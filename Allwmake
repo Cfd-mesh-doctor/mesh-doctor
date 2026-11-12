@@ -5,7 +5,7 @@
 # Build the Mesh Doctor OpenFOAM utilities into $FOAM_USER_APPBIN.
 #
 #   . /opt/openfoam14/etc/bashrc      # OpenFOAM 14 (openfoam.org) first
-#   ./Allwmake                        # foamMeshDoctor, foamResidualHotspots
+#   ./Allwmake                        # foamMeshDoctor, foamResidualHotspots, foamCourantCells
 #   ./Allwmake -experimental          # also foamMeshPolish (experimental)
 #   ./Allwmake -site                  # into $FOAM_SITE_APPBIN instead: every user of this
 #                                     # OpenFOAM install finds them (containers, cluster admins)
@@ -38,6 +38,7 @@ set -e
 mkdir -p "$FOAM_USER_APPBIN"
 wmake foam/foamMeshDoctor
 wmake foam/foamResidualHotspots
+wmake foam/foamCourantCells
 if [ "$experimental" = yes ]; then
     wmake foam/experimental/foamMeshPolish
 fi

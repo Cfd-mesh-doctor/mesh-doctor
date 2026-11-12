@@ -247,7 +247,9 @@ def read_hot(case):
     return rows
 
 
-def cluster_points(rows, rfac=4.0):
+def cluster_points(rows, rfac=4.0, members=False):
+    """Group rows ({"c", "h", "score", "nonOrtho"}) closer than rfac cell sizes; members=True
+    also returns each group's rows."""
     n = len(rows)
     parent = list(range(n))
 
@@ -285,6 +287,8 @@ def cluster_points(rows, rfac=4.0):
                     "h": sorted(x["h"] for x in m)[len(m) // 2],
                     "maxNonOrtho": max(x["nonOrtho"] for x in m),
                     "meanNonOrtho": sum(x["nonOrtho"] for x in m) / len(m)})
+        if members:
+            out[-1]["members"] = m
     out.sort(key=lambda c: -c["sumScore2"])
     return out
 

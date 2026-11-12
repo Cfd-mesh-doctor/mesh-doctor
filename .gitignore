@@ -38,3 +38,7 @@ build/
 dist/
 *.egg-info/
 .venv/
+
+# wmake build output
+foam/**/Make/linux64*/
+foam/**/lnInclude/
