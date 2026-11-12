@@ -10,6 +10,7 @@ For **OpenFOAM 14 (openfoam.org)** on Linux, Windows through WSL, Docker, or a S
 - [Dashboard tour](docs/dashboard.md)
 - [Safety model](docs/safety.md): what protects your cases and your machine
 - [Limits](docs/limits.md): what it does not do, and the experimental tools
+- [Architecture](docs/architecture.md): layers, versioned results, the API and jobs, and the path to a website
 
 ## Quickstart
 
