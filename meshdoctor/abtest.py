@@ -73,9 +73,9 @@ def make_case(src, dst, init, points=None):
     open(os.path.join(dst, ".meshDoctorCopy"), "w").write(src + "\n")
 
 
-def parse_residuals(case):
+def parse_residuals(case, logs=None):
     """{field: [...], "Time": [...]} from a residuals function object, else from the solver logs."""
-    return _fo_residuals(case) or caseinfo.log_residuals(caseinfo.solver_logs(case))
+    return _fo_residuals(case) or caseinfo.log_residuals(logs or caseinfo.solver_logs(case))
 
 
 def _fo_residuals(case):
@@ -388,11 +388,70 @@ def batch_means(x, nb=5):
             "u": max(ci, half), "batchLen": n, "nBatches": nb}
 
 
-def judge(case, window=200, group=None, avg_from=None):
+STEP_TOL = 1e-3       # p initial residual at the last outer iteration of a converged time step
+CO_LIMIT = 1.0        # max Courant number that scale-resolving runs (DES/LES) should stay under
+
+
+def transient_verdict(out, steps, window):
+    """Verdict for a transient run, from three separate questions:
+    - are the forces statistically stationary (mean drift < 2 % between the last two windows)?
+    - did each time step converge (p below STEP_TOL by the last PIMPLE outer iteration)?
+    - is the time step sane (max Courant <= CO_LIMIT, fields not being bounded)?
+    Oscillating forces are expected in a transient run and do not count against it."""
+    last = steps[-window:]
+    if last:
+        n = len(last)
+        ok = [s for s in last if s["last"] is not None and s["last"] <= STEP_TOL]
+        drops = sorted(s["last"] / s["first"] for s in last if s["first"] and s["last"] is not None)
+        co = [s["coMax"] for s in last if s["coMax"] is not None]
+        bounded = [s for s in last if s["bounded"]]
+        out["steps"] = {
+            "n": n, "outerIterations": max(s["outer"] for s in last),
+            "converged": len(ok) / n,
+            "medianLastOuterP": statistics.median([s["last"] for s in last if s["last"] is not None] or [0]),
+            "medianOuterDrop": drops[len(drops) // 2] if drops else None,
+            "maxCourant": max(co) if co else None,
+            "medianMaxCourant": statistics.median(co) if co else None,
+            "aboveCourantLimit": sum(c > CO_LIMIT for c in co) / len(co) if co else None,
+            "bounded": len(bounded) / n,
+            "boundedFields": sorted({f for s in bounded for f in s["bounded"]})}
+    f = out.get("forces", {})
+    drift = max((v["drift"] for v in f.values()), default=None)
+    flags = []
+    st = out.get("steps")
+    if st:
+        if st["converged"] < 0.9:
+            flags.append(f"time steps not converged: only {st['converged']:.0%} reach p < {STEP_TOL:g} "
+                         f"by outer iteration {st['outerIterations']} (median {st['medianLastOuterP']:.2g}); "
+                         "add outer correctors or a smaller time step")
+        if st["aboveCourantLimit"]:
+            flags.append(f"max Courant {st['maxCourant']:.3g} (above {CO_LIMIT:g} in "
+                         f"{st['aboveCourantLimit']:.0%} of steps); a scale-resolving run needs it <= {CO_LIMIT:g}")
+        if st["bounded"] > 0.05:
+            flags.append(f"{', '.join(st['boundedFields'])} bounded in {st['bounded']:.0%} of steps")
+    else:
+        flags.append("no per-step data in the log (pass --log)")
+    out["flags"] = flags
+    if drift is None:
+        out["verdict"] = "too short"
+    elif drift >= 0.02:
+        out["verdict"] = ("still developing (force means still drifting; average later)"
+                          + ("; also check: " + "; ".join(flags) if flags else ""))
+    elif flags:
+        out["verdict"] = "statistically stationary, but check: " + "; ".join(flags)
+    else:
+        out["verdict"] = "converged (statistically stationary, every time step converged)"
+    return out
+
+
+def judge(case, window=200, group=None, avg_from=None, logs=None):
     """Convergence verdict + averaged forces.  Groups and directions come from
     the case (caseinfo.describe); `group` defaults to the group with the
-    largest drag, normally the whole model."""
-    res, frc = parse_residuals(case), parse_forces(case)
+    largest drag, normally the whole model.  `window` counts iterations, or
+    time steps for a transient case, which gets its own verdict (see
+    transient_verdict).  `logs`: solver logs, default log.foamRun*."""
+    res, frc = parse_residuals(case, logs), parse_forces(case)
+    unsteady = caseinfo.transient(case)
     d = caseinfo.describe(case, frc)
     group = group or d["total"]
     vert = d["vertical"]
@@ -408,7 +467,12 @@ def judge(case, window=200, group=None, avg_from=None):
         s = caseinfo.series(frc, d, g, what)
         if not s:
             continue
-        t0 = avg_from if avg_from is not None else s[-1][0] - 2 * window
+        if avg_from is not None:
+            t0 = avg_from
+        elif unsteady:                     # last 2 windows of time steps (t > t0), in seconds
+            t0 = s[max(0, len(s) - 2 * window - 1)][0]
+        else:
+            t0 = s[-1][0] - 2 * window
         bm = batch_means([v for t, v in s if t > t0])
         if bm:
             bm["from"], bm["to"] = t0, s[-1][0]
@@ -437,6 +501,8 @@ def judge(case, window=200, group=None, avg_from=None):
     blk = max(10, window // 5)
     out["pBlocks"] = [[t[i], statistics.median([x for x in res["p"][i:i + blk] if x is not None])]
                       for i in range(0, len(t) - blk + 1, blk)] if res.get("p") else []
+    if unsteady:
+        return transient_verdict(out, caseinfo.step_stats(logs or caseinfo.solver_logs(case)), window)
     r, f = out.get("residuals", {}), out.get("forces", {})
     pm, ptr = r.get("p", {}).get("median", 1), r.get("p", {}).get("trend", 1)
     drift = max((v["drift"] for v in f.values()), default=1)
@@ -524,9 +590,17 @@ def main(a):
     if len(a) < 2:
         print(__doc__); return
     if a[0] == "judge":
+        logs = None
+        if "--log" in a:                   # judge <case> [window] [avgFrom] --log <file or glob>
+            i = a.index("--log")
+            case_dir = os.path.abspath(os.path.expanduser(a[1]))
+            logs = caseinfo.solver_logs(case_dir, (a[i + 1],))
+            if not logs:
+                sys.exit(f"no log matches {a[i + 1]} in {case_dir}")
+            a = a[:i] + a[i + 2:]
         print(json.dumps(judge(os.path.abspath(os.path.expanduser(a[1])),
                                int(a[2]) if len(a) > 2 else 200,
-                               avg_from=float(a[3]) if len(a) > 3 else None), indent=1))
+                               avg_from=float(a[3]) if len(a) > 3 else None, logs=logs), indent=1))
         return
     if a[0] == "extend":
         # abtest.py extend <abDir> <endIter>

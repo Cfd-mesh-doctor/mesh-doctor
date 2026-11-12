@@ -81,6 +81,13 @@ Options:
 
 Averages come with an uncertainty from batch means, so a slow swing is not hidden by a long average.
 
+**Transient runs** (any `ddtSchemes` other than `steadyState`) get their own verdict, with `window` counted in time steps. Oscillating forces are expected there, so it asks three separate questions:
+- are the force means stationary (drift under 2 % between the last two windows)?
+- did each time step converge, meaning p fell below 1e-3 by the last PIMPLE outer iteration?
+- is the time step sane: max Courant at most 1 (needed for DES/LES), and no field bounded in more than 5 % of steps?
+
+The answer is "converged", "statistically stationary, but check: …" or "still developing", with every failed check named. Logs not called `log.foamRun*` are passed with `--log`, for example `meshdoctor judge <case> 500 --log log.pimple`.
+
 Forces are reported as drag (along the flow) and the vertical force, named **downforce** or **lift** by its sign:
 - the flow direction is read from `0/U`, preferring an inlet patch;
 - the up axis comes from, in order: the `up_axis` setting, the `liftDir` of `forceCoeffs`, or the cross-flow axis with the larger force.
