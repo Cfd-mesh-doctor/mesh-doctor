@@ -16,7 +16,8 @@ Built-in rules (always on):
   * no file over 1 MB; no binary file except images under docs/images/;
   * no personal paths (/home/<name>/, /mnt/c/Users/<name>, C:\\Users\\<name>,
     WSL network shares) and no e-mail addresses except @example.invalid,
-    @users.noreply.github.com and noreply@..., in files and in commit authors
+    @users.noreply.github.com, noreply@... and GitHub's own support@github.com
+    (Dependabot signs off with it), in files and in commit authors
     and messages.
 
 Private rules: extra words that must never appear (team, project and case names),
@@ -49,7 +50,8 @@ PERSONAL = [
 ]
 EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
 # allowed: placeholder addresses, GitHub's private commit addresses, and no-reply addresses
-EMAIL_OK = re.compile(r"(@(example\.invalid|users\.noreply\.github\.com)$)|(^noreply@)", re.I)
+EMAIL_OK = re.compile(r"(@(example\.invalid|users\.noreply\.github\.com)$)|(^noreply@)"
+                      r"|(^support@github\.com$)", re.I)       # Dependabot's sign-off line
 
 
 def git(*args, inp=None):
