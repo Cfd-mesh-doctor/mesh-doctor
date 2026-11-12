@@ -1,0 +1,8 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 The Mesh Doctor authors
+# Data guard: blocks commits that contain simulation data, CAD, personal paths or private names.
+# Enabled per clone with:  git config core.hooksPath .githooks
+PY=python3
+if ! python3 -c "" >/dev/null 2>&1; then PY=python; fi
+exec "$PY" "$(git rev-parse --show-toplevel)/tools/data_guard.py" --staged

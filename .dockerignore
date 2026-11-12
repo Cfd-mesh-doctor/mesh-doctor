@@ -1,0 +1,12 @@
+# Never copy these into an image: history, private guard words, build output.
+.git
+.githooks
+.data-guard-private.txt
+**/__pycache__
+**/*.pyc
+**/Make/linux*
+**/lnInclude
+build
+dist
+*.egg-info
+.venv

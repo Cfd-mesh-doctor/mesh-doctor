@@ -1,0 +1,59 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 The Mesh Doctor authors
+#
+# Integration test on OpenFOAM's own motorBike tutorial (no other data):
+#   mesh it -> repair -> no checkMesh count worse, source unchanged
+#   -> short A/B with residual hotspots -> repair map with the ground found.
+#
+#   . /opt/openfoam14/etc/bashrc && ./Allwmake && tests/integration_motorbike.sh
+#
+# Works only in a new temporary folder; NP ranks for the A/B (default 2).
+set -euo pipefail
+REPO=$(cd "$(dirname "$0")/.." && pwd)
+NP=${NP:-2}
+[ -n "${FOAM_TUTORIALS:-}" ] || { echo "source OpenFOAM 14 first" >&2; exit 2; }
+T=$(mktemp -d /tmp/md_it_XXXXXX)
+export MESHDOCTOR_CONFIG=/dev/null MESHDOCTOR_CASES=$T/cases MESHDOCTOR_WORKSPACE=$T/work
+SRC=$T/cases/motorBikeSteady
+mkdir -p "$T/cases"
+cp -r "$FOAM_TUTORIALS/incompressibleFluid/motorBikeSteady" "$T/cases/"
+cp "$FOAM_TUTORIALS/resources/geometry/motorBike.obj.gz" "$SRC/constant/geometry/"
+step() { echo "== $(date +%H:%M:%S) $*"; }
+
+step "meshing (serial snappyHexMesh)"
+( cd "$SRC" && surfaceFeatures > log.surfaceFeatures 2>&1 && blockMesh > log.blockMesh 2>&1 \
+  && snappyHexMesh > log.snappyHexMesh 2>&1 ) || { tail -20 "$SRC"/log.*; exit 1; }
+cd "$REPO"
+
+step "repair"
+python3 -m meshdoctor full "$SRC" it_mb
+python3 - "$T/work/it_mb/meshDoctor/result.json" <<'PY'
+import json, sys
+r = json.load(open(sys.argv[1]))
+assert r["sourceCheck"]["unchanged"], "source case changed"
+assert not r["verdict"]["regressions"], "checkMesh got worse: %s" % r["verdict"]["regressions"]
+assert r["verdict"]["improved"], "nothing improved"
+print("repair ok: improved", ", ".join(r["verdict"]["improved"]))
+PY
+
+step "A/B, 30 iterations on $NP ranks"
+python3 -m meshdoctor ab "$SRC" it_mb --iters 30 --np "$NP" --init 0
+python3 - "$T/work/it_mb_ab/ab_result.json" <<'PY'
+import json, sys
+r = json.load(open(sys.argv[1]))
+assert r["sourceCheck"]["unchanged"], "source case changed"
+assert r["residualRatioFixedOverBase"], "no residual comparison"
+assert r["base"]["forces"] and r["fixed"]["forces"], "no forces read"
+assert r.get("baseHotspots") and r.get("fixedHotspots"), "no hotspot maps"
+print("A/B ok: residual ratios", {k: round(v, 2) for k, v in r["residualRatioFixedOverBase"].items()})
+PY
+
+step "judge and repair map"
+python3 -m meshdoctor judge "$T/work/it_mb_ab/fixed" 10 | python3 -c \
+  "import json,sys; j=json.load(sys.stdin); assert j['axes']['up']=='z', j['axes']; print('judge ok:', j['verdict'])"
+python3 -m meshdoctor map it_mb --hot "Original=$T/work/it_mb_ab/base" --hot "Repaired=$T/work/it_mb_ab/fixed"
+python3 -c "import json,sys; m=json.load(open('$T/work/it_mb/meshDoctor/map.json')); \
+assert m['ground']==['lowerWall'], m['ground']; print('map ok: ground', m['ground'], 'axes', m['axes'])"
+
+step "PASS (temporary folder $T can be deleted)"

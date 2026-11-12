@@ -1,0 +1,40 @@
+# Simulation data and CAD never belong in this repository.
+# tools/data_guard.py blocks these too; this file just keeps them out of `git status`.
+polyMesh/
+processor*/
+postProcessing/
+triSurface/
+dynamicCode/
+/[0-9]*/
+*.foam
+*.stl
+*.obj
+*.step
+*.stp
+*.igs
+*.iges
+*.x_t
+*.x_b
+*.sldprt
+*.sldasm
+*.slddrw
+*.xlsx
+*.xls
+*.vtk
+*.vtu
+*.vtp
+*.pvsm
+*.bak*
+
+# Private data-guard words (team and project names). Local only, never committed.
+.data-guard-private.txt
+
+# Build and Python output
+__pycache__/
+*.pyc
+lnInclude/
+Make/linux*/
+build/
+dist/
+*.egg-info/
+.venv/

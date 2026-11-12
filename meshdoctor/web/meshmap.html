@@ -1,0 +1,179 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 The Mesh Doctor authors -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Repairs vs Hotspots</title>
+<style>
+:root{
+  --bg:#f6f7f9; --card:#ffffff; --ink:#1b1f24; --muted:#5d6670; --line:#e3e6ea; --track:#e9ecf0;
+  --accent:#2f6fde; --ok:#1f9d55; --err:#d23b3b; --def:#8e44ad; --left:#0b7fc7;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#111418; --card:#1a1f25; --ink:#e8ebef; --muted:#9aa4ae; --line:#2a3038; --track:#2a3038;
+  --accent:#5b93ff; --ok:#3ccf7d; --err:#ff6b6b; --def:#c38ff0; --left:#4cc3ff; } }
+:root[data-theme="dark"]{
+  --bg:#111418; --card:#1a1f25; --ink:#e8ebef; --muted:#9aa4ae; --line:#2a3038; --track:#2a3038;
+  --accent:#5b93ff; --ok:#3ccf7d; --err:#ff6b6b; --def:#c38ff0; --left:#4cc3ff; }
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:16px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+h1{font-size:18px;margin:0;font-weight:650}
+h2{font-size:14px;margin:0 0 8px}
+a{color:var(--accent)}
+.sub{color:var(--muted);font-size:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.ctl{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;font-size:13px}
+.ctl label{display:flex;gap:6px;align-items:center;cursor:pointer}
+.sw{display:inline-block;width:12px;height:12px;border-radius:50%}
+.view{position:relative}
+.view canvas{width:100%;display:block;border-radius:8px}
+.tip{position:absolute;pointer-events:none;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.18);display:none;max-width:320px;z-index:2}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+td,th{padding:3px 6px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
+td:first-child,th:first-child{text-align:left}
+.up{color:var(--ok);font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+select{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:6px;font-size:12px;padding:2px 4px}
+.legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px 16px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.lg{display:flex;gap:8px;align-items:flex-start;font-size:12.5px}
+.lg b{display:block;font-weight:600}
+.lg span:not(.key):not(.ramp){color:var(--muted);font-size:12px}
+.key{flex:none;width:14px;height:14px;margin-top:2px;display:inline-block}
+.key.car{border-radius:3px;background:linear-gradient(90deg,color-mix(in srgb,var(--ink) 18%,var(--card)),color-mix(in srgb,var(--ink) 55%,var(--card)))}
+.ramp{flex:none;display:flex;flex-direction:column;gap:2px;margin-top:2px}
+.ramp i{display:flex;align-items:center;gap:6px;font-style:normal;font-size:11.5px;color:var(--muted);white-space:nowrap}
+.ramp i::before{content:"";width:14px;height:10px;border-radius:2px;background:var(--c)}
+.lg.heat{grid-column:span 2}
+@media (max-width:640px){.lg.heat{grid-column:auto}}
+@media (min-width:760px) and (min-height:1200px){.sticky{position:sticky;top:0;z-index:3;box-shadow:0 6px 14px -10px rgba(0,0,0,.35)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div><h1>Where the mesh was repaired vs where the flow won't settle</h1>
+      <div class="sub" id="sub">loading…</div></div>
+    <div class="sub"><a href="/run" style="margin-right:10px">Steady run</a><a href="/meshdoctor">Mesh Doctor</a> · <select id="nameSel"></select></div>
+  </header>
+
+  <section class="card sticky">
+    <div class="ctl">
+      <label><input type="checkbox" id="showBefore" checked>Show repaired defects</label>
+      <label><input type="checkbox" id="showAfter" checked>Show defects left</label>
+      <label>Heat layer <select id="heatSel"></select></label>
+    </div>
+    <div class="legend">
+      <div class="lg"><span class="key car"></span><div><b>Model surface</b><span>every wall face of the mesh (ground removed), seen from the side or top; darker = smaller faces (finer mesh)</span></div></div>
+      <div class="lg"><span class="key" style="border:2px solid var(--def);border-radius:50%"></span><div><b>Bad cells found and repaired</b><span>Mesh Doctor moved points here; bigger ring = more bad faces in that spot</span></div></div>
+      <div class="lg"><span class="key" style="background:var(--left);border-radius:50%"></span><div><b>Bad cells still left</b><span>spots it could not fix without making another check worse</span></div></div>
+      <div class="lg heat"><span class="ramp" id="ramp"></span><div><b>Where the flow is still changing</b><span id="heatLegend"></span></div></div>
+    </div>
+    <div class="sub" style="margin-top:6px" id="heatNote"></div>
+  </section>
+
+  <section class="card view"><h2>Side view <span class="sub" id="hSide"></span></h2>
+    <canvas id="cSide"></canvas><div class="tip" id="tSide"></div></section>
+  <section class="card view"><h2>Top view <span class="sub" id="hTop"></span></h2>
+    <canvas id="cTop"></canvas><div class="tip" id="tTop"></div></section>
+
+  <div class="grid">
+    <section class="card"><h2>What Mesh Doctor changed (checkMesh)</h2><div id="cm"></div></section>
+    <section class="card"><h2>How to read this</h2><div class="sub" id="read" style="font-size:13px;color:var(--ink)"></div></section>
+  </div>
+  <div class="sub">The grey shape is every wall face of the mesh (the car surface) projected onto the view; darker = more finely meshed. Heat dots are the cells whose pressure or velocity changed most (top 3000 per processor, brightest = biggest change). Hover a mark for details.</div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let M=null, imgs={};
+const HEAT=["#f6d55c","#f0a93a","#e8702a","#d23b3b"];
+
+function hexToRgb(h){h=h.replace("#","");if(h.length===3)h=[...h].map(c=>c+c).join("");const n=parseInt(h,16);return [n>>16&255,n>>8&255,n&255]}
+function densityImage(v){
+  const raw=atob(v.data), nx=v.nx, ny=v.ny, img=new ImageData(nx,ny), ink=hexToRgb(css("--ink")), bg=hexToRgb(css("--card"));
+  // light 3x3 blur so the projected surface reads as a solid shape
+  const src=new Float32Array(raw.length); for(let i=0;i<raw.length;i++) src[i]=raw.charCodeAt(i)/255;
+  const tmp=new Float32Array(src.length), out=new Float32Array(src.length), R=1;
+  for(let y=0;y<ny;y++) for(let x=0;x<nx;x++){let s=0,c=0; for(let d=-R;d<=R;d++){const xx=x+d; if(xx>=0&&xx<nx){s+=src[y*nx+xx];c++}} tmp[y*nx+x]=s/c}
+  for(let y=0;y<ny;y++) for(let x=0;x<nx;x++){let s=0,c=0; for(let d=-R;d<=R;d++){const yy=y+d; if(yy>=0&&yy<ny){s+=tmp[yy*nx+x];c++}} out[y*nx+x]=s/c}
+  // wall-face density: any surface shows, finely meshed parts (wing, edges) darker
+  for(let i=0;i<out.length;i++){const a=Math.pow(Math.min(1,out[i]*1.6),0.6)*0.55;
+    for(let k=0;k<3;k++) img.data[4*i+k]=bg[k]+(ink[k]-bg[k])*a; img.data[4*i+3]=255;}
+  const c=document.createElement("canvas"); c.width=v.nx; c.height=v.ny; c.getContext("2d").putImageData(img,0,0); return c;
+}
+function draw(which){
+  const v=M[which], cv=$(which==="side"?"cSide":"cTop"), tip=$(which==="side"?"tSide":"tTop");
+  // projection axes come from map.json (x streamwise; up is the ground normal, e.g. y or z)
+  const ax=(M.axes&&M.axes[which])||[0,which==="side"?1:2], ai=ax[0], bi=ax[1];
+  const W=cv.clientWidth, H=Math.round(W*(v.hi[1]-v.lo[1])/(v.hi[0]-v.lo[0]));
+  const dpr=devicePixelRatio||1; cv.style.height=H+"px"; cv.width=W*dpr; cv.height=H*dpr;
+  const g=cv.getContext("2d"); g.scale(dpr,dpr); g.imageSmoothingEnabled=true;
+  if(!imgs[which]) imgs[which]=densityImage(v);
+  g.drawImage(imgs[which],0,0,W,H);
+  const X=x=>(x-v.lo[0])/(v.hi[0]-v.lo[0])*W, Y=b=>(1-(b-v.lo[1])/(v.hi[1]-v.lo[1]))*H;
+  const marks=[];
+  // heat layer
+  const L=M.hot[+$("heatSel").value];
+  if(L){ const n=L.cells.length;
+    for(let i=n-1;i>=0;i--){const r=L.cells[i], t=1-i/n, ci=t>0.97?3:t>0.85?2:t>0.6?1:0;
+      g.fillStyle=HEAT[ci]; g.globalAlpha=0.35+0.6*t; const px=X(r[ai]), py=Y(r[bi]);
+      g.beginPath(); g.arc(px,py,1.2+2.2*t,0,7); g.fill();
+      if(i<400) marks.push({px,py,html:`<b>${L.label}</b><br>rank ${i+1} of ${n} · change score ${r[3].toFixed(1)}× RMS<br>at (${r[0].toFixed(3)}, ${r[1].toFixed(3)}, ${r[2].toFixed(3)}) m`});}
+    g.globalAlpha=1; }
+  // defects
+  const ring=(lst,fill,color,label)=>{ for(const d of lst){ const px=X(d.c[ai]), py=Y(d.c[bi]), r=Math.max(2.5,Math.min(8,1.6*Math.sqrt(d.n)));
+      g.beginPath(); g.arc(px,py,r,0,7); if(fill){g.fillStyle=color;g.fill();g.strokeStyle=css("--card");g.lineWidth=1;g.stroke()} else {g.strokeStyle=color;g.lineWidth=1.4;g.stroke()}
+      marks.push({px,py,html:`<b>${label}</b><br>${d.n} face(s): ${d.kinds.join(", ")}<br>worst non-ortho ${d.nonOrtho}° · skew ${d.skew}${d.patches.length?"<br>on "+d.patches.join(", "):""}<br>at (${d.c.map(x=>x.toFixed(3)).join(", ")}) m`}); } };
+  if($("showBefore").checked) ring(M.defectsBefore,false,css("--def"),"Defect found before repair");
+  if($("showAfter").checked) ring(M.defectsAfter,true,css("--left"),"Defect left after repair");
+  // axes ticks
+  g.fillStyle=css("--muted"); g.font="11px system-ui";
+  for(let x=Math.ceil(v.lo[0]*2)/2;x<=v.hi[0];x+=0.5){g.fillText(x.toFixed(1)+" m",X(x)+2,H-4)}
+  cv.onmousemove=e=>{const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;let best=null,bd=64;
+    for(const m of marks){const d=(m.px-mx)**2+(m.py-my)**2; if(d<bd){bd=d;best=m}}
+    if(!best){tip.style.display="none";return} tip.innerHTML=best.html; tip.style.display="block";
+    tip.style.left=Math.min(mx+12,cv.clientWidth-tip.offsetWidth-4)+"px"; tip.style.top=(my+cv.offsetTop+12)+"px"};
+  cv.onmouseleave=()=>tip.style.display="none";
+}
+function fmt(x){return x==null?"–":Number.isInteger(x)?x.toLocaleString():(+x).toPrecision(4)}
+function summary(){
+  const b=M.checkMeshBefore,a=M.checkMeshAfter;
+  const rows=[["Inverted face pyramids","nWrongPyramids"],["Bad face tets","nBadTets"],["Max non-orthogonality (°)","maxNonOrtho"],["Max skewness","maxSkewness"],["Low-weight faces","nLowWeight"],["Small-determinant cells","nSmallDeterminant"],["Concave cells","nConcaveCells"],["Failed checkMesh checks","failedChecks"]];
+  $("cm").innerHTML=`<table><tr><th></th><th>before</th><th>after</th></tr>`+rows.map(([l,k])=>{const better=b[k]!=null&&a[k]!=null&&a[k]<b[k];return `<tr><td>${l}</td><td>${fmt(b[k])}</td><td class="${better?"up":""}">${fmt(a[k])}</td></tr>`}).join("")+
+    `<tr><td>Problem clusters (Mesh Doctor)</td><td>${M.defectsBefore.length.toLocaleString()}</td><td class="up">${M.defectsAfter.length}</td></tr></table>`;
+  const L=M.hot[+$("heatSel").value]||{}, s=L.summary||{};
+  // heat legend: same rank bands as draw(): top 3 %, 15 %, 40 % of the plotted cells
+  const n=(L.cells||[]).length, b1=Math.round(0.03*n), b2=Math.round(0.15*n), b3=Math.round(0.40*n);
+  $("ramp").innerHTML = n? [[3,`biggest ${b1.toLocaleString()} cells`],[2,`next ${(b2-b1).toLocaleString()}`],[1,`next ${(b3-b2).toLocaleString()}`],[0,`next ${(n-b3).toLocaleString()}`]]
+    .map(([c,t])=>`<i style="--c:${HEAT[c]}">${t}</i>`).join("") : "";
+  $("heatLegend").textContent = n? `The ${n.toLocaleString()} cells (of ${(+s.nCells||M.nCells||0).toLocaleString()}) whose pressure or velocity changed most${/400 to 600/.test(L.label)?" between iterations 400 and 600 (the slow swing)":" in one iteration"}. Red = biggest change; bigger dot = bigger change. Pick "none" to hide them.` : "Heat layer hidden.";
+  $("heatNote").textContent = L.label? `${L.label}: the top 1 % of cells carry ${(100*(+s.shareTop1pct||0)).toFixed(0)} % of the change, the top 0.1 % carry ${(100*(+s["shareTop0.1pct"]||0)).toFixed(0)} %. A broad spread like this is flow unsteadiness; a mesh problem would light up a few cells.` : "";
+  const P=t=>`<p style="margin:0 0 6px">${t}</p>`;
+  $("read").innerHTML=P(`Purple rings are where Mesh Doctor found bad cells and fixed them by moving points or, where moving points could not help, collapsing the face (${M.defectsBefore.length.toLocaleString()} clusters; ${M.defectsAfter.length} remain, blue). Hover a ring for what was wrong and on which patch.`)
+    +((M.notes||[]).length? M.notes.map(P).join("")
+      : M.hot.length? "" : P(`No heat layer for this mesh yet: a solver A/B run with hotspots adds one, showing where the flow still changes.`));
+}
+function headings(){ const n="xyz", a=M.axes||{side:[0,1],top:[0,2]};
+  $("hSide").textContent=`(${n[a.side[0]]} along the flow, ${n[a.side[1]]} up; everything projected onto one plane)`;
+  $("hTop").textContent=`(${n[a.top[0]]} along the flow, ${n[a.top[1]]} across)`; }
+function render(){ headings(); summary(); draw("side"); draw("top"); }
+async function load(name){
+  const d=await (await fetch("/api/md/map?name="+encodeURIComponent(name))).json(); if(d.error){$("sub").textContent=d.error;return}
+  M=d; imgs={};
+  $("sub").textContent=`${d.name} · mesh ${d.source} · ${d.defectsBefore.length.toLocaleString()} defect clusters before, ${d.defectsAfter.length} after · ${d.hot.length} heat layers`;
+  $("heatSel").innerHTML=d.hot.map((L,i)=>`<option value="${i}" ${i===d.hot.length-1?"selected":""}>${L.label}</option>`).join("")+`<option value="-1">none</option>`;
+  render();
+}
+["showBefore","showAfter","heatSel"].forEach(id=>$(id).onchange=render);
+window.addEventListener("resize",()=>M&&render());
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{imgs={};M&&render()});
+(async()=>{const l=await (await fetch("/api/md/maplist")).json(); const q=new URLSearchParams(location.search).get("name")||l[0];
+  $("nameSel").innerHTML=l.map(n=>`<option ${n===q?"selected":""}>${n}</option>`).join(""); $("nameSel").onchange=e=>load(e.target.value);
+  if(q) load(q); else $("sub").textContent="No map yet: run tools/mesh_doctor/mapdata.py";})();
+</script>
+</body>
+</html>

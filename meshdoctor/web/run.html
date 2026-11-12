@@ -1,0 +1,278 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 The Mesh Doctor authors -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Steady Run Live</title>
+<style>
+:root{
+  --bg:#f6f7f9; --card:#ffffff; --ink:#1b1f24; --muted:#5d6670; --line:#e3e6ea;
+  --track:#e9ecf0; --accent:#2f6fde; --ok:#1f9d55; --warn:#c77d00; --err:#d23b3b;
+  --s1:#2f6fde; --s2:#e07a1f; --s3:#16a085; --s4:#8e44ad; --s5:#c0392b; --s6:#7f8c8d;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#111418; --card:#1a1f25; --ink:#e8ebef; --muted:#9aa4ae; --line:#2a3038;
+  --track:#2a3038; --accent:#5b93ff; --ok:#3ccf7d; --warn:#f0a93a; --err:#ff6b6b;
+  --s1:#5b93ff; --s2:#ff9a45; --s3:#3dd6b5; --s4:#b77be0; --s5:#ff7a6b; --s6:#a3adb5; } }
+:root[data-theme="dark"]{
+  --bg:#111418; --card:#1a1f25; --ink:#e8ebef; --muted:#9aa4ae; --line:#2a3038;
+  --track:#2a3038; --accent:#5b93ff; --ok:#3ccf7d; --warn:#f0a93a; --err:#ff6b6b;
+  --s1:#5b93ff; --s2:#ff9a45; --s3:#3dd6b5; --s4:#b77be0; --s5:#ff7a6b; --s6:#a3adb5; }
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:16px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+h1{font-size:18px;margin:0;font-weight:650}
+a{color:var(--accent)}
+.sub{color:var(--muted);font-size:12px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:6px;vertical-align:middle}
+.dot.live{background:var(--ok);animation:pulse 1.6s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 60%,transparent)}100%{box-shadow:0 0 0 8px transparent}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.overall .big{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums}
+.bar{height:12px;background:var(--track);border-radius:99px;overflow:hidden}
+.bar>i{display:block;height:100%;width:0;background:var(--accent);border-radius:99px;transition:width .8s ease}
+.bar.thin{height:8px}
+.bar>i.ok{background:var(--ok)} .bar>i.err{background:var(--err)}
+.bar>i.run{background:linear-gradient(90deg,var(--accent),color-mix(in srgb,var(--accent) 60%,#fff));background-size:200% 100%;animation:shimmer 2s linear infinite}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:0 0}}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:12px}
+.step{font-size:12px;color:var(--muted)}
+.step b{display:block;color:var(--ink);font-size:13px}
+.step .bar{margin-top:4px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.stage h2{font-size:14px;margin:0 0 6px;display:flex;justify-content:space-between;gap:8px}
+.badge{font-size:11px;padding:2px 8px;border-radius:99px;background:var(--track);color:var(--muted);font-weight:600;white-space:nowrap}
+.badge.running{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent)}
+.badge.done,.badge.ok{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.badge.error,.badge.err{background:color-mix(in srgb,var(--err) 18%,transparent);color:var(--err)}
+.badge.stopped,.badge.warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin-top:8px;font-size:12.5px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.verdict{font-size:13px;margin-top:8px;font-weight:600}
+.chart{position:relative}
+.chart canvas{width:100%;height:240px;display:block}
+.chart h3{font-size:13px;margin:0 0 6px;font-weight:600;display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap}
+.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);font-weight:400;margin-bottom:4px}
+.legend span::before{content:"";display:inline-block;width:10px;height:3px;border-radius:2px;margin-right:4px;vertical-align:middle;background:var(--c)}
+.legend span.dash::before{background:repeating-linear-gradient(90deg,var(--c) 0 3px,transparent 3px 5px)}
+.tip{position:absolute;pointer-events:none;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.15);display:none;white-space:nowrap;z-index:2}
+.errtxt{color:var(--err);font:12px ui-monospace,Consolas,monospace;white-space:pre-wrap;margin-top:8px}
+.mem{font-size:12px;color:var(--muted)}
+.tabs{display:flex;gap:6px}
+.tabs button{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:99px;padding:2px 10px;font-size:12px;cursor:pointer}
+.tabs button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+select{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:6px;font-size:12px;padding:2px 4px;max-width:100%}
+@media (max-width:520px){.overall .big{font-size:24px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div><h1 id="title">Steady run · live</h1><div class="sub" id="caseName">connecting…</div></div>
+    <div class="sub"><a href="/" style="margin-right:10px">Transient run</a><a href="/meshdoctor" style="margin-right:10px">Mesh Doctor</a><a href="/meshmap" style="margin-right:12px">Repair map</a>
+      <select id="labelSel" title="Which test copy to watch"></select>
+      <span style="margin-left:8px"><span class="dot" id="liveDot"></span><span id="updated">connecting…</span></span></div>
+  </header>
+
+  <section class="card overall">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">
+      <div><div class="sub">Whole run</div><div class="big" id="ovPct">–</div></div>
+      <div style="text-align:right"><div class="sub">Current stage</div><div id="ovStage" style="font-weight:600">–</div><div class="sub" id="ovEta"></div></div>
+    </div>
+    <div class="bar" style="margin-top:8px"><i id="ovBar"></i></div>
+    <div class="steps" id="steps"></div>
+    <div class="mem" id="mem" style="margin-top:10px"></div>
+  </section>
+
+  <div class="grid">
+    <section class="card stage">
+      <h2><span id="solverTitle">Solver</span> <span class="badge" id="solverBadge">pending</span></h2>
+      <div class="bar"><i id="solverBar"></i></div>
+      <dl class="kv" id="solverKv"></dl>
+      <div class="errtxt" id="solverErr"></div>
+    </section>
+    <section class="card stage">
+      <h2>Convergence, this stage <span class="badge" id="judgeBadge">–</span></h2>
+      <div class="verdict" id="judgeVerdict">–</div>
+      <dl class="kv" id="judgeKv"></dl>
+      <div class="sub" style="margin-top:6px">Last window vs the one before it. Converged = p below 1e-4 and forces within 0.5 %. Statistically steady = forces settle within 1–2 %, so their window averages can be used. Averages: the stretch since these settings began (skipping 50 iterations) is cut into 5 batches; ± is the larger of the 95 % confidence interval of the batch means and half their spread.</div>
+      <div class="sub" id="savedJudge" style="margin-top:6px"></div>
+    </section>
+  </div>
+
+  <section class="card chart">
+    <h3><span>Forces (N)</span>
+      <span class="tabs" id="forceTabs"><button data-k="car" class="on">Main group</button><button data-k="parts">Parts</button></span></h3>
+    <div class="legend" id="forceLegend"></div>
+    <canvas id="cForce"></canvas><div class="tip" id="tForce"></div>
+  </section>
+
+  <section class="card chart">
+    <h3><span>Residuals (log scale)</span></h3>
+    <div class="legend" id="resLegend"></div>
+    <div class="sub" style="margin-bottom:4px">Where the relaxation changes (dashed line), residual levels jump: OpenFOAM scales each residual by the equation's own matrix, and lower relaxation makes that matrix bigger. Compare stages by the forces, not by residual height.</div>
+    <canvas id="cRes"></canvas><div class="tip" id="tRes"></div>
+  </section>
+  <div class="sub">Refreshes every 15 s from the test copy in WSL (never the baseline case). Force groups, flow direction and up axis are read from the case: drag is along the freestream (0/U), the vertical force along the cross-flow axis with the larger force (or <code>up_axis</code> in the config). Dashed vertical lines mark where settings changed; the shaded band is the current stage.</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let last = null, forceKey = "car";
+let label = new URLSearchParams(location.search).get("label") || "";
+
+function fmtDur(s){ if(s==null||!isFinite(s)) return "–"; s=Math.max(0,s);
+  const h=Math.floor(s/3600), m=Math.floor(s%3600/60), sec=Math.floor(s%60);
+  return h? `${h} h ${m} min` : m? `${m} min ${sec} s` : `${sec} s`; }
+function fmtN(n,d=0){ return n==null||!isFinite(n)? "–" : Number(n).toLocaleString(undefined,{maximumFractionDigits:d,minimumFractionDigits:d}); }
+function pct(x,d=1){ return x==null? "–" : (100*x).toFixed(d)+" %"; }
+function setBar(el, frac, state){ el.style.width=(Math.max(0,Math.min(1,frac||0))*100).toFixed(1)+"%";
+  el.className = state==="done"?"ok":state==="error"?"err":state==="running"?"run":""; }
+function kv(el, rows){ el.innerHTML=""; for(const [k,v] of rows){ const dt=document.createElement("dt"); dt.textContent=k;
+  const dd=document.createElement("dd"); dd.textContent=v; el.append(dt,dd);} }
+
+function render(d){
+  last = d;
+  const s=d.solver||{}, st=d.stages||[], cur=d.current||st[0]||{}, pr=d.proc||{};
+  const it=s.iteration||0, endAll=Math.max(...st.map(x=>x.to), s.end||0);
+  $("title").textContent = d.label.replace(/_/g," ")+" · live";
+  $("caseName").textContent = `Test copy of ${d.source||"?"} · ${d.variant? "solver variant "+d.variant+" on the original mesh":"repaired mesh"} · steady k-ω SST`;
+  const sel=$("labelSel"); if(sel.options.length!==d.labels.length){ sel.innerHTML=d.labels.map(n=>`<option>${n}</option>`).join(""); }
+  sel.value=d.label;
+
+  const frac=endAll? it/endAll : 0;
+  $("ovPct").textContent=(frac*100).toFixed(1)+" %";
+  setBar($("ovBar"), frac, s.state==="running"?"running":s.state==="error"?"error":"done");
+  $("ovStage").textContent = `${cur.name||"–"} · iteration ${fmtN(it)} of ${fmtN(cur.to)}`;
+  $("ovEta").textContent = s.state==="running" && s.eta!=null? `Stage ETA ${fmtDur(s.eta)} · done ≈ ${new Date(Date.now()+s.eta*1000).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}` :
+    s.state==="stopped"? `Solver idle for ${fmtDur(s.idle_s)}` : s.state==="done"? "Stage finished" : "";
+  $("steps").innerHTML = st.map((x,i)=>{const f=Math.max(0,Math.min(1,(it-x.from)/Math.max(1,x.to-x.from)));
+    const state = it>=x.to? "done" : (x===cur && s.state==="running")? "running" : "";
+    return `<div class="step"><b>${i+1} · ${x.name}</b>iterations ${fmtN(x.from)}–${fmtN(x.to)}<div class="bar thin"><i class="${state==="done"?"ok":state==="running"?"run":""}" style="width:${(f*100).toFixed(1)}%"></i></div></div>`}).join("");
+  const procs=["foamRun","snappyHexMesh","checkMesh","decomposePar"].filter(k=>pr[k]).map(k=>`${k} ×${pr[k]}`).join(", ")||"none running";
+  $("mem").textContent = pr.mem_total_mb? `WSL memory ${fmtN(pr.mem_used_mb/1024,1)} / ${fmtN(pr.mem_total_mb/1024,1)} GB · processes: ${procs}` : "";
+
+  // solver card
+  const b=$("solverBadge"); b.className="badge "+s.state;
+  b.textContent={pending:"waiting",running:"running",done:"done",error:"error",stopped:"stopped"}[s.state]||s.state;
+  $("solverTitle").textContent = cur.name||"Solver";
+  setBar($("solverBar"), (it-cur.from)/Math.max(1,cur.to-cur.from), s.state);
+  const set=d.settings||{};
+  kv($("solverKv"), [["Iteration",`${fmtN(it)} / ${fmtN(s.end)}`],["Wall time per iteration",s.wall_per_it? fmtN(s.wall_per_it,1)+" s":"–"],
+    ["Remaining",fmtDur(s.eta)],["Pressure-velocity coupling",set.ddt==="localEuler"?"PIMPLE, local time stepping":set.consistent==="yes"?"SIMPLEC (consistent)":"SIMPLE"],
+    ["Relaxation",set.relaxation||"–"],["Time scheme",set.ddt||"–"],["Log",s.log||"–"]]);
+  $("solverErr").textContent = s.error||"";
+
+  // judge card
+  const j=d.judge||{}, jb=$("judgeBadge");
+  jb.className="badge "+(j.level||"");
+  jb.textContent = /^provisional/.test(j.verdict||"")? "provisional" : j.level==="ok"?"settled":j.level==="warn"?"improving":j.level==="err"?"not converged":"collecting";
+  $("judgeVerdict").textContent = j.verdict||"–";
+  const rows=[["Window",j.window? `${j.window} iterations`:"–"]];
+  if(j.p) rows.push(["p residual (median)",`${j.p.median.toExponential(2)} · trend ×${j.p.trend.toFixed(2)}`]);
+  const vn=(j.verticalName||"vertical"); const VN=vn[0].toUpperCase()+vn.slice(1);
+  for(const [k,n] of [["vertical",VN+(j.total?" ("+j.total+")":"")],["drag","Drag"+(j.total?" ("+j.total+")":"")]]) if(j[k]) rows.push([n,`${j[k].mean.toFixed(2)} ± ${j[k].std.toFixed(2)} N · osc ${pct(j[k].osc)} · drift ${pct(j[k].drift)}`]);
+  const av=j.average||{}, an=Object.keys(av);
+  if(an.length){ rows.push([`Averaged since iteration ${fmtN(j.avgFrom)}`,`(${av[an[0]].nBatches} batches × ${av[an[0]].batchLen} it.)`]);
+    for(const n of an) rows.push([n, `${av[n].mean.toFixed(2)} ± ${av[n].u.toFixed(2)} N`]); }
+  kv($("judgeKv"), rows);
+  const sj=d.savedJudge; $("savedJudge").textContent = sj&&sj.verdict? `Last saved verdict (end of the previous stage): ${sj.verdict}.` : "";
+  drawForces(); drawRes();
+}
+
+$("labelSel").onchange=e=>{ label=e.target.value; history.replaceState(null,"","/run?label="+encodeURIComponent(label)); tick(true); };
+document.querySelectorAll("#forceTabs button").forEach(b=>b.onclick=()=>{forceKey=b.dataset.k;
+  document.querySelectorAll("#forceTabs button").forEach(x=>x.classList.toggle("on",x===b)); drawForces();});
+
+// ---- canvas line chart: hover tooltip, dashed series, stage marks and band ----
+function lineChart(canvas, tip, series, opts){
+  const dpr=window.devicePixelRatio||1, W=canvas.clientWidth, H=canvas.clientHeight;
+  canvas.width=W*dpr; canvas.height=H*dpr; const g=canvas.getContext("2d"); g.scale(dpr,dpr); g.clearRect(0,0,W,H);
+  const pad={l:52,r:10,t:8,b:26}, iw=W-pad.l-pad.r, ih=H-pad.t-pad.b;
+  const all=series.flatMap(s=>s.pts);
+  g.font="11px system-ui"; g.fillStyle=css("--muted");
+  if(!all.length){ g.fillText(opts.empty||"No data yet", pad.l, pad.t+ih/2); canvas._hit=null; return; }
+  let x0=Math.min(...all.map(p=>p[0])), x1=Math.max(...all.map(p=>p[0]));
+  let ys=all.map(p=>opts.log? Math.log10(p[1]) : p[1]);
+  let y0=Math.min(...ys), y1=Math.max(...ys);
+  if(opts.yClip){ const sorted=[...ys].sort((a,b)=>a-b); y0=sorted[Math.floor(sorted.length*0.01)]; y1=sorted[Math.ceil(sorted.length*0.99)-1]; }
+  if(x1===x0) x1=x0+1; if(y1===y0){y1+=1;y0-=1;}
+  const yp=(y1-y0)*0.06; y0-=yp; y1+=yp;
+  const X=x=>pad.l+(x-x0)/(x1-x0)*iw, Y=y=>pad.t+(1-((opts.log?Math.log10(y):y)-y0)/(y1-y0))*ih;
+  if(opts.band){ const [a,b]=opts.band; g.fillStyle=css("--track"); g.globalAlpha=.55;
+    g.fillRect(X(Math.max(a,x0)),pad.t,X(Math.min(b,x1))-X(Math.max(a,x0)),ih); g.globalAlpha=1; }
+  g.strokeStyle=css("--line"); g.lineWidth=1;
+  for(let i=0;i<=4;i++){ const yy=pad.t+ih*i/4; g.beginPath(); g.moveTo(pad.l,yy); g.lineTo(W-pad.r,yy); g.stroke();
+    const v=y1-(y1-y0)*i/4; g.fillStyle=css("--muted"); g.textAlign="right";
+    g.fillText(opts.log? "1e"+v.toFixed(1) : v.toFixed(1), pad.l-6, yy+4); }
+  g.textAlign="center";
+  for(let i=0;i<=4;i++){ const v=x0+(x1-x0)*i/4; g.fillText(v.toFixed(0), pad.l+iw*i/4, H-8); }
+  for(const m of opts.marks||[]){ if(m<=x0||m>=x1) continue; g.strokeStyle=css("--muted"); g.setLineDash([3,3]); g.beginPath();
+    g.moveTo(X(m),pad.t); g.lineTo(X(m),pad.t+ih); g.stroke(); g.setLineDash([]); }
+  g.save(); g.beginPath(); g.rect(pad.l,pad.t,iw,ih); g.clip();
+  for(const s of series){ if(!s.pts.length) continue; g.strokeStyle=s.color; g.lineWidth=s.dash?1.3:1.6; g.setLineDash(s.dash?[5,4]:[]); g.beginPath();
+    s.pts.forEach((p,i)=>{ const xx=X(p[0]), yy=Y(p[1]); i? g.lineTo(xx,yy):g.moveTo(xx,yy); }); g.stroke(); }
+  g.setLineDash([]); g.restore();
+  canvas._hit={series,pad,iw,x0,x1,opts};
+  canvas.onmousemove=e=>{
+    const r=canvas.getBoundingClientRect(), mx=e.clientX-r.left, h=canvas._hit; if(!h) return;
+    const xv=h.x0+(mx-h.pad.l)/h.iw*(h.x1-h.x0); const lines=[];
+    for(const s of h.series){ if(!s.pts.length) continue; let best=s.pts[0];
+      for(const p of s.pts) if(Math.abs(p[0]-xv)<Math.abs(best[0]-xv)) best=p;
+      if(Math.abs(best[0]-xv)<(h.x1-h.x0)*0.02) lines.push([s.name,best]); }
+    if(!lines.length){tip.style.display="none";return;}
+    tip.innerHTML=""; const head=document.createElement("div"); head.style.color=css("--muted");
+    head.textContent="iteration "+lines[0][1][0].toFixed(0); tip.append(head);
+    for(const [n,p] of lines){ const dv=document.createElement("div"); dv.textContent=`${n}: ${h.opts.log? p[1].toExponential(2) : p[1].toFixed(2)}`; tip.append(dv); }
+    tip.style.display="block"; tip.style.left=Math.min(mx+12, canvas.clientWidth-tip.offsetWidth-4)+"px";
+    tip.style.top=(e.clientY-r.top+canvas.offsetTop-10)+"px";
+  };
+  canvas.onmouseleave=()=>{tip.style.display="none";};
+}
+function legend(el, ser){ el.innerHTML=""; ser.forEach(s=>{const sp=document.createElement("span"); sp.style.setProperty("--c",s.color);
+  if(s.dash) sp.className="dash"; sp.textContent=s.name; el.append(sp);}); }
+function marks(){ return (last.stages||[]).slice(1).map(s=>s.from); }
+function band(){ const c=last.current; return c? [c.from, c.to] : null; }
+
+function drawForces(){
+  if(!last) return;
+  const F=last.forces||{}, c=[css("--s1"),css("--s2"),css("--s3"),css("--s4"),css("--s5"),css("--s6")];
+  // groups, flow and up axes come from the case (server: caseinfo.describe)
+  const I=last.forceInfo||{}, tot=I.total, vn=I.vertical||"vertical";
+  const ve=(g)=> (F[g]||[]).map(r=>[r[0],r[2]]), dr=(g)=>(F[g]||[]).map(r=>[r[0],r[1]]);
+  const ser = forceKey==="car"
+    ? (tot? [{name:`${tot} ${vn} (${I.up||"?"})`,color:c[0],pts:ve(tot)},{name:`${tot} drag (${I.flow||"?"})`,color:c[1],pts:dr(tot)}] : [])
+    : (I.groups||[]).filter(g=>g!==tot).slice(0,6).map((g,i)=>({name:`${g} ${vn}`,color:c[i%c.length],pts:ve(g)}));
+  legend($("forceLegend"), ser);
+  lineChart($("cForce"),$("tForce"),ser,{yClip:true, marks:marks(), band:band(), empty:"No force data yet"});
+}
+function drawRes(){
+  if(!last) return;
+  const R=last.residuals||{}, cols=(R.cols||[]).slice(1), rows=R.rows||[];
+  const c=[css("--s1"),css("--s2"),css("--s3"),css("--s4"),css("--s5"),css("--s6")];
+  const ser=cols.map((n,i)=>({name:n,color:c[i%c.length],pts:rows.filter(r=>r[i+1]>0).map(r=>[r[0],r[i+1]])}));
+  const B=last.baseResiduals||{}; if(B.cols&&B.cols.includes("p")){ const i=B.cols.indexOf("p");
+    const pts=(B.rows||[]).filter(r=>r[i]>0).map(r=>[r[0],r[i]]);
+    ser.push({name:`p, original-mesh run${pts.length?` (${pts[0][0]}–${pts[pts.length-1][0]})`:""}`,color:css("--muted"),dash:true,pts}); }
+  legend($("resLegend"), ser);
+  lineChart($("cRes"),$("tRes"),ser,{log:true, marks:marks(), band:band(), empty:"No residuals yet"});
+}
+window.addEventListener("resize",()=>{drawForces();drawRes();});
+
+let timer=null;
+async function tick(now){
+  clearTimeout(timer);
+  try{ const r=await fetch("/api/run?label="+encodeURIComponent(label),{cache:"no-store"}); const d=await r.json();
+    if(d.error) throw new Error(d.error);
+    render(d); $("liveDot").className="dot live"; $("updated").textContent="live · "+new Date().toLocaleTimeString();
+  }catch(e){ $("liveDot").className="dot"; $("updated").textContent="monitor offline ("+e.message+")"; }
+  timer=setTimeout(tick,15000);
+}
+tick();
+</script>
+</body>
+</html>

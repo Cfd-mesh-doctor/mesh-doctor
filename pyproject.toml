@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 The Mesh Doctor authors
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meshdoctor"
+version = "0.1.0"
+description = "Find, show and repair bad cells in OpenFOAM 14 meshes, with a solver A/B test and a local dashboard"
+readme = "README.md"
+license = {text = "GPL-3.0-or-later"}
+authors = [{name = "The Mesh Doctor authors"}]
+requires-python = ">=3.8"
+dependencies = []                       # standard library only
+
+[project.optional-dependencies]
+map = ["numpy>=1.21"]                   # the repair map (python3 -m meshdoctor map)
+
+[project.scripts]
+meshdoctor = "meshdoctor.__main__:main"
+
+[tool.setuptools]
+packages = ["meshdoctor", "meshdoctor.experimental"]
+
+[tool.setuptools.package-data]
+meshdoctor = ["web/*.html"]

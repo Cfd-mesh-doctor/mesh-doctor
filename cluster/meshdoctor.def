@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 The Mesh Doctor authors
+#
+# Apptainer image for clusters: Mesh Doctor + OpenFOAM 14 (openfoam.org).
+# Build it where you have root or --fakeroot (often a workstation, not the cluster):
+#
+#   apptainer build meshdoctor.sif cluster/meshdoctor.def      # from the repository folder
+#
+# then copy meshdoctor.sif to the cluster and use cluster/slurm/*.sbatch.
+# Release builds pin the base image by digest (From: ubuntu:22.04@sha256:...).
+Bootstrap: docker
+From: ubuntu:22.04
+
+%files
+    . /opt/mesh-doctor
+
+%post
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y --no-install-recommends ca-certificates wget gnupg python3 python3-numpy procps
+    wget -qO /etc/apt/trusted.gpg.d/openfoam.asc https://dl.openfoam.org/gpg.key
+    echo "deb http://dl.openfoam.org/ubuntu jammy main" > /etc/apt/sources.list.d/openfoam.list
+    apt-get update
+    apt-get install -y --no-install-recommends openfoam14
+    rm -rf /var/lib/apt/lists/* /opt/mesh-doctor/.git /opt/mesh-doctor/.data-guard-private.txt
+    bash -c ". /opt/openfoam14/etc/bashrc && /opt/mesh-doctor/Allwmake -site"
+
+%environment
+    export MESHDOCTOR_FOAM_BASHRC=/opt/openfoam14/etc/bashrc
+    export PYTHONPATH=/opt/mesh-doctor${PYTHONPATH:+:$PYTHONPATH}
+
+%runscript
+    exec python3 -m meshdoctor "$@"
+
+%help
+    apptainer run meshdoctor.sif help        every command
+    apptainer run meshdoctor.sif check       is this setup ready?
+    Set MESHDOCTOR_CASES and MESHDOCTOR_WORKSPACE (outside every case) before running.

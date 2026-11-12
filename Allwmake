@@ -1,0 +1,44 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 The Mesh Doctor authors
+#
+# Build the Mesh Doctor OpenFOAM utilities into $FOAM_USER_APPBIN.
+#
+#   . /opt/openfoam14/etc/bashrc      # OpenFOAM 14 (openfoam.org) first
+#   ./Allwmake                        # foamMeshDoctor, foamResidualHotspots
+#   ./Allwmake -experimental          # also foamMeshPolish (experimental)
+#   ./Allwmake -site                  # into $FOAM_SITE_APPBIN instead: every user of this
+#                                     # OpenFOAM install finds them (containers, cluster admins)
+cd "${0%/*}" || exit 1
+experimental=no
+for a in "$@"; do
+    case "$a" in
+        -experimental) experimental=yes ;;
+        -site) site=yes ;;
+        *) echo "unknown option $a (use -experimental, -site)" >&2; exit 1 ;;
+    esac
+done
+
+if [ -z "$WM_PROJECT_DIR" ]; then
+    echo "OpenFOAM is not loaded. Source OpenFOAM 14 first, for example:" >&2
+    echo "    . /opt/openfoam14/etc/bashrc" >&2
+    exit 1
+fi
+# openfoam.org numbers its releases 14, 15...; the ESI/OpenCFD fork uses v2406 etc.
+if [ "$WM_PROJECT" != "OpenFOAM" ] || [ "$WM_PROJECT_VERSION" != "14" ]; then
+    echo "Mesh Doctor needs OpenFOAM 14 from openfoam.org; this is $WM_PROJECT $WM_PROJECT_VERSION." >&2
+    exit 1
+fi
+
+if [ "$site" = yes ]; then
+    FOAM_USER_APPBIN="$FOAM_SITE_APPBIN"      # Make/files install to $FOAM_USER_APPBIN
+    export FOAM_USER_APPBIN
+fi
+set -e
+mkdir -p "$FOAM_USER_APPBIN"
+wmake foam/foamMeshDoctor
+wmake foam/foamResidualHotspots
+if [ "$experimental" = yes ]; then
+    wmake foam/experimental/foamMeshPolish
+fi
+echo "Built into $FOAM_USER_APPBIN"
