@@ -92,6 +92,17 @@ Forces are reported as drag (along the flow) and the vertical force, named **dow
 - the flow direction is read from `0/U`, preferring an inlet patch;
 - the up axis comes from, in order: the `up_axis` setting, the `liftDir` of `forceCoeffs`, or the cross-flow axis with the larger force.
 
+### When a steady run cannot converge: the transient plan
+
+A steady run that plateaus on a physically unsteady flow (a wing-tip vortex, a tyre wake) will not converge however long it runs. The way on is a transient run with time-averaged forces, which costs far more. `meshdoctor transient-plan <case>` says how much before you start one:
+- it runs OpenFOAM's `CourantNo` function on the steady result, which gives each cell's Courant number per second of time step, `0.5 Σ|φ| / V`;
+- with `adjustTimeStep`, the largest of these sets the time step: `dt = maxCo / max`;
+- for each max Courant number (`--co`, default 1, 5 and 20) it gives the time step, the number of steps for the flow time, and the hours, from the steady run's seconds per iteration and `--outer` PIMPLE iterations per step (default 3);
+- the flow time is `--flow-time`, or 8 body lengths of flow from `--length` or a `forceCoeffs` `lRef`; without one, the plan gives hours per 0.1 s of flow;
+- it finds the 100 fastest cells (`--top`) and groups them by place, and says how much larger the time step would be without them. A few tiny cells often set the time step for the whole mesh.
+
+The case is only read: OpenFOAM runs in a temporary shadow case whose mesh, settings and flux are links to it. The answer is a versioned JSON document (`tplan` schema). DES and LES need max Co ≤ 1. URANS with enough outer correctors usually runs higher, so the plan shows both.
+
 ## 6. Hotspots and the map
 
 `foamResidualHotspots` finds the cells where the solution still changes most:

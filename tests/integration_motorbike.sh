@@ -4,7 +4,8 @@
 #
 # Integration test on OpenFOAM's own motorBike tutorial (no other data):
 #   mesh it -> repair -> no checkMesh count worse, source unchanged
-#   -> short A/B with residual hotspots -> repair map with the ground found.
+#   -> short A/B with residual hotspots -> repair map with the ground found
+#   -> transient plan of the A/B run (case unchanged).
 #
 #   . /opt/openfoam14/etc/bashrc && ./Allwmake && tests/integration_motorbike.sh
 #
@@ -95,6 +96,22 @@ pinned = re.search(r"script-src ([^;]+)", page).group(1).split()
 assert len(pinned) == 3 and all(p.startswith("'sha256-") for p in pinned), pinned
 assert "connect-src 'none'" in page
 print("html export ok:", round(len(page) / 1e6, 2), "MB, one file, its 3 scripts pinned by hash")
+PY
+
+step "transient plan: time step and cost of a transient run; the case is only read"
+F=$T/work/it_mb_ab/fixed
+stamp() { (cd "$F" && find . -printf '%p %s %T@\n' | sort | md5sum); }
+before=$(stamp)
+python3 -m meshdoctor transient-plan "$F" --co 1,5 -o "$T/tplan.json"
+[ "$before" = "$(stamp)" ] || { echo "transient-plan changed the case" >&2; exit 1; }
+python3 -m meshdoctor schema tplan "$T/tplan.json"
+python3 - "$T/tplan.json" <<'PY'
+import json, sys
+p = json.load(open(sys.argv[1]))
+o1, o5 = p["options"]
+assert p["cells"] > 100000 and p["regions"] and p["speed"] == 20, p
+assert abs(o5["deltaT"] / o1["deltaT"] - 5) < 1e-9 and o1["deltaT"] <= o1["deltaTWithoutTop"], p["options"]
+print("transient plan ok: dt", f"{o1['deltaT']:.3g}", "s at max Co 1, set by", p["cellsWithin2x"], "cells")
 PY
 
 step "jobs through /api/v1: repair, one job at a time, cancel an A/B mid-solve"

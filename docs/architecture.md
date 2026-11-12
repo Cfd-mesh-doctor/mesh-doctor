@@ -31,6 +31,7 @@ Rules between layers:
 | Today | Layer | Notes |
 |---|---|---|
 | `caseinfo.py`, `ramguard.py`, `config.py`, `mapdata.py` | core | already free of HTTP and UI |
+| `tplan.py` | core + CLI | the transient plan: `plan()` returns a `tplan` document; it runs OpenFOAM only in a throwaway shadow case, so the case is only read. Not yet a job kind or an API route |
 | `repair.py`, `abtest.py` | core + CLI | the library functions (`full`, `fix`, `judge`, `run_one`, ...) are core; their `main()` is CLI |
 | `md_api.py` | api | reads results; checks job requests and hands them to `jobs.py`; refusals carry an error code |
 | `jobs.py`, `jobrun.py` | jobs | job files, admission (one big job, RAM guard), the LocalRunner and its wrapper, cancel |
@@ -53,6 +54,7 @@ Every file Mesh Doctor writes for another program to read carries `"schemaVersio
 | `meshDoctor/result.json` | repair | dashboard, map, A/B, reports |
 | `<name>_ab/ab_result.json` | A/B test | dashboard, reports |
 | judge output | `judge` (CLI, API) | dashboard live pages, reports |
+| transient plan | `transient-plan` (CLI) | people deciding on a transient run; later the API |
 | `meshDoctor/map.json` | map | repair map page, reports |
 | `.jobs/<id>.json` | job runner (`jobs.py`, `jobrun.py`) | API, `meshdoctor jobs`, dashboard |
 | `<name>.mdreport.json` | `meshdoctor report` (`report.py`) | the report viewer, anywhere |

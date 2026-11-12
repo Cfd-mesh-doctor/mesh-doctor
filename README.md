@@ -93,6 +93,7 @@ meshdoctor help                       # every command; <command> --help for its 
 meshdoctor full <case> <name>         # repair a copy of <case> as <workspace>/<name>
 meshdoctor ab <case> <name>           # A/B solver test: original vs repaired mesh
 meshdoctor judge <case>               # is this run converged? (steady or transient)
+meshdoctor transient-plan <case>      # a steady run won't settle: time step and hours of a transient run
 meshdoctor schema <kind> <file>       # check a result file against its versioned schema
 meshdoctor jobs [list|show|cancel]    # jobs started from the dashboard or the API
 meshdoctor report <name> [--html]     # one portable file: repair, map and A/B, paths removed

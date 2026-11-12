@@ -1,0 +1,67 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://meshdoctor.invalid/schemas/tplan/1",
+ "title": "Mesh Doctor transient plan",
+ "description": "output of meshdoctor transient-plan: the time step a transient run of a steady case would need, what limits it, and what it would cost",
+ "type": "object",
+ "required": ["schemaVersion", "case", "time", "cells", "courantPerSecond", "cellsWithin2x", "top", "regions", "options"],
+ "properties": {
+  "schemaVersion": {"type": "string", "pattern": "^1\\.\\d+$", "description": "major.minor; readers accept any 1.x"},
+  "case": {"type": "string", "description": "the case folder's name (not its path)"},
+  "time": {"type": "string", "description": "the steady result time planned from"},
+  "processors": {"type": "integer", "minimum": 1},
+  "cells": {"type": "integer", "minimum": 1},
+  "courantPerSecond": {
+   "type": "object",
+   "description": "each cell's Courant number per second of time step, 0.5 sum|phi| / V, in 1/s; withoutTop is the largest once the top fastest cells are left out",
+   "required": ["median", "p99", "p999", "p9999", "max", "withoutTop"],
+   "properties": {
+    "median": {"type": "number", "minimum": 0}, "p99": {"type": "number", "minimum": 0},
+    "p999": {"type": "number", "minimum": 0}, "p9999": {"type": "number", "minimum": 0},
+    "max": {"type": "number", "minimum": 0}, "withoutTop": {"type": "number", "minimum": 0}
+   }
+  },
+  "top": {"type": "integer", "minimum": 0, "description": "how many of the fastest cells were located"},
+  "cellsWithin2x": {"type": "integer", "minimum": 0, "description": "cells whose Courant number is within 2x of the largest: the ones that set the time step"},
+  "regions": {
+   "type": "array",
+   "description": "the fastest cells grouped by place, fastest group first",
+   "items": {
+    "type": "object",
+    "required": ["nCells", "centre", "h", "maxRate"],
+    "properties": {
+     "nCells": {"type": "integer", "minimum": 1},
+     "centre": {"type": "array", "items": {"type": "number"}},
+     "bbox": {"type": "array"},
+     "h": {"type": "number", "minimum": 0, "description": "median cell size (cube root of volume), m"},
+     "maxRate": {"type": "number", "minimum": 0}
+    }
+   }
+  },
+  "speed": {"type": ["number", "null"], "description": "freestream speed, m/s"},
+  "length": {"type": ["number", "null"], "description": "reference length, m"},
+  "flowTime": {"type": ["number", "null"], "description": "seconds of flow the costs are for"},
+  "flowTimeSource": {"type": ["string", "null"]},
+  "secondsPerIteration": {"type": ["number", "null"], "description": "wall seconds per steady iteration, from the solver log"},
+  "outerCorrectors": {"type": "integer", "minimum": 1},
+  "options": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": ["maxCo", "deltaT", "deltaTWithoutTop", "stepsPerSecond"],
+    "properties": {
+     "maxCo": {"type": "number", "minimum": 0},
+     "deltaT": {"type": "number", "minimum": 0},
+     "deltaTWithoutTop": {"type": "number", "minimum": 0},
+     "stepsPerSecond": {"type": "number", "minimum": 0},
+     "hoursPerFlowSecond": {"type": "number", "minimum": 0, "description": "wall hours per second of simulated flow"},
+     "steps": {"type": "integer", "minimum": 0},
+     "hours": {"type": "number", "minimum": 0},
+     "hoursWithoutTop": {"type": "number", "minimum": 0}
+    }
+   }
+  },
+  "seconds": {"type": "number", "description": "how long planning took"},
+  "notes": {"type": "array", "items": {"type": "string"}}
+ }
+}

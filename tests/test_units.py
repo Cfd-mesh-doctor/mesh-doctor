@@ -173,6 +173,180 @@ class TransientJudgeTest(unittest.TestCase):
         self.assertTrue(self.judge()["verdict"].startswith("still developing"))
 
 
+def write_field(path, values, ncomp=1, binary=True, gz=False):
+    """An OpenFOAM vol field file with a nonuniform internalField (values flat: x0 y0 z0 x1 ...)."""
+    import array, gzip
+    typ, n = ("scalar" if ncomp == 1 else "vector"), len(values) // ncomp
+    head = ("FoamFile\n{\n    format      %s;\n    arch        \"LSB;label=32;scalar=64\";\n"
+            "    class       vol%sField;\n    object      f;\n}\ndimensions      [];\n\n"
+            "internalField   nonuniform List<%s> \n%d\n(" % ("binary" if binary else "ascii", typ.capitalize(), typ, n)).encode()
+    if binary:
+        body = array.array("d", values).tobytes()
+    else:
+        rows = [" ".join(repr(float(x)) for x in values[i * ncomp:(i + 1) * ncomp]) for i in range(n)]
+        body = ("\n" + "\n".join(r if ncomp == 1 else f"({r})" for r in rows) + "\n").encode()
+    data = head + body + b")\n;\n\nboundaryField\n{\n}\n"
+    with (gzip.open(path + ".gz", "wb") if gz else open(path, "wb")) as f:
+        f.write(data)
+
+
+class TransientPlanTest(unittest.TestCase):
+    """tplan: field reading, the shadow case, and the plan, with OpenFOAM stubbed out."""
+
+    def setUp(self):
+        import tplan
+        self.tp = tplan
+        self.d = tempfile.mkdtemp(prefix="tplan_test_")
+        self.case = os.path.join(self.d, "steady")
+
+    def tearDown(self):
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def test_read_internal(self):
+        vals = [0.5, 1e-9, 3.25, -2.0, 7.0, 8.0]
+        for kw in ({}, {"binary": False}, {"gz": True}, {"binary": False, "gz": True}):
+            for ncomp in (1, 3):
+                f = os.path.join(self.d, f"f{ncomp}_{len(kw)}_{kw.get('binary', 1)}")
+                write_field(f, vals, ncomp, **kw)
+                got = self.tp.read_internal(f + (".gz" if kw.get("gz") else ""))
+                self.assertEqual(list(got), vals, (kw, ncomp))
+        with open(os.path.join(self.d, "uniform"), "w") as f:
+            f.write("internalField   uniform 0;\n")
+        with self.assertRaises(ValueError):
+            self.tp.read_internal(os.path.join(self.d, "uniform"))
+
+    def make_case(self, nproc=2, t="300", cells=500):
+        for sub in ("system", "constant", "0"):
+            os.makedirs(os.path.join(self.case, sub), exist_ok=True)
+        with open(os.path.join(self.case, "system", "controlDict"), "w") as f:
+            f.write("deltaT          1;\n")
+        with open(os.path.join(self.case, "system", "forceCoeffs"), "w") as f:
+            f.write("forceCoeffs\n{\n    lRef            2;\n    Aref 1;\n}\n")
+        with open(os.path.join(self.case, "0", "U"), "w") as f:
+            f.write("internalField uniform (20 0 0);\nboundaryField\n{\n}\n")
+        with open(os.path.join(self.case, "log.foamRun"), "w") as f:
+            for i in range(1, 51):
+                f.write(f"Time = {i}s\n\nExecutionTime = {1.9 * i} s  ClockTime = {2 * i} s\n\n")
+        for p in range(nproc):
+            d = os.path.join(self.case, f"processor{p}")
+            os.makedirs(os.path.join(d, "constant", "polyMesh"))
+            for tt in ("100", t):
+                os.makedirs(os.path.join(d, tt))
+                open(os.path.join(d, tt, "phi"), "w").close()
+                open(os.path.join(d, tt, "U"), "w").close()
+        return [os.path.join(self.case, f"processor{p}") for p in range(nproc)]
+
+    def listing(self):
+        return sorted((r, tuple(sorted(fs))) for r, _, fs in os.walk(self.case))
+
+    def test_shadow_links_only_and_keeps_processor_order(self):
+        self.make_case(nproc=12)
+        self.assertEqual(self.tp.latest_time(self.case), ("300", True))
+        before = self.listing()
+        into = os.path.join(self.d, "shadow")
+        os.makedirs(into)
+        roots = self.tp.shadow(self.case, "300", True, into)
+        self.assertEqual([os.path.basename(r) for r in roots], [f"processor{p}" for p in range(12)])
+        self.assertTrue(os.path.islink(os.path.join(into, "processor10", "300", "phi")))
+        self.assertTrue(os.path.islink(os.path.join(into, "processor10", "constant")))
+        self.assertFalse(os.path.exists(os.path.join(into, "processor10", "300", "U")))
+        open(os.path.join(into, "processor10", "300", "Co"), "w").close()     # what OpenFOAM writes
+        self.assertEqual(self.listing(), before)
+
+    def fake_post_process(self, rates_of, seen):
+        """Stand-in for foamPostProcess: writes Co, C and Vc in each shadow root."""
+        def run(into, t, nproc):
+            seen.append((into, nproc))
+            roots = [os.path.join(into, f"processor{p}") for p in range(nproc)]
+            for p, r in enumerate(roots):
+                co, c, v = rates_of(p)
+                d = os.path.join(r, t)
+                write_field(os.path.join(d, "Co"), co, binary=p % 2 == 0)
+                write_field(os.path.join(d, "C"), c, 3)
+                write_field(os.path.join(d, "Vc"), v, gz=True)
+            log = os.path.join(into, "log.foamPostProcess")
+            open(log, "w").close()
+            return 0, log
+        return run
+
+    def test_plan(self):
+        self.make_case(nproc=2)
+
+        def rates_of(p):                  # 250 cells each; 5 fast cells in a cluster on processor 1
+            co = [10.0 + (i % 7) for i in range(250)]
+            c = [x for i in range(250) for x in (i * 0.1, p * 50.0, 0.0)]
+            v = [1e-3] * 250
+            if p == 1:
+                for k in range(5):
+                    co[100 + k] = 1000.0 - k
+                    c[3 * (100 + k):3 * (100 + k) + 3] = [5.0 + 0.01 * k, 2.0, 1.0]
+                    v[100 + k] = 1e-6
+            return co, c, v
+        seen, real = [], self.tp.post_process
+        self.tp.post_process = self.fake_post_process(rates_of, seen)
+        try:
+            before = self.listing()
+            p = self.tp.plan(self.case, targets=(1.0, 5.0), outer=3, top=5)
+        finally:
+            self.tp.post_process = real
+        self.assertEqual(self.listing(), before)                         # the case is only read
+        self.assertFalse(os.path.exists(seen[0][0]))                       # the shadow is removed
+        self.assertEqual((p["cells"], p["processors"], p["time"], seen[0][1]), (500, 2, "300", 2))
+        d = p["courantPerSecond"]
+        self.assertEqual((d["max"], d["withoutTop"], d["median"]), (1000.0, 16.0, 13.0))
+        self.assertEqual(p["cellsWithin2x"], 5)
+        g = p["regions"][0]
+        self.assertEqual(g["nCells"], 5)
+        self.assertAlmostEqual(g["h"], 0.01)
+        self.assertAlmostEqual(g["centre"][1], 2.0)
+        self.assertEqual((p["speed"], p["length"], p["flowTimeSource"]), (20.0, 2.0, "8 L/U"))
+        self.assertAlmostEqual(p["flowTime"], 0.8)
+        self.assertAlmostEqual(p["secondsPerIteration"], 2.0)
+        o = p["options"][0]
+        self.assertAlmostEqual(o["deltaT"], 1e-3)
+        self.assertAlmostEqual(o["deltaTWithoutTop"], 1 / 16)
+        self.assertEqual(o["steps"], 800)
+        self.assertAlmostEqual(o["hours"], 800 * 3 * 2.0 / 3600)
+        self.assertAlmostEqual(p["options"][1]["deltaT"], 5e-3)
+        self.assertEqual(self.schema.validate(p, "tplan"), [])
+        self.assertAlmostEqual(o["hoursPerFlowSecond"], 3 * 2.0 / 1e-3 / 3600)
+        text = self.tp.summary(p)
+        self.assertIn("steady at 300: 500 cells", text)
+        self.assertIn("set by 5 cells within 2x of the max", text)
+        self.assertIn("800 steps, about 1.3 h at 3 outer iterations per step", text)
+
+    def test_plan_errors(self):
+        os.makedirs(os.path.join(self.case, "system"))
+        with self.assertRaisesRegex(ValueError, "no time with a flux field"):
+            self.tp.plan(self.case)
+        self.make_case(nproc=1)
+        with self.assertRaisesRegex(ValueError, "no phi at time 7"):
+            self.tp.plan(self.case, t="7")
+        for bad in ("7; rm -rf x", "../300", "-1", ""):
+            with self.assertRaisesRegex(ValueError, "not a time"):
+                self.tp.plan(self.case, t=bad)
+        seen, real = [], self.tp.post_process
+
+        def failing(into, t, nproc):
+            seen.append(into)
+            log = os.path.join(into, "log.foamPostProcess")
+            with open(log, "w") as f:
+                f.write("--> FOAM FATAL ERROR:\ncannot find phi\n")
+            return 1, log
+        self.tp.post_process = failing
+        try:
+            with self.assertRaisesRegex(RuntimeError, "exit 1.*cannot find phi"):
+                self.tp.plan(self.case)
+        finally:
+            self.tp.post_process = real
+        self.assertFalse(os.path.exists(seen[0]))
+
+    @property
+    def schema(self):
+        import schema
+        return schema
+
+
 class SchemaTest(unittest.TestCase):
     """schema.py: version rules, the validator, and read/write."""
 
