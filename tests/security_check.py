@@ -57,6 +57,7 @@ def req(method, path, headers=None, body=None):
     r = c.getresponse()
     body = r.read().decode("utf-8", "replace")
     c.close()
+    req.headers = r
     return r.status, body
 
 
@@ -66,6 +67,7 @@ TOKEN = m.group(1) if m else ""
 JOB = "/api/md/start?src=example_case&name=..&profile=openfoam"
 V1JOB = b'{"kind": "repair", "params": {"source": "example_case", "name": ".."}}'
 JSON = "application/json"
+PAGES = ("/", "/run", "/meshdoctor", "/meshmap", "/report")
 
 CHECKS = [
     # (description, method, path, headers, expected status, text that must be in the body)
@@ -111,6 +113,32 @@ CHECKS = [
      {"Content-Type": JSON, "X-MD-Token": TOKEN, "Content-Length": "10000000"}, 413, "too-large", b""),
     ("v1 job with token reaches the API, which refuses '..'", "POST", "/api/v1/jobs",
      {"Content-Type": JSON, "X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 400, '"code": "bad-request"', V1JOB),
+    # page scripts: only plain names from web/js/
+    ("shared page script is served", "GET", "/js/md.js", {}, 200, "MD.render"),
+    ("unknown script is not served", "GET", "/js/nope.js", {}, 404, ""),
+    ("script route does not reach other files", "GET", "/js/../server.py", {}, 404, ""),
+    ("encoded traversal in the script route", "GET", "/js/%2e%2e%2fserver.py", {}, 404, ""),
+]
+
+
+def header(path, name):
+    req("GET", path)
+    return req.headers.getheader(name) or ""
+
+
+def csp(path):
+    """The page's Content-Security-Policy as {directive: [sources]}."""
+    return {d.split()[0]: d.split()[1:] for d in header(path, "Content-Security-Policy").split(";") if d.strip()}
+
+
+HEADERS = [
+    # (description, check)
+    ("page scripts are sent as JavaScript", lambda: header("/js/md.js", "Content-Type").startswith("text/javascript")),
+    ("pages load nothing from other sites", lambda: all(csp(p).get("default-src") == ["'none'"] for p in PAGES)),
+    ("pages connect only to this server", lambda: all(csp(p).get("connect-src") == ["'self'"] for p in PAGES)),
+    ("pages cannot be framed by another site", lambda: all(csp(p).get("frame-ancestors") == ["'none'"] for p in PAGES)),
+    ("Mesh Doctor and map pages run no inline script",
+     lambda: all(csp(p).get("script-src") == ["'self'"] for p in ("/meshdoctor", "/meshmap"))),
 ]
 
 failed = 0
@@ -120,5 +148,10 @@ for desc, method, path, headers, want, text, *send in CHECKS:
     ok = got == want and (text in body)
     failed += not ok
     print(f"{'PASS' if ok else 'FAIL'}  {desc}: {got}" + ("" if ok else f" (wanted {want}, body {body[:120]!r})"))
-print(f"\n{len(CHECKS) - failed}/{len(CHECKS)} passed")
+for desc, check in HEADERS:
+    ok = check()
+    failed += not ok
+    print(f"{'PASS' if ok else 'FAIL'}  {desc}")
+total = len(CHECKS) + len(HEADERS)
+print(f"\n{total - failed}/{total} passed")
 sys.exit(1 if failed or not TOKEN else 0)

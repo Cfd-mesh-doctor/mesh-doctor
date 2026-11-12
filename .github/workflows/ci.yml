@@ -36,6 +36,8 @@ jobs:
         run: python3 -W error::ResourceWarning -m unittest discover -s tests -v
       - name: Dashboard security tests
         run: python3 tests/security_check.py --start
+      - name: Front-end tests (web/js, Node's own test runner)
+        run: node --test tests/js/*.test.js
 
   pip:
     name: pip install
@@ -52,7 +54,7 @@ jobs:
           cd "$RUNNER_TEMP"
           venv/bin/meshdoctor help
           venv/bin/meshdoctor config
-          venv/bin/python -c "import importlib.resources as r, meshdoctor; print(sorted(p.name for p in (r.files(meshdoctor) / 'web').iterdir()))"
+          venv/bin/python -c "import importlib.resources as r, meshdoctor; print(sorted(p.name for p in (r.files(meshdoctor) / 'web').iterdir())); assert (r.files(meshdoctor) / 'web' / 'js' / 'md.js').is_file()"
           venv/bin/python -c "import importlib.resources as r, meshdoctor; s = sorted(p.name for p in (r.files(meshdoctor) / 'schemas').iterdir()); print(s); assert len(s) == 6, s"
           echo '{"schemaVersion": "1.0", "x": 1}' > bad.json
           ! venv/bin/meshdoctor schema map bad.json

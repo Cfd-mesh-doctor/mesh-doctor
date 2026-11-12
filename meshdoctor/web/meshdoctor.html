@@ -28,7 +28,8 @@ button{cursor:pointer}
 .item{padding:6px 8px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;cursor:pointer}
 .item.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
 .tag{display:inline-block;font-size:11px;padding:0 6px;border-radius:99px;border:1px solid var(--line);margin:2px 2px 0 0;color:var(--muted)}
-.sev3{color:var(--bad);border-color:var(--bad)}.sev2{color:var(--warn);border-color:var(--warn)}
+.sev3,.tag.bad{color:var(--bad);border-color:var(--bad)}.sev2,.tag.warn{color:var(--warn);border-color:var(--warn)}.tag.good{color:var(--good);border-color:var(--good)}
+.judge{margin:0 0 8px;padding:8px;border:1px solid var(--line);border-radius:6px}
 table{border-collapse:collapse;width:100%;font-size:12.5px}
 td,th{padding:3px 6px;border-bottom:1px solid var(--line);text-align:right}
 td:first-child,th:first-child{text-align:left}
@@ -53,7 +54,7 @@ pre{white-space:pre-wrap;font-size:11.5px;margin:0;color:var(--muted);max-height
       <h2>New repair run</h2>
       <div class="row"><select id="src" style="flex:1"></select></div>
       <div class="row"><input id="rname" placeholder="run name" style="flex:1"><select id="prof"><option value="openfoam">OpenFOAM limits</option><option value="strict">Strict</option></select></div>
-      <div class="row"><button class="primary" id="go">Copy + detect + correct</button></div>
+      <div class="row"><button class="primary" id="go">Copy + detect + correct</button><span id="goState" class="sub"></span></div>
       <div class="sub">Steps: copy the mesh → checkMesh → move points to fix bad faces (topology and curved walls never change) → checkMesh again → group problem regions.</div>
     </div>
     <div class="card"><h2>Runs</h2><div class="list" id="runs"></div></div>
@@ -71,6 +72,7 @@ pre{white-space:pre-wrap;font-size:11.5px;margin:0;color:var(--muted);max-height
         <input id="abIters" type="number" value="200" min="20" max="2000" style="width:90px"> iterations
         <select id="abVar"><option value="">2nd run: repaired mesh</option></select>
         <button id="abGo">Run A/B</button><span id="abState" class="sub"></span></div>
+      <div class="row sub" id="abJob"></div>
       <div class="row"><span class="sub">Continue the second run to</span><input id="abExtTo" type="number" value="600" min="21" max="5000" style="width:90px"> iterations <button id="abExt">Continue + judge</button></div>
       <div style="position:relative;height:260px"><canvas id="abChart"></canvas></div>
       <div class="sub" id="abLegend" style="margin:4px 0 8px"></div>
@@ -85,185 +87,7 @@ pre{white-space:pre-wrap;font-size:11.5px;margin:0;color:var(--muted);max-height
     <div class="card"><h2>Optimiser log</h2><pre id="log"></pre></div>
   </div>
 </div>
-<script>
-const $=id=>document.getElementById(id);
-let cur=null, tag='before', res=null;
-// job-starting requests carry the launch token the server wrote into this page
-async function j(u,o){o=o||{};if((o.method||"GET")!=="GET")o.headers=Object.assign({},o.headers,{"X-MD-Token":document.querySelector('meta[name="md-token"]').content});const r=await fetch(u,o);return r.json()}
-function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-
-async function loadSources(){const s=await j('/api/md/sources');$('src').innerHTML=s.map(n=>`<option>${esc(n)}</option>`).join('')}
-async function loadRuns(){
-  const rs=await j('/api/md/results');
-  $('runs').innerHTML=rs.map(r=>{
-    const v=r.verdict, st=r.status||{};
-    const badge=v?(v.regressions.length?`<span class="tag sev3">${v.regressions.length} regressions</span>`:`<span class="tag" style="color:var(--good);border-color:var(--good)">no regressions</span>`):'';
-    return `<div class="item ${cur===r.name?'on':''}" data-n="${esc(r.name)}"><b>${esc(r.name)}</b> ${badge}<div class="sub">${esc(st.step||'')} · ${esc(r.profile||'')} ${r.nCells?(r.nCells/1e6).toFixed(2)+'M cells':''}</div></div>`}).join('')||'<div class="sub">No runs yet.</div>';
-  document.querySelectorAll('#runs .item').forEach(e=>e.onclick=()=>openRun(e.dataset.n));
-}
-const ROWS=[['Face pyramids inverted','nWrongPyramids'],['Bad face tets','nBadTets'],['Skewness > 4 (faces)','nSkew'],['Max skewness','maxSkewness'],['Non-ortho > 70 (faces)','nSevereNonOrtho'],['Max non-orthogonality','maxNonOrtho'],['Small determinant (cells)','nSmallDeterminant'],['Low weight < 0.05 (faces)','nLowWeight'],['Min face weight','minWeight'],['Low volume ratio (faces)','nLowVolRatio'],['Concave cells','nConcaveCells'],['Failed checkMesh checks','failedChecks']];
-function fmt(x){return x===undefined?'–':(Number.isInteger(x)?x.toLocaleString():(+x).toPrecision(4))}
-async function openRun(name){
-  cur=name; loadRuns();
-  res=await j('/api/md/result?name='+encodeURIComponent(name));
-  const lg=await j('/api/md/log?name='+encodeURIComponent(name)); $('log').textContent=lg.text||'';
-  if(!res){$('summary').textContent='Still running…';$('clusters').innerHTML='';return}
-  const b=res.checkMeshBefore,a=res.checkMeshAfter, better=k=>(k==='minWeight'?a[k]>b[k]:a[k]<b[k]), worse=k=>(k==='minWeight'?a[k]<b[k]:a[k]>b[k]);
-  $('resTitle').textContent=`Result: ${name}`;
-  $('summary').innerHTML=`<div class="sub" style="margin-bottom:6px">${esc(res.source)} · ${(res.layout.nCells/1e6).toFixed(2)}M cells · profile ${esc(res.profile)} · max point move ${res.maxDisplacement_m!=null?(res.maxDisplacement_m*1000).toFixed(2)+' mm':'–'}</div>
-  <table><tr><th>checkMesh (OpenFOAM's own verdict)</th><th>before</th><th>after</th></tr>${ROWS.map(([l,k])=>`<tr><td>${l}</td><td>${fmt(b[k])}</td><td class="${better(k)?'up':worse(k)?'down':''}">${fmt(a[k])}</td></tr>`).join('')}</table>
-  <div class="sub" style="margin-top:6px">${res.verdict.regressions.length?'<b class="down">Regressions: '+esc(res.verdict.regressions.join(', '))+'</b>':'No checkMesh metric got worse.'} Mesh OK after: ${a.meshOK?'yes':'no'}</div>
-  <div class="sub">Point-move passes: ${res.passes||1}. ${res.collapse?(res.collapse.accepted?`Topology repair: collapsed ${res.collapse.facesCollapsed} face(s) that point moves could not fix (collapseEdges), then smoothed again; kept because checkMesh did not regress.`:`Topology repair tried on ${res.collapse.facesCollapsed} face(s) and rolled back${res.collapse.verdict&&res.collapse.verdict.regressions.length?' (it would have worsened: '+esc(res.collapse.verdict.regressions.join(', '))+')':''}.`):'No topology repair needed.'}</div>`;
-  showClusters();
-  loadAB(name);
-}
-// ---------------- solver A/B ----------------
-let abTimer=null;
-const FCOL=['#2563eb','#d9468f','#15803d','#b45309','#7c3aed','#0891b2'];
-function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
-function drawAB(live){
-  const c=$('abChart'),r=c.getBoundingClientRect(),dpr=devicePixelRatio||1;c.width=r.width*dpr;c.height=r.height*dpr;
-  const g=c.getContext('2d');g.scale(dpr,dpr);const W=r.width,H=r.height,L=48,B=22,T=6,R=8;
-  g.clearRect(0,0,W,H);g.font='11px system-ui';g.fillStyle=css('--muted');g.strokeStyle=css('--line');
-  const runs=['base','fixed'].filter(t=>live[t]);if(!runs.length){g.fillText('No residuals yet.',L,H/2);$('abLegend').textContent='';return}
-  const cols=live[runs[0]].cols.slice(1);let xmax=1,ymin=1e9,ymax=1e-12;
-  runs.forEach(t=>live[t].rows.forEach(rw=>{xmax=Math.max(xmax,rw[0]);rw.slice(1).forEach(v=>{if(v>0){ymin=Math.min(ymin,v);ymax=Math.max(ymax,v)}})}));
-  const ly0=Math.floor(Math.log10(ymin)),ly1=Math.ceil(Math.log10(ymax));
-  const X=x=>L+(W-L-R)*x/xmax,Y=v=>T+(H-T-B)*(ly1-Math.log10(v))/Math.max(1,ly1-ly0);
-  for(let e=ly0;e<=ly1;e++){const y=Y(10**e);g.beginPath();g.moveTo(L,y);g.lineTo(W-R,y);g.stroke();g.fillText('1e'+e,4,y+4)}
-  g.fillText('iteration',L+(W-L-R)/2-20,H-6);g.fillText('0',L,H-6);g.textAlign='right';g.fillText(String(Math.round(xmax)),W-R,H-6);g.textAlign='left';
-  cols.forEach((cn,i)=>runs.forEach(t=>{const rows=live[t].rows;g.strokeStyle=FCOL[i%FCOL.length];g.lineWidth=t==='fixed'?1.8:1.2;g.setLineDash(t==='fixed'?[]:[5,4]);g.beginPath();let first=true;rows.forEach(rw=>{const v=rw[i+1];if(!(v>0))return;const x=X(rw[0]),y=Y(v);if(first){g.moveTo(x,y);first=false}else g.lineTo(x,y)});g.stroke()}));
-  g.setLineDash([]);
-  $('abLegend').innerHTML=cols.map((cn,i)=>`<span class="sw" style="background:${FCOL[i%FCOL.length]}"></span>${esc(cn)}`).join(' &nbsp; ')+' &nbsp; · dashed = original run, solid = second run (repaired mesh or solver variant)';
-}
-function ms(s){return s?`${(+s.mean).toPrecision(4)} ± ${(+s.std).toPrecision(2)}`:'–'}
-async function fillABList(sel){
-  const l=await j('/api/md/ablist');$('abSel').innerHTML=l.map(n=>`<option ${n===sel?'selected':''}>${esc(n)}</option>`).join('');
-}
-$('abSel').onchange=()=>loadAB($('abSel').value,true);
-async function loadAB(name,keep){
-  clearTimeout(abTimer);
-  if(!keep)await fillABList(name);
-  const d=await j('/api/md/ab?name='+encodeURIComponent(name));
-  if(!d||!d.exists){$('abState').textContent='Not run yet for this repair run.';drawAB({});$('abTable').innerHTML='';return}
-  const st=d.status||{},r=d.result||{};$('abState').textContent=(st.step||'')+' · '+(st.time||'');
-  drawAB(d.live||{});
-  let h='';
-  if(r.base&&r.base.residuals){
-    const ks=Object.keys(r.base.residuals);
-    const lbl=r.variant?{b:'original',f:r.variant+(r.fixedName?' + repaired':'')}:{b:'original',f:'repaired'};
-    h+=(r.variant?`<div class="sub" style="margin-bottom:4px">Second run = solver variant <b>${esc(r.variant)}</b>${r.fixedName?' on the repaired mesh':' on the original mesh'}: ${esc((r.variantSettings||[]).map(x=>x[1]+' = '+x[2]).join(' · '))}</div>`:'')+
-    `<table><tr><th>Initial residual, median of last ${r.window} iterations</th><th>${lbl.b}</th><th>${lbl.f}</th><th>ratio</th></tr>`+ks.map(k=>{const b=r.base.residuals[k],f=r.fixed&&r.fixed.residuals?r.fixed.residuals[k]:null;const q=b&&f&&b.median?f.median/b.median:null;return `<tr><td>${esc(k)}</td><td>${b?(+b.median).toExponential(2):'–'}</td><td>${f?(+f.median).toExponential(2):'running…'}</td><td class="${q==null?'':q<0.95?'up':q>1.05?'down':''}">${q==null?'–':q.toFixed(3)}</td></tr>`}).join('')+'</table>';
-    const gs=Object.keys(r.base.forces||{}).slice(0,12);
-    const B=lbl.b,F=lbl.f;
-    if(gs.length)h+=`<table style="margin-top:8px"><tr><th>Force (N), mean ± oscillation, last ${r.window} it.</th><th>${B} Fx</th><th>${F} Fx</th><th>${B} Fy</th><th>${F} Fy</th><th>${B} Fz</th><th>${F} Fz</th></tr>`+gs.map(g=>{const b=r.base.forces[g],f=r.fixed&&r.fixed.forces?r.fixed.forces[g]:null;return `<tr><td>${esc(g)}</td>${['Fx','Fy','Fz'].map(k=>`<td>${ms(b[k])}</td><td>${f?ms(f[k]):'–'}</td>`).join('')}</tr>`}).join('')+`</table><div class="sub">Oscillation = standard deviation over the window: lower means more settled. Fx, Fy, Fz are along the case axes${r.fixedJudge&&r.fixedJudge.axes?` (flow ${esc(r.fixedJudge.axes.flow)}, up ${esc(r.fixedJudge.axes.up)})`:''}.</div>`;
-    h+=`<div class="sub" style="margin-top:6px">Seconds per iteration: original ${r.base.secondsPerIteration?r.base.secondsPerIteration.toFixed(1):'–'}, repaired ${r.fixed&&r.fixed.secondsPerIteration?r.fixed.secondsPerIteration.toFixed(1):'–'}. Bounding messages: ${r.base.bounding} / ${r.fixed?r.fixed.bounding:'–'}.</div>`;
-  }
-  for(const t of ['base','fixed']){const hs=r[t+'Hotspots'];if(!hs)continue;const s=hs.summary||{};
-    h+=`<div style="margin-top:8px"><b>${t==='base'?'Original':'Repaired'} mesh: where the solution still moves</b> <span class="sub">(change between the last two iterations)</span><div class="sub">Top 0.1 % of cells carry ${((s['shareTop0.1pct']||0)*100).toFixed(1)} % of the squared change, top 1 % carry ${((s['shareTop1pct']||0)*100).toFixed(1)} %. ${((hs.shareOfTopChangeNearMeshDefects||0)*100).toFixed(1)} % of the hotspot change sits next to a Mesh Doctor problem region. A few concentrated hotspots point to local (mesh) trouble; a broad spread points to unsteady flow.</div>`+
-    (hs.top||[]).slice(0,8).map((c,i)=>`<div class="sub">#${i+1} ${c.nCells} cells at (${c.centroid.map(v=>v.toFixed(3)).join(', ')}) m · max score ${(+c.maxScoreAll).toFixed(1)} · max non-ortho ${(+c.maxNonOrtho).toFixed(1)}° ${c.nearMeshDefect?'<span class="tag sev3">next to mesh defect</span>':''}</div>`).join('')+'</div>'}
-  const jd=r.fixedJudge;
-  if(jd&&jd.residuals){const p=jd.residuals.p||{},f=jd.forces||{},ok=/^converged/.test(jd.verdict),mid=/statistically|still/.test(jd.verdict);
-    h=`<div style="margin:0 0 8px;padding:8px;border:1px solid var(--line);border-radius:6px"><b>Convergence judge</b> <span class="tag" style="color:${ok?'var(--good)':mid?'#b45309':'#d9468f'};border-color:currentColor">${esc(jd.verdict)}</span>
-      <div class="sub">Second run, last ${jd.window} vs previous ${jd.window} iterations: p residual ${(+p.median).toExponential(2)} (trend ×${(+p.trend).toFixed(2)})${['vertical','drag','Fx','Fy'].filter(k=>f[k]).map(k=>` · ${esc(jd.group)} ${k==='vertical'?esc((jd.axes||{}).vertical||k):k} ${(+f[k].mean).toFixed(2)} N, oscillation ${(100*f[k].osc).toFixed(1)} %, drift ${(100*(f[k].drift||0)).toFixed(1)} %`).join('')}.</div>
-      ${Object.keys(jd.average||{}).length?`<div class="sub">Averages (N): ${Object.entries(jd.average).map(([k,a])=>`${esc(k)} ${(+a.mean).toFixed(2)} ± ${(+a.u).toFixed(2)}`).join(' · ')}</div>`:''}
-      <div class="sub">Converged = p below 1e-4 and forces within 0.5 %. Statistically steady = forces stationary within 1–2 %, so window means are usable even if residuals plateau.</div></div>`+h}
-  for(const m of d.modes||[]){const s=m.summary||{};
-    h+=`<div style="margin-top:8px"><b>Slow oscillation, iterations ${esc(m.from)} → ${esc(m.to)}</b><div class="sub">Where the solution swings over hundreds of iterations. Top 1 % of cells carry ${((s['shareTop1pct']||0)*100).toFixed(0)} % of the change; ${((m.nearDefects||0)*100).toFixed(1)} % sits next to a Mesh Doctor problem region (low = flow unsteadiness, not mesh).</div>`+
-    m.top.map((c,i)=>`<div class="sub">#${i+1} ${(100*c.share).toFixed(0)} % · ${c.nCells} cells at (${c.centroid.map(v=>v.toFixed(3)).join(', ')}) m · cell size ${c.h?(c.h*1000).toFixed(1)+' mm':'–'} · max non-ortho ${c.maxNonOrtho!=null?(+c.maxNonOrtho).toFixed(0)+'°':'–'}</div>`).join('')+'</div>'}
-  $('abTable').innerHTML=h||'<div class="sub">Running; the table fills in when the first run finishes.</div>';
-  if(st.step&&st.step!=='done')abTimer=setTimeout(()=>loadAB(name,true),20000);
-}
-j('/api/md/variants').then(vs=>{for(const v of vs||[]){const o=document.createElement('option');o.value=v.name;o.textContent='2nd run: '+v.label+' (original mesh)';$('abVar').appendChild(o)}}).catch(()=>{});
-$('abGo').onclick=async()=>{if(!cur)return;const r=await j(`/api/md/abstart?name=${encodeURIComponent(cur)}&iters=${$('abIters').value}&init=${$('abInit').value}&variant=${$('abVar').value}`,{method:'POST'});if(!r.ok)alert(r.error);else setTimeout(()=>loadAB(r.label||cur),3000)};
-$('abExt').onclick=async()=>{const l=$('abSel').value;if(!l)return;const r=await j(`/api/md/abextend?label=${encodeURIComponent(l)}&to=${$('abExtTo').value}`,{method:'POST'});if(!r.ok)alert(r.error);else setTimeout(()=>loadAB(l,true),3000)};
-function showClusters(){
-  if(!res)return;
-  const cl=tag==='before'?res.clustersBefore:res.clustersAfter;
-  $('tBefore').classList.toggle('on',tag==='before');$('tAfter').classList.toggle('on',tag==='after');
-  $('clusters').innerHTML=cl.slice(0,300).map(c=>`<div class="item" data-i="${c.id}"><b>#${c.id+1}</b> ${c.kinds.map(k=>`<span class="tag sev${c.severity}">${esc(k)}</span>`).join('')}<div class="sub">${c.nFaces} face(s) · worst badness ${c.worst.badness.toFixed(2)} · ${c.patches.length?esc(c.patches.join(', ')):'interior'}<br>at (${c.centroid.map(v=>v.toFixed(3)).join(', ')}) m · non-ortho ${c.worst.nonOrtho.toFixed(1)}° · skew ${c.worst.skew.toFixed(2)}</div></div>`).join('')||'<div class="sub">No faces above target.</div>';
-  document.querySelectorAll('#clusters .item').forEach(e=>e.onclick=()=>{document.querySelectorAll('#clusters .item').forEach(x=>x.classList.remove('on'));e.classList.add('on');loadCluster(+e.dataset.i)});
-}
-$('tBefore').onclick=()=>{tag='before';showClusters()};$('tAfter').onclick=()=>{tag='after';showClusters()};
-$('go').onclick=async()=>{const n=$('rname').value.trim()||($('src').value+'_'+Date.now().toString(36));const r=await j(`/api/md/start?src=${encodeURIComponent($('src').value)}&name=${encodeURIComponent(n)}&profile=${$('prof').value}`,{method:'POST'});if(!r.ok)alert(r.error);cur=n;setTimeout(loadRuns,1500)};
-
-// ---------------- WebGL viewer ----------------
-const cv=$('cv'), gl=cv.getContext('webgl',{antialias:true,premultipliedAlpha:false});
-const VS=`attribute vec3 p;attribute vec4 c;attribute vec3 n;uniform mat4 M;varying vec4 vc;varying float l;void main(){gl_Position=M*vec4(p,1.);vc=c;l=.45+.55*abs(normalize(n).z*.6+normalize(n).y*.3+normalize(n).x*.1);}`;
-const FS=`precision mediump float;varying vec4 vc;varying float l;uniform float edge;void main(){gl_FragColor=edge>.5?vec4(.08,.09,.11,.55):vec4(vc.rgb*l,vc.a);}`;
-function sh(t,s){const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);return o}
-const pr=gl.createProgram();gl.attachShader(pr,sh(gl.VERTEX_SHADER,VS));gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,FS));gl.linkProgram(pr);gl.useProgram(pr);
-const L={p:gl.getAttribLocation(pr,'p'),c:gl.getAttribLocation(pr,'c'),n:gl.getAttribLocation(pr,'n'),M:gl.getUniformLocation(pr,'M'),edge:gl.getUniformLocation(pr,'edge')};
-let mesh=null, cam={yaw:.7,pitch:.5,dist:1,target:[0,0,0]}, origin=[0,0,0];
-function col(f){if(f.ctx)return[.6,.64,.7,.28];if(f.hot)return[.85,.27,.56,1];if(f.bad>1)return[.89,.34,.18,.95];if(f.bad>.8)return[.95,.76,.31,.9];return[.29,.64,.64,.5]}
-function build(g){
-  const P=[],C=[],N=[],E=[],tris=[];
-  const add=(xyz,c,info)=>{const m=xyz.length/3;if(m<3)return;const v=i=>[xyz[3*i]-origin[0],xyz[3*i+1]-origin[1],xyz[3*i+2]-origin[2]];
-    const a=v(0);let nn=[0,0,0];for(let i=1;i<m-1;i++){const b=v(i),d=v(i+1),u=[b[0]-a[0],b[1]-a[1],b[2]-a[2]],w=[d[0]-a[0],d[1]-a[1],d[2]-a[2]];nn[0]+=u[1]*w[2]-u[2]*w[1];nn[1]+=u[2]*w[0]-u[0]*w[2];nn[2]+=u[0]*w[1]-u[1]*w[0]}
-    for(let i=1;i<m-1;i++){for(const q of[a,v(i),v(i+1)]){P.push(...q);C.push(...c);N.push(...nn)}tris.push([a,v(i),v(i+1),info])}
-    for(let i=0;i<m;i++){E.push(...v(i),...v((i+1)%m))}};
-  // opaque/near-opaque first, translucent context last
-  const cells=g.cells.slice().sort((x,y)=>(x.hot-y.hot)||(x.bad-y.bad));
-  for(const f of cells)add(f.xyz,col(f),f);
-  const nOpaque=P.length/3;
-  for(const f of g.ctx)add(f.xyz,col({ctx:1}),{ctx:1,patch:f.patch});
-  const mk=a=>{const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(a),gl.STATIC_DRAW);return b};
-  return{p:mk(P),c:mk(C),n:mk(N),e:mk(E),nv:P.length/3,nOpaque,ne:E.length/3,tris};
-}
-async function loadCluster(id){
-  const c=(tag==='before'?res.clustersBefore:res.clustersAfter)[id];
-  const g=await j(`/api/md/cluster?name=${encodeURIComponent(cur)}&tag=${tag}&id=${id}`);if(!g)return;
-  origin=c.centroid.slice();
-  const ext=Math.max(...[0,1,2].map(k=>c.bbox[1][k]-c.bbox[0][k]),c.h*6);
-  cam={yaw:.7,pitch:.5,dist:ext*2.2,target:[0,0,0]};
-  mesh=build(g);
-  $('pick').innerHTML=`Region #${id+1}: ${g.cells.length} cell faces, ${g.ctx.length} nearby wall faces. Click a face for its values.`;
-  draw();
-}
-function mat(){
-  const w=cv.clientWidth,h=cv.clientHeight,asp=w/h,f=1/Math.tan(.45),near=cam.dist/200,far=cam.dist*50;
-  const cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw),cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch);
-  const eye=[cam.target[0]+cam.dist*cp*cy,cam.target[1]+cam.dist*cp*sy,cam.target[2]+cam.dist*sp];
-  const z=norm(sub(eye,cam.target)),x=norm(cross([0,0,1],z)),y=cross(z,x);
-  const V=[x[0],y[0],z[0],0,x[1],y[1],z[1],0,x[2],y[2],z[2],0,-dot(x,eye),-dot(y,eye),-dot(z,eye),1];
-  const Pm=[f/asp,0,0,0,0,f,0,0,0,0,(far+near)/(near-far),-1,0,0,2*far*near/(near-far),0];
-  return{M:mul(Pm,V),eye,x,y,z,f,asp};
-}
-const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]],dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],norm=a=>{const l=Math.hypot(...a)||1;return a.map(v=>v/l)};
-function mul(a,b){const o=new Array(16).fill(0);for(let i=0;i<4;i++)for(let j=0;j<4;j++)for(let k=0;k<4;k++)o[j*4+i]+=a[k*4+i]*b[j*4+k];return o}
-function draw(){
-  const dpr=window.devicePixelRatio||1;cv.width=cv.clientWidth*dpr;cv.height=cv.clientHeight*dpr;gl.viewport(0,0,cv.width,cv.height);
-  gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);if(!mesh)return;
-  gl.enable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
-  gl.uniformMatrix4fv(L.M,false,new Float32Array(mat().M));
-  const bind=(b,loc,n)=>{gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,n,gl.FLOAT,false,0,0)};
-  bind(mesh.p,L.p,3);bind(mesh.c,L.c,4);bind(mesh.n,L.n,3);gl.uniform1f(L.edge,0);
-  gl.drawArrays(gl.TRIANGLES,0,mesh.nOpaque);
-  gl.depthMask(false);gl.drawArrays(gl.TRIANGLES,mesh.nOpaque,mesh.nv-mesh.nOpaque);gl.depthMask(true);
-  bind(mesh.e,L.p,3);gl.disableVertexAttribArray(L.c);gl.disableVertexAttribArray(L.n);gl.vertexAttrib4f(L.c,0,0,0,1);gl.vertexAttrib3f(L.n,0,0,1);
-  gl.uniform1f(L.edge,1);gl.drawArrays(gl.LINES,0,mesh.ne);
-}
-let drag=null;
-cv.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,pan:e.shiftKey||e.button===2,moved:0};cv.setPointerCapture(e.pointerId)});
-cv.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag.x=e.clientX;drag.y=e.clientY;drag.moved+=Math.abs(dx)+Math.abs(dy);
-  if(drag.pan){const m=mat(),s=cam.dist/cv.clientHeight;for(let k=0;k<3;k++)cam.target[k]+=(-dx*m.x[k]+dy*m.y[k])*s}else{cam.yaw-=dx*.01;cam.pitch=Math.max(-1.5,Math.min(1.5,cam.pitch+dy*.01))}draw()});
-cv.addEventListener('pointerup',e=>{if(drag&&drag.moved<4)pick(e);drag=null});
-cv.addEventListener('contextmenu',e=>e.preventDefault());
-cv.addEventListener('wheel',e=>{e.preventDefault();cam.dist*=Math.exp(e.deltaY*.001);draw()},{passive:false});
-function pick(e){
-  if(!mesh)return;const m=mat(),r=cv.getBoundingClientRect();
-  const nx=((e.clientX-r.left)/r.width)*2-1,ny=1-((e.clientY-r.top)/r.height)*2;
-  const d=norm([0,1,2].map(k=>-m.z[k]+m.x[k]*nx*m.asp/m.f+m.y[k]*ny/m.f));
-  let best=null,bt=1e30;
-  for(const [a,b,c,info] of mesh.tris){const e1=sub(b,a),e2=sub(c,a),pv=cross(d,e2),det=dot(e1,pv);if(Math.abs(det)<1e-18)continue;const tv=sub(m.eye,a),u=dot(tv,pv)/det;if(u<0||u>1)continue;const qv=cross(tv,e1),v=dot(d,qv)/det;if(v<0||u+v>1)continue;const t=dot(e2,qv)/det;if(t>0&&t<bt&&!(info.ctx&&best&&!best.ctx)){bt=t;best=info}}
-  if(!best)return;
-  $('pick').innerHTML=best.ctx?`Wall face on patch <b>${esc(best.patch)}</b>`:`Cell ${best.cell} · face ${best.face} · badness <b>${best.bad.toFixed(3)}</b>${best.hot?' · <b>failing face</b>':''} (badness = worst metric ÷ its target; above 1 fails the target)`;
-}
-window.addEventListener('resize',draw);
-// deep link: /meshdoctor?run=<name>[&cluster=<number as listed>] opens that run (and cluster)
-(async()=>{const q=new URLSearchParams(location.search),n=q.get('run'),k=parseInt(q.get('cluster'),10);
-  if(!n)return;await openRun(n);if(res&&k>0&&res.clustersBefore[k-1])loadCluster(k-1)})();
-loadSources();loadRuns();setInterval(()=>{loadRuns();if(cur&&!res)openRun(cur)},8000);
-</script>
+<script src="js/md.js"></script>
+<script src="js/meshdoctor.js"></script>
 </body>
 </html>

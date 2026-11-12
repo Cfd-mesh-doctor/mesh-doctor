@@ -597,7 +597,11 @@ def run_status(label):
 #  - refuses requests that another web site's page sends (Origin check);
 #  - job-starting requests (POST) need a random token made at launch; the
 #    server writes it into the pages it serves, which other sites cannot read;
-#  - serves only the dashboard pages, never the other files in this folder;
+#  - serves only the dashboard pages and the scripts in web/js/, never the
+#    other files in this folder;
+#  - every page gets a Content-Security-Policy: no other site's scripts, styles,
+#    images or connections, no framing.  Pages whose script is all in web/js/
+#    (STRICT) run no inline script at all, so injected markup cannot run code;
 #  - error details go to this server's window; the browser gets a short message.
 import hmac, secrets, traceback
 
@@ -613,6 +617,11 @@ PAGES = {"/": "index.html", "/index.html": "index.html",
          "/meshmap": "meshmap.html", "/meshmap.html": "meshmap.html",
          "/report": "report.html", "/report.html": "report.html"}
 TOKEN_META = '<meta name="md-token" content="">'
+SCRIPT = re.compile(r"^/js/([a-z0-9][a-z0-9-]{0,40}\.js)$")
+STRICT = {"meshdoctor.html", "meshmap.html"}        # no inline script; the others still have some
+CSP = ("default-src 'none'; script-src 'self'{inline}; style-src 'self' 'unsafe-inline'; "
+       "img-src 'self' data: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; "
+       "frame-ancestors 'none'")
 
 
 class H(http.server.BaseHTTPRequestHandler):
@@ -668,7 +677,16 @@ class H(http.server.BaseHTTPRequestHandler):
         except OSError:
             return self._deny(404, "not found")
         html = html.replace(TOKEN_META, f'<meta name="md-token" content="{TOKEN}">')
-        self._send(200, "text/html; charset=utf-8", html.encode())
+        csp = CSP.format(inline="" if name in STRICT else " 'unsafe-inline'")
+        self._send(200, "text/html; charset=utf-8", html.encode(), {"Content-Security-Policy": csp})
+
+    def _script(self, name):
+        try:
+            with open(os.path.join(WEB, "js", name), "rb") as f:
+                body = f.read()
+        except OSError:
+            return self._deny(404, "not found")
+        self._send(200, "text/javascript; charset=utf-8", body)
 
     def _md(self, method):
         u = urlparse(self.path); q = {k: v[0] for k, v in parse_qs(u.query).items()}
@@ -753,6 +771,9 @@ class H(http.server.BaseHTTPRequestHandler):
                 return self._fail(path)
         if path in PAGES:
             return self._page(PAGES[path])
+        m = SCRIPT.match(path)
+        if m:
+            return self._script(m.group(1))
         self._deny(404, "not found")
 
 

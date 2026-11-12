@@ -427,6 +427,44 @@ class ReportTest(unittest.TestCase):
             self.assertIn(f'version = "{version.VERSION}"', f.read())
 
 
+class PagesTest(unittest.TestCase):
+    """The pages load script only from web/js/; STRICT pages have none inline; markup only via MD.render."""
+    WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "meshdoctor", "web")
+    MARKUP = re.compile(r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function")
+
+    def read(self, *p):
+        with open(os.path.join(self.WEB, *p), encoding="utf-8") as f:
+            return f.read()
+
+    def test_script_files_and_strict_pages(self):
+        import server
+        self.assertTrue(server.STRICT <= set(server.PAGES.values()))
+        for name in sorted(set(server.PAGES.values())):
+            page = self.read(name)
+            srcs = re.findall(r'<script src="([^"]+)"', page)
+            for src in srcs:
+                self.assertTrue(server.SCRIPT.match("/" + src), (name, src))      # the server serves it
+                self.assertTrue(os.path.isfile(os.path.join(self.WEB, src)), (name, src))
+            if name in server.STRICT:
+                self.assertEqual(srcs[0], "js/md.js", name)
+                self.assertIsNone(re.search(r"<script(?![^>]*\bsrc=)[^>]*>", page), name)   # nothing inline
+                self.assertIsNone(re.search(r"\son[a-z]+\s*=", page), name)                # no onclick= etc.
+                self.assertIsNone(self.MARKUP.search(page), name)
+
+    def test_only_md_render_writes_markup(self):
+        for f in sorted(os.listdir(os.path.join(self.WEB, "js"))):
+            if f.endswith(".js") and f != "md.js":
+                self.assertIsNone(self.MARKUP.search(self.read("js", f)), f)
+        self.assertEqual(len(re.findall(r"innerHTML", self.read("js", "md.js").split("// ---- /api/v1")[0])), 2)
+
+    def test_script_route_takes_plain_names_only(self):
+        import server
+        for bad in ["/js/../server.py", "/js/md.js/", "/js/.md.js", "/js/sub/md.js", "/js/MD.js", "/js/md.mjs",
+                    "/js/md.js%00", "/js/" + "a" * 50 + ".js"]:
+            self.assertIsNone(server.SCRIPT.match(bad), bad)
+        self.assertEqual(server.SCRIPT.match("/js/md.js").group(1), "md.js")
+
+
 @unittest.skipUnless(os.path.isdir("/proc"), "the local runner needs Linux")
 class LocalRunnerTest(unittest.TestCase):
     """jobs.py + jobrun.py with real processes (python -c ...), never OpenFOAM."""
