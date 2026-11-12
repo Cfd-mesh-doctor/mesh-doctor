@@ -10,8 +10,9 @@
     python3 -m meshdoctor judge  <case> [window]                      convergence verdict
     python3 -m meshdoctor map    <name> [--hot "Label=<dir>"] ...     repair-vs-hotspot map
     python3 -m meshdoctor config                                      settings in use
-    python3 -m meshdoctor schema <repair|abtest|judge|map|job> <file>  validate a result file
+    python3 -m meshdoctor schema <kind> <file>                        validate a result file
     python3 -m meshdoctor jobs   [list | show <id> | cancel <id>]     dashboard and API jobs
+    python3 -m meshdoctor report <name> [--html | --gzip] [-o file]   portable report (one file)
     python3 -m meshdoctor check                                       is this machine ready?
     python3 -m meshdoctor experimental polish | ratchet ...           experimental skills
 
@@ -32,6 +33,7 @@ SCRIPTS = {
     "check": "selfcheck.py",
     "schema": "schema.py",
     "jobs": "jobs.py",
+    "report": "report.py",
 }
 EXPERIMENTAL = {"polish": "polish.py", "ratchet": "ratchet.py"}
 

@@ -9,7 +9,7 @@ It never starts a job: the only accepted job request it sends uses the copy
 name "..", which the API must refuse.  With --start the server gets empty
 temporary cases and workspace folders and no config file.
 """
-import atexit, http.client, os, re, socket, subprocess, sys, tempfile, time
+import atexit, http.client, os, re, shutil, socket, subprocess, sys, tempfile, time
 
 
 def _start_server():
@@ -21,7 +21,15 @@ def _start_server():
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     p = subprocess.Popen([sys.executable, "-m", "meshdoctor", "serve", "--port", str(port)], cwd=repo, env=env,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    atexit.register(p.terminate)
+
+    def stop():
+        p.terminate()
+        try:
+            p.wait(10)
+        except subprocess.TimeoutExpired:
+            p.kill()
+        shutil.rmtree(tmp, ignore_errors=True)
+    atexit.register(stop)
     for _ in range(100):
         try:
             socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
@@ -64,6 +72,7 @@ CHECKS = [
     ("page loads and carries a launch token", "GET", "/meshdoctor", {}, 200, "md-token"),
     ("other dashboard pages load", "GET", "/meshmap", {}, 200, "<canvas"),
     ("run page loads", "GET", "/run", {}, 200, "<html"),
+    ("report viewer loads, with its no-upload policy", "GET", "/report", {}, 200, "connect-src"),
     ("status API works", "GET", "/api/status", {}, 200, ""),
     ("map list API works", "GET", "/api/md/maplist", {}, 200, "["),
     ("server source is not served", "GET", "/server.py", {}, 404, ""),

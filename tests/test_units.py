@@ -263,6 +263,9 @@ class ApiV1Test(unittest.TestCase):
         self.assertEqual(self.get("/repairs")[1]["items"][0]["name"], "r1")
         self.assertEqual(self.get("/")[1]["schemas"], self.schema.VERSIONS)
         self.assertEqual(self.get("/schemas/judge")[1]["$id"], self.schema.schema("judge")["$id"])
+        st, rep, _ = self.get("/repairs/r1/report")
+        self.assertEqual((st, rep["kind"], rep["documents"]["repair"]["source"]), (200, "meshdoctor-report", "cases/c1"))
+        self.assertError(self.get("/repairs/nope/report"), 404, "not-found")
 
     def test_errors(self):
         self.assertError(self.get("/repairs/nope"), 404, "not-found")
@@ -358,6 +361,70 @@ class ApiV1Test(unittest.TestCase):
                                 ["code"]["enum"]), sorted(self.api.STATUS))
         refs = re.findall(r'"\$ref": "schemas/(\w+)"', json.dumps(doc))
         self.assertTrue(refs and all(k in self.schema.VERSIONS for k in refs), refs)
+
+
+class ReportTest(unittest.TestCase):
+    """report.py: one portable file per run, worker paths removed, data intact."""
+
+    def setUp(self):
+        import report, schema
+        self.report, self.schema = report, schema
+        self.d = tempfile.mkdtemp(prefix="report_test_")
+        self.ws, self.cases = os.path.join(self.d, "work"), os.path.join(self.d, "cases")
+        md = os.path.join(self.ws, "r1", "meshDoctor")
+        os.makedirs(md)
+        os.makedirs(os.path.join(self.ws, "r1_ab"))
+        self.blob = "AAAA+/usr/xBBB/+/Zm9v" * 80                   # base64 with "+/" that looks like a path
+        schema.write(os.path.join(md, "result.json"), {
+            "case": os.path.join(self.ws, "r1"), "source": os.path.join(self.cases, "c1"),
+            "verdict": {"improved": ["nSkew"], "regressions": [], "unchanged": []},
+            "runs": [{"cmd": "checkMesh", "log": f"see {self.ws}/r1/log.checkMesh and /opt/of/etc/bashrc"}],
+            "note": "</script><script>alert(1)</script>", "openfoam": "14"}, "repair")
+        schema.write(os.path.join(md, "map.json"), {"side": {"nx": 1, "ny": 1, "data": self.blob},
+                                                    "hot": [{"case": os.path.join(self.ws, "r1_ab", "base")}]})
+        schema.write(os.path.join(self.ws, "r1_ab", "ab_result.json"), {"source": os.path.join(self.cases, "c1"),
+                                                                       "iters": 30}, "abtest")
+
+    def tearDown(self):
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def test_bundle(self):
+        r = self.report.build("r1", ws=self.ws, cases=self.cases)
+        text = json.dumps(r)
+        self.assertNotIn(self.d, text)                                  # no worker path left anywhere
+        d = r["documents"]
+        self.assertEqual(d["repair"]["case"], "workspace/r1")
+        self.assertEqual(d["repair"]["source"], "cases/c1")
+        self.assertEqual(d["repair"]["runs"][0]["log"], "see workspace/r1/log.checkMesh and bashrc")
+        self.assertEqual(d["map"]["side"]["data"], self.blob)          # encoded data untouched
+        self.assertEqual(d["map"]["hot"][0]["case"], "workspace/r1_ab/base")
+        self.assertEqual(sorted(d), ["abtest", "map", "repair"])
+        self.assertEqual(self.schema.validate(r, "report"), [])
+        self.assertEqual(r["contents"]["repair"]["sha256"], self.report.digest(d["repair"]))
+        self.assertEqual(r["redacted"]["paths"], 6)
+
+    def test_html_embeds_safely(self):
+        r = self.report.build("r1", ws=self.ws, cases=self.cases)
+        page = self.report.html(r)
+        with open(self.report.VIEWER, encoding="utf-8") as f:
+            viewer = f.read()
+        self.assertEqual(page.count("</script>"), viewer.count("</script>"))   # data cannot close the tag
+        self.assertIn("connect-src 'none'", page)                       # an exported report never goes online
+        data = page.split('<script type="application/json" id="md-report">')[1].split("</script>")[0]
+        self.assertEqual(json.loads(data), r)
+
+    def test_missing_and_bad_names(self):
+        with self.assertRaises(FileNotFoundError):
+            self.report.build("nope", ws=self.ws, cases=self.cases)
+        with self.assertRaises(FileNotFoundError):
+            self.report.build("r1", ab="other", ws=self.ws, cases=self.cases)
+        with self.assertRaises(ValueError):
+            self.report.build("../r1", ws=self.ws, cases=self.cases)
+
+    def test_version_matches_pyproject(self):
+        import version
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "pyproject.toml")) as f:
+            self.assertIn(f'version = "{version.VERSION}"', f.read())
 
 
 @unittest.skipUnless(os.path.isdir("/proc"), "the local runner needs Linux")

@@ -20,6 +20,7 @@ import json, os, re
 import jobs
 import md_api
 import schema
+import version
 
 API_VERSION = "1.0"
 PREFIX = "/api/v1"
@@ -106,7 +107,7 @@ def _found(doc, what):
 @route("GET", "/", "This API: its version, the result-file versions, the OpenAPI document",
        ok={"type": "object", "required": ["apiVersion", "schemas"]})
 def info(p, q, b):
-    return {"apiVersion": API_VERSION, "schemas": dict(schema.VERSIONS),
+    return {"apiVersion": API_VERSION, "version": version.VERSION, "schemas": dict(schema.VERSIONS),
             "openapi": PREFIX + "/openapi.json", "jobKinds": sorted(JOBS)}
 
 
@@ -156,6 +157,20 @@ def repair_log(p, q, b):
     if not os.path.isdir(os.path.join(md_api.md_dir(), _name(p["name"]), "meshDoctor")):
         raise ApiError("not-found", "no repair run " + p["name"])
     return {"text": md_api.log_tail(p["name"])}
+
+
+@route("GET", "/repairs/{name}/report",
+       "Portable report: the repair, its map and its A/B test in one file, worker paths replaced (open it in /report)",
+       query={"ab": {"schema": NAME, "description": "A/B test label to include (default: the run's own, if any)"}},
+       ok=_ref("report"))
+def repair_report(p, q, b):
+    import report
+    try:
+        return report.build(_name(p["name"]), q.get("ab"))
+    except FileNotFoundError as e:
+        raise ApiError("not-found", str(e))
+    except schema.SchemaError as e:
+        raise ApiError("schema-version", getattr(e, "why", "newer file version"))
 
 
 @route("GET", "/abtests", "A/B solver tests in the workspace", ok=_items({"type": "string"}))

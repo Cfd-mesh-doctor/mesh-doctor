@@ -52,14 +52,33 @@ Every file Mesh Doctor writes for another program to read carries `"schemaVersio
 | judge output | `judge` (CLI, API) | dashboard live pages, reports |
 | `meshDoctor/map.json` | map | repair map page, reports |
 | `.jobs/<id>.json` | job runner (`jobs.py`, `jobrun.py`) | API, `meshdoctor jobs`, dashboard |
+| `<name>.mdreport.json` | `meshdoctor report` (`report.py`) | the report viewer, anywhere |
 
 - A minor bump only adds fields. A major bump changes or removes them.
 - Readers accept any minor version of the major version they know, and refuse a newer major version with a clear message.
 - Tests validate real outputs against the schemas, so a field cannot quietly disappear.
-- `meshdoctor schema <repair|abtest|judge|map|job> <file>` checks any file by hand. `meshdoctor/schema.py` holds the versions, the read and write helpers (which stamp the version and refuse a newer major version), and a small validator for the JSON Schema keywords the schemas use (standard library only, like the rest of the package).
+- `meshdoctor schema <repair|abtest|judge|map|job|report> <file>` checks any file by hand. `meshdoctor/schema.py` holds the versions, the read and write helpers (which stamp the version and refuse a newer major version), and a small validator for the JSON Schema keywords the schemas use (standard library only, like the rest of the package).
 - Files written before versioning existed have no `schemaVersion`. They are read as "legacy" and never re-stamped, so an old file is not mislabelled as 1.0.
 
-This is what makes a **report bundle** possible: a folder of these files plus a viewer, which can be opened anywhere, including a static website, without the worker.
+This is what makes a **report bundle** possible.
+
+## Report bundles
+
+`meshdoctor report <name>` writes one file, `<name>.mdreport.json`, that holds a run's versioned documents: the repair result, its repair map and its A/B test, when they exist. `--gzip` makes it about 5× smaller. `--html` writes the viewer with the report inside: one file to email, which opens with a double-click. `GET /api/v1/repairs/{name}/report` returns the same thing.
+
+- **Worker paths are replaced** before anything is written: `workspace/...`, `cases/...`, or just the file name. Encoded data (the map's base64 images) is never touched. The `redacted` field counts the replacements.
+- **What stays:** the case's geometry coordinates, patch and force-group names and all the numbers. A report is shared like the case itself; the viewer says so.
+- **Integrity:** `contents` lists each document's schema version (or `legacy`), size and the sha256 of its sorted compact JSON.
+
+The viewer is `web/report.html`, one page with no build step and no libraries. It works in three places:
+
+| Where | How it gets the report |
+|---|---|
+| the dashboard, `/report?name=<run>` | from `/api/v1/repairs/{name}/report` |
+| a static site (shape 2), or the page saved anywhere | the user picks or drops a `.json`, `.json.gz` or exported `.html` file; it is read in the browser |
+| an exported `--html` report | the report is inside the page |
+
+The page's Content-Security-Policy allows no network access except its own server (`connect-src 'self'`), and none at all in an exported report (`connect-src 'none'`). So the viewer cannot send a report anywhere, even by mistake. Everything from the file is shown as text, never parsed as HTML, so a report from someone else cannot run code in the page. Each card renders on its own: a damaged part of a file costs that card, not the page. A report from a newer major version is refused with a clear message.
 
 ## API v1
 
@@ -144,7 +163,7 @@ The dashboard pages still use the old routes. They move to v1 with the shared fr
 | Shape | What runs where | Team data | Needs |
 |---|---|---|---|
 | **1. Local (today)** | everything on your machine; the browser talks to 127.0.0.1 | stays on your machine | nothing more |
-| **2. Static report viewer** | a static site (for example Vercel) serves only the viewer; you open a report bundle from your own disk, and it is read in the browser and never uploaded | never on the server | report bundles, a viewer that uses only the schemas |
+| **2. Static report viewer** | a static site (for example Vercel) serves only `web/report.html`; you open a report bundle from your own disk, and it is read in the browser and never uploaded | never on the server | ready: report bundles and the viewer exist; deploying the page is one static file |
 | **3. Hosted app + private workers** | the website and API are hosted; workers (your PC, cluster, cloud VM) pull jobs and push results to private storage | stored in the hosted service | real sign-in, per-user storage, a job queue, a worker that connects out, CORS and rate limits, and a decision about which data may leave the team's machines |
 
 Shape 2 comes first: it is useful on its own (share a result with a teammate as a file), costs nothing to host, and keeps the data rule simple. Shape 3 is only worth building once shapes 1 and 2 are solid, and it needs the team's agreement on where data may live. On Vercel's Hobby plan the production domain is public, so shape 3 would need a paid plan or another host with access control.
@@ -155,7 +174,7 @@ Shape 2 comes first: it is useful on its own (share a result with a teammate as 
 2. Schemas and `schemaVersion` for the result files, validated in tests. (Done.)
 3. The `/api/v1` router with the error format and `openapi.json`. Old routes become aliases. (Done.)
 4. The job model and `LocalRunner`. `md_api` starts jobs only through it. (Done.)
-5. `meshdoctor report <name>`: the portable bundle, and a viewer that reads only bundles.
+5. `meshdoctor report <name>`: the portable bundle, and a viewer that reads only bundles. (Done.)
 6. Shared front-end modules (charts, 3D viewer, API client); pages move to `/api/v1`.
 7. A pluggable auth layer: the launch token now, real sign-in for shape 3.
 8. The package restructure (`core/`, `jobs/`, `api/`) with shims, once the boundaries above are proven.

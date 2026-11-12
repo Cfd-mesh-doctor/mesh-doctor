@@ -95,10 +95,13 @@ meshdoctor ab <case> <name>           # A/B solver test: original vs repaired me
 meshdoctor judge <case>               # is this run converged? (steady or transient)
 meshdoctor schema <kind> <file>       # check a result file against its versioned schema
 meshdoctor jobs [list|show|cancel]    # jobs started from the dashboard or the API
+meshdoctor report <name> [--html]     # one portable file: repair, map and A/B, paths removed
 meshdoctor serve [--case <case>]      # dashboard; --case picks the live run to watch
 ```
 
 Without the `bin/` launcher or pip, `python3 -m meshdoctor <command>` from the clone does the same.
+
+**Sharing a result:** `meshdoctor report <name>` writes one file with the repair, its map and its A/B test, with this machine's paths removed. Open it at `http://localhost:8765/report`, or send the `--html` version, which opens anywhere with a double-click and never goes online. It still holds the case's geometry and patch names, so share it like the case itself.
 
 The dashboard's data is also a versioned JSON API under `/api/v1`, described at `http://localhost:8765/api/v1/openapi.json` (see [Architecture](docs/architecture.md#api-v1)). Starting a job through it needs the launch token from a dashboard page.
 

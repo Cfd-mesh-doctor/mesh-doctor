@@ -63,6 +63,19 @@ python3 -m meshdoctor schema map "$T/work/it_mb/meshDoctor/map.json"
 python3 -m meshdoctor judge "$T/work/it_mb_ab/fixed" 10 > "$T/judge.json"
 python3 -m meshdoctor schema judge "$T/judge.json"
 
+step "portable report: one file, every document valid, no paths of this machine"
+python3 -m meshdoctor report it_mb -o "$T/it_mb.mdreport.json"
+python3 -m meshdoctor schema report "$T/it_mb.mdreport.json"
+python3 - "$T/it_mb.mdreport.json" "$T" <<'PY'
+import json, sys
+r = json.load(open(sys.argv[1]))
+assert sorted(r["documents"]) == ["abtest", "map", "repair"], sorted(r["documents"])
+bad = {k: c for k, c in r["contents"].items() if c["schemaVersion"] == "legacy" or c["problems"]}
+assert not bad, bad
+assert sys.argv[2] not in open(sys.argv[1]).read(), "a path of this machine is in the report"
+print("report ok:", {k: c["schemaVersion"] for k, c in r["contents"].items()}, r["redacted"]["paths"], "paths replaced")
+PY
+
 step "jobs through /api/v1: repair, one job at a time, cancel an A/B mid-solve"
 python3 tests/api_jobs_check.py motorBikeSteady
 for f in "$T"/work/.jobs/*.json; do python3 -m meshdoctor schema job "$f"; done

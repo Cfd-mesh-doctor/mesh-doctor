@@ -610,7 +610,8 @@ ORIGINS = {f"http://{h}" for h in HOSTS}
 PAGES = {"/": "index.html", "/index.html": "index.html",
          "/run": "run.html", "/run.html": "run.html",
          "/meshdoctor": "meshdoctor.html", "/meshdoctor.html": "meshdoctor.html",
-         "/meshmap": "meshmap.html", "/meshmap.html": "meshmap.html"}
+         "/meshmap": "meshmap.html", "/meshmap.html": "meshmap.html",
+         "/report": "report.html", "/report.html": "report.html"}
 TOKEN_META = '<meta name="md-token" content="">'
 
 
