@@ -5,17 +5,15 @@
 Reads Mesh Doctor results and starts jobs.  Every path comes from config.py.
 Jobs only ever run on copies in the workspace folder.
 """
-import json, os, posixpath, re, shlex, subprocess
+import json, os, posixpath, re, sys
 
 import config
-import ramguard
+import jobs
 import schema
 
-q = shlex.quote
 PKG = os.path.dirname(os.path.abspath(__file__))
 DRIVER = posixpath.join(PKG, "repair.py")
 ABTEST = posixpath.join(PKG, "abtest.py")
-SOLVERS = ("foamRun", "snappyHexMesh", "foamMeshDoctor")
 
 
 def _paths():
@@ -36,28 +34,18 @@ def md_dir():
 
 def procs():
     """[(command name, full command line)] of this machine's processes, from /proc."""
-    out = []
+    return [(comm, cmd) for _, comm, cmd in jobs.procs()]
+
+
+def _submit(kind, params, name, cmd, **kw):
+    """Start a job through the runner (jobs.py), which applies the one-big-job
+    rule and the RAM guard.  The answer the old routes expect, plus the job."""
     try:
-        pids = [d for d in os.listdir("/proc") if d.isdigit()]
-    except OSError:
-        return out
-    for pid in pids:
-        try:
-            with open(f"/proc/{pid}/comm", encoding="utf-8", errors="replace") as f:
-                comm = f.read().strip()
-            with open(f"/proc/{pid}/cmdline", "rb") as f:
-                cmd = f.read().replace(b"\0", b" ").decode("utf-8", "replace").strip()
-        except OSError:
-            continue           # the process ended while we looked
-        out.append((comm, cmd))
-    return out
+        job = jobs.submit(kind, params, name, cmd, **kw)
+    except jobs.Refused as e:
+        return _refuse(e.code, e.message)
+    return {"ok": True, "name": name, "label": name, "job": job}
 
-
-def _launch(cmd):
-    """Start a detached shell command; every path in cmd is quoted with shlex."""
-    config.ensure_workspace()
-    subprocess.Popen(["bash", "-lc", cmd], start_new_session=True,
-                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 def _refuse(code, msg):
     """A refused request.  `code` is one of api_v1.STATUS (which maps it to an
@@ -158,15 +146,10 @@ def start(src, name, profile, replace=True):
         return _refuse("not-found", "unknown source case")
     if not replace and os.path.exists(os.path.join(md_dir(), name)):
         return _refuse("exists", f"run {name} already exists; pick another name or replace it")
-    if _solver_running():
-        return _refuse("busy", "another OpenFOAM job is running; one big job at a time (RAM)")
-    cases, ws, _ = _paths()
-    ok, msg = ramguard.check(posixpath.join(cases, src), "repair")
-    if not ok:
-        return _refuse("not-enough-memory", msg)
-    _launch(f"mkdir -p {q(ws)} && nohup nice -n 5 python3 {q(DRIVER)} full {q(posixpath.join(cases, src))} "
-            f"{q(name)} --profile {q(profile)} > {q(posixpath.join(ws, name + '.log'))} 2>&1 &")
-    return {"ok": True, "name": name}
+    case = posixpath.join(run_dir(), src)
+    return _submit("repair", {"source": src, "name": name, "profile": profile}, name,
+                   [sys.executable, DRIVER, "full", case, name, "--profile", profile],
+                   log=name + ".log", result=f"{name}/meshDoctor/result.json", ram=(case, "repair"))
 
 
 # --------------------------------------------------------------------------
@@ -278,23 +261,9 @@ def ab_extend(label, to):
         return _refuse("bad-request", f"target must be between {r['iters'] + 1} and 5000")
     if not os.path.isdir(os.path.join(top, "fixed", "processor0")):
         return _refuse("not-ready", "second run has no decomposed fields to continue from")
-    if _solver_running():
-        return _refuse("busy", "another OpenFOAM job is running; one big job at a time (RAM)")
-    ok, msg = ramguard.check(os.path.join(top, "fixed"), "solve")
-    if not ok:
-        return _refuse("not-enough-memory", msg)
-    _, ws, bashrc = _paths()
-    wtop = posixpath.join(ws, label + "_ab")
-    _launch(f"source {q(bashrc)}; nohup nice -n 5 python3 {q(ABTEST)} extend {q(wtop)} {to} "
-            f"> {q(posixpath.join(wtop, 'extend.log'))} 2>&1 &")
-    return {"ok": True, "label": label}
-
-
-def _solver_running():
-    """True while an OpenFOAM solver, mesher or repair runs (one big job at a time)."""
-    if not os.path.isdir("/proc"):
-        return True            # can't tell: refuse rather than overload the machine
-    return any(comm in SOLVERS or any(x in cmd.split()[:3] for x in SOLVERS) for comm, cmd in procs())
+    return _submit("abextend", {"name": label, "to": to}, label, [sys.executable, ABTEST, "extend", top, str(to)],
+                   log=f"{label}_ab/extend.log", result=f"{label}_ab/ab_result.json",
+                   ram=(os.path.join(top, "fixed"), "solve"))
 
 
 def _base_for(src, iters, init):
@@ -335,23 +304,17 @@ def ab_start(name, iters, init, variant="", replace=True):
         return _refuse("unsupported", "unexpected source path")
     if not os.path.isdir(os.path.join(run_dir(), posixpath.basename(src), init)):
         return _refuse("bad-request", f"source case has no {init} directory")
-    if _solver_running():
-        return _refuse("busy", "another OpenFOAM job is running; one big job at a time (RAM)")
-    ok, msg = ramguard.check(src, "solve")
-    if not ok:
-        return _refuse("not-enough-memory", msg)
-    extra, label = "", name
-    if variant:
-        label = f"{os.path.basename(src)}_{variant}"
-        extra = f" --variant {variant} --label {label}"
+    label = f"{os.path.basename(src)}_{variant}" if variant else name
     if not replace and os.path.exists(os.path.join(md_dir(), label + "_ab")):
         return _refuse("exists", f"A/B test {label} already exists; extend it or replace it")
+    cmd = [sys.executable, ABTEST, src, "-" if variant else name, "--iters", str(iters), "--init", init]
+    if variant:
+        cmd += ["--variant", variant, "--label", label]
         b = _base_for(src, iters, init)
         if b:
-            extra += f" --base-from {q(b)}"
-    _launch(f"nohup nice -n 5 python3 {q(ABTEST)} {q(src)} {'-' if variant else q(name)} --iters {iters} "
-            f"--init {q(init)}{extra} > {q(posixpath.join(ws, label + '_ab.log'))} 2>&1 &")
-    return {"ok": True, "label": label}
+            cmd += ["--base-from", b]       # reuse an earlier original-mesh run with the same settings
+    return _submit("abtest", {"name": name, "iters": iters, "init": init, "variant": variant}, label, cmd,
+                   log=label + "_ab.log", result=f"{label}_ab/ab_result.json", ram=(src, "solve"))
 
 
 def ab_list():

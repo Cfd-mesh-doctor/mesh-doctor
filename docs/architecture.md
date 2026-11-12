@@ -32,7 +32,8 @@ Rules between layers:
 |---|---|---|
 | `caseinfo.py`, `ramguard.py`, `config.py`, `mapdata.py` | core | already free of HTTP and UI |
 | `repair.py`, `abtest.py` | core + CLI | the library functions (`full`, `fix`, `judge`, `run_one`, ...) are core; their `main()` is CLI |
-| `md_api.py` | api + jobs | reads results; starts jobs with `Popen` and finds running ones from `/proc` and `status.json`; refusals carry an error code |
+| `md_api.py` | api | reads results; checks job requests and hands them to `jobs.py`; refusals carry an error code |
+| `jobs.py`, `jobrun.py` | jobs | job files, admission (one big job, RAM guard), the LocalRunner and its wrapper, cancel |
 | `api_v1.py` | api | the `/api/v1` route table, request checks, error format and OpenAPI document |
 | `server.py` | api | HTTP, the security checks, the live monitors, and the old `/api/md/*`, `/api/run` and `/api/status` routes |
 | `web/*.html` | web | four pages; chart and 3D-viewer code is copied between them |
@@ -50,12 +51,12 @@ Every file Mesh Doctor writes for another program to read carries `"schemaVersio
 | `<name>_ab/ab_result.json` | A/B test | dashboard, reports |
 | judge output | `judge` (CLI, API) | dashboard live pages, reports |
 | `meshDoctor/map.json` | map | repair map page, reports |
-| `.jobs/<id>.json` | job runner | API, dashboard |
+| `.jobs/<id>.json` | job runner (`jobs.py`, `jobrun.py`) | API, `meshdoctor jobs`, dashboard |
 
 - A minor bump only adds fields. A major bump changes or removes them.
 - Readers accept any minor version of the major version they know, and refuse a newer major version with a clear message.
 - Tests validate real outputs against the schemas, so a field cannot quietly disappear.
-- `meshdoctor schema <repair|abtest|judge|map> <file>` checks any file by hand. `meshdoctor/schema.py` holds the versions, the read and write helpers (which stamp the version and refuse a newer major version), and a small validator for the JSON Schema keywords the schemas use (standard library only, like the rest of the package).
+- `meshdoctor schema <repair|abtest|judge|map|job> <file>` checks any file by hand. `meshdoctor/schema.py` holds the versions, the read and write helpers (which stamp the version and refuse a newer major version), and a small validator for the JSON Schema keywords the schemas use (standard library only, like the rest of the package).
 - Files written before versioning existed have no `schemaVersion`. They are read as "legacy" and never re-stamped, so an old file is not mislabelled as 1.0.
 
 This is what makes a **report bundle** possible: a folder of these files plus a viewer, which can be opened anywhere, including a static website, without the worker.
@@ -82,7 +83,9 @@ All routes live under `/api/v1` (`meshdoctor/api_v1.py`). The routes are a table
 | `GET /judge?case=&window=&avgFrom=&log=` | (CLI only) | convergence verdict for a case in the cases folder (judge schema); `log` picks the solver log, such as `log.pimple` |
 | `GET /live` | `/api/status` | the live (transient) case: forces, averaging window, time step, processes, memory |
 | `GET /variants` | `/api/md/variants` | solver-setting variants for an A/B second run |
-| `POST /jobs` | `/api/md/start`, `abstart`, `abextend` | start a repair, A/B test or A/B extension (202 Accepted) |
+| `POST /jobs` | `/api/md/start`, `abstart`, `abextend` | start a repair, A/B test or A/B extension (202 Accepted, the job document) |
+| `GET /jobs?state=&limit=`, `GET /jobs/{job}` | | jobs, newest first, with progress and links to their runs (job schema) |
+| `POST /jobs/{job}/cancel` | | stop a job and everything it started (`409 finished` if it already ended) |
 
 A job request names its kind and its parameters, which are checked against a schema (also in the OpenAPI document) before anything starts. Unknown parameters are refused:
 
@@ -111,19 +114,30 @@ The dashboard pages still use the old routes. They move to v1 with the shared fr
 
 ## Jobs
 
-A job is a file `<workspace>/.jobs/<id>.json`:
+`meshdoctor/jobs.py` is the only place that starts long-running work. A job is a file `<workspace>/.jobs/<id>.json` (`schemas/job.schema.json`):
 
 ```json
-{"schemaVersion": "1.0", "id": "20261111-213000-repair-mb", "kind": "repair",
- "params": {"source": "motorBike", "name": "mb", "profile": "openfoam"},
- "state": "running", "created": "...", "started": "...", "finished": null,
- "progress": {"step": "checkMesh (after)", "fraction": 0.8},
- "log": "mb/meshDoctor/log.full", "result": "mb/meshDoctor/result.json", "error": null}
+{"schemaVersion": "1.0", "id": "20261111-213000-repair-mb-3fa2", "kind": "repair",
+ "params": {"source": "motorBike", "name": "mb", "profile": "openfoam"}, "name": "mb",
+ "state": "running", "runner": "local", "created": "2026-11-11T21:30:00Z", "started": "...", "finished": null,
+ "pid": 4242, "exitCode": null, "log": "mb.log", "result": "mb/meshDoctor/result.json", "error": null,
+ "progress": {"step": "checkMesh (after)", "fraction": 0.75, "updated": "..."}}
 ```
 
-- **States:** `queued` → `running` → `done` | `failed` | `cancelled`.
-- **Runners** turn a job into a process. `LocalRunner` is today's behaviour (a detached process on this machine, with the one-big-job rule and the RAM guard). `SlurmRunner` would submit the sbatch templates. A remote **worker** would poll a queue over an outgoing connection, so no port on your machine is ever opened to the internet.
-- The API, the CLI and the dashboard all start work through the runner, never with their own `Popen`.
+- **States:** `queued` → `running` → `done` | `failed` | `cancelled`. Paths are relative to the workspace, so a job means the same thing on another worker.
+- **Admission** happens in `jobs.submit`, so every client gets the same rules. Only one big job runs at a time, judged both from the job files and from OpenFOAM processes started outside Mesh Doctor (from `/proc`). The RAM guard runs before the job is written.
+- **The LocalRunner** starts `jobrun.py`, a small wrapper, detached from the server. Init adopts it, so a finished job leaves no zombie process, and a job keeps running if the server stops. The wrapper:
+  - runs the command, an argument list with no shell, at nice 5 in its own process group;
+  - writes the log;
+  - records `running`, then the end state, exit code and finish time.
+
+  The command comes from the wrapper's own arguments, never from the job file. While a job is live, only the wrapper writes its file, so no update is lost.
+- **Cancel** sends SIGTERM to the wrapper. The wrapper stops the whole process group (mpirun ranks included), sends SIGKILL after 30 s, and records `cancelled`.
+- **Progress** is read when a job is read, from the tool's own `status.json` / `ab_status.json`. It holds the current step, and a rough fraction where the step is known.
+- **Lost jobs:** a `running` job whose wrapper is gone (machine restarted, process killed) is marked `failed` with a reason the next time it is read. So is a `queued` job that never started within a minute.
+- **Errors** are the last line of the job's log, with workspace paths removed, because they may be shown on a web page.
+- `md_api` (and so the old dashboard routes and `/api/v1/jobs`) starts work only through `jobs.submit`. `meshdoctor jobs [list | show <id> | cancel <id>]` follows jobs from the shell. The CLI commands (`full`, `ab`, ...) still run in the foreground without a job file.
+- **Later runners:** a `SlurmRunner` would submit the sbatch templates and read `squeue`. A remote **worker** would poll a queue over an outgoing connection, so no port on your machine is ever opened to the internet. Both write the same job files.
 
 ## Three ways to put it on the web
 
@@ -140,7 +154,7 @@ Shape 2 comes first: it is useful on its own (share a result with a teammate as 
 1. This document. (Done.)
 2. Schemas and `schemaVersion` for the result files, validated in tests. (Done.)
 3. The `/api/v1` router with the error format and `openapi.json`. Old routes become aliases. (Done.)
-4. The job model and `LocalRunner`. `md_api` starts jobs only through it.
+4. The job model and `LocalRunner`. `md_api` starts jobs only through it. (Done.)
 5. `meshdoctor report <name>`: the portable bundle, and a viewer that reads only bundles.
 6. Shared front-end modules (charts, 3D viewer, API client); pages move to `/api/v1`.
 7. A pluggable auth layer: the launch token now, real sign-in for shape 3.

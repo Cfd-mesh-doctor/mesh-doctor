@@ -17,6 +17,7 @@ same table (GET /api/v1/openapi.json), so it cannot drift from the code.
 """
 import json, os, re
 
+import jobs
 import md_api
 import schema
 
@@ -27,7 +28,7 @@ MAX_BODY = 64 * 1024
 # error code -> HTTP status.  md_api refusals carry one of these codes.
 STATUS = {
     "bad-request": 400, "forbidden": 403, "not-found": 404, "method-not-allowed": 405,
-    "exists": 409, "busy": 409, "not-ready": 409, "not-enough-memory": 409, "schema-version": 409,
+    "exists": 409, "finished": 409, "busy": 409, "not-ready": 409, "not-enough-memory": 409, "schema-version": 409,
     "too-large": 413, "unsupported-media-type": 415, "unsupported": 422,
     "internal": 500, "unavailable": 503,
 }
@@ -280,13 +281,45 @@ JOB_REQUEST = {"oneOf": [
     {"type": "object", "required": ["kind", "params"], "additionalProperties": False,
      "description": j["summary"],
      "properties": {"kind": {"enum": [k]}, "params": j["params"]}} for k, j in JOBS.items()]}
-JOB_STARTED = {"type": "object", "required": ["kind", "name", "state", "links"],
-               "properties": {"kind": {"enum": sorted(JOBS)}, "name": {"type": "string"},
-                              "state": {"enum": ["started"]}, "links": {"type": "object"}}}
+def _job_out(job):
+    """A job document with the links a client follows (the job, cancelling it, its run)."""
+    me = f"{PREFIX}/jobs/{job['id']}"
+    return dict(job, links={"self": me, "cancel": me + "/cancel", **JOBS[job["kind"]]["links"](job["name"])})
+
+
+def _job(job_id):
+    if not jobs.ID.match(job_id):
+        raise ApiError("bad-request", "bad job id")
+    job = jobs.get(job_id)
+    if job is None:
+        raise ApiError("not-found", "no job " + job_id)
+    return job
+
+
+@route("GET", "/jobs", "Jobs on this worker, newest first, with their progress",
+       query={"state": {"schema": {"enum": ["queued", "running", "done", "failed", "cancelled"]},
+                        "description": "only jobs in this state"},
+              "limit": {"schema": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 50}}},
+       ok=_items(_ref("job")))
+def list_jobs(p, q, b):
+    return {"items": [_job_out(j) for j in jobs.list_jobs(state=q.get("state"), limit=q["limit"])]}
+
+
+@route("GET", "/jobs/{job}", "One job: state, progress (the tool's own step), exit code, error", ok=_ref("job"))
+def get_job(p, q, b):
+    return _job_out(_job(p["job"]))
+
+
+@route("POST", "/jobs/{job}/cancel", "Stop a queued or running job and everything it started.  Needs the token.",
+       ok=_ref("job"))
+def cancel_job(p, q, b):
+    if _job(p["job"])["state"] not in jobs.ACTIVE:
+        raise ApiError("finished", "job already finished")
+    return _job_out(jobs.cancel(p["job"]))
 
 
 @route("POST", "/jobs", "Start a repair, A/B test or A/B extension.  Needs the launch token (X-MD-Token).",
-       body=JOB_REQUEST, ok=JOB_STARTED, status=202)
+       body=JOB_REQUEST, ok=_ref("job"), status=202)
 def start_job(p, q, b):
     if not isinstance(b, dict) or b.get("kind") not in JOBS:
         raise ApiError("bad-request", "body must be {\"kind\": one of %s, \"params\": {...}}" % sorted(JOBS))
@@ -302,8 +335,7 @@ def start_job(p, q, b):
     r = job["start"](args)
     if not r.get("ok"):
         raise ApiError(r.get("code", "bad-request"), r.get("error", "refused"))
-    name = r.get("label") or r.get("name") or args["name"]
-    return {"kind": b["kind"], "name": name, "state": "started", "links": job["links"](name)}
+    return _job_out(r["job"])
 
 
 # --------------------------------------------------------------------------
@@ -378,7 +410,8 @@ def openapi():
                         "content": {"application/json": {"schema": err}}}}}
         for n in r.names:
             sch = {"type": "string", "pattern": r"^[0-9]{1,9}$"} if n == "id" else \
-                {"enum": sorted(schema.VERSIONS)} if n == "kind" else NAME
+                {"enum": sorted(schema.VERSIONS)} if n == "kind" else \
+                {"type": "string", "pattern": jobs.ID.pattern} if n == "job" else NAME
             op["parameters"].append({"name": n, "in": "path", "required": True, "schema": sch})
         for n, s in r.query.items():
             op["parameters"].append({"name": n, "in": "query", "required": bool(s.get("required")),

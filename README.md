@@ -94,6 +94,7 @@ meshdoctor full <case> <name>         # repair a copy of <case> as <workspace>/<
 meshdoctor ab <case> <name>           # A/B solver test: original vs repaired mesh
 meshdoctor judge <case>               # is this run converged? (steady or transient)
 meshdoctor schema <kind> <file>       # check a result file against its versioned schema
+meshdoctor jobs [list|show|cancel]    # jobs started from the dashboard or the API
 meshdoctor serve [--case <case>]      # dashboard; --case picks the live run to watch
 ```
 

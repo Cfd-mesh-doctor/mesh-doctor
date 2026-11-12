@@ -63,4 +63,8 @@ python3 -m meshdoctor schema map "$T/work/it_mb/meshDoctor/map.json"
 python3 -m meshdoctor judge "$T/work/it_mb_ab/fixed" 10 > "$T/judge.json"
 python3 -m meshdoctor schema judge "$T/judge.json"
 
+step "jobs through /api/v1: repair, one job at a time, cancel an A/B mid-solve"
+python3 tests/api_jobs_check.py motorBikeSteady
+for f in "$T"/work/.jobs/*.json; do python3 -m meshdoctor schema job "$f"; done
+
 step "PASS (temporary folder $T can be deleted)"

@@ -10,6 +10,7 @@ Every file Mesh Doctor writes for another program carries
   abtest   <run>_ab/ab_result.json            schemas/abtest.schema.json
   judge    output of `judge` (and fixedJudge) schemas/judge.schema.json
   map      <run>/meshDoctor/map.json          schemas/map.schema.json
+  job      .jobs/<id>.json                    schemas/job.schema.json
 
 A minor version only adds fields; a major version changes or removes them.
 Readers accept every minor version of the major they know, files written
@@ -20,7 +21,7 @@ before versioning existed ("legacy"), and refuse a newer major version.
 import json, os, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSIONS = {"repair": "1.0", "abtest": "1.0", "judge": "1.0", "map": "1.0"}
+VERSIONS = {"repair": "1.0", "abtest": "1.0", "judge": "1.0", "map": "1.0", "job": "1.0"}
 _cache = {}
 
 

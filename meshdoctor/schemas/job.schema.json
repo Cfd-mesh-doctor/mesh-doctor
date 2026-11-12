@@ -1,0 +1,131 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://meshdoctor.invalid/schemas/job/1",
+ "title": "Mesh Doctor job",
+ "description": "<workspace>/.jobs/<id>.json, written by jobs.py and jobrun.py; paths are relative to the workspace",
+ "type": "object",
+ "required": [
+  "schemaVersion",
+  "id",
+  "kind",
+  "params",
+  "name",
+  "state",
+  "runner",
+  "created",
+  "log"
+ ],
+ "properties": {
+  "schemaVersion": {
+   "type": "string",
+   "pattern": "^1\\.\\d+$",
+   "description": "major.minor; readers accept any 1.x"
+  },
+  "id": {
+   "type": "string",
+   "pattern": "^[0-9]{8}-[0-9]{6}-[a-z]+-[A-Za-z0-9_.-]{1,80}-[0-9a-f]{4}$",
+   "description": "local start time (yyyymmdd-hhmmss), kind, run name and a random suffix"
+  },
+  "kind": {
+   "enum": [
+    "repair",
+    "abtest",
+    "abextend"
+   ]
+  },
+  "params": {
+   "type": "object",
+   "description": "the parameters the job was asked for"
+  },
+  "name": {
+   "type": "string",
+   "description": "the workspace run the job writes (an A/B test's label)"
+  },
+  "state": {
+   "enum": [
+    "queued",
+    "running",
+    "done",
+    "failed",
+    "cancelled"
+   ]
+  },
+  "runner": {
+   "type": "string",
+   "description": "local, or later slurm / a remote worker"
+  },
+  "created": {
+   "type": "string",
+   "description": "UTC, ISO 8601"
+  },
+  "started": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "finished": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "pid": {
+   "type": [
+    "integer",
+    "null"
+   ],
+   "description": "the job's wrapper process on the worker"
+  },
+  "exitCode": {
+   "type": [
+    "integer",
+    "null"
+   ]
+  },
+  "log": {
+   "type": "string"
+  },
+  "result": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "error": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "description": "why it failed, without worker paths"
+  },
+  "progress": {
+   "type": [
+    "object",
+    "null"
+   ],
+   "description": "added when read: the tool's own status",
+   "properties": {
+    "step": {
+     "type": "string"
+    },
+    "fraction": {
+     "type": [
+      "number",
+      "null"
+     ]
+    },
+    "updated": {
+     "type": [
+      "string",
+      "null"
+     ]
+    }
+   }
+  },
+  "links": {
+   "type": "object",
+   "description": "added by the API: where to follow the job and its run"
+  }
+ }
+}

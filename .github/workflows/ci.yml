@@ -53,7 +53,7 @@ jobs:
           venv/bin/meshdoctor help
           venv/bin/meshdoctor config
           venv/bin/python -c "import importlib.resources as r, meshdoctor; print(sorted(p.name for p in (r.files(meshdoctor) / 'web').iterdir()))"
-          venv/bin/python -c "import importlib.resources as r, meshdoctor; s = sorted(p.name for p in (r.files(meshdoctor) / 'schemas').iterdir()); print(s); assert len(s) == 4, s"
+          venv/bin/python -c "import importlib.resources as r, meshdoctor; s = sorted(p.name for p in (r.files(meshdoctor) / 'schemas').iterdir()); print(s); assert len(s) == 5, s"
           echo '{"schemaVersion": "1.0", "x": 1}' > bad.json
           ! venv/bin/meshdoctor schema map bad.json
           venv/bin/python -c "import importlib.resources as r, meshdoctor, sys; sys.path.insert(0, str(r.files(meshdoctor))); import api_v1; d = api_v1.openapi(); assert d['openapi'] == '3.1.0'; print(len(d['paths']), 'API paths')"

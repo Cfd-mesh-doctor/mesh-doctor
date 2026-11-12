@@ -4,7 +4,7 @@
 
     python3 -m unittest discover -s tests
 """
-import json, math, os, re, shutil, sys, tempfile, unittest
+import json, math, os, re, shutil, sys, tempfile, time, unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "meshdoctor"))
 os.environ["MESHDOCTOR_CONFIG"] = os.devnull
@@ -225,14 +225,17 @@ class ApiV1Test(unittest.TestCase):
         open(os.path.join(self.d, "cases", "c1", "system", "controlDict"), "w").close()
         md = os.path.join(self.d, "work", "r1", "meshDoctor")
         os.makedirs(md)
-        schema.write(os.path.join(md, "result.json"), {"source": "c1", "finished": True}, "repair")
-        self.launched = []
-        self.saved = md_api._launch, md_api._solver_running
-        md_api._launch = self.launched.append
-        md_api._solver_running = lambda: False
+        self.src = os.path.join(self.d, "cases", "c1")
+        os.makedirs(os.path.join(self.src, "0"))
+        schema.write(os.path.join(md, "result.json"), {"source": self.src, "finished": True}, "repair")
+        import jobs
+        self.jobs, self.launched = jobs, []
+        self.saved = jobs._spawn, jobs.solver_running
+        jobs._spawn = lambda argv: self.launched.append(argv) or 2 ** 22 + 7     # no process, no such pid
+        jobs.solver_running = lambda: False
 
     def tearDown(self):
-        md_api._launch, md_api._solver_running = self.saved
+        self.jobs._spawn, self.jobs.solver_running = self.saved
         for k, v in self.env.items():
             if v is None:
                 os.environ.pop(k, None)
@@ -256,7 +259,7 @@ class ApiV1Test(unittest.TestCase):
     def test_reads(self):
         self.assertEqual(self.get("/cases")[:2], (200, {"items": ["c1"]}))
         st, doc, _ = self.get("/repairs/r1")
-        self.assertEqual((st, doc["source"]), (200, "c1"))
+        self.assertEqual((st, doc["source"]), (200, self.src))
         self.assertEqual(self.get("/repairs")[1]["items"][0]["name"], "r1")
         self.assertEqual(self.get("/")[1]["schemas"], self.schema.VERSIONS)
         self.assertEqual(self.get("/schemas/judge")[1]["$id"], self.schema.schema("judge")["$id"])
@@ -306,17 +309,37 @@ class ApiV1Test(unittest.TestCase):
                          404, "not-found")
         self.assertError(self.post("/jobs", {"kind": "repair", "params": {"source": "c1", "name": "r1"}}),
                          409, "exists")                                          # never deletes a run unasked
-        md_api._solver_running = lambda: True
+        self.jobs.solver_running = lambda: True
         self.assertError(self.post("/jobs", repair), 409, "busy")
         self.assertEqual(self.launched, [])
 
-    def test_job_start(self):
+    def test_job_start_and_follow(self):
         st, doc, _ = self.post("/jobs", {"kind": "repair", "params": {"source": "c1", "name": "r2"}})
-        self.assertEqual((st, doc["kind"], doc["name"], doc["state"]), (202, "repair", "r2", "started"))
+        self.assertEqual((st, doc["kind"], doc["name"], doc["state"]), (202, "repair", "r2", "queued"))
+        self.assertEqual(self.schema.validate(doc, "job"), [])
+        self.assertEqual(doc["links"]["self"], "/api/v1/jobs/" + doc["id"])
         self.assertEqual(doc["links"]["repair"], "/api/v1/repairs/r2")
-        self.assertEqual(len(self.launched), 1)
-        self.assertIn(" full ", self.launched[0])
-        self.assertIn("--profile openfoam", self.launched[0])
+        self.assertEqual(doc["log"], "r2.log")                         # workspace-relative
+        argv = self.launched[0]
+        self.assertTrue(argv[1].endswith("jobrun.py"), argv)
+        cmd = argv[argv.index("--") + 1:]                              # an argument list, no shell
+        self.assertEqual(cmd[2:], ["full", self.src, "r2", "--profile", "openfoam"])
+        self.assertEqual(self.get("/jobs")[1]["items"][0]["id"], doc["id"])
+        self.assertEqual(self.get("/jobs/" + doc["id"])[1]["state"], "queued")
+        self.assertError(self.post("/jobs", {"kind": "repair", "params": {"source": "c1", "name": "r3"}}),
+                         409, "busy", doc["id"])                       # one big job at a time, from the job files
+        self.assertError(self.get("/jobs/no;such"), 400, "bad-request")
+        self.assertError(self.get("/jobs/20260101-000000-repair-x-abcd"), 404, "not-found")
+
+    def test_variant_reuses_an_earlier_original_mesh_run(self):
+        ab = os.path.join(self.d, "work", "r1_ab")
+        os.makedirs(ab)
+        self.schema.write(os.path.join(ab, "ab_result.json"),
+                          {"source": self.src, "iters": 200, "init": "0", "base": {"forces": {}}}, "abtest")
+        st, doc, _ = self.post("/jobs", {"kind": "abtest", "params": {"name": "r1", "init": "0", "variant": "simplec"}})
+        self.assertEqual((st, doc["name"]), (202, "c1_simplec"), doc)
+        cmd = self.launched[0]
+        self.assertEqual(cmd[cmd.index("--base-from") + 1], ab)
 
     def test_openapi_matches_the_table(self):
         doc = self.get("/openapi.json")[1]
@@ -335,6 +358,79 @@ class ApiV1Test(unittest.TestCase):
                                 ["code"]["enum"]), sorted(self.api.STATUS))
         refs = re.findall(r'"\$ref": "schemas/(\w+)"', json.dumps(doc))
         self.assertTrue(refs and all(k in self.schema.VERSIONS for k in refs), refs)
+
+
+@unittest.skipUnless(os.path.isdir("/proc"), "the local runner needs Linux")
+class LocalRunnerTest(unittest.TestCase):
+    """jobs.py + jobrun.py with real processes (python -c ...), never OpenFOAM."""
+
+    def setUp(self):
+        import jobs, schema
+        self.jobs, self.schema = jobs, schema
+        self.ws = tempfile.mkdtemp(prefix="jobs_test_")
+        self.saved = jobs.solver_running
+        jobs.solver_running = lambda: False
+
+    def tearDown(self):
+        for j in self.jobs.list_jobs(self.ws):
+            if j["state"] in self.jobs.ACTIVE:
+                self.jobs.cancel(j["id"], self.ws)
+        self.jobs.solver_running = self.saved
+        shutil.rmtree(self.ws, ignore_errors=True)
+
+    def run_job(self, code, name="t1"):
+        return self.jobs.submit("repair", {}, name, [sys.executable, "-c", code], log=name + ".log", ws=self.ws)
+
+    def wait(self, job_id, states, timeout=15):
+        t0 = time.time()
+        while time.time() - t0 < timeout:
+            j = self.jobs.get(job_id, self.ws)
+            if j["state"] in states:
+                return j
+            time.sleep(0.1)
+        self.fail(f"job {job_id} still {j['state']}")
+
+    def test_done(self):
+        j = self.wait(self.run_job("print('hello from the job')")["id"], ("done", "failed"))
+        self.assertEqual((j["state"], j["exitCode"], j["error"]), ("done", 0, None))
+        self.assertTrue(j["started"] and j["finished"])
+        self.assertEqual(self.schema.validate(j, "job"), [])
+        with open(os.path.join(self.ws, "t1.log")) as f:
+            self.assertIn("hello from the job", f.read())
+
+    def test_failed_says_why_without_paths(self):
+        code = f"import sys; sys.exit('stopped: see {self.ws}/t1/log.x')"
+        j = self.wait(self.run_job(code)["id"], ("done", "failed"))
+        self.assertEqual((j["state"], j["exitCode"]), ("failed", 1))
+        self.assertIn("stopped: see t1/log.x", j["error"])
+        self.assertNotIn(self.ws, j["error"])
+
+    def test_busy_then_cancel_stops_the_whole_group(self):
+        mark = os.path.basename(self.ws)                               # unique per test run
+        code = ("import subprocess, sys, time; subprocess.Popen([sys.executable, '-c', "
+                f"'import time; time.sleep(60) # {mark}']); time.sleep(60)")
+        j = self.wait(self.run_job(code)["id"], ("running",))
+        time.sleep(0.5)                                                # let the grandchild start
+        self.assertEqual(len([c for _, _, c in self.jobs.procs() if mark in c and "jobrun.py" not in c]), 2)
+        with self.assertRaises(self.jobs.Refused) as e:
+            self.run_job("pass", "t2")
+        self.assertEqual(e.exception.code, "busy")
+        j = self.jobs.cancel(j["id"], self.ws, wait=10)
+        self.assertEqual(j["state"], "cancelled")
+        time.sleep(0.5)
+        self.assertEqual([c for _, _, c in self.jobs.procs() if mark in c], [])   # child and grandchild gone
+        self.assertIsNone(self.jobs.busy(self.ws))
+
+    def test_lost_job_is_marked_failed(self):
+        os.makedirs(self.jobs.jobs_dir(self.ws))
+        jid = "20260101-000000-repair-t3-abcd"
+        self.jobs.save(self.jobs.path_of(jid, self.ws), {
+            "id": jid, "kind": "repair", "params": {}, "name": "t3", "state": "running", "runner": "local",
+            "created": "2026-01-01T00:00:00Z", "started": "2026-01-01T00:00:01Z", "finished": None,
+            "pid": 2 ** 22 + 7, "exitCode": None, "log": "t3.log", "result": None, "error": None})
+        j = self.jobs.get(jid, self.ws)
+        self.assertEqual(j["state"], "failed")
+        self.assertIn("without reporting", j["error"])
 
 
 if __name__ == "__main__":
