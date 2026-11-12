@@ -2,8 +2,9 @@
 // Copyright (C) 2026 The Mesh Doctor authors
 //
 // The live page (index.html): the transient case this server watches - mesh,
-// check, steady start, transient run - from GET /api/v1/live.  Charts are
-// MD.chart; text is set with textContent only.
+// check, steady start, transient run - from GET /api/v1/live, and the transient
+// judge from GET /api/v1/live/judge (at most once a minute: it reads the whole
+// log).  Charts are MD.chart; text is set with textContent only.
 (function () {
   "use strict";
   const $ = id => document.getElementById(id);
@@ -73,6 +74,43 @@
     if (!userPickedForce) forceKey = t.state !== "pending" ? "ddes" : "steady";
     if (!userPickedRes) resKey = t.state !== "pending" ? "ddes" : "steady";
     syncTabs(); drawForces(); drawRes();
+    if (t.state !== "pending" && Date.now() - judgedAt > 60000) judge(t);
+  }
+
+  // ---- the transient judge: forces stationary? each step converged? time step sane?
+  let judgedAt = 0;
+  async function judge(t) {
+    judgedAt = Date.now();
+    let j;
+    try {
+      j = await MD.api.get("/live/judge", t.avgFrom != null ? { avgFrom: t.avgFrom } : {});
+    } catch (e) {
+      if (e.code === "not-found") return;        // no transient log yet
+      $("judgeCard").hidden = false;
+      $("judgeVerdict").textContent = "Could not judge the run: " + e.message;
+      return;
+    }
+    const v = j.verdict || "–", st = j.steps || {}, b = $("judgeBadge");
+    b.className = "badge " + (/^converged/.test(v) ? "ok" : /^statistically stationary/.test(v) ? "warn" : /^still/.test(v) ? "running" : "");
+    b.textContent = /^converged/.test(v) ? "converged" : /^statistically stationary/.test(v) ? "stationary, check steps"
+      : /^still/.test(v) ? "still developing" : v === "too short" ? "too short" : "–";
+    $("judgeVerdict").textContent = v.split("; also check")[0].replace(/, but check:.*$/, "");
+    // labels carry the words, values stay short so they fit beside them on a phone
+    const rows = [["Window (time steps)", loc(j.window)]];
+    if (st.n) {
+      rows.push([`Steps reaching p < 1e-3 by outer iteration ${st.outerIterations}`, fmt.pct(st.converged, 0)]);
+      rows.push(["p after the last outer iteration, median", fmt.exp(st.medianLastOuterP)]);
+      rows.push(["Outer loop cuts p to, median", fmt.pct(st.medianOuterDrop, 0)]);
+      rows.push(["Max Courant, median / max", `${fmt.fixed(st.medianMaxCourant, 2)} / ${fmt.fixed(st.maxCourant, 2)}`]);
+      rows.push(["Fields bounded (share of steps)", st.bounded ? `${(st.boundedFields || []).join(", ")} (${fmt.pct(st.bounded, 0)})` : "none"]);
+    }
+    for (const [k, f] of Object.entries(j.forces || {}))
+      rows.push([`${k[0].toUpperCase() + k.slice(1)}, ${j.group}: mean, drift between windows`, `${fmt.fixed(f.mean, 2)} N, ${fmt.pct(f.drift)}`]);
+    for (const [n, a] of Object.entries(j.average || {}))
+      rows.push([`${n}, averaged ${fmt.num(a.from)}–${fmt.num(a.to)} s`, `${fmt.fixed(a.mean, 2)} ± ${fmt.fixed(a.u, 2)} N`]);
+    ui.kv($("judgeKv"), rows);
+    $("judgeFlags").replaceChildren(...(j.flags || []).map(f => { const li = document.createElement("li"); li.textContent = f; return li; }));
+    $("judgeCard").hidden = false;
   }
 
   function syncTabs() {

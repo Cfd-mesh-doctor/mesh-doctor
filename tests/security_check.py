@@ -103,6 +103,8 @@ CHECKS = [
     ("v1 A/B judge takes no other side", "GET", "/api/v1/abtests/x/judge?side=..", {}, 400, '"code": "bad-request"'),
     ("v1 refuses non-finite numbers", "GET", "/api/v1/abtests/x/judge?side=base&to=nan", {}, 400, "finite"),
     ("v1 A/B judge of a missing test", "GET", "/api/v1/abtests/nope/judge?side=base", {}, 404, '"code": "not-found"'),
+    ("v1 live judge window has a floor", "GET", "/api/v1/live/judge?window=5", {}, 400, "window"),
+    ("v1 live judge refuses non-finite times", "GET", "/api/v1/live/judge?avgFrom=nan", {}, 400, "finite"),
     ("v1 wrong method", "GET", "/api/v1/jobs/20260101-000000-repair-x-abcd/cancel", {}, 405, '"code": "method-not-allowed"'),
     ("v1 job without token refused", "POST", "/api/v1/jobs", {"Content-Type": JSON}, 403, "token", V1JOB),
     ("v1 cancel without token refused", "POST", "/api/v1/jobs/20260101-000000-repair-x-abcd/cancel", {}, 403,
@@ -144,6 +146,7 @@ HEADERS = [
     ("no page runs inline script, the report viewer included", lambda: all(csp(p).get("script-src") == ["'self'"] for p in PAGES)),
     ("the report viewer's own script is served", lambda: req("GET", "/js/report.js")[0] == 200),
     ("v1 names the A/B test running now", lambda: req("GET", "/api/v1/live/abtest")[0] in (200, 404)),
+    ("v1 judges the live run, or says why not", lambda: req("GET", "/api/v1/live/judge")[0] in (200, 404, 503)),
     ("old routes say they are deprecated, and point to v1",
      lambda: all(header(p, "Deprecation").startswith("@") and "/api/v1/openapi.json" in header(p, "Link")
                  for p in ("/api/status", "/api/md/maplist"))),

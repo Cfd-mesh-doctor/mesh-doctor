@@ -252,6 +252,41 @@ def _reused_base(test):
     return prev if prev.endswith("_ab") and md_api.SAFE.match(prev[:-3]) and prev != test else None
 
 
+_live_judged = {}                           # (case, window, avgFrom, logs' size and time) -> verdict
+
+
+@route("GET", "/live/judge", "Is the live (transient) run converged?  The transient judge on the live case's "
+       "transient log (log.ddes*, else log.foamRun*): force means, per-time-step convergence, Courant number",
+       query={"window": {"schema": {"type": "integer", "minimum": 10, "maximum": 100000},
+                         "description": "time steps to judge (default: half the run, 10 to 200)"},
+              "avgFrom": {"schema": {"type": "number", "minimum": 0},
+                          "description": "average forces from this flow time on, in s (default: the last 2 windows)"}},
+       ok=_ref("judge"))
+def live_judge(p, q, b):
+    if "live_case" not in _live:
+        raise ApiError("unavailable", "the live monitor is not running in this server")
+    case = _live["live_case"]() or ""
+    if not os.path.isfile(os.path.join(case, "system", "controlDict")):
+        raise ApiError("not-found", "this server watches no live case")
+    import abtest as ab, caseinfo           # only reads the logs and force files
+    logs = caseinfo.solver_logs(case, ("log.ddes*",)) or caseinfo.solver_logs(case)
+    try:
+        key = (case, q.get("window"), q.get("avgFrom"),
+               tuple((f, os.path.getsize(f), os.path.getmtime(f)) for f in logs))
+    except OSError:
+        key = None                              # a log went away meanwhile: judge without the cache
+    if not logs:
+        raise ApiError("not-found", "the live case has no solver log yet")
+    if key is None or key not in _live_judged:
+        out = ab.judge(case, q.get("window"), avg_from=q.get("avgFrom"), logs=logs)
+        if key is None:
+            return out
+        if len(_live_judged) >= 8:            # the log grows every step: keep only recent answers
+            _live_judged.clear()
+        _live_judged[key] = out
+    return _live_judged[key]
+
+
 @route("GET", "/maps", "Repair runs that have a repair map", ok=_items({"type": "string"}))
 def maps(p, q, b):
     return {"items": md_api.map_list()}

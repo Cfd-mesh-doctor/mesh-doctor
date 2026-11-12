@@ -50,6 +50,12 @@ h1{font-size:18px;margin:0;font-weight:650}
 .badge.stale{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin-top:8px;font-size:12.5px}
 .kv dt{color:var(--muted)} .kv dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.verdict{font-size:13px;margin-top:8px;font-weight:600}
+#judgeKv dd{white-space:nowrap}
+.flags{margin:8px 0 0;padding-left:18px;font-size:12.5px;color:var(--warn)}
+.badge.ok{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.badge.warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+[hidden]{display:none!important}
 .phase{font-size:12.5px;margin-top:6px;min-height:18px}
 .chart{position:relative}
 .chart canvas{width:100%;height:220px;display:block}
@@ -108,6 +114,14 @@ h1{font-size:18px;margin:0;font-weight:650}
       <div class="err" id="ddesErr"></div>
     </section>
   </div>
+
+  <section class="card stage" id="judgeCard" hidden>
+    <h2>Is the transient run converged? <span class="badge" id="judgeBadge">–</span></h2>
+    <div class="verdict" id="judgeVerdict">–</div>
+    <dl class="kv" id="judgeKv"></dl>
+    <ul class="flags" id="judgeFlags"></ul>
+    <div class="sub" id="judgeNote" style="margin-top:6px">Three separate questions: are the force means stationary (drift below 2 % between the last two windows of time steps), did each time step converge (p below 1e-3 by its last PIMPLE outer iteration), and is the time step sane (max Courant within the limit, no field bounded). Oscillating forces are expected in a transient run; their window means are what counts.</div>
+  </section>
 
   <section class="card chart" id="forceChart">
     <h3><span id="fTitle">Forces by group (N)</span>

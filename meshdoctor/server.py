@@ -606,7 +606,7 @@ def run_status(label):
 import hmac, secrets, traceback
 
 import api_v1  # /api/v1: the versioned API (route table, error format, OpenAPI)
-api_v1.provide(abtest_live=run_status, live=status)
+api_v1.provide(abtest_live=run_status, live=status, live_case=lambda: CASE)
 
 TOKEN = secrets.token_urlsafe(24)
 HOSTS = {f"{h}:{PORT}" for h in ("localhost", "127.0.0.1", "[::1]")}

@@ -112,6 +112,6 @@ The ground plane is found from the geometry and left out of the drawing. Its nor
 - `/meshdoctor`: start repairs and A/B tests, view highlighted cells and results;
 - `/meshmap`: the map;
 - `/run`: a steady run as it happens (residuals, forces and the live judge);
-- `/`: a transient run as it happens (forces, averaging window, time step).
+- `/`: a transient run as it happens (forces, averaging window, time step), and the transient judge's three answers for it, refreshed once a minute.
 
 Starting a job from the page runs the same commands as the command line.

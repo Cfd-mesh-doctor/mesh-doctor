@@ -104,6 +104,7 @@ All routes live under `/api/v1` (`meshdoctor/api_v1.py`). The routes are a table
 | `GET /abtests`, `GET /abtests/{name}` | `/api/md/ablist`, `/api/md/ab` | A/B tests: status, result (abtest schema), residuals, oscillation maps |
 | `GET /abtests/{name}/live` | `/api/run?label=` | the steady-run page: stages, forces, residuals, live judge |
 | `GET /live/abtest` | `/api/run` (no label) | the same, for the A/B test running now (or else the one updated last); its name is in `label` |
+| `GET /live/judge?window=&avgFrom=` | (new) | the transient judge on the live case's transient log (`log.ddes*`, else `log.foamRun*`): force means stationary, each time step converged, Courant number, bounded fields. Kept until a log changes size or time, since it reads the whole log; the live page asks at most once a minute. 503 when the server has no live monitor, 404 when there is no live case or log |
 | `GET /maps`, `GET /maps/{name}` | `/api/md/maplist`, `/api/md/map` | repair maps (map schema) |
 | `GET /abtests/{name}/judge?side=base\|fixed&to=&window=&avgFrom=` | (new) | the judge on one run of an A/B test; `to` judges it as it was at that iteration, so both runs can be compared over the same iterations. A test that reused another's original-mesh run (`--base-from`) is judged on that run; `run` in the answer says which |
 | `GET /judge?case=&window=&avgFrom=&log=` | (CLI only) | convergence verdict for a case in the cases folder (judge schema); `log` picks the solver log, such as `log.pimple` |

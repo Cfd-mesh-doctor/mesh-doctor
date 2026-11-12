@@ -107,6 +107,23 @@ class JudgeTest(unittest.TestCase):
         self.assertEqual(abtest.upto({"Time": [1, 2, 3], "p": [9, 8, 7]}, 2.5), {"Time": [1, 2], "p": [9, 8]})
 
 
+def write_transient_run(d, n, p_last, co_max, drag_of, bounding=False, log="log.pimple"):
+    """A synthetic PIMPLE run in folder d: 2 outer iterations per step, Courant lines, forces."""
+    dt = 1e-3
+    with open(os.path.join(d, log), "w") as f:
+        for i in range(1, n + 1):
+            f.write(f"Courant Number mean: 0.05 max: {co_max}\nTime = {i * dt:g}s\n\n")
+            for k, p in ((1, 1e-2), (2, p_last)):
+                f.write(f"PIMPLE: Iteration {k}\nGAMG:  Solving for p, Initial residual = {p}, "
+                        "Final residual = 1e-7, No Iterations 5\n")
+            if bounding:
+                f.write("bounding k, min: -0.1 max: 2 average: 0.5\n")
+    os.makedirs(os.path.join(d, "postProcessing", "body", "0"), exist_ok=True)
+    with open(os.path.join(d, "postProcessing", "body", "0", "forces.dat"), "w") as f:
+        for i in range(1, n + 1):
+            f.write(f"{i * dt:g} (({drag_of(i)} 0 -30) (0 0 0))\n")
+
+
 class TransientJudgeTest(unittest.TestCase):
     """abtest.judge on a synthetic transient (PIMPLE) run."""
 
@@ -123,19 +140,7 @@ class TransientJudgeTest(unittest.TestCase):
         shutil.rmtree(self.d, ignore_errors=True)
 
     def write_run(self, n, p_last, co_max, drag_of, bounding=False):
-        dt = 1e-3
-        with open(os.path.join(self.d, "log.pimple"), "w") as f:
-            for i in range(1, n + 1):
-                f.write(f"Courant Number mean: 0.05 max: {co_max}\nTime = {i * dt:g}s\n\n")
-                for k, p in ((1, 1e-2), (2, p_last)):
-                    f.write(f"PIMPLE: Iteration {k}\nGAMG:  Solving for p, Initial residual = {p}, "
-                            "Final residual = 1e-7, No Iterations 5\n")
-                if bounding:
-                    f.write("bounding k, min: -0.1 max: 2 average: 0.5\n")
-        os.makedirs(os.path.join(self.d, "postProcessing", "body", "0"))
-        with open(os.path.join(self.d, "postProcessing", "body", "0", "forces.dat"), "w") as f:
-            for i in range(1, n + 1):
-                f.write(f"{i * dt:g} (({drag_of(i)} 0 -30) (0 0 0))\n")
+        write_transient_run(self.d, n, p_last, co_max, drag_of, bounding)
 
     def judge(self):
         import caseinfo
@@ -373,6 +378,50 @@ class ApiV1Test(unittest.TestCase):
             self.api.provide(abtest_live=lambda n: {"label": n or "r1", "labels": ["r1"]})
             self.assertEqual(self.get("/live/abtest")[:2], (200, {"label": "r1", "labels": ["r1"]}))
         finally:
+            self.api._live.clear()
+            self.api._live.update(saved)
+
+    def test_live_judge(self):
+        saved, calls = dict(self.api._live), []
+        import abtest
+        real = abtest.judge
+        try:
+            self.api._live.clear()
+            self.assertError(self.get("/live/judge"), 503, "unavailable")
+            self.api.provide(live_case=lambda: "")
+            self.assertError(self.get("/live/judge"), 404, "not-found", "no live case")
+            case = os.path.join(self.d, "live")
+            for sub in ("0", "system"):
+                os.makedirs(os.path.join(case, sub))
+            open(os.path.join(case, "system", "controlDict"), "w").close()
+            with open(os.path.join(case, "0", "U"), "w") as f:
+                f.write("internalField uniform (20 0 0);\nboundaryField\n{\n}\n")
+            with open(os.path.join(case, "system", "fvSchemes"), "w") as f:
+                f.write("ddtSchemes\n{\n    default backward;\n}\n")
+            self.api.provide(live_case=lambda: case)
+            self.assertError(self.get("/live/judge"), 404, "not-found", "no solver log")
+            # a steady start, then the transient stage: only the transient log is judged
+            write_steady_run(case, 50, lambda t: 1e-1, lambda t: 500.0)
+            write_transient_run(case, 600, 5e-3, 12, lambda i: 50 + 3 * math.sin(i / 7), log="log.ddes")
+            abtest.judge = lambda *a, **k: calls.append(k) or real(*a, **k)
+            st, j, _ = self.get("/live/judge", avgFrom=0.3)
+            self.assertEqual(st, 200, j)
+            self.assertTrue(j["transient"])
+            self.assertTrue(j["verdict"].startswith("statistically stationary, but check"), j["verdict"])
+            self.assertEqual((j["window"], j["steps"]["converged"], j["steps"]["outerIterations"]), (200, 0.0, 2))
+            self.assertAlmostEqual(j["average"]["drag"]["from"], 0.3)
+            self.assertEqual(self.schema.validate(j, "judge"), [])
+            self.assertEqual(self.get("/live/judge", avgFrom=0.3)[1], j)        # same logs: the cached answer
+            self.assertEqual(len(calls), 1)
+            self.assertEqual([os.path.basename(f) for f in calls[0]["logs"]], ["log.ddes"])
+            with open(os.path.join(case, "log.ddes"), "a") as f:               # the log grows: judged again
+                f.write("Courant Number mean: 0.05 max: 12\nTime = 0.601s\n\n")
+            self.get("/live/judge", avgFrom=0.3)
+            self.assertEqual(len(calls), 2)
+            self.assertError(self.get("/live/judge", window=5), 400, "bad-request")
+        finally:
+            abtest.judge = real
+            self.api._live_judged.clear()
             self.api._live.clear()
             self.api._live.update(saved)
 
