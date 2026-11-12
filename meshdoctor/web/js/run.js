@@ -3,7 +3,9 @@
 //
 // The steady-run page (run.html): one A/B test's second run, live.  Reads
 // GET /api/v1/abtests/{name}/live, or /api/v1/live/abtest (the test running
-// now) when the URL names none.  Charts are MD.chart; text is textContent or MD.html.
+// now) when the URL names none.  The comparison card judges both sides of the
+// A/B over the first stage's iterations: GET /api/v1/abtests/{name}/judge?side=&to=.
+// Charts are MD.chart; text is textContent or MD.html.
 (function () {
   "use strict";
   const $ = id => document.getElementById(id);
@@ -76,6 +78,59 @@
     $("savedJudge").textContent = sj && sj.verdict ? `Last saved verdict (end of the previous stage): ${sj.verdict}.` : "";
     drawForces();
     drawRes();
+    compare(d);
+  }
+
+  // ---- original vs repaired mesh: both A/B runs judged over the same iterations (the first stage)
+  let cmpKey = "";
+  const level = v => /^(converged|statistically steady)/.test(v) ? "ok" : /^(still|statistically stationary)/.test(v) ? "warn"
+    : /^not converged/.test(v) ? "err" : "";
+  async function compare(d) {
+    const st = d.stages || [], to = st.length ? st[0].to : null;
+    const key = [d.label, st.length, (d.solver || {}).state, to].join("|");
+    if (key === cmpKey) return;                  // judged already: only a new stage or state changes it
+    cmpKey = key;
+    const side = s => MD.api.get(["abtests", d.label, "judge"], to != null ? { side: s, to } : { side: s });
+    try {
+      const [b, f] = await Promise.all([side("base"), side("fixed")]);
+      if (cmpKey === key) showCompare(d, b, f, to);
+    } catch (e) {
+      if (cmpKey !== key) return;
+      $("cmpCard").hidden = false;
+      render($("cmp"), html``);
+      if (e.code === "not-found") {               // a test that reused or skipped the original-mesh run
+        $("cmpNote").textContent = `Nothing to compare: ${e.message}.`;
+      } else {
+        $("cmpNote").textContent = "Could not judge both runs: " + e.message;
+        cmpKey = "";                              // try again at the next refresh
+      }
+    }
+  }
+  function showCompare(d, b, f, to) {
+    // a solver-variant test runs both on the original mesh: it compares settings, not meshes
+    const first = d.variant ? "default settings" : "original mesh", second = d.variant ? `${d.variant} settings` : "repaired mesh";
+    const ax = b.axes || f.axes || {};
+    const vn = String(ax.vertical || "vertical"), VN = vn[0].toUpperCase() + vn.slice(1), tot = b.group ? ` (${b.group})` : "";
+    const p = j => (j.residuals || {}).p, F = (j, k) => (j.forces || {})[k];
+    const force = v => v ? `${fmt.fixed(v.mean, 2)} N · osc ${fmt.pct(v.osc)} · drift ${fmt.pct(v.drift)}` : "–";
+    const rows = [
+      html`<tr><td>Verdict</td><td class="${level(b.verdict || "")}">${b.verdict || "–"}</td><td class="${level(f.verdict || "")}">${f.verdict || "–"}</td></tr>`,
+      html`<tr><td>p residual, median of the last window</td>${[b, f].map(j => html`<td>${p(j) ? `${fmt.exp(p(j).median)} · trend ×${fmt.fixed(p(j).trend, 2)}` : "–"}</td>`)}</tr>`,
+      html`<tr><td>Drag${tot}</td>${[b, f].map(j => html`<td>${force(F(j, "drag"))}</td>`)}</tr>`,
+      html`<tr><td>${VN}${tot}</td>${[b, f].map(j => html`<td>${force(F(j, "vertical"))}</td>`)}</tr>`,
+      html`<tr><td>Window</td>${[b, f].map(j => html`<td>${j.window ? `last ${loc(j.window)} iterations` : "–"}</td>`)}</tr>`];
+    $("cmpTitle").textContent = `${first[0].toUpperCase() + first.slice(1)} vs ${second}`;
+    render($("cmp"), html`<tr><th></th><th>${first}</th><th>${second}</th></tr>${rows}`);
+    const own = `${d.label}_ab/base`, reused = b.run && b.run !== own ? String(b.run).replace(/_ab\/base$/, "") : "";
+    const pb = p(b), pf = p(f), ratio = pb && pf && pb.median > 0 ? pf.median / pb.median : null;
+    $("cmpNote").textContent = `Both runs judged as they were at iteration ${to != null ? loc(to) : "–"}, the end of the first stage: ` +
+      `the same iterations, start and thresholds as the stage card.` +
+      (d.variant ? " Other settings scale the residuals differently (their own matrix and relaxation), so compare " +
+        "the two by the forces' oscillation and drift, not by residual height."
+        : ratio ? ` p residual, ${second} ÷ ${first}: ${fmt.fixed(ratio, 2)}×.` : "") +
+      (reused ? ` The ${first} run is the one this test reused from test ${reused}.` : "") +
+      ((d.stages || []).length > 1 ? " Later stages of the second run are judged in the card above." : "");
+    $("cmpCard").hidden = false;
   }
 
   const marks = () => (last.stages || []).slice(1).map(s => s.from);

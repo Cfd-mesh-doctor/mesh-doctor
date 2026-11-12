@@ -70,7 +70,7 @@ Options:
 
 ## 5. The convergence judge
 
-`meshdoctor judge <case> [window]` compares the last `window` iterations with the ones before. It reads residuals from the `residuals` function object, or else from `log.foamRun*`, and reads forces from `forces` or `forceCoeffs`:
+`meshdoctor judge <case> [window|auto] [--to N]` compares the last `window` iterations with the ones before (`auto`: half the run, 10 to 200). `--to N` judges the run as it was at iteration N, leaving out what came after, so two runs can be judged over the same iterations; the steady-run page does this for both runs of an A/B test (`GET /api/v1/abtests/{name}/judge?side=base|fixed&to=N`). It reads residuals from the `residuals` function object, or else from `log.foamRun*`, and reads forces from `forces` or `forceCoeffs`:
 
 | Verdict | Means |
 |---|---|

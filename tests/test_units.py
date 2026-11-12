@@ -40,6 +40,21 @@ class NamesTest(unittest.TestCase):
             self.assertFalse(md_api.SAFE.match(n), n)
 
 
+def write_steady_run(d, n, p_of, drag_of):
+    """A synthetic steady run in folder d: log.foamRun with p residuals, a forces file."""
+    os.makedirs(os.path.join(d, "0"), exist_ok=True)
+    with open(os.path.join(d, "0", "U"), "w") as f:
+        f.write("internalField uniform (20 0 0);\nboundaryField\n{\n}\n")
+    with open(os.path.join(d, "log.foamRun"), "w") as f:
+        for t in range(1, n + 1):
+            f.write(f"Time = {t}s\n\nGAMG:  Solving for p, Initial residual = {p_of(t)}, Final residual = 1e-9, "
+                    "No Iterations 3\n\n")
+    os.makedirs(os.path.join(d, "postProcessing", "body", "0"), exist_ok=True)
+    with open(os.path.join(d, "postProcessing", "body", "0", "forces.dat"), "w") as f:
+        for t in range(1, n + 1):
+            f.write(f"{t} (({drag_of(t)} 0 -30) (0 0 0))\n")
+
+
 class JudgeTest(unittest.TestCase):
     """abtest.judge on a synthetic steady run: log residuals + a forces file."""
 
@@ -52,15 +67,8 @@ class JudgeTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.d, ignore_errors=True)
 
-    def write_run(self, n, p_of, drag_of):
-        with open(os.path.join(self.d, "log.foamRun"), "w") as f:
-            for t in range(1, n + 1):
-                f.write(f"Time = {t}s\n\nGAMG:  Solving for p, Initial residual = {p_of(t)}, Final residual = 1e-9, "
-                        "No Iterations 3\n\n")
-        os.makedirs(os.path.join(self.d, "postProcessing", "body", "0"))
-        with open(os.path.join(self.d, "postProcessing", "body", "0", "forces.dat"), "w") as f:
-            for t in range(1, n + 1):
-                f.write(f"{t} (({drag_of(t)} 0 -30) (0 0 0))\n")
+    def write_run(self, n, p_of, drag_of, d=None):
+        write_steady_run(d or self.d, n, p_of, drag_of)
 
     def test_converged(self):
         self.write_run(600, lambda t: 1e-3 * math.exp(-t / 40) + 1e-6, lambda t: 50.0)
@@ -75,6 +83,28 @@ class JudgeTest(unittest.TestCase):
         self.write_run(600, lambda t: 5e-3, lambda t: 50 + 5 * math.sin(t / 15))
         j = abtest.judge(self.d, window=200)
         self.assertTrue(j["verdict"].startswith("not converged"), j["verdict"])
+
+    def test_to_judges_the_run_as_it_was(self):
+        # settled until 300, then a settings change sets it oscillating
+        self.write_run(600, lambda t: 1e-3 * math.exp(-t / 30) + 1e-6 if t <= 300 else 5e-3,
+                       lambda t: 50.0 if t <= 300 else 50 + 5 * math.sin(t / 15))
+        whole, early = abtest.judge(self.d, window=100), abtest.judge(self.d, window=100, to=300)
+        self.assertTrue(whole["verdict"].startswith("not converged"), whole["verdict"])
+        self.assertTrue(early["verdict"].startswith("converged"), early["verdict"])
+        self.assertEqual((early["to"], "to" in whole), (300, False))
+        self.assertAlmostEqual(early["average"]["drag"]["mean"], 50.0)
+        self.assertEqual(early["average"]["drag"]["to"], 300)
+        import schema
+        self.assertEqual(schema.validate(early, "judge"), [])
+        self.assertEqual(early["schemaVersion"], "1.1")
+
+    def test_auto_window(self):
+        self.write_run(600, lambda t: 1e-5, lambda t: 50.0)
+        self.assertEqual(abtest.judge(self.d, window=None)["window"], 200)
+        self.assertEqual(abtest.judge(self.d, window=None, to=240)["window"], 120)
+        self.assertEqual(abtest.judge(self.d, window=None, to=12)["window"], 10)
+        self.assertEqual(abtest.judge(self.d, window=None, to=12)["verdict"], "too short")
+        self.assertEqual(abtest.upto({"Time": [1, 2, 3], "p": [9, 8, 7]}, 2.5), {"Time": [1, 2], "p": [9, 8]})
 
 
 class TransientJudgeTest(unittest.TestCase):
@@ -285,6 +315,51 @@ class ApiV1Test(unittest.TestCase):
         self.assertError(self.get("/judge", case="c1", log="../x"), 400, "bad-request")  # log names only
         self.assertError(self.get("/judge", case="c1", log="log.none"), 404, "not-found", "no log matches")
         self.assertError(self.get("/live"), 503, "unavailable")                   # no live monitor in tests
+        self.assertError(self.get("/judge", case="c1", avgFrom="nan"), 400, "bad-request", "finite")
+        self.assertError(self.get("/judge", case="c1", avgFrom="inf"), 400, "bad-request", "finite")
+
+    def test_abtest_judge_each_side(self):
+        top = os.path.join(self.d, "work", "ab1_ab")
+        settles = lambda t: 1e-3 * math.exp(-t / 30) + 1e-6
+        for side, p_of, osc in (("base", lambda t: 5e-3, 5), ("fixed", settles, 0)):   # only the repaired mesh settles
+            case = os.path.join(top, side)
+            os.makedirs(os.path.join(case, "system"))
+            open(os.path.join(case, "system", "controlDict"), "w").close()
+            write_steady_run(case, 400, p_of, lambda t, a=osc: 50 + a * math.sin(t / 15))
+        st, base, _ = self.get("/abtests/ab1/judge", side="base")
+        self.assertEqual(st, 200, base)
+        self.assertTrue(base["verdict"].startswith("not converged"), base["verdict"])
+        self.assertEqual(base["window"], 200)                                     # half the run
+        st, fixed, _ = self.get("/abtests/ab1/judge", side="fixed", to=300, window=100)
+        self.assertTrue(fixed["verdict"].startswith("converged"), fixed["verdict"])
+        self.assertEqual((fixed["to"], fixed["window"]), (300, 100))
+        self.assertEqual(self.schema.validate(fixed, "judge"), [])
+        # the hotspot run's log (written last) is not part of the test: here it would put p at 1 everywhere
+        with open(os.path.join(top, "fixed", "log.foamRun_hot"), "w") as f:
+            f.writelines(f"Time = {t}s\n\nGAMG:  Solving for p, Initial residual = 1, Final residual = 1e-9, "
+                         "No Iterations 3\n\n" for t in range(1, 401))
+        st, whole, _ = self.get("/abtests/ab1/judge", side="fixed")
+        self.assertLess(whole["residuals"]["p"]["median"], 1e-4, whole["residuals"])
+        self.assertError(self.get("/abtests/ab1/judge"), 400, "bad-request", "missing query parameter side")
+        self.assertError(self.get("/abtests/ab1/judge", side="both"), 400, "bad-request", "side")
+        self.assertError(self.get("/abtests/ab1/judge", side="fixed", to="-1"), 400, "bad-request")
+        self.assertError(self.get("/abtests/ab1/judge", side="fixed", to="nan"), 400, "bad-request", "finite")
+        self.assertError(self.get("/abtests/ab2/judge", side="base"), 404, "not-found", "no base run")
+        self.assertError(self.get("/abtests/.x/judge", side="base"), 400, "bad-request")
+        self.assertEqual((base["run"], fixed["run"]), ("ab1_ab/base", "ab1_ab/fixed"))
+        # a test made with --base-from reused ab1's original-mesh run: its base is judged there
+        top2 = os.path.join(self.d, "work", "ab2_ab")
+        os.makedirs(os.path.join(top2, "base", "postProcessing"))
+        reuse = lambda prev: self.schema.write(os.path.join(top2, "ab_result.json"), {"baseReusedFrom": prev}, "abtest")
+        reuse(top)
+        st, b2, _ = self.get("/abtests/ab2/judge", side="base")
+        self.assertEqual((st, b2["run"], b2["verdict"]), (200, "ab1_ab/base", base["verdict"]))
+        self.assertError(self.get("/abtests/ab2/judge", side="fixed"), 404, "not-found")   # nothing reused there
+        for bad in ("/etc", os.path.join(self.d, "elsewhere", "ab1_ab", "..", "..", "x_ab"), top2, 42):
+            reuse(bad)                                                # only a sibling test folder, by name
+            self.assertError(self.get("/abtests/ab2/judge", side="base"), 404, "not-found")
+        shutil.rmtree(os.path.join(top, "base", "system"))
+        self.assertError(self.get("/abtests/ab1/judge", side="base"), 404, "not-found")   # not a case folder
 
     def test_live_abtest_is_the_active_test(self):
         saved = dict(self.api._live)

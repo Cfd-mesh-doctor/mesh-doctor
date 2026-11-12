@@ -15,7 +15,7 @@ same table.  Every answer is JSON.  Errors always look like
 with the HTTP status from STATUS.  The OpenAPI description is built from the
 same table (GET /api/v1/openapi.json), so it cannot drift from the code.
 """
-import json, os, re
+import json, math, os, re
 
 import jobs
 import md_api
@@ -210,6 +210,48 @@ def live_abtest(p, q, b):
     return d
 
 
+@route("GET", "/abtests/{name}/judge", "Is one side of an A/B test converged?  The judge on its original-mesh "
+       "(base) or repaired-mesh (fixed) run; with `to`, as the run was at that iteration, so both sides can be "
+       "judged over the same iterations",
+       query={"side": {"schema": {"enum": ["base", "fixed"]}, "required": True,
+                       "description": "base: the original mesh; fixed: the repaired mesh"},
+              "window": {"schema": {"type": "integer", "minimum": 10, "maximum": 100000},
+                         "description": "iterations to judge (default: half the run, 10 to 200)"},
+              "to": {"schema": {"type": "number", "minimum": 0},
+                     "description": "judge the run as it was at this iteration (default: all of it)"},
+              "avgFrom": {"schema": {"type": "number", "minimum": 0},
+                          "description": "average forces from this iteration on (default: the last 2 windows)"}},
+       ok=_ref("judge"))
+def abtest_judge(p, q, b):
+    test, side = _name(p["name"]) + "_ab", q["side"]
+    if side == "base" and not _is_case(test, side):
+        test = _reused_base(test) or test     # a test made with --base-from: judge the run it reused
+    if not _is_case(test, side):
+        raise ApiError("not-found", f"no {side} run in A/B test {p['name']}")
+    case = os.path.join(md_api.md_dir(), test, side)
+    import abtest as ab, caseinfo           # only reads the logs and force files
+    # log.foamRun_hot is the one-iteration hotspot run made after the test, not part of it
+    logs = [f for f in caseinfo.solver_logs(case) if not f.endswith("_hot")] or None
+    out = ab.judge(case, q.get("window"), avg_from=q.get("avgFrom"), to=q.get("to"), logs=logs)
+    out["run"] = f"{test}/{side}"
+    return out
+
+
+def _is_case(test, side):
+    return os.path.isfile(os.path.join(md_api.md_dir(), test, side, "system", "controlDict"))
+
+
+def _reused_base(test):
+    """The A/B folder whose original-mesh run this test reused (--base-from), if any.
+    Only its folder name is taken from the file, so the answer stays in the workspace."""
+    try:
+        prev = schema.read(os.path.join(md_api.md_dir(), test, "ab_result.json"), "abtest").get("baseReusedFrom")
+    except (OSError, ValueError):
+        return None
+    prev = os.path.basename(str(prev or "").rstrip("/"))
+    return prev if prev.endswith("_ab") and md_api.SAFE.match(prev[:-3]) and prev != test else None
+
+
 @route("GET", "/maps", "Repair runs that have a repair map", ok=_items({"type": "string"}))
 def maps(p, q, b):
     return {"items": md_api.map_list()}
@@ -382,6 +424,8 @@ def _query_args(spec, query):
             v = int(v) if sch.get("type") == "integer" else float(v) if sch.get("type") == "number" else v
         except ValueError:
             raise ApiError("bad-request", f"{k} must be a {sch['type']}")
+        if isinstance(v, float) and not math.isfinite(v):           # nan, inf: never valid, never in JSON
+            raise ApiError("bad-request", f"{k} must be a finite number")
         problems = schema.check(v, sch)
         if problems:
             raise ApiError("bad-request", f"{k}: " + problems[0].split(": ", 1)[-1])

@@ -11,7 +11,7 @@
     python3 abtest.py extend <abDir> <endIter> [--variant P]
                                             # continue the second run (optionally
                                             # with another preset), judge it
-    python3 abtest.py judge <case> [window]      # convergence verdict for any case
+    python3 abtest.py judge <case> [window|auto] [--to N]   # convergence verdict for any case
     --variant simplec|relax|lts   solver-setting variant on the second run
     --extend <N>          after the A/B, continue the second run to N iterations
     --base-from <abDir>   reuse the original-mesh run of an earlier A/B
@@ -28,7 +28,7 @@ means/oscillation and seconds per iteration for both runs, plus a checksum
 proving the source case was only read.  <workspace> comes from config.py.
 Serial-mesh sources only (the root polyMesh must be the real mesh).
 """
-import gzip, json, os, re, shutil, statistics, subprocess, sys, time
+import bisect, gzip, json, os, re, shutil, statistics, subprocess, sys, time
 
 import caseinfo
 import config
@@ -445,13 +445,32 @@ def transient_verdict(out, steps, window):
     return out
 
 
-def judge(case, window=200, group=None, avg_from=None, logs=None):
+def upto(table, t_max):
+    """The rows of a {"Time": [...], column: [...]} table with Time <= t_max."""
+    t = table.get("Time") or []
+    n = bisect.bisect_right(t, t_max)
+    return {k: v[:n] if isinstance(v, list) else v for k, v in table.items()}
+
+
+def auto_window(n):
+    """The judge window for a run of n iterations: half of it, 10 to 200."""
+    return max(10, min(200, n // 2))
+
+
+def judge(case, window=200, group=None, avg_from=None, logs=None, to=None):
     """Convergence verdict + averaged forces.  Groups and directions come from
     the case (caseinfo.describe); `group` defaults to the group with the
     largest drag, normally the whole model.  `window` counts iterations, or
     time steps for a transient case, which gets its own verdict (see
-    transient_verdict).  `logs`: solver logs, default log.foamRun*."""
+    transient_verdict); None picks one from the run's length (auto_window).
+    `to` judges the run as it was at that iteration (or time): residuals and
+    forces after it are left out, so two runs can be judged over the same
+    iterations.  `logs`: solver logs, default log.foamRun*."""
     res, frc = parse_residuals(case, logs), parse_forces(case)
+    if to is not None:
+        res, frc = upto(res, to), {g: upto(F, to) for g, F in frc.items()}
+    if window is None:
+        window = auto_window(len(res.get("Time") or []))
     unsteady = caseinfo.transient(case)
     d = caseinfo.describe(case, frc)
     group = group or d["total"]
@@ -459,6 +478,8 @@ def judge(case, window=200, group=None, avg_from=None, logs=None):
     out = {"schemaVersion": schema.VERSIONS["judge"], "transient": unsteady, "window": window, "group": group,
            "axes": {"flow": ("-" if d["flowSign"] < 0 else "+") + "xyz"[d["flowAxis"]],
                     "up": "xyz"[d["upAxis"]], "vertical": vert, "source": d["source"]}}
+    if to is not None:
+        out["to"] = to
     # averaged forces with uncertainty over [avg_from, end] (default: last 2 windows):
     # main group's vertical force and drag, then every other group's vertical force
     avg = {}
@@ -591,17 +612,22 @@ def main(a):
     if len(a) < 2:
         print(__doc__); return
     if a[0] == "judge":
-        logs = None
-        if "--log" in a:                   # judge <case> [window] [avgFrom] --log <file or glob>
+        # judge <case> [window|auto] [avgFrom] [--log <file or glob>] [--to <iteration or time>]
+        logs = to = None
+        if "--log" in a:
             i = a.index("--log")
             case_dir = os.path.abspath(os.path.expanduser(a[1]))
             logs = caseinfo.solver_logs(case_dir, (a[i + 1],))
             if not logs:
                 sys.exit(f"no log matches {a[i + 1]} in {case_dir}")
             a = a[:i] + a[i + 2:]
-        print(json.dumps(judge(os.path.abspath(os.path.expanduser(a[1])),
-                               int(a[2]) if len(a) > 2 else 200,
-                               avg_from=float(a[3]) if len(a) > 3 else None, logs=logs), indent=1))
+        if "--to" in a:
+            i = a.index("--to")
+            to = float(a[i + 1])
+            a = a[:i] + a[i + 2:]
+        window = None if len(a) > 2 and a[2] == "auto" else int(a[2]) if len(a) > 2 else 200
+        print(json.dumps(judge(os.path.abspath(os.path.expanduser(a[1])), window,
+                               avg_from=float(a[3]) if len(a) > 3 else None, logs=logs, to=to), indent=1))
         return
     if a[0] == "extend":
         # abtest.py extend <abDir> <endIter>

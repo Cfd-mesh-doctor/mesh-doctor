@@ -62,6 +62,15 @@ python3 -m meshdoctor schema abtest "$T/work/it_mb_ab/ab_result.json"
 python3 -m meshdoctor schema map "$T/work/it_mb/meshDoctor/map.json"
 python3 -m meshdoctor judge "$T/work/it_mb_ab/fixed" 10 > "$T/judge.json"
 python3 -m meshdoctor schema judge "$T/judge.json"
+python3 -m meshdoctor judge "$T/work/it_mb_ab/base" auto --to 28 > "$T/judge_to.json"
+python3 -m meshdoctor schema judge "$T/judge_to.json"
+python3 - "$T/judge_to.json" <<'PY'
+import json, sys
+j = json.load(open(sys.argv[1]))
+assert (j["to"], j["window"]) == (28, 14), (j.get("to"), j["window"])   # auto: half the 28 iterations
+assert j["average"] and all(a["to"] <= 28 for a in j["average"].values()), j["average"]   # nothing after 28
+print("judge --to ok:", j["verdict"], "over", j["window"], "iterations up to", j["to"])
+PY
 
 step "portable report: one file, every document valid, no paths of this machine"
 python3 -m meshdoctor report it_mb -o "$T/it_mb.mdreport.json"

@@ -19,7 +19,16 @@
    "description": "major.minor; readers accept any 1.x"
   },
   "window": {
-   "type": "integer"
+   "type": "integer",
+   "description": "iterations (steady) or time steps (transient) judged"
+  },
+  "to": {
+   "type": "number",
+   "description": "added in 1.1: the run was judged as it was at this iteration or time; later residuals and forces were left out"
+  },
+  "run": {
+   "type": "string",
+   "description": "added in 1.1, API only: the A/B run judged, <test>_ab/base or <test>_ab/fixed (another test's, when its original-mesh run was reused)"
   },
   "group": {
    "type": [

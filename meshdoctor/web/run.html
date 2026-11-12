@@ -65,6 +65,13 @@ a{color:var(--accent)}
 .tabs button{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:99px;padding:2px 10px;font-size:12px;cursor:pointer}
 .tabs button.on{background:var(--accent);border-color:var(--accent);color:#fff}
 select{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:6px;font-size:12px;padding:2px 4px;max-width:100%}
+.scroll{overflow-x:auto}
+.cmp{border-collapse:collapse;width:100%;font-size:12.5px;margin-top:6px}
+.cmp td,.cmp th{padding:4px 6px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
+.cmp th{font-weight:600}
+.cmp td:first-child,.cmp th:first-child{text-align:left;color:var(--muted);font-weight:400}
+.cmp td.ok{color:var(--ok);font-weight:600} .cmp td.warn{color:var(--warn);font-weight:600} .cmp td.err{color:var(--err);font-weight:600}
+[hidden]{display:none!important}
 @media (max-width:520px){.overall .big{font-size:24px}}
 </style>
 </head>
@@ -102,6 +109,12 @@ select{background:var(--card);color:var(--ink);border:1px solid var(--line);bord
       <div class="sub" id="savedJudge" style="margin-top:6px"></div>
     </section>
   </div>
+
+  <section class="card" id="cmpCard" hidden>
+    <h2><span id="cmpTitle">Original vs repaired mesh</span>, over the same iterations</h2>
+    <div class="scroll"><table class="cmp" id="cmp"></table></div>
+    <div class="sub" id="cmpNote" style="margin-top:6px"></div>
+  </section>
 
   <section class="card chart">
     <h3><span>Forces (N)</span>
