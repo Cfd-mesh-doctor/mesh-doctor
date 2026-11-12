@@ -1,0 +1,202 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://meshdoctor.invalid/schemas/judge/1",
+ "title": "Mesh Doctor convergence verdict",
+ "description": "output of meshdoctor judge, and fixedJudge inside ab_result.json",
+ "type": "object",
+ "required": [
+  "schemaVersion",
+  "window",
+  "group",
+  "axes",
+  "average",
+  "verdict"
+ ],
+ "properties": {
+  "schemaVersion": {
+   "type": "string",
+   "pattern": "^1\\.\\d+$",
+   "description": "major.minor; readers accept any 1.x"
+  },
+  "window": {
+   "type": "integer"
+  },
+  "group": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "transient": {
+   "type": "boolean"
+  },
+  "verdict": {
+   "type": "string"
+  },
+  "axes": {
+   "type": "object",
+   "required": [
+    "flow",
+    "up",
+    "vertical"
+   ],
+   "properties": {
+    "flow": {
+     "type": "string",
+     "pattern": "^[+-][xyz]$"
+    },
+    "up": {
+     "enum": [
+      "x",
+      "y",
+      "z"
+     ]
+    },
+    "vertical": {
+     "enum": [
+      "downforce",
+      "lift"
+     ]
+    },
+    "source": {
+     "type": "object"
+    }
+   }
+  },
+  "average": {
+   "type": "object",
+   "description": "batch-means averages by name; u is the uncertainty",
+   "additionalProperties": {
+    "type": "object",
+    "required": [
+     "mean",
+     "u"
+    ],
+    "properties": {
+     "mean": {
+      "type": "number"
+     },
+     "u": {
+      "type": "number"
+     },
+     "from": {
+      "type": "number"
+     },
+     "to": {
+      "type": "number"
+     },
+     "nBatches": {
+      "type": "integer"
+     },
+     "batchLen": {
+      "type": "integer"
+     }
+    }
+   }
+  },
+  "residuals": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "object",
+    "properties": {
+     "median": {
+      "type": "number"
+     },
+     "trend": {
+      "type": "number"
+     }
+    }
+   }
+  },
+  "forces": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "object",
+    "properties": {
+     "mean": {
+      "type": "number"
+     },
+     "std": {
+      "type": "number"
+     },
+     "osc": {
+      "type": "number"
+     },
+     "drift": {
+      "type": "number"
+     }
+    }
+   }
+  },
+  "pBlocks": {
+   "type": "array",
+   "items": {
+    "type": "array",
+    "items": {
+     "type": "number"
+    }
+   }
+  },
+  "flags": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "steps": {
+   "type": "object",
+   "description": "transient runs only: per-time-step convergence",
+   "required": [
+    "n",
+    "converged"
+   ],
+   "properties": {
+    "n": {
+     "type": "integer"
+    },
+    "outerIterations": {
+     "type": "integer"
+    },
+    "converged": {
+     "type": "number"
+    },
+    "medianLastOuterP": {
+     "type": "number"
+    },
+    "medianOuterDrop": {
+     "type": [
+      "number",
+      "null"
+     ]
+    },
+    "maxCourant": {
+     "type": [
+      "number",
+      "null"
+     ]
+    },
+    "medianMaxCourant": {
+     "type": [
+      "number",
+      "null"
+     ]
+    },
+    "aboveCourantLimit": {
+     "type": [
+      "number",
+      "null"
+     ]
+    },
+    "bounded": {
+     "type": "number"
+    },
+    "boundedFields": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    }
+   }
+  }
+ }
+}

@@ -67,6 +67,8 @@ class JudgeTest(unittest.TestCase):
         j = abtest.judge(self.d, window=200)
         self.assertTrue(j["verdict"].startswith("converged"), j["verdict"])
         self.assertEqual(j["axes"]["vertical"], "downforce")
+        import schema
+        self.assertEqual(schema.validate(j, "judge"), [])
         self.assertAlmostEqual(j["average"]["drag"]["mean"], 50.0)
 
     def test_oscillating_plateau(self):
@@ -117,6 +119,9 @@ class TransientJudgeTest(unittest.TestCase):
         self.assertEqual(j["steps"]["outerIterations"], 2)
         self.assertAlmostEqual(j["average"]["drag"]["mean"], 50, delta=0.5)
         self.assertAlmostEqual(j["average"]["drag"]["from"], 0.2, places=6)  # 2 windows of steps, in seconds
+        import schema
+        self.assertEqual(schema.validate(j, "judge"), [])
+        self.assertTrue(j["transient"])
 
     def test_flags_unconverged_steps_courant_and_bounding(self):
         self.write_run(600, 5e-3, 12, lambda i: 50 + 3 * math.sin(i / 7), bounding=True)
@@ -125,10 +130,57 @@ class TransientJudgeTest(unittest.TestCase):
         self.assertEqual(j["steps"]["converged"], 0.0)
         self.assertEqual(j["steps"]["boundedFields"], ["k"])
         self.assertEqual(len(j["flags"]), 3)
+        import schema
+        self.assertEqual(schema.validate(j, "judge"), [])
 
     def test_drifting_mean(self):
         self.write_run(600, 1e-5, 0.8, lambda i: 50 + i / 10)
         self.assertTrue(self.judge()["verdict"].startswith("still developing"))
+
+
+class SchemaTest(unittest.TestCase):
+    """schema.py: version rules, the validator, and read/write."""
+
+    def test_versions(self):
+        import schema
+        self.assertTrue(schema.compatible({}, "repair")[0])                       # legacy, no version
+        self.assertTrue(schema.compatible({"schemaVersion": "1.7"}, "repair")[0])  # newer minor: fine
+        self.assertFalse(schema.compatible({"schemaVersion": "2.0"}, "repair")[0])  # newer major: refused
+        self.assertFalse(schema.compatible({"schemaVersion": "one"}, "repair")[0])
+
+    def test_validator(self):
+        import schema
+        root = {"type": "object", "required": ["a", "n"],
+                "properties": {"a": {"$ref": "#/$defs/pos"}, "n": {"type": ["integer", "null"]},
+                               "tags": {"type": "array", "items": {"enum": ["x", "y"]}}},
+                "additionalProperties": {"type": "number"}, "$defs": {"pos": {"type": "number", "minimum": 0}}}
+        schema._cache["_t"] = root
+        self.assertEqual(schema.validate({"a": 1, "n": None, "tags": ["x"], "extra": 2.5}, "_t"), [])
+        errs = schema.validate({"a": -1, "n": True, "tags": ["z"], "extra": "s"}, "_t")
+        self.assertEqual(len(errs), 4, errs)          # minimum, bool is not integer, enum, additional type
+        self.assertIn("$: missing n", schema.validate({"a": 1}, "_t"))
+
+    def test_write_read(self):
+        import schema
+        d = tempfile.mkdtemp(prefix="schema_test_")
+        try:
+            p = os.path.join(d, "r.json")
+            doc = schema.write(p, {"x": 1}, "map")
+            self.assertEqual(list(doc)[0], "schemaVersion")
+            self.assertEqual(schema.read(p, "map")["schemaVersion"], schema.VERSIONS["map"])
+            schema.write(p, {"schemaVersion": "9.0"})
+            with self.assertRaises(schema.SchemaError):
+                schema.read(p, "map")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_every_schema_is_well_formed(self):
+        import json, schema
+        for kind in schema.VERSIONS:
+            s = schema.schema(kind)
+            self.assertIn("schemaVersion", s["required"], kind)
+            self.assertEqual(s["properties"]["schemaVersion"]["pattern"], r"^%s\.\d+$" % schema.VERSIONS[kind].split(".")[0])
+            json.dumps(s)
 
 
 class BoundaryParserTest(unittest.TestCase):

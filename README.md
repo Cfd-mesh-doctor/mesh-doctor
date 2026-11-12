@@ -92,7 +92,8 @@ meshdoctor serve                               # http://localhost:8765/meshdocto
 meshdoctor help                       # every command; <command> --help for its options
 meshdoctor full <case> <name>         # repair a copy of <case> as <workspace>/<name>
 meshdoctor ab <case> <name>           # A/B solver test: original vs repaired mesh
-meshdoctor judge <case>               # is this run converged?
+meshdoctor judge <case>               # is this run converged? (steady or transient)
+meshdoctor schema <kind> <file>       # check a result file against its versioned schema
 meshdoctor serve [--case <case>]      # dashboard; --case picks the live run to watch
 ```
 

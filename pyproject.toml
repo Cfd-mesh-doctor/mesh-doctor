@@ -24,4 +24,4 @@ meshdoctor = "meshdoctor.__main__:main"
 packages = ["meshdoctor", "meshdoctor.experimental"]
 
 [tool.setuptools.package-data]
-meshdoctor = ["web/*.html"]
+meshdoctor = ["web/*.html", "schemas/*.json"]

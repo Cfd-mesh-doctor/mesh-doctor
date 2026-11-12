@@ -54,6 +54,8 @@ Every file Mesh Doctor writes for another program to read carries `"schemaVersio
 - A minor bump only adds fields. A major bump changes or removes them.
 - Readers accept any minor version of the major version they know, and refuse a newer major version with a clear message.
 - Tests validate real outputs against the schemas, so a field cannot quietly disappear.
+- `meshdoctor schema <repair|abtest|judge|map> <file>` checks any file by hand. `meshdoctor/schema.py` holds the versions, the read and write helpers (which stamp the version and refuse a newer major version), and a small validator for the JSON Schema keywords the schemas use (standard library only, like the rest of the package).
+- Files written before versioning existed have no `schemaVersion`. They are read as "legacy" and never re-stamped, so an old file is not mislabelled as 1.0.
 
 This is what makes a **report bundle** possible: a folder of these files plus a viewer, which can be opened anywhere, including a static website, without the worker.
 

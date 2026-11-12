@@ -33,6 +33,7 @@ import gzip, json, os, re, shutil, statistics, subprocess, sys, time
 import caseinfo
 import config
 import ramguard
+import schema
 
 HOME = os.path.expanduser("~")
 _S = config.settings()
@@ -351,7 +352,7 @@ def defects_of(fixed_name):
 
 
 def hot_both(top):
-    result = json.load(open(os.path.join(top, "ab_result.json")))
+    result = schema.read(os.path.join(top, "ab_result.json"), "abtest")
     name = result.get("fixedName")
     db, da = defects_of(name) if name else ([], [])
     for tag, defects in (("base", db), ("fixed", da)):
@@ -363,7 +364,7 @@ def hot_both(top):
         result[tag + "Hotspots"] = {k: h[k] for k in ("summary", "nHotCells",
                                                      "shareOfTopChangeNearMeshDefects")}
         result[tag + "Hotspots"]["top"] = h["clusters"][:15]
-        json.dump(result, open(os.path.join(top, "ab_result.json"), "w"), indent=1)
+        schema.write(os.path.join(top, "ab_result.json"), result, indent=1)
     status(top, step="done")
     return result
 
@@ -455,7 +456,7 @@ def judge(case, window=200, group=None, avg_from=None, logs=None):
     d = caseinfo.describe(case, frc)
     group = group or d["total"]
     vert = d["vertical"]
-    out = {"window": window, "group": group,
+    out = {"schemaVersion": schema.VERSIONS["judge"], "transient": unsteady, "window": window, "group": group,
            "axes": {"flow": ("-" if d["flowSign"] < 0 else "+") + "xyz"[d["flowAxis"]],
                     "up": "xyz"[d["upAxis"]], "vertical": vert, "source": d["source"]}}
     # averaged forces with uncertainty over [avg_from, end] (default: last 2 windows):
@@ -543,7 +544,7 @@ def end_write_interval(start, end):
 def extend(top, end_iter, nproc=None, variant=None):
     """Continue the second run of an A/B to end_iter (optionally switching to
     another solver preset first), then judge convergence."""
-    result = json.load(open(os.path.join(top, "ab_result.json")))
+    result = schema.read(os.path.join(top, "ab_result.json"), "abtest")
     case = os.path.join(top, "fixed")
     nproc = nproc or result["nProcs"]
     t0 = latest_time(case)
@@ -568,7 +569,7 @@ def extend(top, end_iter, nproc=None, variant=None):
     result["fixedJudge"] = judge(case, window=min(200, max(40, (end_iter - int(float(t0))) // 2)),
                                  avg_from=first + 50)
     result["fixedFull"] = {"residualHistory": summarise(case, 200)["residualHistory"]}
-    json.dump(result, open(os.path.join(top, "ab_result.json"), "w"), indent=1)
+    schema.write(os.path.join(top, "ab_result.json"), result, indent=1)
     status(top, step="done")
     return result
 
@@ -631,11 +632,11 @@ def main(a):
         return
     if a[0] == "resummarise":
         top = os.path.abspath(os.path.expanduser(a[1]))
-        r = json.load(open(os.path.join(top, "ab_result.json")))
+        r = schema.read(os.path.join(top, "ab_result.json"), "abtest")
         for t in ("base", "fixed"):
             if os.path.isdir(os.path.join(top, t, "postProcessing")):
                 r[t] = summarise(os.path.join(top, t), r["window"])
-        json.dump(r, open(os.path.join(top, "ab_result.json"), "w"), indent=1)
+        schema.write(os.path.join(top, "ab_result.json"), r, indent=1)
         return
     import repair                              # plain_name + source fingerprint (same folder)
     src = os.path.abspath(os.path.expanduser(a[0]))
@@ -671,7 +672,7 @@ def main(a):
     top = os.path.join(ROOT, label + "_ab")
     os.makedirs(top, exist_ok=True)
     window = max(20, iters // 4)
-    result = {"source": src, "fixedName": None if fixed_name == "-" else fixed_name,
+    result = {"schemaVersion": schema.VERSIONS["abtest"], "source": src, "fixedName": None if fixed_name == "-" else fixed_name,
               "variant": variant, "variantSettings": PRESETS.get(variant), "label": label,
               "iters": iters, "nProcs": nproc,
               "init": init, "window": window, "started": time.strftime("%Y-%m-%d %H:%M:%S")}
@@ -679,7 +680,7 @@ def main(a):
     if base_from:
         # reuse an earlier original-mesh run with identical settings
         base_from = os.path.abspath(os.path.expanduser(base_from))
-        prev = json.load(open(os.path.join(base_from, "ab_result.json")))
+        prev = schema.read(os.path.join(base_from, "ab_result.json"), "abtest")
         if (prev.get("source"), prev.get("iters"), prev.get("init"), prev.get("nProcs")) != (src, iters, init, nproc):
             sys.exit("--base-from run used different settings")
         for k in ("base", "baseRuns", "baseHotspots"):
@@ -705,7 +706,7 @@ def main(a):
         status(top, step=f"solving {tag}", case=case)
         result[tag + "Runs"] = run_one(case, iters, nproc)
         result[tag] = summarise(case, window)
-        json.dump(result, open(os.path.join(top, "ab_result.json"), "w"), indent=1)
+        schema.write(os.path.join(top, "ab_result.json"), result, indent=1)
     # verdict: lower plateau residuals and smaller force oscillation = better
     cmp = {}
     for k, b in result["base"]["residuals"].items():
@@ -715,7 +716,7 @@ def main(a):
     result["residualRatioFixedOverBase"] = cmp
     result["finished"] = time.strftime("%Y-%m-%d %H:%M:%S")
     result["sourceCheck"] = repair.source_check(fp0, src)
-    json.dump(result, open(os.path.join(top, "ab_result.json"), "w"), indent=1)
+    schema.write(os.path.join(top, "ab_result.json"), result, indent=1)
     if "--no-hotspots" not in a:
         hot_both(top)
     if "--extend" in a:

@@ -1,0 +1,354 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://meshdoctor.invalid/schemas/repair/1",
+ "title": "Mesh Doctor repair result",
+ "description": "<workspace>/<run>/meshDoctor/result.json, written by meshdoctor full and fix",
+ "type": "object",
+ "required": [
+  "schemaVersion",
+  "case",
+  "source",
+  "layout",
+  "profile",
+  "targets",
+  "checkMeshBefore",
+  "checkMeshAfter",
+  "verdict",
+  "clustersBefore",
+  "clustersAfter",
+  "runs",
+  "finished"
+ ],
+ "properties": {
+  "schemaVersion": {
+   "type": "string",
+   "pattern": "^1\\.\\d+$",
+   "description": "major.minor; readers accept any 1.x"
+  },
+  "case": {
+   "type": "string"
+  },
+  "source": {
+   "type": "string"
+  },
+  "profile": {
+   "type": "string"
+  },
+  "options": {
+   "type": "string"
+  },
+  "openfoam": {
+   "type": "string"
+  },
+  "finished": {
+   "type": "string"
+  },
+  "layout": {
+   "type": "object",
+   "required": [
+    "parallel",
+    "nCells"
+   ],
+   "properties": {
+    "parallel": {
+     "type": "boolean"
+    },
+    "nProcs": {
+     "type": [
+      "integer",
+      "null"
+     ]
+    },
+    "nCells": {
+     "type": [
+      "integer",
+      "null"
+     ]
+    },
+    "rootCells": {
+     "type": [
+      "integer",
+      "null"
+     ]
+    }
+   }
+  },
+  "targets": {
+   "type": "object",
+   "required": [
+    "nonOrthTarget",
+    "skewTarget",
+    "bSkewTarget",
+    "weightTarget",
+    "volRatioTarget"
+   ],
+   "additionalProperties": {
+    "type": "number"
+   }
+  },
+  "doctorBefore": {
+   "type": "object"
+  },
+  "doctorAfter": {
+   "type": "object"
+  },
+  "checkMeshBefore": {
+   "$ref": "#/$defs/checkMesh"
+  },
+  "checkMeshAfter": {
+   "$ref": "#/$defs/checkMesh"
+  },
+  "verdict": {
+   "type": "object",
+   "required": [
+    "improved",
+    "regressions",
+    "unchanged"
+   ],
+   "description": "checkMesh numbers that got better, worse, or stayed the same",
+   "properties": {
+    "improved": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "regressions": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "unchanged": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "collapse": {
+   "type": [
+    "object",
+    "null"
+   ],
+   "description": "the face-collapse stage, or null when it did not run",
+   "properties": {
+    "accepted": {
+     "type": "boolean"
+    },
+    "facesCollapsed": {
+     "type": [
+      "integer",
+      "null"
+     ]
+    }
+   }
+  },
+  "sweeps": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "passes": {
+   "type": "integer",
+   "minimum": 0
+  },
+  "maxDisplacement_m": {
+   "type": [
+    "number",
+    "null"
+   ]
+  },
+  "clustersBefore": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/cluster"
+   }
+  },
+  "clustersAfter": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/cluster"
+   }
+  },
+  "runs": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "cmd",
+     "log",
+     "exit",
+     "seconds"
+    ],
+    "properties": {
+     "cmd": {
+      "type": "string"
+     },
+     "log": {
+      "type": "string"
+     },
+     "exit": {
+      "type": "integer"
+     },
+     "seconds": {
+      "type": "number"
+     }
+    }
+   }
+  },
+  "sourceCheck": {
+   "type": [
+    "object",
+    "null"
+   ],
+   "required": [
+    "unchanged"
+   ],
+   "description": "fingerprint of the source case before and after; unchanged must be true",
+   "properties": {
+    "unchanged": {
+     "type": "boolean"
+    },
+    "before": {
+     "$ref": "#/$defs/fingerprint"
+    },
+    "after": {
+     "$ref": "#/$defs/fingerprint"
+    }
+   }
+  }
+ },
+ "$defs": {
+  "fingerprint": {
+   "type": "object",
+   "required": [
+    "sha256",
+    "files",
+    "bytes"
+   ],
+   "properties": {
+    "sha256": {
+     "type": "string"
+    },
+    "files": {
+     "type": "integer"
+    },
+    "bytes": {
+     "type": "integer"
+    },
+    "time": {
+     "type": "string"
+    }
+   }
+  },
+  "checkMesh": {
+   "type": "object",
+   "required": [
+    "meshOK"
+   ],
+   "description": "numbers parsed from checkMesh; absent when checkMesh did not report them",
+   "properties": {
+    "meshOK": {
+     "type": "boolean"
+    },
+    "maxNonOrtho": {
+     "type": "number"
+    },
+    "avgNonOrtho": {
+     "type": "number"
+    },
+    "maxSkewness": {
+     "type": "number"
+    },
+    "minWeight": {
+     "type": "number"
+    },
+    "minVolRatio": {
+     "type": "number"
+    },
+    "failedChecks": {
+     "type": "integer"
+    },
+    "errors": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    }
+   },
+   "additionalProperties": {
+    "type": [
+     "number",
+     "boolean",
+     "array"
+    ]
+   }
+  },
+  "cluster": {
+   "type": "object",
+   "required": [
+    "id",
+    "nFaces",
+    "kinds",
+    "severity",
+    "worst",
+    "centroid"
+   ],
+   "properties": {
+    "id": {
+     "type": "integer"
+    },
+    "nFaces": {
+     "type": "integer"
+    },
+    "kinds": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "severity": {
+     "type": "integer"
+    },
+    "centroid": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     }
+    },
+    "bbox": {
+     "type": "array",
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     }
+    },
+    "h": {
+     "type": "number"
+    },
+    "patches": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "worst": {
+     "type": "object",
+     "required": [
+      "badness"
+     ],
+     "properties": {
+      "badness": {
+       "type": "number"
+      }
+     }
+    }
+   }
+  }
+ }
+}

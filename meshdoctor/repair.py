@@ -18,6 +18,7 @@ import hashlib, json, math, os, re, shutil, subprocess, sys, time
 
 import config
 import ramguard
+import schema
 
 HOME = os.path.expanduser("~")
 _S = config.settings()
@@ -587,8 +588,7 @@ def fix(case, profile="openfoam", extra="-slideFlat -slideCurved -slideEdges", c
         "openfoam": subprocess.run(["bash", "-c", f"source {BASHRC}; echo $WM_PROJECT_VERSION"],
                                    capture_output=True, text=True).stdout.strip(),
     }
-    with open(os.path.join(md, "result.json"), "w") as f:
-        json.dump(res, f, indent=1)
+    res = schema.write(os.path.join(md, "result.json"), res, "repair", indent=1)
     sc = res["sourceCheck"]
     status(case, "done" if not sc or sc["unchanged"] else "done, but the SOURCE CASE CHANGED during the run",
            layout=lay, verdict=res["verdict"])

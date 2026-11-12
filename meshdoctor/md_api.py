@@ -9,6 +9,7 @@ import json, os, posixpath, re, shlex, subprocess
 
 import config
 import ramguard
+import schema
 
 q = shlex.quote
 PKG = os.path.dirname(os.path.abspath(__file__))
@@ -62,10 +63,17 @@ def _launch(cmd):
 SAFE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$")
 
 
-def _read_json(path):
+def _read_json(path, kind=None):
+    """A JSON file, or None if missing/unreadable.  With a kind (schema.VERSIONS),
+    a file from a newer major version gives {"error": {...}} instead of data
+    this code would misread."""
     try:
+        if kind:
+            return schema.read(path, kind)
         with open(path, encoding="utf-8") as f:
             return json.load(f)
+    except schema.SchemaError as e:
+        return {"error": {"code": "schema-version", "message": str(e)}}
     except (OSError, ValueError):
         return None
 
@@ -98,7 +106,7 @@ def results():
         if not os.path.isdir(md):
             continue
         st = _read_json(os.path.join(md, "status.json")) or {}
-        res = _read_json(os.path.join(md, "result.json"))
+        res = _read_json(os.path.join(md, "result.json"), "repair")
         row = {"name": n, "status": st}
         if res:
             row.update({
@@ -113,7 +121,7 @@ def results():
 def result(name):
     if not SAFE.match(name):
         return None
-    return _read_json(os.path.join(md_dir(), name, "meshDoctor", "result.json"))
+    return _read_json(os.path.join(md_dir(), name, "meshDoctor", "result.json"), "repair")
 
 
 def cluster(name, tag, cid):
@@ -213,7 +221,7 @@ def ab(name):
     if not os.path.isdir(top):
         return {"exists": False}
     out = {"exists": True, "status": _read_json(os.path.join(top, "ab_status.json")),
-           "result": _read_json(os.path.join(top, "ab_result.json")), "live": {}}
+           "result": _read_json(os.path.join(top, "ab_result.json"), "abtest"), "live": {}}
     if out["result"]:
         for tag in ("base", "fixed"):
             if tag in out["result"]:
@@ -248,7 +256,7 @@ def ab_extend(label, to):
     if not SAFE.match(label):
         return {"ok": False, "error": "bad arguments"}
     top = os.path.join(md_dir(), label + "_ab")
-    r = _read_json(os.path.join(top, "ab_result.json"))
+    r = _read_json(os.path.join(top, "ab_result.json"), "abtest")
     if not r or not r.get("fixed"):
         return {"ok": False, "error": "A/B not finished"}
     try:
@@ -281,7 +289,7 @@ def _solver_running():
 def _base_for(src, iters, init):
     """An earlier A/B whose original-mesh run can be reused."""
     for n in ab_list():
-        r = _read_json(os.path.join(md_dir(), n + "_ab", "ab_result.json")) or {}
+        r = _read_json(os.path.join(md_dir(), n + "_ab", "ab_result.json"), "abtest") or {}
         if (r.get("source"), r.get("iters"), r.get("init")) == (src, iters, init) and r.get("base"):
             return posixpath.join(_paths()[1], n + "_ab")
     return None
@@ -340,7 +348,7 @@ def mapdata(name):
     """Repair-vs-hotspot map written by mapdata.py (meshDoctor/map.json)."""
     if not SAFE.match(name):
         return None
-    return _read_json(os.path.join(md_dir(), name, "meshDoctor", "map.json"))
+    return _read_json(os.path.join(md_dir(), name, "meshDoctor", "map.json"), "map")
 
 
 def map_list():

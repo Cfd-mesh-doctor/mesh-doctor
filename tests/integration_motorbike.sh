@@ -56,4 +56,11 @@ python3 -m meshdoctor map it_mb --hot "Original=$T/work/it_mb_ab/base" --hot "Re
 python3 -c "import json,sys; m=json.load(open('$T/work/it_mb/meshDoctor/map.json')); \
 assert m['ground']==['lowerWall'], m['ground']; print('map ok: ground', m['ground'], 'axes', m['axes'])"
 
+step "result files match their schemas"
+python3 -m meshdoctor schema repair "$T/work/it_mb/meshDoctor/result.json"
+python3 -m meshdoctor schema abtest "$T/work/it_mb_ab/ab_result.json"
+python3 -m meshdoctor schema map "$T/work/it_mb/meshDoctor/map.json"
+python3 -m meshdoctor judge "$T/work/it_mb_ab/fixed" 10 > "$T/judge.json"
+python3 -m meshdoctor schema judge "$T/judge.json"
+
 step "PASS (temporary folder $T can be deleted)"
