@@ -59,6 +59,12 @@ def _launch(cmd):
     subprocess.Popen(["bash", "-lc", cmd], start_new_session=True,
                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+def _refuse(code, msg):
+    """A refused request.  `code` is one of api_v1.STATUS (which maps it to an
+    HTTP status); the old /api/md routes show only the message."""
+    return {"ok": False, "error": msg, "code": code}
+
+
 # Plain folder names only: no leading dot, so "." and ".." (parent folder) are refused.
 SAFE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$")
 
@@ -73,7 +79,7 @@ def _read_json(path, kind=None):
         with open(path, encoding="utf-8") as f:
             return json.load(f)
     except schema.SchemaError as e:
-        return {"error": {"code": "schema-version", "message": str(e)}}
+        return {"error": {"code": "schema-version", "message": getattr(e, "why", str(e))}}
     except (OSError, ValueError):
         return None
 
@@ -142,17 +148,22 @@ def log_tail(name, n=60):
         return ""
 
 
-def start(src, name, profile):
+def start(src, name, profile, replace=True):
+    """Start a repair of a copy of source case `src` as workspace run `name`.
+    replace=False refuses when that run already exists (the copy step would
+    delete it)."""
     if not (SAFE.match(src) and SAFE.match(name)) or profile not in ("openfoam", "strict"):
-        return {"ok": False, "error": "bad arguments"}
+        return _refuse("bad-request", "bad arguments")
     if src not in sources():
-        return {"ok": False, "error": "unknown source case"}
+        return _refuse("not-found", "unknown source case")
+    if not replace and os.path.exists(os.path.join(md_dir(), name)):
+        return _refuse("exists", f"run {name} already exists; pick another name or replace it")
     if _solver_running():
-        return {"ok": False, "error": "another OpenFOAM job is running; one big job at a time (RAM)"}
+        return _refuse("busy", "another OpenFOAM job is running; one big job at a time (RAM)")
     cases, ws, _ = _paths()
     ok, msg = ramguard.check(posixpath.join(cases, src), "repair")
     if not ok:
-        return {"ok": False, "error": msg}
+        return _refuse("not-enough-memory", msg)
     _launch(f"mkdir -p {q(ws)} && nohup nice -n 5 python3 {q(DRIVER)} full {q(posixpath.join(cases, src))} "
             f"{q(name)} --profile {q(profile)} > {q(posixpath.join(ws, name + '.log'))} 2>&1 &")
     return {"ok": True, "name": name}
@@ -254,24 +265,24 @@ def ab(name):
 def ab_extend(label, to):
     """Continue the second run of an A/B (abtest.py extend) and judge it."""
     if not SAFE.match(label):
-        return {"ok": False, "error": "bad arguments"}
+        return _refuse("bad-request", "bad arguments")
     top = os.path.join(md_dir(), label + "_ab")
     r = _read_json(os.path.join(top, "ab_result.json"), "abtest")
     if not r or not r.get("fixed"):
-        return {"ok": False, "error": "A/B not finished"}
+        return _refuse("not-ready", "A/B not finished")
     try:
         to = int(to)
     except ValueError:
-        return {"ok": False, "error": "bad iteration count"}
+        return _refuse("bad-request", "bad iteration count")
     if not (r["iters"] < to <= 5000):
-        return {"ok": False, "error": f"target must be between {r['iters'] + 1} and 5000"}
+        return _refuse("bad-request", f"target must be between {r['iters'] + 1} and 5000")
     if not os.path.isdir(os.path.join(top, "fixed", "processor0")):
-        return {"ok": False, "error": "second run has no decomposed fields to continue from"}
+        return _refuse("not-ready", "second run has no decomposed fields to continue from")
     if _solver_running():
-        return {"ok": False, "error": "another OpenFOAM job is running; one big job at a time (RAM)"}
+        return _refuse("busy", "another OpenFOAM job is running; one big job at a time (RAM)")
     ok, msg = ramguard.check(os.path.join(top, "fixed"), "solve")
     if not ok:
-        return {"ok": False, "error": msg}
+        return _refuse("not-enough-memory", msg)
     _, ws, bashrc = _paths()
     wtop = posixpath.join(ws, label + "_ab")
     _launch(f"source {q(bashrc)}; nohup nice -n 5 python3 {q(ABTEST)} extend {q(wtop)} {to} "
@@ -301,33 +312,40 @@ def variants():
     return [{"name": k, "label": abtest.PRESET_LABELS.get(k, k)} for k in abtest.PRESETS]
 
 
-def ab_start(name, iters, init, variant=""):
+def ab_start(name, iters, init, variant="", replace=True):
+    """Start an A/B solver test of repair run `name`.  replace=False refuses
+    when the A/B folder it would write already exists."""
     import abtest
     if variant and variant not in abtest.PRESETS:
-        return {"ok": False, "error": "unknown variant"}
+        return _refuse("bad-request", "unknown variant")
     if not SAFE.match(name) or init not in ("0.warm", "0.cold", "0"):
-        return {"ok": False, "error": "bad arguments"}
-    iters = max(20, min(int(iters), 2000))
+        return _refuse("bad-request", "bad arguments")
+    try:
+        iters = max(20, min(int(iters), 2000))
+    except (TypeError, ValueError):
+        return _refuse("bad-request", "bad iteration count")
     res = result(name)
     if not res or not res.get("finished"):
-        return {"ok": False, "error": "repair run not finished"}
+        return _refuse("not-ready", "repair run not finished")
     if res.get("layout", {}).get("parallel"):
-        return {"ok": False, "error": "A/B test supports serial (root) meshes only for now"}
+        return _refuse("unsupported", "A/B test supports serial (root) meshes only for now")
     src = res.get("source", "")
     cases, ws, _ = _paths()
     if posixpath.dirname(src) != cases.rstrip("/") or not SAFE.match(posixpath.basename(src)):
-        return {"ok": False, "error": "unexpected source path"}
+        return _refuse("unsupported", "unexpected source path")
     if not os.path.isdir(os.path.join(run_dir(), posixpath.basename(src), init)):
-        return {"ok": False, "error": f"source case has no {init} directory"}
+        return _refuse("bad-request", f"source case has no {init} directory")
     if _solver_running():
-        return {"ok": False, "error": "another OpenFOAM job is running; one big job at a time (RAM)"}
+        return _refuse("busy", "another OpenFOAM job is running; one big job at a time (RAM)")
     ok, msg = ramguard.check(src, "solve")
     if not ok:
-        return {"ok": False, "error": msg}
+        return _refuse("not-enough-memory", msg)
     extra, label = "", name
     if variant:
         label = f"{os.path.basename(src)}_{variant}"
         extra = f" --variant {variant} --label {label}"
+    if not replace and os.path.exists(os.path.join(md_dir(), label + "_ab")):
+        return _refuse("exists", f"A/B test {label} already exists; extend it or replace it")
         b = _base_for(src, iters, init)
         if b:
             extra += f" --base-from {q(b)}"

@@ -32,8 +32,9 @@ Rules between layers:
 |---|---|---|
 | `caseinfo.py`, `ramguard.py`, `config.py`, `mapdata.py` | core | already free of HTTP and UI |
 | `repair.py`, `abtest.py` | core + CLI | the library functions (`full`, `fix`, `judge`, `run_one`, ...) are core; their `main()` is CLI |
-| `md_api.py` | api + jobs | starts jobs with `Popen`, and finds running ones from `/proc` and `status.json` |
-| `server.py` | api | an if-chain over `/api/md/*`, `/api/run` and `/api/status`; security checks |
+| `md_api.py` | api + jobs | reads results; starts jobs with `Popen` and finds running ones from `/proc` and `status.json`; refusals carry an error code |
+| `api_v1.py` | api | the `/api/v1` route table, request checks, error format and OpenAPI document |
+| `server.py` | api | HTTP, the security checks, the live monitors, and the old `/api/md/*`, `/api/run` and `/api/status` routes |
 | `web/*.html` | web | four pages; chart and 3D-viewer code is copied between them |
 | `__main__.py` | CLI | dispatches to the scripts |
 
@@ -61,23 +62,52 @@ This is what makes a **report bundle** possible: a folder of these files plus a 
 
 ## API v1
 
-All routes live under `/api/v1`. Responses are JSON, and errors are always `{"error": {"code": "...", "message": "..."}}` with a matching HTTP status. The server publishes `/api/v1/openapi.json`, so a website (or a script) can be written against the description instead of the code.
+All routes live under `/api/v1` (`meshdoctor/api_v1.py`). The routes are a table that knows nothing about the HTTP server: `handle(method, path, query, body, content_type)` returns a status and a JSON document. `server.py` runs the security checks first and then hands the request over, so another server, or a test, can use the same table.
 
-| v1 route | Today | Purpose |
+- Responses are JSON. Errors are always `{"error": {"code": "...", "message": "..."}}`, with the HTTP status that the code maps to (below). Messages never contain the worker's file paths.
+- `GET /api/v1/openapi.json` describes the API in OpenAPI 3.1. It is built from the same table, so it cannot drift from the code. The result documents refer to `GET /api/v1/schemas/{kind}`, the JSON Schemas above.
+- List answers are objects, `{"items": [...]}`, so fields can be added later without breaking clients.
+
+| v1 route | Old route | Purpose |
 |---|---|---|
+| `GET /` | | API version, result-file versions, job kinds |
+| `GET /openapi.json`, `GET /schemas/{kind}` | | the API description and the result schemas |
 | `GET /cases` | `/api/md/sources` | source cases the worker may read |
-| `GET /repairs`, `GET /repairs/{name}` | `/api/md/results`, `/api/md/result` | repair runs and their result |
-| `GET /repairs/{name}/clusters/{id}` | `/api/md/cluster` | geometry of one defect cluster |
-| `GET /repairs/{name}/log` | `/api/md/log` | repair log |
-| `GET /abtests`, `GET /abtests/{name}` | `/api/md/ablist`, `/api/md/ab` | A/B tests and their residuals |
-| `GET /abtests/{name}/live` | `/api/run?label=` | the steady-run page: progress, forces, residuals, live judge |
-| `GET /maps`, `GET /maps/{name}` | `/api/md/maplist`, `/api/md/map` | repair maps |
-| `GET /judge?case=` | (CLI only) | convergence verdict for a case |
+| `GET /repairs`, `GET /repairs/{name}` | `/api/md/results`, `/api/md/result` | repair runs, and a finished run's result (repair schema) |
+| `GET /repairs/{name}/clusters/{id}?tag=before\|after\|report` | `/api/md/cluster` | geometry of one defect cluster |
+| `GET /repairs/{name}/log` | `/api/md/log` | the repair sweeps from the log |
+| `GET /abtests`, `GET /abtests/{name}` | `/api/md/ablist`, `/api/md/ab` | A/B tests: status, result (abtest schema), residuals, oscillation maps |
+| `GET /abtests/{name}/live` | `/api/run?label=` | the steady-run page: stages, forces, residuals, live judge |
+| `GET /maps`, `GET /maps/{name}` | `/api/md/maplist`, `/api/md/map` | repair maps (map schema) |
+| `GET /judge?case=&window=&avgFrom=&log=` | (CLI only) | convergence verdict for a case in the cases folder (judge schema); `log` picks the solver log, such as `log.pimple` |
 | `GET /live` | `/api/status` | the live (transient) case: forces, averaging window, time step, processes, memory |
-| `GET /variants` | `/api/md/variants` | solver-setting variants |
-| `POST /jobs`, `GET /jobs`, `GET /jobs/{id}`, `POST /jobs/{id}/cancel` | `/api/md/start`, `abstart`, `abextend` | start and follow repair, A/B, extend and map jobs |
+| `GET /variants` | `/api/md/variants` | solver-setting variants for an A/B second run |
+| `POST /jobs` | `/api/md/start`, `abstart`, `abextend` | start a repair, A/B test or A/B extension (202 Accepted) |
 
-The old routes stay as aliases until the pages have moved to v1, then they are removed in a major release.
+A job request names its kind and its parameters, which are checked against a schema (also in the OpenAPI document) before anything starts. Unknown parameters are refused:
+
+```json
+{"kind": "repair", "params": {"source": "motorBike", "name": "mb", "profile": "openfoam"}}
+{"kind": "abtest", "params": {"name": "mb", "iters": 200, "init": "0.warm", "variant": ""}}
+{"kind": "abextend", "params": {"name": "mb", "to": 1000}}
+```
+
+A new repair or A/B test refuses to replace an existing run of the same name (`409 exists`) unless the request says `"replace": true`, because the copy step deletes the old run. The old routes keep their old behaviour.
+
+| Error code | HTTP | Meaning |
+|---|---|---|
+| `bad-request` | 400 | a bad name, parameter or body |
+| `forbidden` | 403 | unknown Host, another site's Origin, or a missing or wrong launch token |
+| `not-found` | 404 | no such route, run, case or log |
+| `method-not-allowed` | 405 | wrong method; the `Allow` header says which |
+| `exists`, `busy`, `not-ready`, `not-enough-memory`, `schema-version` | 409 | the request is fine, but the worker's state refuses it: the run exists, another OpenFOAM job is running, the run it needs is not finished, the RAM guard says no, or a result file is from a newer Mesh Doctor |
+| `too-large`, `unsupported-media-type` | 413, 415 | job bodies are JSON (`Content-Type: application/json`), at most 64 KB |
+| `unsupported` | 422 | something Mesh Doctor cannot do yet, such as an A/B test of a decomposed-only mesh |
+| `internal`, `unavailable` | 500, 503 | a bug (details go to the server window), or a route this server does not run |
+
+The security rules are the same as for the old routes: the Host and Origin checks on every request, and the launch token (`X-MD-Token`) on every POST. Requiring a JSON body adds one more barrier: a plain form on another site can only send form encodings, which `/jobs` refuses with 415. `tests/security_check.py` checks all of this against a running server.
+
+The dashboard pages still use the old routes. They move to v1 with the shared front-end modules (step 6 below); then the old routes are removed in a major release.
 
 ## Jobs
 
@@ -107,9 +137,9 @@ Shape 2 comes first: it is useful on its own (share a result with a teammate as 
 
 ## Order of work
 
-1. This document.
-2. Schemas and `schemaVersion` for the result files, validated in tests.
-3. The `/api/v1` router with the error format and `openapi.json`. Old routes become aliases.
+1. This document. (Done.)
+2. Schemas and `schemaVersion` for the result files, validated in tests. (Done.)
+3. The `/api/v1` router with the error format and `openapi.json`. Old routes become aliases. (Done.)
 4. The job model and `LocalRunner`. `md_api` starts jobs only through it.
 5. `meshdoctor report <name>`: the portable bundle, and a viewer that reads only bundles.
 6. Shared front-end modules (charts, 3D viewer, API client); pages move to `/api/v1`.

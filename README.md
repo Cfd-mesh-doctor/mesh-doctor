@@ -99,6 +99,8 @@ meshdoctor serve [--case <case>]      # dashboard; --case picks the live run to 
 
 Without the `bin/` launcher or pip, `python3 -m meshdoctor <command>` from the clone does the same.
 
+The dashboard's data is also a versioned JSON API under `/api/v1`, described at `http://localhost:8765/api/v1/openapi.json` (see [Architecture](docs/architecture.md#api-v1)). Starting a job through it needs the launch token from a dashboard page.
+
 **On another machine** (a cluster node, a lab PC): the dashboard listens on 127.0.0.1 only. Reach it through an SSH tunnel, never a public address:
 
 ```bash

@@ -61,7 +61,9 @@ def read(path, kind):
         doc = json.load(f)
     ok, why = compatible(doc, kind)
     if not ok:
-        raise SchemaError(f"{path}: {why}")
+        e = SchemaError(f"{path}: {why}")
+        e.why = why                       # the reason without the path (for API answers)
+        raise e
     return doc
 
 
@@ -104,6 +106,8 @@ def _check(value, sch, root, path, errors):
         errors.append(f"{path}: {value!r} does not match {sch['pattern']}")
     if "minimum" in sch and _is(value, "number") and value < sch["minimum"]:
         errors.append(f"{path}: {value} < {sch['minimum']}")
+    if "maximum" in sch and _is(value, "number") and value > sch["maximum"]:
+        errors.append(f"{path}: {value} > {sch['maximum']}")
     if isinstance(value, dict):
         for k in sch.get("required", []):
             if k not in value:
@@ -124,8 +128,14 @@ def _check(value, sch, root, path, errors):
 
 def validate(doc, kind):
     """List of problems (empty when doc matches the schema for kind)."""
-    root, errors = schema(kind), []
-    _check(doc, root, root, "$", errors)
+    return check(doc, schema(kind))
+
+
+def check(value, sch):
+    """List of problems with value against any schema written with the keywords
+    above (local $refs resolve inside sch).  The API checks requests with it."""
+    errors = []
+    _check(value, sch, sch, "$", errors)
     return errors
 
 

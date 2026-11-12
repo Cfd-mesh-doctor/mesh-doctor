@@ -35,15 +35,17 @@ PORT = _start_server() if "--start" in sys.argv else int(sys.argv[1]) if len(sys
 HOST = f"localhost:{PORT}"
 
 
-def req(method, path, headers=None):
+def req(method, path, headers=None, body=None):
     c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=30)
     h = {"Host": HOST}
+    if body is not None:
+        h["Content-Length"] = str(len(body))
     h.update(headers or {})
     c.putrequest(method, path, skip_host=True, skip_accept_encoding=True)
     for k, v in h.items():
         if v is not None:
             c.putheader(k, v)
-    c.endheaders()
+    c.endheaders(body)
     r = c.getresponse()
     body = r.read().decode("utf-8", "replace")
     c.close()
@@ -54,6 +56,8 @@ page_status, page = req("GET", "/meshdoctor")
 m = re.search(r'<meta name="md-token" content="([^"]+)">', page)
 TOKEN = m.group(1) if m else ""
 JOB = "/api/md/start?src=example_case&name=..&profile=openfoam"
+V1JOB = b'{"kind": "repair", "params": {"source": "example_case", "name": ".."}}'
+JSON = "application/json"
 
 CHECKS = [
     # (description, method, path, headers, expected status, text that must be in the body)
@@ -77,12 +81,31 @@ CHECKS = [
      {"X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 200, "bad arguments"),
     ("A/B extend without token refused", "POST", "/api/md/abextend?label=x&to=10", {}, 403, "token"),
     ("HEAD does not fall back to file serving", "HEAD", "/server.py", {}, 501, ""),
+    # /api/v1: the same rules, and errors always {"error": {"code", "message"}}
+    ("v1 index works", "GET", "/api/v1", {}, 200, "apiVersion"),
+    ("v1 OpenAPI document is served", "GET", "/api/v1/openapi.json", {}, 200, '"openapi": "3.1.0"'),
+    ("v1 list works", "GET", "/api/v1/cases", {}, 200, '"items"'),
+    ("v1 unknown host refused", "GET", "/api/v1/cases", {"Host": f"evil.example:{PORT}"}, 403, '"code": "forbidden"'),
+    ("v1 cross-site read refused", "GET", "/api/v1/cases", {"Origin": "http://evil.example"}, 403, "cross-site"),
+    ("v1 unknown route", "GET", "/api/v1/nowhere", {}, 404, '"code": "not-found"'),
+    ("v1 wrong method", "GET", "/api/v1/jobs", {}, 405, '"code": "method-not-allowed"'),
+    ("v1 job without token refused", "POST", "/api/v1/jobs", {"Content-Type": JSON}, 403, "token", V1JOB),
+    ("v1 job with wrong token refused", "POST", "/api/v1/jobs", {"Content-Type": JSON, "X-MD-Token": "wrong"},
+     403, "token", V1JOB),
+    ("v1 job from another site refused, even with token", "POST", "/api/v1/jobs",
+     {"Content-Type": JSON, "X-MD-Token": TOKEN, "Origin": "http://evil.example"}, 403, "cross-site", V1JOB),
+    ("v1 job as a form post refused, even with token", "POST", "/api/v1/jobs",
+     {"Content-Type": "application/x-www-form-urlencoded", "X-MD-Token": TOKEN}, 415, "application/json", V1JOB),
+    ("v1 oversized body refused unread", "POST", "/api/v1/jobs",
+     {"Content-Type": JSON, "X-MD-Token": TOKEN, "Content-Length": "10000000"}, 413, "too-large", b""),
+    ("v1 job with token reaches the API, which refuses '..'", "POST", "/api/v1/jobs",
+     {"Content-Type": JSON, "X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 400, '"code": "bad-request"', V1JOB),
 ]
 
 failed = 0
 print(f"token found in page: {'yes' if TOKEN else 'NO'} (page status {page_status})")
-for desc, method, path, headers, want, text in CHECKS:
-    got, body = req(method, path, headers)
+for desc, method, path, headers, want, text, *send in CHECKS:
+    got, body = req(method, path, headers, *send)
     ok = got == want and (text in body)
     failed += not ok
     print(f"{'PASS' if ok else 'FAIL'}  {desc}: {got}" + ("" if ok else f" (wanted {want}, body {body[:120]!r})"))

@@ -4,7 +4,7 @@
 
     python3 -m unittest discover -s tests
 """
-import math, os, shutil, sys, tempfile, unittest
+import json, math, os, re, shutil, sys, tempfile, unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "meshdoctor"))
 os.environ["MESHDOCTOR_CONFIG"] = os.devnull
@@ -205,6 +205,136 @@ class BoundaryParserTest(unittest.TestCase):
         self.assertEqual(mapdata.patches(self.TEXT), [
             ("inlet", "patch", 10, 100), ("motorBike_frt-fairing:001%1", "wall", 42, 110),
             ("lowerWall", "wall", 7, 152)])
+
+
+class ApiV1Test(unittest.TestCase):
+    """api_v1: routes, the one error format, request checks and the OpenAPI
+    document, on a temporary cases folder and workspace.  Job starts are
+    caught before anything is launched."""
+
+    def setUp(self):
+        import api_v1, schema
+        self.api, self.schema = api_v1, schema
+        self.d = tempfile.mkdtemp(prefix="api_test_")
+        self.env = {k: os.environ.get(k) for k in ("MESHDOCTOR_CASES", "MESHDOCTOR_WORKSPACE")}
+        os.environ["MESHDOCTOR_CASES"] = os.path.join(self.d, "cases")
+        os.environ["MESHDOCTOR_WORKSPACE"] = os.path.join(self.d, "work")
+        os.makedirs(os.path.join(self.d, "cases", "c1", "constant", "polyMesh"))
+        open(os.path.join(self.d, "cases", "c1", "constant", "polyMesh", "owner"), "w").close()
+        os.makedirs(os.path.join(self.d, "cases", "c1", "system"))
+        open(os.path.join(self.d, "cases", "c1", "system", "controlDict"), "w").close()
+        md = os.path.join(self.d, "work", "r1", "meshDoctor")
+        os.makedirs(md)
+        schema.write(os.path.join(md, "result.json"), {"source": "c1", "finished": True}, "repair")
+        self.launched = []
+        self.saved = md_api._launch, md_api._solver_running
+        md_api._launch = self.launched.append
+        md_api._solver_running = lambda: False
+
+    def tearDown(self):
+        md_api._launch, md_api._solver_running = self.saved
+        for k, v in self.env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def get(self, path, **q):
+        return self.api.handle("GET", "/api/v1" + path, {k: str(v) for k, v in q.items()})
+
+    def post(self, path, doc, ctype="application/json"):
+        body = doc if isinstance(doc, bytes) else json.dumps(doc).encode()
+        return self.api.handle("POST", "/api/v1" + path, {}, body, ctype)
+
+    def assertError(self, answer, status, code, text=""):
+        got, doc, _ = answer
+        self.assertEqual((got, doc["error"]["code"]), (status, code), doc)
+        self.assertEqual(set(doc), {"error"})
+        self.assertIn(text, doc["error"]["message"])
+
+    def test_reads(self):
+        self.assertEqual(self.get("/cases")[:2], (200, {"items": ["c1"]}))
+        st, doc, _ = self.get("/repairs/r1")
+        self.assertEqual((st, doc["source"]), (200, "c1"))
+        self.assertEqual(self.get("/repairs")[1]["items"][0]["name"], "r1")
+        self.assertEqual(self.get("/")[1]["schemas"], self.schema.VERSIONS)
+        self.assertEqual(self.get("/schemas/judge")[1]["$id"], self.schema.schema("judge")["$id"])
+
+    def test_errors(self):
+        self.assertError(self.get("/repairs/nope"), 404, "not-found")
+        self.assertError(self.get("/repairs/.hidden"), 400, "bad-request", "bad name")
+        self.assertError(self.get("/nowhere"), 404, "not-found")
+        self.assertError(self.get("/openapiXjson"), 404, "not-found")            # literal dots in routes
+        self.assertError(self.get("/schemas/secret"), 404, "not-found")
+        st, doc, headers = self.post("/cases", {})
+        self.assertEqual((st, headers), (405, {"Allow": "GET"}))
+        self.assertError(self.get("/repairs/r1/clusters/x"), 400, "bad-request")
+        self.assertError(self.get("/repairs/r1/clusters/1", tag="bogus"), 400, "bad-request", "tag")
+        self.assertError(self.get("/judge"), 400, "bad-request", "missing query parameter case")
+        self.assertError(self.get("/judge", case="c1", window="abc"), 400, "bad-request", "integer")
+        self.assertError(self.get("/judge", case="c1", window=5), 400, "bad-request", "5 < 10")
+        self.assertError(self.get("/judge", case="c9"), 404, "not-found")
+        self.assertError(self.get("/judge", case="work"), 404, "not-found")            # not a case folder
+        self.assertError(self.get("/judge", case="c1", log="../x"), 400, "bad-request")  # log names only
+        self.assertError(self.get("/judge", case="c1", log="log.none"), 404, "not-found", "no log matches")
+        self.assertError(self.get("/live"), 503, "unavailable")                   # no live monitor in tests
+
+    def test_newer_result_file_is_refused_without_paths(self):
+        p = os.path.join(self.d, "work", "r1", "meshDoctor", "result.json")
+        self.schema.write(p, {"schemaVersion": "2.0"})
+        self.assertError(self.get("/repairs/r1"), 409, "schema-version", "update Mesh Doctor")
+        self.assertNotIn(self.d, self.get("/repairs/r1")[1]["error"]["message"])
+
+    def test_job_requests_are_checked(self):
+        repair = {"kind": "repair", "params": {"source": "c1", "name": "r2"}}
+        self.assertError(self.post("/jobs", repair, "text/plain"), 415, "unsupported-media-type")
+        self.assertError(self.post("/jobs", b"{nope"), 400, "bad-request", "not valid JSON")
+        self.assertError(self.post("/jobs", b"x" * (self.api.MAX_BODY + 1)), 413, "too-large")
+        self.assertError(self.post("/jobs", {"kind": "rm"}), 400, "bad-request", "kind")
+        self.assertError(self.post("/jobs", {"kind": "repair", "params": {"name": "r2"}}), 400, "bad-request",
+                         "missing source")
+        self.assertError(self.post("/jobs", {"kind": "repair", "params": {"source": "c1", "name": "r2", "x": 1}}),
+                         400, "bad-request", "unexpected x")
+        self.assertError(self.post("/jobs", {"kind": "repair", "params": {"source": "c1", "name": ".."}}),
+                         400, "bad-request")
+        self.assertError(self.post("/jobs", {"kind": "abtest", "params": {"name": "r1", "iters": "many"}}),
+                         400, "bad-request", "integer")
+        self.assertError(self.post("/jobs", {"kind": "abextend", "params": {"name": "r1"}}), 400, "bad-request",
+                         "missing to")
+        self.assertError(self.post("/jobs", {"kind": "repair", "params": {"source": "c9", "name": "r2"}}),
+                         404, "not-found")
+        self.assertError(self.post("/jobs", {"kind": "repair", "params": {"source": "c1", "name": "r1"}}),
+                         409, "exists")                                          # never deletes a run unasked
+        md_api._solver_running = lambda: True
+        self.assertError(self.post("/jobs", repair), 409, "busy")
+        self.assertEqual(self.launched, [])
+
+    def test_job_start(self):
+        st, doc, _ = self.post("/jobs", {"kind": "repair", "params": {"source": "c1", "name": "r2"}})
+        self.assertEqual((st, doc["kind"], doc["name"], doc["state"]), (202, "repair", "r2", "started"))
+        self.assertEqual(doc["links"]["repair"], "/api/v1/repairs/r2")
+        self.assertEqual(len(self.launched), 1)
+        self.assertIn(" full ", self.launched[0])
+        self.assertIn("--profile openfoam", self.launched[0])
+
+    def test_openapi_matches_the_table(self):
+        doc = self.get("/openapi.json")[1]
+        self.assertEqual(doc["openapi"], "3.1.0")
+        ops = [(t, m) for t, ms in doc["paths"].items() for m in ms]
+        self.assertEqual(sorted(ops), sorted((r.template, r.method.lower()) for r in self.api.ROUTES))
+        ids = [o["operationId"] for ms in doc["paths"].values() for o in ms.values()]
+        self.assertEqual(len(ids), len(set(ids)))
+        for t, ms in doc["paths"].items():
+            for o in ms.values():
+                declared = {x["name"] for x in o.get("parameters", []) if x["in"] == "path"}
+                self.assertEqual(declared, set(re.findall(r"{(\w+)}", t)), t)
+                self.assertIn("default", o["responses"])
+        self.assertEqual(doc["paths"]["/jobs"]["post"]["security"], [{"launchToken": []}])
+        self.assertEqual(sorted(doc["components"]["schemas"]["Error"]["properties"]["error"]["properties"]
+                                ["code"]["enum"]), sorted(self.api.STATUS))
+        refs = re.findall(r'"\$ref": "schemas/(\w+)"', json.dumps(doc))
+        self.assertTrue(refs and all(k in self.schema.VERSIONS for k in refs), refs)
 
 
 if __name__ == "__main__":
