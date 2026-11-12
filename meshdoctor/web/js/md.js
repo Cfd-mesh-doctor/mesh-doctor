@@ -167,6 +167,8 @@
     exp: (x, d) => isNum(x = toNum(x)) ? x.toExponential(d == null ? 2 : d) : "–",
     pct: (x, d) => isNum(x = toNum(x)) ? (100 * x).toFixed(d == null ? 1 : d) + " %" : "–",
     int: x => isNum(x = toNum(x)) ? Math.round(x).toLocaleString() : "–",
+    // with separators and exactly d decimals: 1,234.5
+    loc: (x, d) => isNum(x = toNum(x)) ? x.toLocaleString(undefined, { maximumFractionDigits: d || 0, minimumFractionDigits: d || 0 }) : "–",
     dur(s) {
       if (s == null || !isFinite(s)) return "–";
       s = Math.max(0, s);
@@ -176,7 +178,29 @@
     xyz: (c, d) => Array.isArray(c) ? "(" + c.map(v => fmt.fixed(v, d == null ? 3 : d)).join(", ") + ")" : "–",
   };
 
-  const MD = { html, render, join, esc, Html, api, ApiError, jobs, fmt, version: "1" };
+  // ---- small DOM helpers (text only) -----------------------------------------
+  const ui = {
+    // a <dl> of [label, value] rows
+    kv(el, rows) {
+      el.replaceChildren(...rows.flatMap(([k, v]) => {
+        const dt = document.createElement("dt"), dd = document.createElement("dd");
+        dt.textContent = k; dd.textContent = v;
+        return [dt, dd];
+      }));
+    },
+    // a progress bar's <i>: width from frac (0..1), colour from the state
+    bar(el, frac, state) {
+      el.style.width = (Math.max(0, Math.min(1, frac || 0)) * 100).toFixed(1) + "%";
+      el.className = state === "done" ? "ok" : state === "error" ? "err" : state === "running" ? "run" : "";
+    },
+    // the header's "live · 22:41:07" / "monitor offline (...)" line
+    status(dot, text, err) {
+      dot.className = err ? "dot" : "dot live";
+      text.textContent = err ? "monitor offline (" + (err.message || err) + ")" : "live · " + new Date().toLocaleTimeString();
+    },
+  };
+
+  const MD = { html, render, join, esc, Html, api, ApiError, jobs, fmt, ui, version: "1" };
   root.MD = MD;
   if (typeof module === "object" && module.exports) module.exports = MD;
 })(typeof window !== "undefined" ? window : globalThis);

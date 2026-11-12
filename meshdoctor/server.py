@@ -618,7 +618,9 @@ PAGES = {"/": "index.html", "/index.html": "index.html",
          "/report": "report.html", "/report.html": "report.html"}
 TOKEN_META = '<meta name="md-token" content="">'
 SCRIPT = re.compile(r"^/js/([a-z0-9][a-z0-9-]{0,40}\.js)$")
-STRICT = {"meshdoctor.html", "meshmap.html"}        # no inline script; the others still have some
+STRICT = {"index.html", "run.html", "meshdoctor.html", "meshmap.html"}   # no inline script (report.html still has its own)
+# The old routes still answer, but every page uses /api/v1 since 2026-11-11 (RFC 9745 header, a Unix time)
+OLD_API = {"Deprecation": "@1794355200", "Link": f'<{api_v1.PREFIX}/openapi.json>; rel="successor-version"'}
 CSP = ("default-src 'none'; script-src 'self'{inline}; style-src 'self' 'unsafe-inline'; "
        "img-src 'self' data: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; "
        "frame-ancestors 'none'")
@@ -629,6 +631,8 @@ class H(http.server.BaseHTTPRequestHandler):
         pass
 
     def _send(self, code, ctype, body, headers=None):
+        if getattr(self, "_old", False):
+            headers = dict(OLD_API, **(headers or {}))
         self.send_response(code)
         for k, v in (headers or {}).items():
             self.send_header(k, v)
@@ -742,20 +746,24 @@ class H(http.server.BaseHTTPRequestHandler):
         self._json(doc, code, headers)
 
     def do_POST(self):
+        self._old = False
         if not self._allowed(post=True):
             return
         if self._v1path():
             return self._v1("POST")
         if urlparse(self.path).path.startswith("/api/md/"):
+            self._old = True
             return self._md("POST")
         self._deny(404, "not found")
 
     def do_GET(self):
+        self._old = False
         if not self._allowed():
             return
         path = urlparse(self.path).path
         if self._v1path():
             return self._v1("GET")
+        self._old = path.startswith("/api/md/") or path in ("/api/run", "/api/status")
         if path.startswith("/api/md/"):
             return self._md("GET")
         if path == "/api/run":

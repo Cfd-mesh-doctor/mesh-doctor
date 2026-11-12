@@ -37,7 +37,8 @@ Rules between layers:
 | `api_v1.py` | api | the `/api/v1` route table, request checks, error format and OpenAPI document |
 | `server.py` | api | HTTP, the security checks, the live monitors, and the old `/api/md/*`, `/api/run` and `/api/status` routes |
 | `web/*.html` | web | five pages: HTML and CSS, plus the page's own script in `web/js/` |
-| `web/js/md.js` | web | the shared front-end core: `/api/v1` client, jobs, escaping templates, number formats |
+| `web/js/md.js` | web | the shared front-end core: `/api/v1` client, jobs, escaping templates, number formats, small DOM helpers |
+| `web/js/chart.js` | web | the one line chart (log or linear, stage band and marks, hover tooltip) |
 | `__main__.py` | CLI | dispatches to the scripts |
 
 The modules import each other by plain name (`import caseinfo`), which `__main__` makes work from a clone, pip and the images. New code keeps that convention until the package is restructured. That restructure is the last step below, not the first, so the tree never goes through a broken state.
@@ -99,6 +100,7 @@ All routes live under `/api/v1` (`meshdoctor/api_v1.py`). The routes are a table
 | `GET /repairs/{name}/log` | `/api/md/log` | the repair sweeps from the log |
 | `GET /abtests`, `GET /abtests/{name}` | `/api/md/ablist`, `/api/md/ab` | A/B tests: status, result (abtest schema), residuals, oscillation maps |
 | `GET /abtests/{name}/live` | `/api/run?label=` | the steady-run page: stages, forces, residuals, live judge |
+| `GET /live/abtest` | `/api/run` (no label) | the same, for the A/B test running now (or else the one updated last); its name is in `label` |
 | `GET /maps`, `GET /maps/{name}` | `/api/md/maplist`, `/api/md/map` | repair maps (map schema) |
 | `GET /judge?case=&window=&avgFrom=&log=` | (CLI only) | convergence verdict for a case in the cases folder (judge schema); `log` picks the solver log, such as `log.pimple` |
 | `GET /live` | `/api/status` | the live (transient) case: forces, averaging window, time step, processes, memory |
@@ -130,7 +132,7 @@ A new repair or A/B test refuses to replace an existing run of the same name (`4
 
 The security rules are the same as for the old routes: the Host and Origin checks on every request, and the launch token (`X-MD-Token`) on every POST. Requiring a JSON body adds one more barrier: a plain form on another site can only send form encodings, which `/jobs` refuses with 415. `tests/security_check.py` checks all of this against a running server.
 
-The Mesh Doctor and repair-map pages use only `/api/v1`. The live pages (`/` and `/run`) still use `/api/status` and `/api/run`; they move next. Then the old routes are removed in a major release.
+Every page uses only `/api/v1`. The old routes still answer for scripts that call them, but each answer carries a `Deprecation` header (RFC 9745, dated 2026-11-11) and a `Link` to the v1 OpenAPI document. They are removed in a major release.
 
 ## Front end
 
@@ -140,11 +142,12 @@ The pages are plain HTML and CSS with no build step, so they can be served by th
   - `MD.api` is the `/api/v1` client. It sends the launch token on every POST and reads the API's one error format into `MD.ApiError` (`.code` is the API's code: `not-found`, `busy`, `exists`, ...). `MD.api.find` gives `null` for not-found, for runs that have not finished.
   - `MD.jobs` starts, follows and cancels jobs. If a run of that name exists, `submit` asks before replacing it. The old routes replaced it silently.
   - `MD.html` is a template tag that escapes every value: ``MD.html`<b>${name}</b>` ``. `MD.render` puts its result into an element and refuses plain strings. Pages build markup only this way (or with `textContent`); `innerHTML` appears only inside `MD.render`.
-  - `MD.fmt` holds the number formats.
+  - `MD.fmt` holds the number formats; `MD.ui` the small DOM helpers (a `<dl>` of rows, a progress bar, the live/offline line).
+- **One chart, `web/js/chart.js`** (`MD.chart.line`): log or linear y, outliers clipped on request, a shaded band (the current stage or averaging window), dashed marks where settings changed, a text-only hover tooltip, and 1-2-5 ticks. The tick and range maths are plain functions with their own tests.
 - **Each page's script is its own file in `web/js/`,** served at `/js/<name>.js` (plain names only).
-- **Every page gets a Content-Security-Policy header.** It allows nothing from other sites (`default-src 'none'`), connections only to this server, and no framing. Pages whose script is all in files (`STRICT` in `server.py`: Mesh Doctor and the repair map so far) run no inline script at all (`script-src 'self'`). Even if a bug let markup from a run file into the page, it could not run code.
+- **Every page gets a Content-Security-Policy header.** It allows nothing from other sites (`default-src 'none'`), connections only to this server, and no framing. Pages whose script is all in files (`STRICT` in `server.py`: every dashboard page; the report viewer still has its script inline, so an exported report stays one file) run no inline script at all (`script-src 'self'`). Even if a bug let markup from a run file into the page, it could not run code.
 
-`tests/test_units.py` (`PagesTest`) checks these rules on every page, `tests/js/md.test.js` tests `md.js` with Node's own test runner (`node --test tests/js/*.test.js`), and `tests/security_check.py` checks the headers and the `/js/` route on a running server.
+`tests/test_units.py` (`PagesTest`) checks these rules on every page, `tests/js/` tests `md.js` and the chart maths with Node's own test runner (`node --test tests/js/*.test.js`), and `tests/security_check.py` checks the headers and the `/js/` route on a running server.
 
 ## Jobs
 
@@ -190,7 +193,7 @@ Shape 2 comes first: it is useful on its own (share a result with a teammate as 
 3. The `/api/v1` router with the error format and `openapi.json`. Old routes become aliases. (Done.)
 4. The job model and `LocalRunner`. `md_api` starts jobs only through it. (Done.)
 5. `meshdoctor report <name>`: the portable bundle, and a viewer that reads only bundles. (Done.)
-6. Shared front-end modules (charts, 3D viewer, API client); pages move to `/api/v1`. (Started: `md.js` with the API client, jobs and safe templates; the Mesh Doctor and map pages moved. Still to do: the live pages, a shared chart, and the report viewer on `md.js`.)
+6. Shared front-end modules (charts, 3D viewer, API client); pages move to `/api/v1`. (Mostly done: `md.js` and `chart.js`; every dashboard page uses only `/api/v1` and runs no inline script; the old routes are marked deprecated. Still to do: the report viewer on `md.js` + `chart.js`, with `--html` inlining them.)
 7. A pluggable auth layer: the launch token now, real sign-in for shape 3.
 8. The package restructure (`core/`, `jobs/`, `api/`) with shims, once the boundaries above are proven.
 

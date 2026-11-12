@@ -286,6 +286,21 @@ class ApiV1Test(unittest.TestCase):
         self.assertError(self.get("/judge", case="c1", log="log.none"), 404, "not-found", "no log matches")
         self.assertError(self.get("/live"), 503, "unavailable")                   # no live monitor in tests
 
+    def test_live_abtest_is_the_active_test(self):
+        saved = dict(self.api._live)
+        try:
+            self.api._live.clear()
+            self.assertError(self.get("/live/abtest"), 503, "unavailable")
+            asked = []
+            self.api.provide(abtest_live=lambda n: asked.append(n) or {"error": "no A/B run found"})
+            self.assertError(self.get("/live/abtest"), 404, "not-found")
+            self.assertEqual(asked, [""])                                   # the server picks the test
+            self.api.provide(abtest_live=lambda n: {"label": n or "r1", "labels": ["r1"]})
+            self.assertEqual(self.get("/live/abtest")[:2], (200, {"label": "r1", "labels": ["r1"]}))
+        finally:
+            self.api._live.clear()
+            self.api._live.update(saved)
+
     def test_newer_result_file_is_refused_without_paths(self):
         p = os.path.join(self.d, "work", "r1", "meshDoctor", "result.json")
         self.schema.write(p, {"schemaVersion": "2.0"})

@@ -137,8 +137,13 @@ HEADERS = [
     ("pages load nothing from other sites", lambda: all(csp(p).get("default-src") == ["'none'"] for p in PAGES)),
     ("pages connect only to this server", lambda: all(csp(p).get("connect-src") == ["'self'"] for p in PAGES)),
     ("pages cannot be framed by another site", lambda: all(csp(p).get("frame-ancestors") == ["'none'"] for p in PAGES)),
-    ("Mesh Doctor and map pages run no inline script",
-     lambda: all(csp(p).get("script-src") == ["'self'"] for p in ("/meshdoctor", "/meshmap"))),
+    ("dashboard pages run no inline script",
+     lambda: all(csp(p).get("script-src") == ["'self'"] for p in ("/", "/run", "/meshdoctor", "/meshmap"))),
+    ("v1 names the A/B test running now", lambda: req("GET", "/api/v1/live/abtest")[0] in (200, 404)),
+    ("old routes say they are deprecated, and point to v1",
+     lambda: all(header(p, "Deprecation").startswith("@") and "/api/v1/openapi.json" in header(p, "Link")
+                 for p in ("/api/status", "/api/md/maplist"))),
+    ("v1 and the pages are not deprecated", lambda: not any(header(p, "Deprecation") for p in ("/api/v1", "/meshdoctor"))),
 ]
 
 failed = 0

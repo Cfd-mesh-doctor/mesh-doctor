@@ -199,6 +199,17 @@ def abtest_live(p, q, b):
     return _live["abtest_live"](p["name"])
 
 
+@route("GET", "/live/abtest", "The A/B test running now, or else the one updated last: the same steady-run page "
+       "data as /abtests/{name}/live, with its name in `label`", ok={"type": "object", "required": ["label"]})
+def live_abtest(p, q, b):
+    if "abtest_live" not in _live:
+        raise ApiError("unavailable", "the live monitor is not running in this server")
+    d = _live["abtest_live"]("")              # an empty name: the server picks the active test
+    if not isinstance(d, dict) or "label" not in d:
+        raise ApiError("not-found", "no A/B test in the workspace yet")
+    return d
+
+
 @route("GET", "/maps", "Repair runs that have a repair map", ok=_items({"type": "string"}))
 def maps(p, q, b):
     return {"items": md_api.map_list()}
