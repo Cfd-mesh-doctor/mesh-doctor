@@ -618,7 +618,7 @@ PAGES = {"/": "index.html", "/index.html": "index.html",
          "/report": "report.html", "/report.html": "report.html"}
 TOKEN_META = '<meta name="md-token" content="">'
 SCRIPT = re.compile(r"^/js/([a-z0-9][a-z0-9-]{0,40}\.js)$")
-STRICT = {"index.html", "run.html", "meshdoctor.html", "meshmap.html"}   # no inline script (report.html still has its own)
+STRICT = {"index.html", "run.html", "meshdoctor.html", "meshmap.html", "report.html"}   # no inline script
 # The old routes still answer, but every page uses /api/v1 since 2026-11-11 (RFC 9745 header, a Unix time)
 OLD_API = {"Deprecation": "@1794355200", "Link": f'<{api_v1.PREFIX}/openapi.json>; rel="successor-version"'}
 CSP = ("default-src 'none'; script-src 'self'{inline}; style-src 'self' 'unsafe-inline'; "

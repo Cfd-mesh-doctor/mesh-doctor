@@ -8,6 +8,8 @@
 //         series  [{name, color, pts: [[x, y], ...], dash: true|false}]
 //         opts    log      y on a log scale (points with y <= 0 are left out)
 //                 clip     drop this fraction of y outliers at each end (0.01 = 1 %)
+//                 settle   the first fraction of the x range does not set the y scale (0.1:
+//                          a steady run's start-up spike is drawn off the top, not flattening the rest)
 //                 band     [x0, x1]  shaded span (the current stage, an averaging window)
 //                 marks    [x, ...]  dashed vertical lines (where settings changed)
 //                 tip      element   hover tooltip (text only), placed inside the canvas's parent
@@ -59,6 +61,16 @@
     return [lo - pad, hi + pad];
   }
 
+  // the y values that set the scale: with settle, only those after the first `frac` of the x range
+  function settled(pts, frac) {
+    const all = pts.map(p => p[1]);
+    if (!(frac > 0) || pts.length < 2) return all;
+    let lo = Infinity, hi = -Infinity;
+    for (const p of pts) { lo = Math.min(lo, p[0]); hi = Math.max(hi, p[0]); }
+    const cut = lo + frac * (hi - lo), v = pts.filter(p => p[0] >= cut).map(p => p[1]);
+    return v.length ? v : all;
+  }
+
   const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const DEFAULT = ["#2f6fde", "#e07a1f", "#16a085", "#8e44ad", "#c0392b", "#7f8c8d"];
   const palette = () => DEFAULT.map((d, i) => css("--s" + (i + 1)) || d);
@@ -84,7 +96,7 @@
     const xr = range(all.map(p => p[0]));
     let x0 = Math.min(...all.map(p => p[0])), x1 = Math.max(...all.map(p => p[0]));
     if (x1 === x0) { x0 = xr[0]; x1 = xr[1]; }
-    const [y0, y1] = range(all.map(p => p[1]), { log: opts.log, clip: opts.clip });
+    const [y0, y1] = range(settled(all, opts.settle), { log: opts.log, clip: opts.clip });
     const pad = { l: 52, r: 10, t: 8, b: 24 }, iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
     const X = x => pad.l + (x - x0) / (x1 - x0) * iw;
     const Y = y => pad.t + (1 - ((opts.log ? Math.log10(y) : y) - y0) / (y1 - y0)) * ih;
@@ -167,7 +179,7 @@
     }));
   }
 
-  const chart = { line, legend, palette, ticks, step, decimals, range };
+  const chart = { line, legend, palette, ticks, step, decimals, range, settled };
   MD.chart = chart;
   if (typeof module === "object" && module.exports) module.exports = chart;
 })(typeof window !== "undefined" ? window : globalThis);

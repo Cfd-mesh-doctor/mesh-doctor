@@ -428,6 +428,20 @@ class ReportTest(unittest.TestCase):
         data = page.split('<script type="application/json" id="md-report">')[1].split("</script>")[0]
         self.assertEqual(json.loads(data), r)
 
+    def test_html_is_one_file_with_pinned_scripts(self):
+        r = self.report.build("r1", ws=self.ws, cases=self.cases)
+        for page in (self.report.html(r), self.report.html()):
+            self.assertNotIn("<script src=", page)                      # nothing to fetch: one file
+            policy = re.search(r'http-equiv="Content-Security-Policy" content="([^"]+)"', page).group(1)
+            allowed = re.search(r"script-src ([^;]+)", policy).group(1).split()
+            self.assertTrue(all(a.startswith("'sha256-") for a in allowed), allowed)   # hashes only
+            self.assertNotIn("'self'", policy)
+            inline = re.findall(r"<script>(.*?)</script>", page, re.S)
+            self.assertEqual(len(inline), 3)                            # md.js, chart.js, report.js
+            self.assertEqual(sorted(allowed), sorted(self.report.csp_hash(js) for js in inline))
+            self.assertIn("MD.chart = chart", inline[1])
+        self.assertIn('<script type="application/json" id="md-report"></script>', self.report.html())   # empty viewer
+
     def test_missing_and_bad_names(self):
         with self.assertRaises(FileNotFoundError):
             self.report.build("nope", ws=self.ws, cases=self.cases)
@@ -462,7 +476,8 @@ class PagesTest(unittest.TestCase):
                 self.assertTrue(os.path.isfile(os.path.join(self.WEB, src)), (name, src))
             if name in server.STRICT:
                 self.assertEqual(srcs[0], "js/md.js", name)
-                self.assertIsNone(re.search(r"<script(?![^>]*\bsrc=)[^>]*>", page), name)   # nothing inline
+                inline = r'<script(?![^>]*\b(?:src=|type="application/json"))[^>]*>'   # data, not code, is fine
+                self.assertIsNone(re.search(inline, page), name)                         # nothing inline
                 self.assertIsNone(re.search(r"\son[a-z]+\s*=", page), name)                # no onclick= etc.
                 self.assertIsNone(self.MARKUP.search(page), name)
 

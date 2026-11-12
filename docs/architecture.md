@@ -39,6 +39,7 @@ Rules between layers:
 | `web/*.html` | web | five pages: HTML and CSS, plus the page's own script in `web/js/` |
 | `web/js/md.js` | web | the shared front-end core: `/api/v1` client, jobs, escaping templates, number formats, small DOM helpers |
 | `web/js/chart.js` | web | the one line chart (log or linear, stage band and marks, hover tooltip) |
+| `web/js/report.js` | web | the report viewer's script (on `md.js` + `chart.js`); `--html` inlines all three |
 | `__main__.py` | CLI | dispatches to the scripts |
 
 The modules import each other by plain name (`import caseinfo`), which `__main__` makes work from a clone, pip and the images. New code keeps that convention until the package is restructured. That restructure is the last step below, not the first, so the tree never goes through a broken state.
@@ -66,21 +67,23 @@ This is what makes a **report bundle** possible.
 
 ## Report bundles
 
-`meshdoctor report <name>` writes one file, `<name>.mdreport.json`, that holds a run's versioned documents: the repair result, its repair map and its A/B test, when they exist. `--gzip` makes it about 5× smaller. `--html` writes the viewer with the report inside: one file to email, which opens with a double-click. `GET /api/v1/repairs/{name}/report` returns the same thing.
+`meshdoctor report <name>` writes one file, `<name>.mdreport.json`, that holds a run's versioned documents: the repair result, its repair map and its A/B test, when they exist. `--gzip` makes it about 5× smaller. `--html` writes the viewer with the report inside: one file to email, which opens with a double-click. `--viewer` writes the same one-file viewer with no report in it, for a static host or a shared folder. `GET /api/v1/repairs/{name}/report` returns the same thing.
 
 - **Worker paths are replaced** before anything is written: `workspace/...`, `cases/...`, or just the file name. Encoded data (the map's base64 images) is never touched. The `redacted` field counts the replacements.
 - **What stays:** the case's geometry coordinates, patch and force-group names and all the numbers. A report is shared like the case itself; the viewer says so.
 - **Integrity:** `contents` lists each document's schema version (or `legacy`), size and the sha256 of its sorted compact JSON.
 
-The viewer is `web/report.html`, one page with no build step and no libraries. It works in three places:
+The viewer is `web/report.html` with its script in `web/js/report.js`, on the same `md.js` and `chart.js` as the dashboard pages: no build step and no libraries. It works in three places:
 
 | Where | How it gets the report |
 |---|---|
 | the dashboard, `/report?name=<run>` | from `/api/v1/repairs/{name}/report` |
-| a static site (shape 2), or the page saved anywhere | the user picks or drops a `.json`, `.json.gz` or exported `.html` file; it is read in the browser |
+| a static site (shape 2) serving `web/` (the page and `js/`), or the `--viewer` file anywhere | the user picks or drops a `.json`, `.json.gz` or exported `.html` file; it is read in the browser |
 | an exported `--html` report | the report is inside the page |
 
-The page's Content-Security-Policy allows no network access except its own server (`connect-src 'self'`), and none at all in an exported report (`connect-src 'none'`). So the viewer cannot send a report anywhere, even by mistake. Everything from the file is shown as text, never parsed as HTML, so a report from someone else cannot run code in the page. Each card renders on its own: a damaged part of a file costs that card, not the page. A report from a newer major version is refused with a clear message.
+An export (`--html` or `--viewer`) is one file: `report.py` copies `md.js`, `chart.js` and `report.js` into the page and swaps the policy's `script-src 'self'` for the sha256 hash of each one. The page runs exactly those three scripts and nothing else, not even an inline script injected later. That is why no file in `web/js/` may contain a closing script tag or an HTML comment opener: the export refuses to inline one that does.
+
+The page's Content-Security-Policy allows no network access except its own server (`connect-src 'self'`), and none at all in an exported report (`connect-src 'none'`). So the viewer cannot send a report anywhere, even by mistake. Everything from the file goes through `MD.html`, which escapes every value, so a report from someone else cannot run code in the page. An exported `.html` opened in the viewer is parsed as an inert document (its scripts never run) and only its report slot is read. Each card renders on its own: a damaged part of a file costs that card, not the page. A report from a newer major version is refused with a clear message.
 
 ## API v1
 
@@ -139,13 +142,13 @@ Every page uses only `/api/v1`. The old routes still answer for scripts that cal
 The pages are plain HTML and CSS with no build step, so they can be served by this server, copied to a static host, or ported to a framework later. Their rules:
 
 - **One shared core, `web/js/md.js`,** loaded first by every page:
-  - `MD.api` is the `/api/v1` client. It sends the launch token on every POST and reads the API's one error format into `MD.ApiError` (`.code` is the API's code: `not-found`, `busy`, `exists`, ...). `MD.api.find` gives `null` for not-found, for runs that have not finished.
+  - `MD.api` is the `/api/v1` client. It sends the launch token on every POST and reads the API's one error format into `MD.ApiError` (`.code` is the API's code: `not-found`, `busy`, `exists`, ...; `.api` is false when no Mesh Doctor API answered, such as a static host or a proxy's error page). `MD.api.find` gives `null` for not-found, for runs that have not finished.
   - `MD.jobs` starts, follows and cancels jobs. If a run of that name exists, `submit` asks before replacing it. The old routes replaced it silently.
   - `MD.html` is a template tag that escapes every value: ``MD.html`<b>${name}</b>` ``. `MD.render` puts its result into an element and refuses plain strings. Pages build markup only this way (or with `textContent`); `innerHTML` appears only inside `MD.render`.
   - `MD.fmt` holds the number formats; `MD.ui` the small DOM helpers (a `<dl>` of rows, a progress bar, the live/offline line).
-- **One chart, `web/js/chart.js`** (`MD.chart.line`): log or linear y, outliers clipped on request, a shaded band (the current stage or averaging window), dashed marks where settings changed, a text-only hover tooltip, and 1-2-5 ticks. The tick and range maths are plain functions with their own tests.
+- **One chart, `web/js/chart.js`** (`MD.chart.line`): log or linear y, outliers clipped on request, the start of a run left out of the y scale on request (`settle`, so a steady run's start-up spike does not flatten the forces), a shaded band (the current stage or averaging window), dashed marks where settings changed, a text-only hover tooltip, and 1-2-5 ticks. The tick and range maths are plain functions with their own tests.
 - **Each page's script is its own file in `web/js/`,** served at `/js/<name>.js` (plain names only).
-- **Every page gets a Content-Security-Policy header.** It allows nothing from other sites (`default-src 'none'`), connections only to this server, and no framing. Pages whose script is all in files (`STRICT` in `server.py`: every dashboard page; the report viewer still has its script inline, so an exported report stays one file) run no inline script at all (`script-src 'self'`). Even if a bug let markup from a run file into the page, it could not run code.
+- **Every page gets a Content-Security-Policy header.** It allows nothing from other sites (`default-src 'none'`), connections only to this server, and no framing. Pages whose script is all in files (`STRICT` in `server.py`: every page, the report viewer included) run no inline script at all (`script-src 'self'`). Even if a bug let markup from a run file into the page, it could not run code.
 
 `tests/test_units.py` (`PagesTest`) checks these rules on every page, `tests/js/` tests `md.js` and the chart maths with Node's own test runner (`node --test tests/js/*.test.js`), and `tests/security_check.py` checks the headers and the `/js/` route on a running server.
 
@@ -181,7 +184,7 @@ The pages are plain HTML and CSS with no build step, so they can be served by th
 | Shape | What runs where | Team data | Needs |
 |---|---|---|---|
 | **1. Local (today)** | everything on your machine; the browser talks to 127.0.0.1 | stays on your machine | nothing more |
-| **2. Static report viewer** | a static site (for example Vercel) serves only `web/report.html`; you open a report bundle from your own disk, and it is read in the browser and never uploaded | never on the server | ready: report bundles and the viewer exist; deploying the page is one static file |
+| **2. Static report viewer** | a static site (for example Vercel) serves only `web/report.html`; you open a report bundle from your own disk, and it is read in the browser and never uploaded | never on the server | ready: `meshdoctor report --viewer` writes the one file to deploy |
 | **3. Hosted app + private workers** | the website and API are hosted; workers (your PC, cluster, cloud VM) pull jobs and push results to private storage | stored in the hosted service | real sign-in, per-user storage, a job queue, a worker that connects out, CORS and rate limits, and a decision about which data may leave the team's machines |
 
 Shape 2 comes first: it is useful on its own (share a result with a teammate as a file), costs nothing to host, and keeps the data rule simple. Shape 3 is only worth building once shapes 1 and 2 are solid, and it needs the team's agreement on where data may live. On Vercel's Hobby plan the production domain is public, so shape 3 would need a paid plan or another host with access control.
@@ -193,7 +196,7 @@ Shape 2 comes first: it is useful on its own (share a result with a teammate as 
 3. The `/api/v1` router with the error format and `openapi.json`. Old routes become aliases. (Done.)
 4. The job model and `LocalRunner`. `md_api` starts jobs only through it. (Done.)
 5. `meshdoctor report <name>`: the portable bundle, and a viewer that reads only bundles. (Done.)
-6. Shared front-end modules (charts, 3D viewer, API client); pages move to `/api/v1`. (Mostly done: `md.js` and `chart.js`; every dashboard page uses only `/api/v1` and runs no inline script; the old routes are marked deprecated. Still to do: the report viewer on `md.js` + `chart.js`, with `--html` inlining them.)
+6. Shared front-end modules (charts, 3D viewer, API client); pages move to `/api/v1`. (Done: `md.js` and `chart.js` under every page, the report viewer included; every page uses only `/api/v1` and runs no inline script; the old routes are marked deprecated; exports inline the scripts, pinned by hash. Left for later: the WebGL viewer as a module.)
 7. A pluggable auth layer: the launch token now, real sign-in for shape 3.
 8. The package restructure (`core/`, `jobs/`, `api/`) with shims, once the boundaries above are proven.
 

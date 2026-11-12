@@ -92,7 +92,7 @@
                 { name: `${tot} drag (${I.flow || "?"})`, color: c[1], pts: dr(tot) }] : [])
       : (I.groups || []).filter(g => g !== tot).slice(0, 6).map((g, i) => ({ name: `${g} ${vn}`, color: c[i % c.length], pts: ve(g) }));
     chart.legend($("forceLegend"), ser);
-    chart.line($("cForce"), ser, { clip: 0.01, marks: marks(), band: band(), tip: $("tForce"), xlabel: "iteration", empty: "No force data yet" });
+    chart.line($("cForce"), ser, { clip: 0.01, settle: 0.1, marks: marks(), band: band(), tip: $("tForce"), xlabel: "iteration", empty: "No force data yet" });
   }
 
   function drawRes() {

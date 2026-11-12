@@ -3,6 +3,7 @@
 """Portable report bundles: a run's results in one file that opens anywhere.
 
     python3 -m meshdoctor report <name> [--ab <label>] [-o <file>] [--html | --gzip]
+    python3 -m meshdoctor report --viewer [-o <file>]
 
 A report is one JSON file (schemas/report.schema.json) that holds the run's
 versioned documents: the repair result, its repair map and its A/B test, when
@@ -11,12 +12,14 @@ else the file name only), so the file can be shared; it still holds the case's
 geometry coordinates, patch and force-group names and numbers.
 
 Open it in the viewer (web/report.html): `meshdoctor serve` then /report, a
-static copy of that page (it reads the file in the browser and sends nothing),
-or --html, which writes the viewer with the report inside, one file to email.
+static host that serves web/ (the page reads the file in the browser and sends
+nothing), or --html, which writes the viewer with the report inside, one file
+to email.  --viewer writes that one-file viewer with no report in it: a page
+anyone can open a report file in, from a disk or any static web host.
 
 Default output: <workspace>/.reports/<name>.mdreport.json (.html, .json.gz).
 """
-import argparse, gzip, hashlib, json, os, re, sys, time
+import argparse, base64, gzip, hashlib, json, os, re, sys, time
 
 import config
 import schema
@@ -25,6 +28,8 @@ import version
 HERE = os.path.dirname(os.path.abspath(__file__))
 VIEWER = os.path.join(HERE, "web", "report.html")
 SLOT = '<script type="application/json" id="md-report"></script>'
+SCRIPT_TAG = re.compile(r'<script src="js/([a-z0-9][a-z0-9-]{0,40}\.js)"></script>')
+SCRIPT_POLICY = "script-src 'self'"          # the viewer's meta CSP; the export pins each inlined script by hash
 KIND = "meshdoctor-report"
 SAFE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$")
 # an absolute path: at the start, or after a space, quote, =, bracket, comma or colon ("m/s", "</b>" are not paths)
@@ -106,14 +111,38 @@ def build(name, ab=None, ws=None, cases=None):
         "contents": contents, "documents": documents}, "report")
 
 
-def html(report):
-    """The viewer page with the report inside: one file, no network access at all."""
+def csp_hash(js):
+    """The CSP source that allows exactly this inline script ('sha256-...')."""
+    return "'sha256-" + base64.b64encode(hashlib.sha256(js.encode("utf-8")).digest()).decode() + "'"
+
+
+def html(report=None):
+    """The viewer as one file: its scripts inlined, each allowed by its hash only, and
+    no network access at all.  With a report, the report is inside; without, it is the
+    empty viewer that opens report files."""
     with open(VIEWER, encoding="utf-8") as f:
         page = f.read()
-    if SLOT not in page:
-        raise RuntimeError("viewer page has no report slot")
-    data = json.dumps(report, separators=(",", ":")).replace("<", "\\u003c")   # never closes the script tag
+    if SLOT not in page or page.count(SCRIPT_POLICY) != 1:
+        raise RuntimeError("viewer page has no report slot or no script policy")
+    hashes = []
+
+    def inline(m):
+        # text mode reads \r\n as \n, as the browser's parser does, so the hash matches either way
+        with open(os.path.join(HERE, "web", "js", m.group(1)), encoding="utf-8") as f:
+            js = f.read()
+        if re.search(r"</script|<!--", js, re.I):            # would end the inline script early
+            raise RuntimeError(f"web/js/{m.group(1)} cannot be inlined")
+        hashes.append(csp_hash(js))
+        return f"<script>{js}</script>"
+
+    page = SCRIPT_TAG.sub(inline, page)
+    if not hashes:
+        raise RuntimeError("viewer page loads no scripts")
+    page = page.replace(SCRIPT_POLICY, "script-src " + " ".join(hashes))
     page = page.replace("connect-src 'self'", "connect-src 'none'")
+    if report is None:
+        return page
+    data = json.dumps(report, separators=(",", ":")).replace("<", "\\u003c")   # never closes the script tag
     return page.replace(SLOT, f'<script type="application/json" id="md-report">{data}</script>')
 
 
@@ -133,13 +162,26 @@ def write(report, path, fmt="json"):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="meshdoctor report", description=__doc__.split("\n\n")[0])
-    ap.add_argument("name", help="workspace run (a finished repair)")
+    ap.add_argument("name", nargs="?", help="workspace run (a finished repair)")
     ap.add_argument("--ab", help="A/B test label to include (default <name>, if it exists)")
     ap.add_argument("-o", "--out", help="output file (default <workspace>/.reports/<name>.mdreport.<ext>)")
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--html", action="store_true", help="the viewer page with the report inside, one file")
     g.add_argument("--gzip", action="store_true", help="gzip the JSON (the viewer opens it as it is)")
+    g.add_argument("--viewer", action="store_true", help="only the one-file viewer, no report in it (for a static host)")
     a = ap.parse_args(argv)
+    if a.viewer:
+        if a.name or a.ab:
+            ap.error("--viewer takes no run name")
+        out = a.out or os.path.join(config.settings()["workspace"], ".reports", "meshdoctor-viewer.html")
+        os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
+        with open(out, "w", encoding="utf-8") as f:
+            f.write(html())
+        print(f"viewer: {out}  {os.path.getsize(out) / 1e3:.0f} kB")
+        print("  open it, or put it on any static host; it reads report files in the browser and sends nothing")
+        return 0
+    if not a.name:
+        ap.error("give a run name (or --viewer)")
     fmt = "html" if a.html else "gzip" if a.gzip else "json"
     try:
         rep = build(a.name, a.ab)

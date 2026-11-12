@@ -56,10 +56,10 @@ test("api: errors carry the API's code; find turns not-found into null", async (
     : url.includes("busy") ? [409, { error: { code: "busy", message: "a job runs" } }]
       : [200, "<html>", "text/html"]);
   assert.equal(await MD.api.find(["repairs", "nope"]), null);
-  await assert.rejects(MD.api.get("/busy"), e => e instanceof MD.ApiError && e.code === "busy" && e.status === 409);
-  await assert.rejects(MD.api.get("/page"), e => e.code === "internal" && /JSON/.test(e.message));
+  await assert.rejects(MD.api.get("/busy"), e => e instanceof MD.ApiError && e.code === "busy" && e.status === 409 && e.api);
+  await assert.rejects(MD.api.get("/page"), e => e.code === "internal" && /JSON/.test(e.message) && !e.api);   // not the API: a static host
   MD.api.fetch = async () => { throw new TypeError("network"); };
-  await assert.rejects(MD.api.get("/x"), e => e.code === "unavailable" && e.status === 0);
+  await assert.rejects(MD.api.get("/x"), e => e.code === "unavailable" && e.status === 0 && !e.api);
 });
 
 test("jobs.submit replaces an existing run only when the user says yes", async () => {

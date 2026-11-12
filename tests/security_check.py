@@ -137,8 +137,8 @@ HEADERS = [
     ("pages load nothing from other sites", lambda: all(csp(p).get("default-src") == ["'none'"] for p in PAGES)),
     ("pages connect only to this server", lambda: all(csp(p).get("connect-src") == ["'self'"] for p in PAGES)),
     ("pages cannot be framed by another site", lambda: all(csp(p).get("frame-ancestors") == ["'none'"] for p in PAGES)),
-    ("dashboard pages run no inline script",
-     lambda: all(csp(p).get("script-src") == ["'self'"] for p in ("/", "/run", "/meshdoctor", "/meshmap"))),
+    ("no page runs inline script, the report viewer included", lambda: all(csp(p).get("script-src") == ["'self'"] for p in PAGES)),
+    ("the report viewer's own script is served", lambda: req("GET", "/js/report.js")[0] == 200),
     ("v1 names the A/B test running now", lambda: req("GET", "/api/v1/live/abtest")[0] in (200, 404)),
     ("old routes say they are deprecated, and point to v1",
      lambda: all(header(p, "Deprecation").startswith("@") and "/api/v1/openapi.json" in header(p, "Link")

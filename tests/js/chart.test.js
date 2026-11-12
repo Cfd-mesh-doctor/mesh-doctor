@@ -50,3 +50,14 @@ test("range: padded, outliers clipped, log in whole decades, never empty", () =>
   assert.ok(c1 < 61, `clipped top ${c1}`);
   assert.ok(chart.range(v)[1] > 5000);
 });
+
+test("settle: a start-up spike does not set the y scale", () => {
+  // a steady run: drag starts near 1500 N for 6 of 100 points, then sits near 60 N
+  const pts = Array.from({ length: 100 }, (_, i) => [10 * i, i < 6 ? 1500 - 200 * i : 60 + (i % 5) * 0.1]);
+  const [lo, hi] = chart.range(chart.settled(pts, 0.1));
+  assert.ok(lo > 55 && hi < 65, `settled ${lo}..${hi}`);
+  assert.ok(chart.range(chart.settled(pts, 0))[1] > 1500);                    // off: every point counts
+  assert.ok(chart.range(pts.map(p => p[1]), { clip: 0.01 })[1] > 1000);      // why clipping alone is not enough
+  assert.deepEqual(chart.settled([[0, 5]], 0.1), [5]);                        // too few points: all of them
+  assert.deepEqual(chart.settled([[0, 1], [0, 2]], 0.5), [1, 2]);             // no x range: all of them
+});

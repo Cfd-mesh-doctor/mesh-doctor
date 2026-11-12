@@ -2,15 +2,17 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <!-- Copyright (C) 2026 The Mesh Doctor authors -->
 <!-- Report viewer: reads a Mesh Doctor report bundle (meshdoctor report) in the browser.
-     Works from the dashboard (/report?name=<run>), as a static page, or with the report
-     inside (meshdoctor report <name> --html).  It never sends the report anywhere: the
-     policy below allows no network access except this page's own server (none at all in
-     an exported file), and everything from the file is shown as text, never as HTML. -->
+     Works from the dashboard (/report?name=<run>), from a static host that serves this
+     folder (the page and js/), or as one file with the report inside (meshdoctor report
+     <name> --html; --viewer for the empty viewer).  The script is js/report.js on md.js and
+     chart.js; the one-file export inlines all three and pins them by hash.  It never sends
+     the report anywhere: the policy below allows no network access except this page's own
+     server (none at all in an exported file), and everything from the file is text. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'">
 <title>Mesh Doctor report</title>
 <style>
 :root{
@@ -94,11 +96,11 @@ ul.flags{margin:6px 0 0;padding-left:18px}
       <section class="card" id="abCard"><h2>Did it help the solver?</h2><div class="sub" id="abMeta"></div>
         <div class="scroll" id="ab" style="margin-top:8px"></div><div class="sub" id="abNote" style="margin-top:6px"></div></section>
     </div>
-    <section class="card" id="histCard"><h2>Residuals, original vs repaired mesh</h2>
+    <section class="card view" id="histCard"><h2>Residuals, original vs repaired mesh</h2>
       <div class="row"><label>Field <select id="field"></select></label>
         <span class="key" style="--c:var(--base);--s:dashed">original mesh</span><span class="key" style="--c:var(--accent)">repaired mesh</span>
         <span class="sub">initial residual per iteration, log scale</span></div>
-      <canvas id="hist" height="260"></canvas></section>
+      <canvas id="hist" height="260"></canvas><div class="tip" id="histTip"></div></section>
     <section class="card" id="judgeCard"><h2>Is the repaired-mesh run converged?</h2><div id="judge"></div></section>
     <section class="card view" id="mapCard"><h2>Where the mesh was repaired <span class="sub" id="mapHead"></span></h2>
       <div class="row"><label>View <select id="mapView"><option value="side">side</option><option value="top">top</option></select></label>
@@ -110,324 +112,8 @@ ul.flags{margin:6px 0 0;padding-left:18px}
   </main>
 </div>
 <script type="application/json" id="md-report"></script>
-<script>
-"use strict";
-const $ = id => document.getElementById(id);
-const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-const isNum = x => typeof x === "number" && isFinite(x);
-// Everything from the file goes in as text: el() never parses HTML.
-function el(tag, props, ...kids) {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(props || {})) {
-    if (k === "class") e.className = v; else if (k === "style") e.style.cssText = v; else e.setAttribute(k, v);
-  }
-  for (const k of kids.flat()) if (k != null && k !== false) e.append(k instanceof Node ? k : String(k));
-  return e;
-}
-function fmt(x, digits = 4) {
-  if (!isNum(x)) return "–";
-  if (Number.isInteger(x)) return x.toLocaleString();
-  const a = Math.abs(x);
-  if (a !== 0 && (a < 1e-3 || a >= 1e6)) return x.toExponential(digits - 1);
-  const r = +x.toPrecision(digits);         // toLocaleString alone would cut 0.00312 to 0.003
-  return a >= 1000 ? r.toLocaleString(undefined, {maximumFractionDigits: 20}) : String(r);
-}
-const base = p => typeof p === "string" ? p.split("/").pop() : "";
-const obj = x => x && typeof x === "object" && !Array.isArray(x) ? x : {};
-const arr = x => Array.isArray(x) ? x : [];
-
-let R = null, map = null, mapImgs = {};
-
-// ---------------------------------------------------------------- loading
-function fail(msg) { $("err").textContent = msg; $("drop").hidden = false; }
-function show(rep, from) {
-  if (!rep || rep.kind !== "meshdoctor-report") throw new Error("This is not a Mesh Doctor report.");
-  const major = String(rep.schemaVersion || "").split(".")[0];
-  if (major !== "1") throw new Error(`This report was made by a newer Mesh Doctor (report version ${rep.schemaVersion}); this viewer reads version 1.`);
-  if (!rep.documents || !rep.documents.repair) throw new Error("The report has no repair result.");
-  R = rep; map = rep.documents.map || null; mapImgs = {};
-  $("err").textContent = ""; $("drop").hidden = true; $("report").hidden = false; $("another").hidden = false;
-  render(from);
-}
-async function readFile(file) {
-  const buf = new Uint8Array(await file.arrayBuffer());
-  let text;
-  if (buf[0] === 0x1f && buf[1] === 0x8b) {
-    if (!("DecompressionStream" in window)) throw new Error("This browser cannot open .gz files; open the .json report instead.");
-    text = await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
-  } else text = new TextDecoder().decode(buf);
-  if (/^\s*</.test(text)) {                                   // an exported .html report: take the data inside
-    const doc = new DOMParser().parseFromString(text, "text/html"), slot = doc.getElementById("md-report");
-    if (!slot || !slot.textContent.trim()) throw new Error("This HTML file has no report inside.");
-    text = slot.textContent;
-  }
-  let rep;
-  try { rep = JSON.parse(text); } catch (e) { throw new Error("The file is not valid JSON."); }
-  show(rep, file.name);
-}
-function openFile(file) { readFile(file).catch(e => fail(e.message)); }
-$("file").onchange = e => e.target.files[0] && openFile(e.target.files[0]);
-$("another").onclick = () => { $("report").hidden = true; $("drop").hidden = false; $("file").value = ""; };
-for (const t of ["dragenter", "dragover"]) document.addEventListener(t, e => { e.preventDefault(); $("drop").classList.add("over"); });
-for (const t of ["dragleave", "drop"]) document.addEventListener(t, e => { e.preventDefault(); $("drop").classList.remove("over"); });
-document.addEventListener("drop", e => { const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) openFile(f); });
-
-// ---------------------------------------------------------------- summary
-const CM = [["nWrongPyramids", "Inverted face pyramids"], ["nBadTets", "Bad face tets"],
-  ["maxNonOrtho", "Max non-orthogonality (°)"], ["avgNonOrtho", "Mean non-orthogonality (°)"],
-  ["nSevereNonOrtho", "Severely non-orthogonal faces"], ["maxSkewness", "Max skewness"], ["nSkew", "Highly skewed faces"],
-  ["nLowWeight", "Low-weight faces"], ["minWeight", "Min face weight"], ["nSmallDeterminant", "Small-determinant cells"],
-  ["minDeterminant", "Min cell determinant"], ["nConcaveCells", "Concave cells"], ["nLowVolRatio", "Low volume-ratio faces"],
-  ["minVolRatio", "Min volume ratio"], ["failedChecks", "Failed checkMesh checks"]];
-const label = k => (CM.find(r => r[0] === k) || [k, k])[1];
-
-function ratios(ab) {
-  const r = obj(ab && ab.residualRatioFixedOverBase);
-  return Object.entries(r).filter(([, v]) => isNum(v) && v > 0);
-}
-function geomean(xs) { return xs.length ? Math.exp(xs.reduce((s, x) => s + Math.log(x), 0) / xs.length) : null; }
-
-function tile(name, value, note, cls) {
-  return el("div", {class: "tile"}, el("div", {class: "n"}, name), el("div", {class: "v " + (cls || "")}, value), note ? el("div", {class: "n"}, note) : null);
-}
-
-function render(from) {
-  const d = R.documents, rep = d.repair, ab = d.abtest || null, v = obj(rep.verdict);
-  const imp = arr(v.improved), reg = arr(v.regressions), same = arr(v.unchanged);
-  const cb = arr(rep.clustersBefore).length, ca = arr(rep.clustersAfter).length;
-  document.title = `Mesh Doctor report: ${R.name}`;
-  $("title").textContent = `Mesh Doctor report: ${R.name}`;
-  const lay = obj(rep.layout);
-  $("sub").textContent = [base(rep.source) && `mesh ${base(rep.source)}`, isNum(lay.nCells) && `${lay.nCells.toLocaleString()} cells`,
-    rep.profile && `${rep.profile} profile`, rep.finished && `repaired ${rep.finished}`, from && `from ${from}`].filter(Boolean).join(" · ");
-
-  const rs = ratios(ab), g = geomean(rs.map(x => x[1]));
-  const sc = obj(rep.sourceCheck);
-  $("tiles").replaceChildren(
-    tile("checkMesh measures improved", String(imp.length), `${same.length} unchanged`, imp.length ? "good" : ""),
-    tile("Measures made worse", String(reg.length), reg.length ? reg.join(", ") : "none", reg.length ? "bad" : "good"),
-    tile("Problem clusters", `${cb.toLocaleString()} → ${ca.toLocaleString()}`, "before → after the repair", ca < cb ? "good" : ""),
-    tile("Largest point move", isNum(rep.maxDisplacement_m) ? `${fmt(rep.maxDisplacement_m * 1000, 3)} mm` : "–", "inside the mesh; CAD untouched"),
-    ab ? tile("Residuals, repaired ÷ original", g ? `${g.toFixed(2)}×` : "–", "geometric mean over fields; below 1 is better",
-      g ? (g < 0.98 ? "good" : g > 1.02 ? "bad" : "") : "") : null,
-    tile("Source case", sc.unchanged === true ? "unchanged" : sc.unchanged === false ? "CHANGED" : "–", "checked by fingerprint",
-      sc.unchanged === true ? "good" : sc.unchanged === false ? "bad" : ""));
-
-  let txt = reg.length ? `The repair improved ${imp.length} checkMesh measure(s) but made ${reg.length} worse (${reg.join(", ")}).`
-                       : `The repair improved ${imp.length} checkMesh measure(s) and made none worse.`;
-  txt += ` Problem clusters went from ${cb.toLocaleString()} to ${ca.toLocaleString()}.`;
-  if (ab && rs.length) {
-    const lo = Math.min(...rs.map(x => x[1])), hi = Math.max(...rs.map(x => x[1]));
-    txt += ` In the solver test, the repaired mesh's residuals are ${lo.toFixed(2)}–${hi.toFixed(2)}× those of the original mesh` +
-      (g < 0.98 ? ", so the repair helped the solver." : g > 1.02 ? ", so the solver did not benefit." : ", about the same.");
-  } else if (!ab) txt += " There is no solver A/B test in this report.";
-  $("verdict").textContent = txt;
-  $("chips").replaceChildren(...imp.map(k => el("span", {class: "chip up"}, "▲ " + label(k))),
-    ...reg.map(k => el("span", {class: "chip down"}, "▼ " + label(k))), ...same.map(k => el("span", {class: "chip"}, label(k))));
-
-  // each section on its own: a damaged part of the file costs that card, not the page
-  section("cm", () => checkMesh(rep, imp, reg));
-  section("ab", () => abTable(ab));
-  section("hist", () => history(ab));
-  section("judge", () => judge(ab));
-  $("mapCard").hidden = !map;
-  if (map) section("mapHead", setupMap);
-  section("about", about);
-}
-function section(id, fn) {
-  try { fn(); } catch (e) {
-    const card = $(id).closest(".card"); card.hidden = false;
-    card.append(el("div", {class: "err"}, "This part of the report could not be shown: " + e.message));
-  }
-}
-
-function checkMesh(rep, imp, reg) {
-  const b = obj(rep.checkMeshBefore), a = obj(rep.checkMeshAfter);
-  const keys = [...CM.map(r => r[0]).filter(k => k in b || k in a), ...Object.keys({...b, ...a}).filter(k => !CM.some(r => r[0] === k))];
-  const rows = keys.filter(k => isNum(b[k]) || isNum(a[k])).map(k => el("tr", null, el("td", null, label(k)), el("td", null, fmt(b[k])),
-    el("td", {class: imp.includes(k) ? "up" : reg.includes(k) ? "down" : ""}, fmt(a[k]))));
-  $("cm").replaceChildren(el("table", null, el("tr", null, el("th", null, ""), el("th", null, "before"), el("th", null, "after")), rows));
-  $("cmNote").textContent = "Green: better after the repair; red: worse. Counts and maxima should go down, minima up.";
-}
-
-function abTable(ab) {
-  $("abCard").hidden = !ab;
-  if (!ab) return;
-  const b = obj(ab.base), f = obj(ab.fixed), rs = ratios(ab);
-  $("abMeta").textContent = [`${fmt(ab.iters)} iterations`, ab.init != null && `from ${ab.init}`, isNum(ab.nProcs) && `${ab.nProcs} ranks`,
-    ab.variant ? `second run with ${ab.variant} settings` : "same settings on both meshes",
-    arr(ab.extensions).length && `continued ${arr(ab.extensions).length}×`, ab.finished && `finished ${ab.finished}`].filter(Boolean).join(" · ");
-  const rows = rs.map(([k, r]) => {
-    const w = Math.min(50, Math.abs(r - 1) * 100), col = r < 0.98 ? "var(--ok)" : r > 1.02 ? "var(--err)" : "var(--muted)";
-    const bar = el("span", {class: "bar"}, el("i", {style: `background:${col};left:${r < 1 ? 50 - w : 50}%;width:${w}%`}), el("b"));
-    const mb = obj(obj(b.residuals)[k]).mean, mf = obj(obj(f.residuals)[k]).mean;
-    return el("tr", null, el("td", null, k), el("td", null, fmt(mb, 3)), el("td", null, fmt(mf, 3)),
-      el("td", {class: r < 0.98 ? "up" : r > 1.02 ? "down" : ""}, `${r.toFixed(2)}×`, bar));
-  });
-  $("ab").replaceChildren(el("table", null, el("tr", null, el("th", null, "field"), el("th", null, "original"), el("th", null, "repaired"),
-    el("th", null, "repaired ÷ original")), rows));
-  const w = ab.window ? `the last ${ab.window} iterations` : "the end of each run";
-  $("abNote").textContent = `Mean initial residual over ${w}; the same case, settings and start on both meshes. Below 1× (green) the repaired mesh converges further.` +
-    (isNum(b.secondsPerIteration) && isNum(f.secondsPerIteration) ? ` Time per iteration: ${b.secondsPerIteration.toFixed(2)} s original, ${f.secondsPerIteration.toFixed(2)} s repaired.` : "");
-}
-
-// ---------------------------------------------------------------- residual history chart
-function hist(run) { const h = obj(run && run.residualHistory); return Array.isArray(h.Time) ? h : null; }
-function history(ab) {
-  const hb = ab && hist(ab.base), hf = ab && (hist(ab.fixedFull) || hist(ab.fixed));
-  $("histCard").hidden = !(hb || hf);
-  if (!(hb || hf)) return;
-  const fields = [...new Set([...Object.keys(hb || {}), ...Object.keys(hf || {})])].filter(k => k !== "Time");
-  const sel = $("field"), keep = sel.value;
-  sel.replaceChildren(...fields.map(k => el("option", {value: k}, k)));
-  sel.value = fields.includes(keep) ? keep : fields.includes("p") ? "p" : fields[0];
-  const draw = () => chart($("hist"), [
-    {x: hb && hb.Time, y: hb && hb[sel.value], color: css("--base"), dash: [5, 4]},
-    {x: hf && hf.Time, y: hf && hf[sel.value], color: css("--accent"), dash: []}]);
-  sel.onchange = draw; draw();
-}
-function chart(cv, series) {
-  const W = cv.clientWidth, H = 260, dpr = devicePixelRatio || 1;
-  cv.style.height = H + "px"; cv.width = W * dpr; cv.height = H * dpr;
-  const g = cv.getContext("2d"); g.scale(dpr, dpr); g.clearRect(0, 0, W, H);
-  const pts = series.map(s => (s.x && s.y ? s.x.map((x, i) => [x, s.y[i]]) : []).filter(([x, y]) => isNum(x) && isNum(y) && y > 0));
-  const all = pts.flat();
-  if (!all.length) { g.fillStyle = css("--muted"); g.fillText("no residual history", 10, 20); return; }
-  const x0 = Math.min(...all.map(p => p[0])), x1 = Math.max(...all.map(p => p[0]));
-  let y0 = Math.floor(Math.log10(Math.min(...all.map(p => p[1])))), y1 = Math.ceil(Math.log10(Math.max(...all.map(p => p[1]))));
-  if (y1 === y0) y1 = y0 + 1;
-  const L = 52, Rm = 10, T = 8, B = 24;
-  const X = x => L + (x - x0) / ((x1 - x0) || 1) * (W - L - Rm), Y = y => T + (y1 - Math.log10(y)) / (y1 - y0) * (H - T - B);
-  g.font = "11px system-ui"; g.strokeStyle = css("--line"); g.fillStyle = css("--muted"); g.lineWidth = 1;
-  for (let e = y0; e <= y1; e++) { const yy = Y(10 ** e); g.beginPath(); g.moveTo(L, yy); g.lineTo(W - Rm, yy); g.stroke(); g.fillText(`1e${e}`, 8, yy + 4); }
-  const raw = ((x1 - x0) || 1) / Math.max(2, Math.floor((W - L) / 70)), mag = 10 ** Math.floor(Math.log10(raw));
-  const step = mag * ([1, 2, 5, 10].find(m => m * mag >= raw) || 10);        // 1, 2 or 5 × 10^n, labels ~70 px apart
-  for (let x = Math.ceil(x0 / step) * step; x <= x1; x += step) { const t = String(+x.toPrecision(6)); g.fillText(t, X(x) - g.measureText(t).width / 2, H - 6); }
-  series.forEach((s, i) => {
-    if (!pts[i].length) return;
-    g.strokeStyle = s.color; g.lineWidth = 1.6; g.setLineDash(s.dash); g.beginPath();
-    pts[i].forEach(([x, y], j) => j ? g.lineTo(X(x), Y(y)) : g.moveTo(X(x), Y(y))); g.stroke();
-  });
-  g.setLineDash([]);
-}
-
-// ---------------------------------------------------------------- judge
-function judge(ab) {
-  const j = ab && ab.fixedJudge;
-  $("judgeCard").hidden = !j;
-  if (!j) return;
-  const avg = obj(j.average), kids = [el("p", {class: "verdict"}, String(j.verdict || "–"))];
-  const rows = Object.entries(avg).filter(([, v]) => v && typeof v === "object" && isNum(v.mean))
-    .map(([k, v]) => el("tr", null, el("td", null, k), el("td", null, fmt(v.mean)), el("td", null, isNum(v.u) ? "± " + fmt(v.u, 2) : "–")));
-  if (rows.length) kids.push(el("div", {class: "scroll", style: "margin-top:8px"}, el("table", null,
-    el("tr", null, el("th", null, `average (${String(j.group || "all")})`), el("th", null, "mean"), el("th", null, "uncertainty")), rows)));
-  if (arr(j.flags).length) kids.push(el("ul", {class: "flags"}, arr(j.flags).map(f => el("li", null, String(f)))));
-  kids.push(el("div", {class: "sub", style: "margin-top:6px"}, `Judged over ${fmt(j.window)} ${j.transient ? "time steps" : "iterations"}` +
-    (obj(j.axes).flow ? `; flow ${j.axes.flow}, up ${j.axes.up}` : "") + "."));
-  $("judge").replaceChildren(...kids);
-}
-
-// ---------------------------------------------------------------- repair map
-function hexToRgb(h) { h = h.replace("#", ""); if (h.length === 3) h = [...h].map(c => c + c).join(""); const n = parseInt(h, 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
-function density(v) {
-  const nx = v.nx, ny = v.ny;
-  let raw;
-  try { raw = atob(v.data || ""); } catch (e) { return null; }          // the surface is left out, marks still drawn
-  if (!(nx > 0 && ny > 0) || raw.length !== nx * ny) return null;
-  const img = new ImageData(nx, ny), ink = hexToRgb(css("--ink")), bg = hexToRgb(css("--card"));
-  const src = new Float32Array(raw.length); for (let i = 0; i < raw.length; i++) src[i] = raw.charCodeAt(i) / 255;
-  const tmp = new Float32Array(src.length), out = new Float32Array(src.length);
-  for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) { let s = 0, c = 0; for (let d = -1; d <= 1; d++) { const xx = x + d; if (xx >= 0 && xx < nx) { s += src[y * nx + xx]; c++; } } tmp[y * nx + x] = s / c; }
-  for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) { let s = 0, c = 0; for (let d = -1; d <= 1; d++) { const yy = y + d; if (yy >= 0 && yy < ny) { s += tmp[yy * nx + x]; c++; } } out[y * nx + x] = s / c; }
-  for (let i = 0; i < out.length; i++) { const a = Math.pow(Math.min(1, out[i] * 1.6), 0.6) * 0.55; for (let k = 0; k < 3; k++) img.data[4 * i + k] = bg[k] + (ink[k] - bg[k]) * a; img.data[4 * i + 3] = 255; }
-  const c = document.createElement("canvas"); c.width = nx; c.height = ny; c.getContext("2d").putImageData(img, 0, 0); return c;
-}
-const HEAT = ["#f6d55c", "#f0a93a", "#e8702a", "#d23b3b"];
-function setupMap() {
-  const hot = arr(map.hot);
-  $("heat").replaceChildren(...hot.map((L, i) => el("option", {value: String(i)}, String(L.label || `layer ${i + 1}`))), el("option", {value: "-1"}, "none"));
-  $("heat").value = String(hot.length - 1);
-  $("heat").onchange = $("mapView").onchange = drawMap;
-  drawMap();
-}
-function drawMap() {
-  const which = $("mapView").value, v = obj(map[which]), cv = $("map"), tip = $("tip");
-  const ax = arr(obj(map.axes)[which]).length === 2 ? map.axes[which] : [0, which === "side" ? 2 : 1], n = "xyz";
-  $("mapHead").textContent = which === "side" ? `(${n[ax[0]]} along the flow, ${n[ax[1]]} up)` : `(${n[ax[0]]} along the flow, ${n[ax[1]]} across)`;
-  const lo = arr(v.lo), hi = arr(v.hi);
-  if (lo.length !== 2 || hi.length !== 2) { cv.hidden = true; return; }
-  cv.hidden = false;
-  const W = cv.clientWidth, H = Math.round(W * (hi[1] - lo[1]) / (hi[0] - lo[0])), dpr = devicePixelRatio || 1;
-  cv.style.height = H + "px"; cv.width = W * dpr; cv.height = H * dpr;
-  const g = cv.getContext("2d"); g.scale(dpr, dpr);
-  if (!(which in mapImgs)) mapImgs[which] = density(v);
-  if (mapImgs[which]) g.drawImage(mapImgs[which], 0, 0, W, H);
-  const X = x => (x - lo[0]) / (hi[0] - lo[0]) * W, Y = y => (1 - (y - lo[1]) / (hi[1] - lo[1])) * H, marks = [];
-  const L = arr(map.hot)[+$("heat").value];
-  if (L) {
-    const cells = arr(L.cells), k = cells.length;
-    for (let i = k - 1; i >= 0; i--) {
-      const r = arr(cells[i]); if (!isNum(r[ax[0]]) || !isNum(r[ax[1]])) continue;
-      const t = 1 - i / k, ci = t > 0.97 ? 3 : t > 0.85 ? 2 : t > 0.6 ? 1 : 0, px = X(r[ax[0]]), py = Y(r[ax[1]]);
-      g.fillStyle = HEAT[ci]; g.globalAlpha = 0.35 + 0.6 * t; g.beginPath(); g.arc(px, py, 1.2 + 2.2 * t, 0, 7); g.fill();
-      if (i < 400) marks.push({px, py, text: `${L.label}\nrank ${i + 1} of ${k}` + (isNum(r[3]) ? ` · change ${r[3].toFixed(1)}× RMS` : "")});
-    }
-    g.globalAlpha = 1;
-  }
-  const ring = (list, fill, color, what) => { for (const d of arr(list)) {
-    const c = arr(d.c); if (!isNum(c[ax[0]]) || !isNum(c[ax[1]])) continue;
-    const px = X(c[ax[0]]), py = Y(c[ax[1]]), rad = Math.max(2.5, Math.min(8, 1.6 * Math.sqrt(+d.n || 1)));
-    g.beginPath(); g.arc(px, py, rad, 0, 7);
-    if (fill) { g.fillStyle = color; g.fill(); } else { g.strokeStyle = color; g.lineWidth = 1.4; g.stroke(); }
-    marks.push({px, py, text: `${what}\n${d.n} face(s): ${arr(d.kinds).join(", ")}\nnon-ortho ${d.nonOrtho}° · skew ${d.skew}` +
-      (arr(d.patches).length ? `\non ${arr(d.patches).join(", ")}` : "") + `\nat (${c.map(x => (+x).toFixed(3)).join(", ")}) m`});
-  } };
-  ring(map.defectsBefore, false, css("--def"), "Defect found and repaired");
-  ring(map.defectsAfter, true, css("--left"), "Defect left after the repair");
-  cv.onmousemove = e => {
-    const b = cv.getBoundingClientRect(), mx = e.clientX - b.left, my = e.clientY - b.top; let best = null, bd = 64;
-    for (const m of marks) { const dd = (m.px - mx) ** 2 + (m.py - my) ** 2; if (dd < bd) { bd = dd; best = m; } }
-    if (!best) { tip.style.display = "none"; return; }
-    tip.textContent = best.text; tip.style.display = "block";
-    tip.style.left = Math.max(0, Math.min(mx + 12, cv.clientWidth - tip.offsetWidth - 4)) + "px"; tip.style.top = (my + cv.offsetTop + 12) + "px";
-  };
-  cv.onmouseleave = () => tip.style.display = "none";
-}
-
-// ---------------------------------------------------------------- about
-function about() {
-  const gen = obj(R.generator), red = obj(R.redacted), c = obj(R.contents);
-  const names = {repair: "Repair result", map: "Repair map", abtest: "Solver A/B test"};
-  const rows = Object.entries(c).map(([k, x]) => el("tr", null, el("td", null, names[k] || k), el("td", null, String(obj(x).schemaVersion || "–")),
-    el("td", null, isNum(obj(x).bytes) ? `${(x.bytes / 1e3).toFixed(0)} kB` : "–"), el("td", {class: "mono", title: String(obj(x).sha256 || "")}, String(obj(x).sha256 || "").slice(0, 12))));
-  $("about").replaceChildren(
-    el("div", {class: "sub"}, `Made ${R.created || "–"} by Mesh Doctor ${gen.meshdoctor || "?"}` + (gen.openfoam ? ` (OpenFOAM ${gen.openfoam})` : "") +
-      `. ${isNum(red.paths) ? red.paths : "?"} paths on the worker were replaced before it was written. ` +
-      "It still holds the case's geometry coordinates, patch and force-group names and numbers: share it like the case itself."),
-    el("div", {class: "scroll", style: "margin-top:8px"}, el("table", null, el("tr", null, el("th", null, "document"), el("th", null, "version"),
-      el("th", null, "size"), el("th", null, "sha256")), rows)));
-}
-
-let resizeT;
-window.addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => R && (history(R.documents.abtest), map && drawMap()), 120); });
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { mapImgs = {}; R && render(); });
-
-// ---------------------------------------------------------------- start: embedded report, ?name= on the dashboard, or wait for a file
-(async () => {
-  const slot = $("md-report");
-  try {
-    if (slot && slot.textContent.trim()) return show(JSON.parse(slot.textContent), "this file");
-    const name = new URLSearchParams(location.search).get("name");
-    if (name && /^https?:$/.test(location.protocol)) {
-      const r = await fetch("/api/v1/repairs/" + encodeURIComponent(name) + "/report", {cache: "no-store"});
-      if (!(r.headers.get("Content-Type") || "").includes("application/json"))
-        throw new Error("This page is not served by a Mesh Doctor dashboard, so it cannot load a run by name. Open a report file instead.");
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error ? d.error.message : `HTTP ${r.status}`);
-      show(d, "this dashboard");
-    }
-  } catch (e) { fail(e.message); }
-})();
-</script>
+<script src="js/md.js"></script>
+<script src="js/chart.js"></script>
+<script src="js/report.js"></script>
 </body>
 </html>

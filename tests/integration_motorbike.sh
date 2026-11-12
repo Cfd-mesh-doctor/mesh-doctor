@@ -75,6 +75,18 @@ assert not bad, bad
 assert sys.argv[2] not in open(sys.argv[1]).read(), "a path of this machine is in the report"
 print("report ok:", {k: c["schemaVersion"] for k, c in r["contents"].items()}, r["redacted"]["paths"], "paths replaced")
 PY
+python3 -m meshdoctor report it_mb --html -o "$T/it_mb.html"
+python3 - "$T/it_mb.html" "$T/it_mb.mdreport.json" <<'PY'
+import json, re, sys
+page, r = open(sys.argv[1]).read(), json.load(open(sys.argv[2]))
+assert "<script src=" not in page, "the export loads a script from elsewhere"
+slot = page.split('<script type="application/json" id="md-report">')[1].split("</script>")[0]
+assert json.loads(slot)["documents"] == r["documents"], "the export holds a different report"
+pinned = re.search(r"script-src ([^;]+)", page).group(1).split()
+assert len(pinned) == 3 and all(p.startswith("'sha256-") for p in pinned), pinned
+assert "connect-src 'none'" in page
+print("html export ok:", round(len(page) / 1e6, 2), "MB, one file, its 3 scripts pinned by hash")
+PY
 
 step "jobs through /api/v1: repair, one job at a time, cancel an A/B mid-solve"
 python3 tests/api_jobs_check.py motorBikeSteady

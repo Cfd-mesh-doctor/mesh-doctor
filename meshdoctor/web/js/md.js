@@ -3,7 +3,10 @@
 //
 // Mesh Doctor front-end core, shared by every page.  No framework, no build step:
 //
-//     <script src="js/md.js"></script>   then   MD.api, MD.jobs, MD.html, MD.render, MD.fmt
+//     load js/md.js first on every page, then use MD.api, MD.jobs, MD.html, MD.render, MD.fmt
+//
+// (No closing script tag or HTML comment opener anywhere in web/js/: the report export
+// inlines these files into one page, and either would end the script early.)
 //
 //  * MD.api    the /api/v1 client: one error type (MD.ApiError with .code from
 //              the API's error list), the launch token on every POST, JSON only.
@@ -44,11 +47,12 @@
   // ---- /api/v1 client ------------------------------------------------------
   const BASE = "/api/v1";
   class ApiError extends Error {
-    constructor(status, code, message) {
+    constructor(status, code, message, api) {
       super(message);
       this.name = "ApiError";
       this.status = status;     // HTTP status, 0 if the server could not be reached
       this.code = code;         // the API's error code: not-found, busy, exists, ...
+      this.api = !!api;         // false: no Mesh Doctor API answered (offline, a static host, a proxy page)
     }
   }
   function token() {
@@ -82,7 +86,7 @@
     const doc = json ? await r.json().catch(() => null) : null;
     if (!r.ok) {
       const e = doc && typeof doc.error === "object" && doc.error;
-      throw new ApiError(r.status, (e && e.code) || "internal", (e && e.message) || "HTTP " + r.status);
+      throw new ApiError(r.status, (e && e.code) || "internal", (e && e.message) || "HTTP " + r.status, !!e);
     }
     if (doc === null) throw new ApiError(r.status, "internal", "the server did not answer with JSON");
     return doc;
