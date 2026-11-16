@@ -10,7 +10,7 @@ For **OpenFOAM 14 (openfoam.org)** on Linux, Windows through WSL, Docker, or a S
 - [Dashboard tour](docs/dashboard.md)
 - [Safety model](docs/safety.md): what protects your cases and your machine
 - [Limits](docs/limits.md): what it does not do, and the experimental tools
-- [Claude Code plugin](docs/claude.md): CFD skills for Claude (OpenFOAM, SimScale, ParaView, cloud solves), installed with `/plugin marketplace add agencybuisness05-eng/mesh-doctor`
+- [Claude Code plugin](docs/claude.md): CFD skills for Claude (OpenFOAM, SimScale, ParaView, cloud solves), installed with `/plugin marketplace add Cfd-mesh-doctor/mesh-doctor`
 
 ## Quickstart
 
@@ -32,7 +32,7 @@ echo "deb http://dl.openfoam.org/ubuntu jammy main" | sudo tee /etc/apt/sources.
 sudo apt update && sudo apt install openfoam14 python3-numpy
 
 # Mesh Doctor
-git clone <repository URL> mesh-doctor && cd mesh-doctor
+git clone https://github.com/Cfd-mesh-doctor/mesh-doctor mesh-doctor && cd mesh-doctor
 . /opt/openfoam14/etc/bashrc
 ./Allwmake                    # builds foamMeshDoctor and foamResidualHotspots
 bin/meshdoctor check          # says "ready", or lists what is missing

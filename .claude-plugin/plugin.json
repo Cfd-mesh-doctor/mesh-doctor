@@ -3,8 +3,8 @@
   "version": "0.2.0",
   "description": "Skills for OpenFOAM and SimScale CFD work: Mesh Doctor mesh repair, OpenFOAM on WSL/Linux, SimScale setup and API, ParaView pictures and charts, Google Cloud solves, and honest result reading.",
   "author": { "name": "The Mesh Doctor authors" },
-  "homepage": "https://github.com/agencybuisness05-eng/mesh-doctor",
-  "repository": "https://github.com/agencybuisness05-eng/mesh-doctor",
+  "homepage": "https://github.com/Cfd-mesh-doctor/mesh-doctor",
+  "repository": "https://github.com/Cfd-mesh-doctor/mesh-doctor",
   "license": "GPL-3.0-or-later",
   "keywords": ["cfd", "openfoam", "simscale", "paraview", "mesh", "aerodynamics"]
 }

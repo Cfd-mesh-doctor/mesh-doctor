@@ -9,7 +9,7 @@ solves on Google Cloud, and read results honestly.
 In Claude Code (terminal, desktop app or IDE):
 
 ```
-/plugin marketplace add agencybuisness05-eng/mesh-doctor
+/plugin marketplace add Cfd-mesh-doctor/mesh-doctor
 /plugin install cfd-toolkit@mesh-doctor
 ```
 
