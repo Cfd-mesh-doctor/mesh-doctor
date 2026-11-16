@@ -10,7 +10,8 @@ Everything since 0.1.0 (0.2.0 was the plugin version on main without a release).
 - **AGENTS.md**: points any AI coding agent to the skill for each task.
 - **Worked example `examples/ahmed-body`**: the Ahmed body from published dimensions, meshed, checked with Mesh
   Doctor, solved and compared with wind-tunnel measurements; also the template for new cases.
-- **Slash commands** (`commands/`): `/cfd-toolkit:dashboard` opens the live dashboard in the side panel; also
+- **Slash commands** (`commands/`): `/testrun` tests the whole toolkit on the Ahmed example with live progress;
+  `/cfd-toolkit:dashboard` opens the live dashboard in the side panel; also
   `run-status`, `solve`, `mesh-check`, `pictures`, `size`, `toolkit-check`, `ahmed-demo`, `cloud-status`.
 - Dashboard: the live page follows a plain case (one `foamRun`, steady or transient) as well as the staged
   steady-then-DDES run, and hides the stage it doesn't use.

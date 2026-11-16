@@ -32,10 +32,12 @@ own skills.
 
 ## Slash commands
 
-Type these in Claude Code (arguments in brackets are optional):
+Type these in Claude Code (arguments in brackets are optional). The `cfd-toolkit:` prefix can be left out when no
+other plugin has a command with the same name, so `/testrun` works as well as `/cfd-toolkit:testrun`.
 
 | Command | What it does |
 |---|---|
+| `/cfd-toolkit:testrun [quick\|full] [ranks]` | **start here**: checks the setup, then runs the Ahmed body from mesh to wind-tunnel comparison with live progress in the side panel (quick about 10 min, full about 45 min) |
 | `/cfd-toolkit:dashboard [case]` | starts the live dashboard and opens it in the side panel: whole-job progress, iteration and time left, forces, residuals, Mesh Doctor pages |
 | `/cfd-toolkit:run-status <case>` | iteration, speed, time left, force means and drift of a running or finished case, with a verdict |
 | `/cfd-toolkit:solve <case> [ranks] [iterations]` | sizes the run, starts it in the background and opens the dashboard |
@@ -51,8 +53,8 @@ terminal, Claude prints the link (`http://localhost:8765/`).
 
 ## Start here
 
-1. `/cfd-toolkit:toolkit-check` to see what is installed.
-2. `/cfd-toolkit:ahmed-demo` to run the worked example (`examples/ahmed-body`) and see every step once.
+1. `/testrun` checks what is installed and runs the worked example (`examples/ahmed-body`) end to end, so you see
+   every step work once on your machine. `/testrun full` runs it long enough to compare with the wind tunnel.
 3. Copy that example for your own model: `docs/templates.md`. When something breaks: `docs/troubleshooting.md`.
 
 Claude picks the right skill from what you ask ("fix this mesh", "make vortex pictures of this case", "set up the

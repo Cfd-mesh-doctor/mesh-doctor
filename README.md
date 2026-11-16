@@ -14,7 +14,7 @@ For **OpenFOAM 14 (openfoam.org)** on Linux, Windows through WSL, Docker, or a S
 - [Worked example](examples/ahmed-body/README.md): the Ahmed body from STL to wind-tunnel comparison; copy it for your own case ([templates](docs/templates.md))
 - [Gallery](docs/gallery.md): the pictures and charts the scripts make
 - [Troubleshooting](docs/troubleshooting.md): error messages and their fixes · [Changelog](CHANGELOG.md)
-- [Claude Code plugin](docs/claude.md): CFD skills for Claude (OpenFOAM, SimScale, ParaView, cloud solves), installed with `/plugin marketplace add Cfd-mesh-doctor/mesh-doctor`
+- [Claude Code plugin](docs/claude.md): CFD skills for Claude (OpenFOAM, SimScale, ParaView, cloud solves), installed with `/plugin marketplace add Cfd-mesh-doctor/mesh-doctor`; then type `/testrun`
 
 ## Quickstart
 
