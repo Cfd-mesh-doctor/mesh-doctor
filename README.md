@@ -10,6 +10,7 @@ For **OpenFOAM 14 (openfoam.org)** on Linux, Windows through WSL, Docker, or a S
 - [Dashboard tour](docs/dashboard.md)
 - [Safety model](docs/safety.md): what protects your cases and your machine
 - [Limits](docs/limits.md): what it does not do, and the experimental tools
+- [AI agents](AGENTS.md): which skill guide to read for each task (works with any AI coding tool)
 - [Claude Code plugin](docs/claude.md): CFD skills for Claude (OpenFOAM, SimScale, ParaView, cloud solves), installed with `/plugin marketplace add Cfd-mesh-doctor/mesh-doctor`
 
 ## Quickstart
