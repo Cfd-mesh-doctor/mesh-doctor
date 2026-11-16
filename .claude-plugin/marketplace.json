@@ -1,0 +1,13 @@
+{
+  "name": "mesh-doctor",
+  "owner": { "name": "The Mesh Doctor authors" },
+  "metadata": { "description": "CFD skills for Claude Code, shipped with Mesh Doctor." },
+  "plugins": [
+    {
+      "name": "cfd-toolkit",
+      "source": "./",
+      "description": "OpenFOAM, SimScale, ParaView and cloud-solve skills plus Mesh Doctor mesh repair.",
+      "version": "0.2.0"
+    }
+  ]
+}

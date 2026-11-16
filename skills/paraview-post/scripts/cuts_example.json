@@ -1,0 +1,11 @@
+{
+  "about": "Example cut list for cut_views.py: a side cut through the middle of a wheel, a flat cut near the ground, and a cross cut behind the model. Box = [x0, x1, y0, y1, z0, z1] in m (the plane's own axis is ignored).",
+  "cuts": [
+    {"name": "c1_side_y000", "title": "Side cut on the centreline, seen from the side, front to the right",
+     "plane": "y", "at": 0.0, "box": [-1.5, 0.8, 0, 0, 0.0, 0.8], "colours": ["U", "Cp", "Cpt"]},
+    {"name": "c2_top_z005", "title": "Flat cut 5 cm above the ground, seen from above",
+     "plane": "z", "at": 0.05, "box": [-1.5, 0.8, -0.6, 0.6, 0, 0], "colours": ["U"]},
+    {"name": "c3_cross_xm1", "title": "Cross cut 1 m behind the origin, seen from behind",
+     "plane": "x", "at": -1.0, "box": [0, 0, -0.6, 0.6, 0.0, 0.7], "step": 0.002, "colours": ["U", "Cpt"]}
+  ]
+}
