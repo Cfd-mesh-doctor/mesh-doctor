@@ -117,7 +117,7 @@ for patch in CAR:
               % (c[0], c[1], c[2], len(cl), A[cl].sum() * 1e6, Cp[cl].min(), pref / Q,
                  -dF[0], -dF[2], dF[1], nrm[0], nrm[1], nrm[2]))
         spots.append((Cp[cl].min(), c, nrm, patch, dF))
-print('car pressure force (%.2f, %.2f, %.2f) N' % tuple(tot))
+print('model pressure force (%.2f, %.2f, %.2f) N' % tuple(tot))
 if spots:
     dsum = sum(s[4] for s in spots)
     print('all spots together add drag %.2f N, downforce %.2f N' % (-dsum[0], -dsum[2]))
@@ -128,7 +128,7 @@ if not spots and not AT:
 if AT:
     c, nrm = np.array(AT[:3]), np.array(AT[3:6]) / np.linalg.norm(AT[3:6])
     best = min(at_low, key=lambda s: s[0]) if at_low else None
-    NOTE2 = ATNOTE.replace('{cpmin}', '%.1f (on the %s)' % (best[0], best[1]) if best else 'not found (no car faces)')
+    NOTE2 = ATNOTE.replace('{cpmin}', '%.1f (on the %s)' % (best[0], best[1]) if best else 'not found (no wall faces)')
     WHAT = 'the place'
     print('lowest Cp within %.0f cm of the place: %s' % (200 * NEAR, NOTE2))
 else:
@@ -170,7 +170,7 @@ for loc in ['Upper Left Corner', 'UpperLeftCorner']:
     except Exception:
         pass
 Render(V)
-NOTE = NOTE1.replace('{it}', '%g' % t) + ': Cp on the car (cell values).\n' + NOTE2
+NOTE = NOTE1.replace('{it}', '%g' % t) + ': Cp on the model (cell values).\n' + NOTE2
 
 
 def look(name, title, dirn, dist, edges=False):
@@ -195,4 +195,4 @@ side = 1.0 if c[1] >= 0 else -1.0
 look(PREFIX + '_Cp_spot_closeup', 'Close-up, looking straight at %s from the air side, with the surface mesh' % WHAT,
      -nrm, 0.16, edges=True)
 look(PREFIX + '_Cp_spot_normal', 'Same direction, further back', -nrm, 0.7)
-look(PREFIX + '_Cp_spot_side', 'From the side of the car', [0.15, side, 0.25], 1.3)
+look(PREFIX + '_Cp_spot_side', 'From the side of the model', [0.15, side, 0.25], 1.3)
