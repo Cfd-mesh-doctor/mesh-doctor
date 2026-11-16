@@ -1,0 +1,12 @@
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "initial";
+    object      conditions;
+}
+
+// Free stream for the Ahmed body benchmark: 40 m/s, the air flows toward -x (nose faces +x), ground moves with it.
+Uinf            (-40 0 0);
+kInf            0.06;       // 0.5 % turbulence intensity: k = 1.5 (0.005 * 40)^2
+omegaInf        4.5;        // k^0.5 / (Cmu^0.25 * 0.1 m)

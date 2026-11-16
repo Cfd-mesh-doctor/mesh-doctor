@@ -1,0 +1,11 @@
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      decomposeParDict;
+}
+
+numberOfSubdomains 4;      // Allrun sets this from its first argument
+decomposer      scotch;
+method          scotch;     // OpenFOAM 14 reads "decomposer"; "method" for older readers

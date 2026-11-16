@@ -1,0 +1,11 @@
+{
+  "about": "Cut list for skills/paraview-post/scripts/cut_views.py on the Ahmed half model (nose at x = 0, base at x = -1.044, symmetry plane y = 0). Box = [x0, x1, y0, y1, z0, z1] in m.",
+  "cuts": [
+    {"name": "c1_side_centre", "title": "Side cut on the centreline, seen from the side (+y), nose to the left",
+     "plane": "y", "at": 0.001, "box": [-2.0, 0.3, 0, 0, 0.0, 0.6], "colours": ["U", "Cp", "Cpt"]},
+    {"name": "c2_top_z200", "title": "Flat cut 20 cm above the ground (through the slant), seen from above",
+     "plane": "z", "at": 0.20, "box": [-2.0, 0.3, 0.0, 0.45, 0, 0], "colours": ["U", "Cpt"]},
+    {"name": "c3_cross_wake", "title": "Cross cut 0.2 m behind the base, seen from behind: the slant-edge vortex",
+     "plane": "x", "at": -1.244, "box": [0, 0, 0.0, 0.45, 0.0, 0.5], "step": 0.002, "colours": ["U", "Cpt"]}
+  ]
+}

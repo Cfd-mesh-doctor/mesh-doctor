@@ -1,0 +1,15 @@
+#!/bin/sh
+# Serial mesh of the Ahmed body case: geometry -> blockMesh -> snappyHexMesh -> checkMesh, and 0/ from initial/.
+#   ./Allmesh [extra make_ahmed.py options, e.g. --slant 35 --stilts]
+# About 1.5M cells, ~5-10 minutes and ~3 GB on one core. A serial mesh is what Mesh Doctor repairs.
+cd "${0%/*}" || exit 1
+. "$WM_PROJECT_DIR/bin/tools/RunFunctions"
+fail() { echo "$1 failed: see log.$1"; exit 1; }
+
+python3 make_ahmed.py -o constant/geometry/ahmed.stl "$@" || exit 1
+runApplication surfaceFeatures || fail surfaceFeatures
+runApplication blockMesh || fail blockMesh
+runApplication snappyHexMesh -overwrite || fail snappyHexMesh
+rm -rf 0 && cp -r initial 0
+runApplication checkMesh -allGeometry -allTopology
+grep -E "cells:|Max non-orthogonality|Max skewness|Mesh OK|Failed" log.checkMesh

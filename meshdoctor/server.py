@@ -352,18 +352,37 @@ def _status():
     ddes["deltaT"] = run_setting("controlDict.ddes", "deltaT")
     ddes["avgFrom"] = run_setting("controlDict.ddes", "timeStart")
     steady_pp = "postProcessing_steady" if os.path.isdir(p("postProcessing_steady")) else "postProcessing"
+    single = None
+    if steady["state"] == "pending" and ddes["state"] == "pending" and os.path.isfile(p("log.foamRun")):
+        # a plain case (one foamRun, e.g. examples/ahmed-body): follow log.foamRun as the steady or the transient stage
+        transient = "steadyState" not in (read_all(p("system", "fvSchemes")) or "steadyState")
+        run = solver_status("log.foamRun", end_time("controlDict", DDES_END if transient else STEADY_END),
+                            "ddes" if transient else "steady")
+        single = "transient" if transient else "steady"
+        if transient:
+            ddes.update(run)
+            steady = {"state": "skipped", "end": None}
+        else:
+            steady = run
+            ddes = {"state": "skipped", "end": None}
+        steady_pp = "postProcessing"
     data = {
         "case": re.split(r"[\\/]", CASE.rstrip("\\/"))[-1] if CASE else "",
         "now": time.time(),
         "mesh": mesh, "checkMesh": chk, "steady": steady, "ddes": ddes,
         "proc": processes(),
-        "forces_steady": forces(steady_pp) if steady["state"] != "pending" else {},
-        "forces_ddes": forces("postProcessing") if ddes["state"] != "pending" else {},
-        "res_steady": residuals(steady_pp, "log.steady") if steady["state"] != "pending" else {},
-        "res_ddes": residuals("postProcessing", "log.ddes") if ddes["state"] != "pending" else {},
+        "single": single,
+        "forces_steady": forces(steady_pp) if steady["state"] not in ("pending", "skipped") else {},
+        "forces_ddes": forces("postProcessing") if ddes["state"] not in ("pending", "skipped") else {},
+        "res_steady": residuals(steady_pp, "log.foamRun" if single else "log.steady")
+        if steady["state"] not in ("pending", "skipped") else {},
+        "res_ddes": residuals("postProcessing", "log.foamRun" if single else "log.ddes")
+        if ddes["state"] not in ("pending", "skipped") else {},
     }
-    # overall stage weights by expected wall time: mesh 6 %, steady 9 %, DDES 85 %
+    # overall stage weights by expected wall time: mesh 6 %, steady 9 %, DDES 85 % (one solver stage: mesh 6 %, it 94 %)
     w = [("mesh", 0.06), ("steady", 0.09), ("ddes", 0.85)]
+    if single:
+        w = [("mesh", 0.06), ("ddes" if single == "transient" else "steady", 0.94)]
     total = 0.0
     for key, wt in w:
         st = data[key]

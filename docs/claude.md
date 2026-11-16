@@ -30,6 +30,31 @@ own skills.
 | `cloud-solve-gcp` | solving a big case on a Google Cloud VM with no SSH, and getting the results back |
 | `cfd-results` | averaging windows, drift, comparing variants and meshes, coefficients, comparison workbooks |
 
+## Slash commands
+
+Type these in Claude Code (arguments in brackets are optional):
+
+| Command | What it does |
+|---|---|
+| `/cfd-toolkit:dashboard [case]` | starts the live dashboard and opens it in the side panel: whole-job progress, iteration and time left, forces, residuals, Mesh Doctor pages |
+| `/cfd-toolkit:run-status <case>` | iteration, speed, time left, force means and drift of a running or finished case, with a verdict |
+| `/cfd-toolkit:solve <case> [ranks] [iterations]` | sizes the run, starts it in the background and opens the dashboard |
+| `/cfd-toolkit:mesh-check <case> [name]` | checkMesh, Mesh Doctor repair on a copy, before/after table |
+| `/cfd-toolkit:pictures <case> [patches]` | charts, cut planes, vortices, pressure spots and a contact sheet |
+| `/cfd-toolkit:size <Mcells>` | fits in memory or not, local time, cloud cost, SimScale core hours |
+| `/cfd-toolkit:toolkit-check` | what is installed and what is missing for each skill |
+| `/cfd-toolkit:ahmed-demo [ranks] [iterations]` | the worked example from mesh to wind-tunnel comparison (about an hour on 6 cores) |
+| `/cfd-toolkit:cloud-status <gs://bucket>` | progress of a Google Cloud solve |
+
+In the Claude desktop app the dashboard opens in the browser side panel and keeps refreshing while you work; in a
+terminal, Claude prints the link (`http://localhost:8765/`).
+
+## Start here
+
+1. `/cfd-toolkit:toolkit-check` to see what is installed.
+2. `/cfd-toolkit:ahmed-demo` to run the worked example (`examples/ahmed-body`) and see every step once.
+3. Copy that example for your own model: `docs/templates.md`. When something breaks: `docs/troubleshooting.md`.
+
 Claude picks the right skill from what you ask ("fix this mesh", "make vortex pictures of this case", "set up the
 next SimScale variant"). You can also name one: "use the simscale skill".
 

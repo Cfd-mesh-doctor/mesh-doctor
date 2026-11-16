@@ -1,0 +1,28 @@
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      blockMeshDict;
+}
+
+// Half domain (y >= 0, symmetry plane at y = 0). The body: nose at x = 0, base at x = -1.044, flow toward -x.
+// Inlet 4 m ahead of the nose (3.8 lengths), outlet 7.9 m behind the base, sides 1.5 m (blockage 2.5 %).
+// Base cells 0.1 m; snappyHexMesh refines to 3.1 mm on the body.
+vertices
+(
+    (-9.0 0.0 0.0) ( 4.0 0.0 0.0) ( 4.0 1.5 0.0) (-9.0 1.5 0.0)
+    (-9.0 0.0 1.5) ( 4.0 0.0 1.5) ( 4.0 1.5 1.5) (-9.0 1.5 1.5)
+);
+
+blocks ( hex (0 1 2 3 4 5 6 7) (130 15 15) simpleGrading (1 1 1) );
+
+boundary
+(
+    inlet    { type patch;         faces ((1 2 6 5)); }
+    outlet   { type patch;         faces ((0 4 7 3)); }
+    ground   { type wall;          faces ((0 3 2 1)); }
+    top      { type patch;         faces ((4 5 6 7)); }
+    side     { type patch;         faces ((3 7 6 2)); }
+    symmetry { type symmetryPlane; faces ((0 1 5 4)); }
+);

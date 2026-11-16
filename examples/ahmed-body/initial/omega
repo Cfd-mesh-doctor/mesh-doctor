@@ -1,0 +1,22 @@
+FoamFile
+{
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      omega;
+}
+
+#include        "conditions"
+dimensions      [0 0 -1 0 0 0 0];
+internalField   uniform $omegaInf;
+
+boundaryField
+{
+    inlet       { type fixedValue;   value uniform $omegaInf; }
+    outlet      { type inletOutlet;  inletValue uniform $omegaInf; value uniform $omegaInf; }
+    ground      { type omegaWallFunction; value uniform $omegaInf; }
+    top         { type slip; }
+    side        { type slip; }
+    symmetry    { type symmetryPlane; }
+    ahmedGroup  { type omegaWallFunction; value uniform $omegaInf; }
+}

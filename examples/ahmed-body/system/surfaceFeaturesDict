@@ -1,0 +1,15 @@
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      surfaceFeaturesDict;
+}
+
+surfaces        ("ahmed.stl");
+includedAngle   150;        // edges sharper than 30 degrees: the slant edges, the base, the long edges
+subsetFeatures
+{
+    nonManifoldEdges no;
+    openEdges        yes;
+}

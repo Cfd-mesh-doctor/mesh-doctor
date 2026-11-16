@@ -1,0 +1,22 @@
+FoamFile
+{
+    format      ascii;
+    class       volVectorField;
+    location    "0";
+    object      U;
+}
+
+#include        "conditions"
+dimensions      [0 1 -1 0 0 0 0];
+internalField   uniform $Uinf;
+
+boundaryField
+{
+    inlet       { type fixedValue;   value uniform $Uinf; }
+    outlet      { type inletOutlet;  inletValue uniform (0 0 0); value uniform $Uinf; }
+    ground      { type fixedValue;   value uniform $Uinf; }     // moving ground at the free-stream speed
+    top         { type slip; }
+    side        { type slip; }
+    symmetry    { type symmetryPlane; }
+    ahmedGroup  { type noSlip; }
+}

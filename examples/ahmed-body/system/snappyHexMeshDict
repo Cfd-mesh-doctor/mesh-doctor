@@ -1,0 +1,97 @@
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      snappyHexMeshDict;
+}
+
+// Refinement levels on the 0.1 m base: L1 50 mm, L2 25, L3 12.5, L4 6.25, L5 3.1 mm.
+castellatedMesh true;
+snap            true;
+addLayers       true;
+
+geometry
+{
+    ahmed      { type triSurface; file "ahmed.stl"; }
+    farWake    { type box; min (-6.0 0 0); max (1.0 1.0 1.0); }     // L1
+    wake       { type box; min (-3.5 0 0); max (0.5 0.6 0.8); }     // L2
+    nearBody   { type box; min (-1.8 0 0); max (0.3 0.4 0.55); }   // L3
+    slantWake  { type box; min (-1.45 0 0.08); max (-0.75 0.26 0.42); }   // L4: the slant and the base
+    underBody  { type box; min (-1.10 0 0); max (0.06 0.25 0.07); }  // L4: the 50 mm gap to the ground
+};
+
+castellatedMeshControls
+{
+    maxLocalCells       2000000;
+    maxGlobalCells      8000000;
+    minRefinementCells  10;
+    maxLoadUnbalance    0.10;
+    nCellsBetweenLevels 3;
+
+    features ( { file "ahmed.eMesh"; level 5; } );
+
+    refinementSurfaces
+    {
+        ahmed
+        {
+            level (4 5);
+            patchInfo { type wall; inGroups (ahmedGroup); }
+        }
+    }
+    resolveFeatureAngle 30;
+
+    refinementRegions
+    {
+        farWake   { mode inside; level 1; }
+        wake      { mode inside; level 2; }
+        nearBody  { mode inside; level 3; }
+        slantWake { mode inside; level 4; }
+        underBody { mode inside; level 4; }
+    }
+
+    insidePoint (2.0 1.0 1.0);
+    allowFreeStandingZoneFaces true;
+}
+
+snapControls
+{
+    nSmoothPatch        3;
+    tolerance           2.0;
+    nSolveIter          50;
+    nRelaxIter          5;
+    nFeatureSnapIter    10;
+    implicitFeatureSnap false;
+    explicitFeatureSnap true;
+    multiRegionFeatureSnap false;
+}
+
+addLayersControls
+{
+    relativeSizes       true;
+    layers
+    {
+        "ahmed.*"  { nSurfaceLayers 5; }
+        ground     { nSurfaceLayers 3; }
+    }
+    expansionRatio      1.25;
+    finalLayerThickness 0.4;
+    minThickness        0.1;
+    nGrow               0;
+    featureAngle        120;
+    slipFeatureAngle    30;
+    nRelaxIter          5;
+    nSmoothSurfaceNormals 1;
+    nSmoothNormals      3;
+    nSmoothThickness    10;
+    maxFaceThicknessRatio 0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedianAxisAngle  90;
+    nBufferCellsNoExtrude 0;
+    nLayerIter          50;
+}
+
+meshQualityControls { #include "meshQualityDict" }
+
+writeFlags ( scalarLevels layerSets layerFields );
+mergeTolerance 1e-6;

@@ -6,7 +6,24 @@ description: Make CFD pictures and charts from OpenFOAM results with ParaView (p
 # ParaView post-processing (offscreen)
 
 Scripts are in `scripts/` next to this file. All are read-only on the case. Axes convention: x forward (flow goes
-toward -x), z up, model on a ground at z = 0; adapt the camera directions in the scripts for other frames.
+toward -x), z up, model on a ground at z = 0. A case in other axes is turned into these axes on a copy (below)
+rather than by editing the scripts' cameras.
+
+## Cases in other axes
+
+Rotate a copy holding only `constant/`, `system/` and the time to render (tested on OpenFOAM 14):
+
+```bash
+cp -r case/constant case/system case_tk/ && cp -r case/<time> case_tk/ && cd case_tk
+foamDictionary system/controlDict -entry startFrom -set latestTime   # transformPoints works on the start time
+transformPoints -rotateFields "Rx=90"          # y up -> z up      (mesh points and the vector fields of <time>)
+transformPoints -rotateFields "Rz=180"         # flow toward +x -> toward -x
+transformPoints "translate=(0 0 0.123)"        # ground to z = 0 (minus the ground height after rotating)
+```
+
+Without `-rotateFields` only the mesh turns and `U` points the wrong way. `postProcessing/` force files are not
+rotated: chart those from the original case with `plot_convergence.py --drag/--down` instead. Check with
+`checkMesh` (bounding box) before rendering.
 
 ## Setup
 

@@ -145,13 +145,20 @@ function render(d){
   last = d;
   const m=d.mesh, c=d.checkMesh, s=d.steady, t=d.ddes, pr=d.proc||{};
   $("ovPct").textContent = (d.overall*100).toFixed(1)+" %";
-  setBar($("ovBar"), d.overall, t.state==="done"?"done":"running");
+  const fin = d.single==="steady"? s.state==="done" : t.state==="done";
+  setBar($("ovBar"), d.overall, fin?"done":"running");
+  // a plain case (one foamRun) has no second solver stage: hide it
+  for(const [id,st] of [["stSteady",s],["stDdes",t]]) $(id).parentElement.style.display = st.state==="skipped"?"none":"";
+  $("steadyCard").style.display = s.state==="skipped"?"none":""; $("ddesCard").style.display = t.state==="skipped"?"none":"";
+  $("forceTabs").style.display = $("resTabs").style.display = d.single? "none":"";
+  if(d.single){ $("stSteady").previousElementSibling.textContent="3 · Steady solve"; $("stDdes").previousElementSibling.textContent="3 · Transient solve";
+    $("steadyCard").querySelector("h2").firstChild.textContent="Steady solve (foamRun) "; $("caseName").textContent=d.case||"Live run"; }
   let stage="Waiting", eta="";
   if(m.state==="running"){ stage="Meshing · "+(m.phase||""); }
   else if(m.state==="error"){ stage="Meshing failed"; }
-  else if(s.state==="running"){ stage=`Steady start · iteration ${fmtN(s.time)} of ${fmtN(s.end)}`; eta="Stage ETA "+fmtDur(s.eta); }
+  else if(s.state==="running"){ stage=`${d.single?"Steady solve":"Steady start"} · iteration ${fmtN(s.time)} of ${fmtN(s.end)}`; eta="Stage ETA "+fmtDur(s.eta); }
   else if(t.state==="running"){ stage=`Transient · t = ${fmtN(t.time,4)} s of ${t.end} s`; eta="ETA "+fmtDur(t.eta)+(t.eta? " · done ≈ "+new Date(Date.now()+t.eta*1000).toLocaleString([], {weekday:"short",hour:"2-digit",minute:"2-digit"}):""); }
-  else if(t.state==="done"){ stage="Finished"; }
+  else if(fin){ stage="Finished"; }
   else if(m.state==="done" && s.state==="pending"){ stage="Mesh done · checking / starting solver"; }
   $("ovStage").textContent = stage; $("ovEta").textContent = eta;
 
@@ -185,8 +192,9 @@ function render(d){
     ["Elapsed",fmtDur(t.clock)],["Remaining",fmtDur(t.eta)],["Averaging window",t.avgFrom!=null? t.avgFrom+" – "+t.end+" s":"no fieldAverage in this case"]]);
   $("ddesErr").textContent = t.error||"";
 
-  if(!userPickedForce) forceKey = (t.state!=="pending")? "ddes":"steady";
-  if(!userPickedRes) resKey = (t.state!=="pending")? "ddes":"steady";
+  const tOn = !["pending","skipped"].includes(t.state);
+  if(!userPickedForce) forceKey = tOn? "ddes":"steady";
+  if(!userPickedRes) resKey = tOn? "ddes":"steady";
   syncTabs(); drawForces(); drawRes();
 }
 

@@ -14,6 +14,16 @@ dashboard) plus a set of **CFD skills**: Markdown guides with tested helper scri
 | solve a big case on a Google Cloud VM | `skills/cloud-solve-gcp/SKILL.md` (scripts in `skills/cloud-solve-gcp/scripts/`) |
 | read, average, compare or report CFD forces and residuals | `skills/cfd-results/SKILL.md` |
 
+## Also here
+
+| Path | What it is |
+|---|---|
+| `examples/ahmed-body/` | a complete, tested case (Ahmed body, 25 deg slant) with wind-tunnel comparison; the starting point for new cases (`docs/templates.md`) |
+| `tools/toolkit_check.py` | is this machine ready for each skill; prints the install command for anything missing |
+| `skills/cfd-results/scripts/size_estimate.py` | memory, time and cloud/SimScale cost for N million cells |
+| `docs/troubleshooting.md` | error messages people actually hit, with the fix |
+| `commands/` | Claude Code slash commands (`/cfd-toolkit:dashboard`, ...); plain Markdown task recipes any agent can follow |
+
 Each SKILL.md starts with a short front-matter block (name, description) followed by the instructions. Follow them as
 written; they record what failed in practice, not just what should work.
 

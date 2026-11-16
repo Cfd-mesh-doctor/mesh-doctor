@@ -5,6 +5,12 @@ description: Judge and report CFD results honestly - convergence of residuals an
 
 # Reading CFD results
 
+## Will it fit? How long? What will it cost?
+
+`python3 scripts/size_estimate.py <million cells> [--iters 1000] [--ram 26] [--cores 6]` prints the memory each
+step needs (snappyHexMesh, solver, decomposePar, checkMesh, Mesh Doctor), the local solve time, the Google Cloud
+time and cost, and SimScale core hours, from measured runs (+-30 %). Run it before meshing anything big.
+
 ## Averages, not last values
 
 - Steady RANS forces oscillate. Report the mean over a window at the end (e.g. the last 100-200 iterations of 1000),

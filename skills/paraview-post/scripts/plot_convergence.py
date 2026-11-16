@@ -164,7 +164,9 @@ save(fig, 'residuals')
 it, drag, down, side, my = forces(TOTAL)
 i0 = 50
 for i in range(len(it)):                            # first iteration after which both stay on a sensible scale
-    if np.all((drag[i:] > 0) & (drag[i:] < 2 * last(it, drag)) & (down[i:] > 0) & (down[i:] < 2 * last(it, down))):
+    # (by size: a body that makes lift has negative downforce)
+    if np.all((drag[i:] > 0) & (drag[i:] < 2 * last(it, drag)) & (abs(down[i:]) > 0)
+              & (abs(down[i:]) < 2 * abs(last(it, down)))):
         i0 = max(50, int(math.ceil(it[i] / 10.0) * 10))
         break
 sel = it >= i0
@@ -176,7 +178,10 @@ for v, n, c in [(down, 'Downforce', SLOT[0]), (drag, 'Drag', SLOT[1])]:
     ax.plot(it[sel], v[sel], color=c, lw=1.1, solid_capstyle='round', label=n)
 ax.set_xlim(i0, it[-1])
 hi = max(down[sel].max(), drag[sel].max())
-ax.set_ylim(0, hi * 1.08)
+lo = min(0.0, down[sel].min(), drag[sel].min())
+ax.set_ylim(lo * 1.08, hi * 1.08)
+if lo < 0:
+    ax.axhline(0, color=MUTED, lw=0.8, zorder=1)
 ax.text(it[-1] - WIN / 2, hi * 1.065, 'last %d, averaged' % WIN, color=MUTED, fontsize=8, ha='center', va='top')
 ax.legend(loc='lower left', frameon=False, ncol=2, fontsize=9, labelcolor=INK2, bbox_to_anchor=(0.0, 1.0),
           borderaxespad=0.3)

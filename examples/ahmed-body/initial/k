@@ -1,0 +1,22 @@
+FoamFile
+{
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      k;
+}
+
+#include        "conditions"
+dimensions      [0 2 -2 0 0 0 0];
+internalField   uniform $kInf;
+
+boundaryField
+{
+    inlet       { type fixedValue;   value uniform $kInf; }
+    outlet      { type inletOutlet;  inletValue uniform $kInf; value uniform $kInf; }
+    ground      { type kqRWallFunction; value uniform $kInf; }
+    top         { type slip; }
+    side        { type slip; }
+    symmetry    { type symmetryPlane; }
+    ahmedGroup  { type kqRWallFunction; value uniform $kInf; }
+}

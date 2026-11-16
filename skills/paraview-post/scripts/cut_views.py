@@ -94,7 +94,7 @@ vol.UpdatePipeline(TIME)
 log('time', TIME, 'volume', vol.GetDataInformation().GetNumberOfCells(), 'cells')
 
 LUTS = {
-    'U': (('POINTS', 'U', 'Magnitude'), '|U| (m/s)', '%.0f', None, 'Viridis (matplotlib)', (0.0, 22.5)),
+    'U': (('POINTS', 'U', 'Magnitude'), '|U| (m/s)', '%.0f', None, 'Viridis (matplotlib)', (0.0, 1.5 * UINF)),
     'Cp': (('POINTS', 'Cp'), 'Cp', '%.1f', [-2.5, 0.231, 0.299, 0.754, 0.0, 0.865, 0.865, 0.865,
                                             1.0, 0.706, 0.016, 0.150], None, (-2.5, 1.0)),
     'Cpt': (('POINTS', 'Cpt'), 'Cp,t', '%.1f', None, 'Inferno (matplotlib)', (0.0, 1.0)),

@@ -7,7 +7,7 @@
       "name": "cfd-toolkit",
       "source": "./",
       "description": "OpenFOAM, SimScale, ParaView and cloud-solve skills plus Mesh Doctor mesh repair.",
-      "version": "0.2.0"
+      "version": "0.3.0"
     }
   ]
 }
