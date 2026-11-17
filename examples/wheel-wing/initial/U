@@ -1,0 +1,28 @@
+FoamFile
+{
+    format      ascii;
+    class       volVectorField;
+    location    "0";
+    object      U;
+}
+
+#include        "conditions"
+dimensions      [0 1 -1 0 0 0 0];
+internalField   uniform $Uinf;
+
+boundaryField
+{
+    inlet       { type fixedValue;   value uniform $Uinf; }
+    outlet      { type inletOutlet;  inletValue uniform (0 0 0); value uniform $Uinf; }
+    ground      { type fixedValue;   value uniform $Uinf; }     // moving ground at the free-stream speed
+    top         { type slip; }
+    "side.*"    { type slip; }
+    modelGroup  { type noSlip; }
+    model_wheel                 // a patch name wins over its group: the wheel rolls on the moving ground
+    {
+        type    rotatingWallVelocity;
+        origin  (0 0.45 0.2236);   // wheel centre (make_wheel_wing.py prints it)
+        axis    (0 1 0);           // with this sign the contact patch moves toward -x, like the ground
+        omega   $omegaWheel;       // rad/s = speed / rolling radius, set in conditions
+    }
+}

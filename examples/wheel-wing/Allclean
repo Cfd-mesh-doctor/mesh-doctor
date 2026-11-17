@@ -1,0 +1,6 @@
+#!/bin/sh
+# Back to the files in the repository: removes the mesh, results and logs.
+cd "${0%/*}" || exit 1
+. "$WM_PROJECT_DIR/bin/tools/CleanFunctions"
+cleanCase
+rm -rf 0 constant/geometry/model.stl constant/geometry/model.eMesh constant/extendedFeatureEdgeMesh

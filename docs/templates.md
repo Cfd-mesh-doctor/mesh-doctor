@@ -37,6 +37,9 @@ Export in metres, with the toolkit's axes (x forward, z up, ground at z = 0) so 
 
 ## Variant: wheel and wing on a moving ground (full model, no symmetry)
 
+A ready-made case for this is in `examples/wheel-wing` (tested: 0.92 M cells, solves at 0.9 s per iteration on 6 cores; see its README). The steps below
+turn the Ahmed case into one by hand.
+
 - `system/blockMeshDict`: domain on both sides (y from -Y to +Y); turn the `symmetry` patch into a second `side`
   patch (type patch) and set it to `slip` in `initial/*`.
 - Sink the tyre 3-6 mm into the ground (flat contact patch) in CAD, so there is no zero-thickness wedge.

@@ -120,13 +120,15 @@ Read it honestly:
 - The model has no stilts (the wind-tunnel model stands on four; `--stilts` adds approximate ones), the ground
   moves, and the mesh is modest. Each changes Cd by around 1-3 %.
 - So: the toolchain gives the right answer for the right reasons on the big features (stagnation, base wake,
-  slant-edge vortices). For the slant details, try the 35 degree case (fully separated, which RANS handles better),
-  a finer mesh, or a transient DDES run.
+  slant-edge vortices). The slant itself is where steady RANS is weakest: at 35 degrees this setup gives Cd 0.408
+  against 0.26 in the wind tunnel (see `docs/validation.md`), so for slant details use a transient DDES run.
 
 ## Things to try next
 
-- `./Allmesh --slant 35` and run again: above about 30 degrees the flow leaves the slant completely and the drag
-  drops. RANS gets this case closer than 25 degrees.
-- Refine the mesh (raise the levels in `system/snappyHexMeshDict`) and check that Cd stops changing.
+- `./Allvalidate`: the accuracy check (three meshes at 25 degrees and the 35 degree slant, about 2 h on 6 cores).
+  Results and what they mean: `docs/validation.md`.
+- `./Allmesh --slant 35` and run again: in the wind tunnel the flow leaves the slant completely above about 30
+  degrees and the drag drops to about 0.26. Steady k-omega SST misses that drop (Cd 0.408 here): a good example of
+  where a steady RANS answer must not be trusted without a check.
 - Use this folder as a template for your own model: replace `make_ahmed.py` with your STL, then adjust the domain,
   boxes, speed and reference area. See `docs/templates.md`.

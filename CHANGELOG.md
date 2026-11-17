@@ -16,6 +16,11 @@ Everything since 0.1.0 (0.2.0 was the plugin version on main without a release).
 - Dashboard: the live page follows a plain case (one `foamRun`, steady or transient) as well as the staged
   steady-then-DDES run, and hides the stage it doesn't use.
 - paraview-post: how to bring a case in other axes into the toolkit's axes (`transformPoints -rotateFields`).
+- **`tools/setup_linux.sh`, `tools/setup_windows.ps1`**: one-command setup (WSL + Ubuntu 22.04, OpenFOAM 14,
+  Python packages, ParaView, Mesh Doctor), with a dry-run mode.
+- **Template `examples/wheel-wing`**: front wing in ground effect and a rotating wheel on a moving ground.
+- **Accuracy check `examples/ahmed-body/Allvalidate`** and `docs/validation.md`: three meshes and two slant angles
+  against the wind tunnel.
 - **`tools/toolkit_check.py`**: is this machine ready for each skill?
 - **`skills/cfd-results/scripts/size_estimate.py`**: memory, time and cost for a mesh size, from measured runs.
 - **docs/gallery.md**: pictures from the worked example.

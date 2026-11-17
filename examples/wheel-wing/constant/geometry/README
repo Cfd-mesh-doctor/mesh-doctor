@@ -1,0 +1,3 @@
+Allmesh writes model.stl here with ../../make_wheel_wing.py. To use your own geometry, put your STL here as
+model.stl (one solid per part: the solid names become patches model_<solid>) and remove the make_wheel_wing.py line
+from Allmesh.

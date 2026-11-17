@@ -1,0 +1,24 @@
+#!/bin/sh
+# Solve the case: ./Allrun [ranks] [iterations]     (defaults: 4 ranks, 2000 iterations)
+# Meshes first if there is no mesh yet. Steady k-omega SST from a potentialFoam start. Run it again with a higher
+# iteration count to continue from the last save.
+cd "${0%/*}" || exit 1
+. "$WM_PROJECT_DIR/bin/tools/RunFunctions"
+fail() { echo "$1 failed: see log.$1"; exit 1; }
+NP=${1:-4}
+ITERS=${2:-2000}
+
+[ -f constant/polyMesh/owner ] || ./Allmesh || exit 1
+foamDictionary system/controlDict -entry endTime -set "$ITERS" > /dev/null
+foamDictionary system/decomposeParDict -entry numberOfSubdomains -set "$NP" > /dev/null
+
+if [ ! -d processor0 ]; then
+    [ -d 0 ] || cp -r initial 0
+    runApplication decomposePar || fail decomposePar
+    runParallel potentialFoam -initialiseUBCs || fail potentialFoam
+fi
+[ -f log.foamRun ] && mv log.foamRun "log.foamRun.$(date +%Y%m%d-%H%M%S)"
+runParallel foamRun || fail foamRun
+rm -f log.reconstructPar
+runApplication reconstructPar -latestTime || fail reconstructPar
+tail -n 3 postProcessing/forceCoeffs/*/forceCoeffs.dat 2> /dev/null | tail -n 1

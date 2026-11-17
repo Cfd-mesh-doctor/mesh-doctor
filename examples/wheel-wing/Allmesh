@@ -1,0 +1,16 @@
+#!/bin/sh
+# Serial mesh of the wheel-and-wing template: geometry -> blockMesh -> snappyHexMesh -> checkMesh, and 0/ from initial/.
+#   ./Allmesh [make_wheel_wing.py options, e.g. --aoa 8 --clearance 0.04]
+# About 1-1.5M cells, ~5-10 minutes and ~3 GB on one core. With your own STL: delete the make_wheel_wing.py line and
+# put the STL in constant/geometry/model.stl.
+cd "${0%/*}" || exit 1
+. "$WM_PROJECT_DIR/bin/tools/RunFunctions"
+fail() { echo "$1 failed: see log.$1"; exit 1; }
+
+python3 make_wheel_wing.py -o constant/geometry/model.stl "$@" || exit 1
+runApplication surfaceFeatures || fail surfaceFeatures
+runApplication blockMesh || fail blockMesh
+runApplication snappyHexMesh -overwrite || fail snappyHexMesh
+rm -rf 0 && cp -r initial 0
+runApplication checkMesh -allGeometry -allTopology
+grep -E "cells:|Max non-orthogonality|Max skewness|Mesh OK|Failed" log.checkMesh

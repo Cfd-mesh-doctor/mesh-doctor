@@ -18,7 +18,9 @@ dashboard) plus a set of **CFD skills**: Markdown guides with tested helper scri
 
 | Path | What it is |
 |---|---|
-| `examples/ahmed-body/` | a complete, tested case (Ahmed body, 25 deg slant) with wind-tunnel comparison; the starting point for new cases (`docs/templates.md`) |
+| `examples/ahmed-body/` | a complete, tested case (Ahmed body, 25 deg slant) with wind-tunnel comparison; the starting point for new cases (`docs/templates.md`); `Allvalidate` reruns the accuracy check (`docs/validation.md`) |
+| `examples/wheel-wing/` | template: front wing in ground effect + rotating wheel, full model, forces per part |
+| `tools/setup_linux.sh`, `tools/setup_windows.ps1` | one-command install (WSL, OpenFOAM 14, Python packages, ParaView, Mesh Doctor); `--dry-run` first |
 | `tools/toolkit_check.py` | is this machine ready for each skill; prints the install command for anything missing |
 | `skills/cfd-results/scripts/size_estimate.py` | memory, time and cloud/SimScale cost for N million cells |
 | `docs/troubleshooting.md` | error messages people actually hit, with the fix |

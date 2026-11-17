@@ -1,0 +1,15 @@
+// Flow conditions for the wheel-and-wing template; the other initial/ files include this one.
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "initial";
+    object      conditions;
+}
+
+Uinf            (-15 0 0);  // car speed 15 m/s: the air flows toward -x
+kInf            0.0084;     // 0.5 % turbulence intensity: k = 1.5 (0.005 * 15)^2
+omegaInf        1.7;        // k^0.5 / (Cmu^0.25 * 0.1 m)
+omegaWheel      67.08;      // wheel rotation, rad/s = 15 / 0.2236 (centre height = rolling radius)
+
+// ************************************************************************* //

@@ -13,12 +13,29 @@ For **OpenFOAM 14 (openfoam.org)** on Linux, Windows through WSL, Docker, or a S
 - [AI agents](AGENTS.md): which skill guide to read for each task (works with any AI coding tool)
 - [Worked example](examples/ahmed-body/README.md): the Ahmed body from STL to wind-tunnel comparison; copy it for your own case ([templates](docs/templates.md))
 - [Gallery](docs/gallery.md): the pictures and charts the scripts make
+- [Accuracy check](docs/validation.md): three meshes and two slant angles against the wind tunnel, and where steady RANS goes wrong
 - [Troubleshooting](docs/troubleshooting.md): error messages and their fixes · [Changelog](CHANGELOG.md)
 - [Claude Code plugin](docs/claude.md): CFD skills for Claude (OpenFOAM, SimScale, ParaView, cloud solves), installed with `/plugin marketplace add Cfd-mesh-doctor/mesh-doctor`; then type `/testrun`
 
 ## Quickstart
 
 You need OpenFOAM 14 from openfoam.org and Python 3.8 or newer. numpy is needed only for the repair map. Pick your platform:
+
+### One command (Windows or Ubuntu 22.04)
+
+From a clone of this repository:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\setup_windows.ps1     # Windows: WSL + Ubuntu, then everything below
+```
+```bash
+bash tools/setup_linux.sh                                          # Ubuntu 22.04 or inside WSL
+```
+
+They install only what is missing (OpenFOAM 14, numpy/matplotlib/PIL, ParaView, then `./Allwmake`), make OpenFOAM
+load in new terminals, and finish with `tools/toolkit_check.py`. Add `-DryRun` / `--dry-run` to see the steps
+first, `-NoParaView` / `--no-paraview` to skip ParaView. The first WSL install needs an administrator PowerShell and
+a restart; run the script again afterwards. The steps by hand:
 
 ### Windows (WSL)
 1. Install Ubuntu 22.04 from the Microsoft Store (or `wsl --install -d Ubuntu-22.04`), then follow **Linux** below inside the Ubuntu window.

@@ -33,3 +33,7 @@ drift between windows.
 Live progress of a running case, Mesh Doctor repairs and the repair map: see [dashboard.md](dashboard.md).
 
 ![Mesh Doctor page](images/meshdoctor.png)
+
+## How accurate are these?
+
+The same case on three meshes and at a second slant angle, against the wind tunnel: [validation.md](validation.md).

@@ -1,0 +1,59 @@
+#!/bin/sh
+# Accuracy check: the Ahmed body on three meshes (25 deg slant) and at 35 deg, each compared with the wind tunnel.
+#   ./Allvalidate [ranks] [iterations] [output folder]       defaults: 6, 2000, ../ahmed_validation
+# Runs one case after the other (about 2.5 h on 6 cores, 4.5 GB peak for the fine mesh) and writes
+# <output>/results.md. A case whose solve already finished is skipped, so it can be restarted after a stop.
+# Cases: coarse / medium / fine change only the background cell size (all refinement levels follow it, about 2x
+# cells per step); slant35 is the medium mesh with the 35 deg slant.
+cd "${0%/*}" || exit 1
+SRC=$PWD
+NP=${1:-6}; ITERS=${2:-2000}; OUT=${3:-$SRC/../ahmed_validation}
+WIN=$((ITERS / 4))
+mkdir -p "$OUT" || exit 1
+OUT=$(cd "$OUT" && pwd)
+
+# name  slant  background cells (x y z)  wind-tunnel Cd  source
+CASES="coarse 25 104 12 12 0.285 A84
+medium 25 130 15 15 0.285 A84
+fine 25 164 19 19 0.285 A84
+slant35 35 130 15 15 0.26 A84q"
+
+echo "$CASES" | while read -r NAME SLANT NX NY NZ EXP SRCREF; do
+    C=$OUT/$NAME
+    if [ -f "$C/log.reconstructPar" ] && grep -q "^End" "$C/log.foamRun" 2>/dev/null; then
+        echo "$NAME: already solved, skipped"; continue
+    fi
+    echo "$NAME: slant $SLANT deg, background ($NX $NY $NZ), $(date +%H:%M)"
+    rm -rf "$C" && mkdir -p "$C" || exit 1
+    cp -r "$SRC/Allmesh" "$SRC/Allrun" "$SRC/Allclean" "$SRC/make_ahmed.py" "$SRC/initial" "$SRC/constant" "$SRC/system" "$C/"
+    sed -i "s/(130 15 15)/($NX $NY $NZ)/" "$C/system/blockMeshDict"
+    (cd "$C" && ./Allmesh --slant "$SLANT" > log.Allmesh 2>&1) || { echo "$NAME: mesh failed, see $C/log.Allmesh"; exit 1; }
+    (cd "$C" && ./Allrun "$NP" "$ITERS" > log.Allrun 2>&1) || { echo "$NAME: solve failed, see $C/log.Allrun"; exit 1; }
+done || exit 1
+
+# Table: mean Cd and Cl over the last quarter, drift between its two halves, cells, solve time.
+{
+    echo "| Case | Slant | Cells | Cd (last $WIN) | Drift | Cl | Wind tunnel Cd | Difference | Solve time |"
+    echo "|---|---|---|---|---|---|---|---|---|"
+    echo "$CASES" | while read -r NAME SLANT NX NY NZ EXP SRCREF; do
+        C=$OUT/$NAME
+        CELLS=$(awk '/^ *cells:/ {print $2; exit}' "$C/log.checkMesh")
+        F=$(ls "$C"/postProcessing/forceCoeffs/*/forceCoeffs.dat | tail -1)
+        SOLVE=$(grep "^ExecutionTime" "$C/log.foamRun" | tail -1 | awk '{printf "%.0f min", $3 / 60}')
+        grep -v '^#' "$F" | awk -v w="$WIN" -v e="$EXP" -v n="$NAME" -v s="$SLANT" -v c="$CELLS" -v t="$SOLVE" '
+            { k++; cd[k] = $3; cl[k] = $4 }
+            END {
+                for (i = k - w + 1; i <= k; i++) { a += cd[i]; b += cl[i] }
+                h = int(w / 2)
+                for (i = k - w + 1; i <= k - h; i++) p += cd[i]
+                for (i = k - h + 1; i <= k; i++) q += cd[i]
+                a /= w; b /= w; p /= (w - h); q /= h
+                printf "| %s | %s deg | %.2f M | %.3f | %+.2f %% | %.3f | %s | %+.1f %% | %s |\n",
+                       n, s, c / 1e6, a, (q - p) / p * 100, b, e, (a - e) / e * 100, t
+            }'
+    done
+    echo
+    echo "Wind tunnel: Ahmed, Ramm & Faltin 1984 (SAE 840300), 60 m/s; the 35 deg value (about 0.26) as quoted from it"
+    echo "in later papers. Simulation: 40 m/s, half model, moving ground, steady k-omega SST, no stilts."
+} > "$OUT/results.md"
+cat "$OUT/results.md"

@@ -1,0 +1,18 @@
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      surfaceFeaturesDict;
+}
+
+surfaces        ("model.stl");
+includedAngle   150;        // edges sharper than 30 degrees: the wing's trailing edge and tips, the wheel's rims
+
+subsetFeatures
+{
+    nonManifoldEdges no;
+    openEdges        yes;
+}
+
+// ************************************************************************* //

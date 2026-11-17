@@ -1,0 +1,29 @@
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      blockMeshDict;
+}
+
+// Full model (no symmetry plane): 6.0 x 2.6 x 1.4 m around the wheel and wing, 0.1 m background cells.
+// The air enters at x = 2.5 (inlet) and leaves at x = -3.5 (outlet).
+vertices
+(
+    (-3.5 -1.0 0.0) ( 2.5 -1.0 0.0) ( 2.5 1.6 0.0) (-3.5 1.6 0.0)
+    (-3.5 -1.0 1.4) ( 2.5 -1.0 1.4) ( 2.5 1.6 1.4) (-3.5 1.6 1.4)
+);
+
+blocks ( hex (0 1 2 3 4 5 6 7) (60 26 14) simpleGrading (1 1 1) );
+
+boundary
+(
+    inlet    { type patch; faces ((1 2 6 5)); }
+    outlet   { type patch; faces ((0 4 7 3)); }
+    ground   { type wall;  faces ((0 3 2 1)); }
+    top      { type patch; faces ((4 5 6 7)); }
+    sideL    { type patch; faces ((0 1 5 4)); }
+    sideR    { type patch; faces ((3 7 6 2)); }
+);
+
+// ************************************************************************* //
