@@ -11,7 +11,7 @@
     python3 abtest.py extend <abDir> <endIter> [--variant P]
                                             # continue the second run (optionally
                                             # with another preset), judge it
-    python3 abtest.py judge <case> [window]      # convergence verdict for any case
+    python3 abtest.py judge <case> [window|auto] [--to N]   # convergence verdict for any case
     --variant simplec|relax|lts   solver-setting variant on the second run
     --extend <N>          after the A/B, continue the second run to N iterations
     --base-from <abDir>   reuse the original-mesh run of an earlier A/B
@@ -28,11 +28,12 @@ means/oscillation and seconds per iteration for both runs, plus a checksum
 proving the source case was only read.  <workspace> comes from config.py.
 Serial-mesh sources only (the root polyMesh must be the real mesh).
 """
-import gzip, json, os, re, shutil, statistics, subprocess, sys, time
+import bisect, gzip, json, os, re, shutil, statistics, subprocess, sys, time
 
 import caseinfo
 import config
 import ramguard
+import schema
 
 HOME = os.path.expanduser("~")
 _S = config.settings()
@@ -73,9 +74,9 @@ def make_case(src, dst, init, points=None):
     open(os.path.join(dst, ".meshDoctorCopy"), "w").write(src + "\n")
 
 
-def parse_residuals(case):
+def parse_residuals(case, logs=None):
     """{field: [...], "Time": [...]} from a residuals function object, else from the solver logs."""
-    return _fo_residuals(case) or caseinfo.log_residuals(caseinfo.solver_logs(case))
+    return _fo_residuals(case) or caseinfo.log_residuals(logs or caseinfo.solver_logs(case))
 
 
 def _fo_residuals(case):
@@ -246,7 +247,9 @@ def read_hot(case):
     return rows
 
 
-def cluster_points(rows, rfac=4.0):
+def cluster_points(rows, rfac=4.0, members=False):
+    """Group rows ({"c", "h", "score", "nonOrtho"}) closer than rfac cell sizes; members=True
+    also returns each group's rows."""
     n = len(rows)
     parent = list(range(n))
 
@@ -284,6 +287,8 @@ def cluster_points(rows, rfac=4.0):
                     "h": sorted(x["h"] for x in m)[len(m) // 2],
                     "maxNonOrtho": max(x["nonOrtho"] for x in m),
                     "meanNonOrtho": sum(x["nonOrtho"] for x in m) / len(m)})
+        if members:
+            out[-1]["members"] = m
     out.sort(key=lambda c: -c["sumScore2"])
     return out
 
@@ -351,7 +356,7 @@ def defects_of(fixed_name):
 
 
 def hot_both(top):
-    result = json.load(open(os.path.join(top, "ab_result.json")))
+    result = schema.read(os.path.join(top, "ab_result.json"), "abtest")
     name = result.get("fixedName")
     db, da = defects_of(name) if name else ([], [])
     for tag, defects in (("base", db), ("fixed", da)):
@@ -363,7 +368,7 @@ def hot_both(top):
         result[tag + "Hotspots"] = {k: h[k] for k in ("summary", "nHotCells",
                                                      "shareOfTopChangeNearMeshDefects")}
         result[tag + "Hotspots"]["top"] = h["clusters"][:15]
-        json.dump(result, open(os.path.join(top, "ab_result.json"), "w"), indent=1)
+        schema.write(os.path.join(top, "ab_result.json"), result, indent=1)
     status(top, step="done")
     return result
 
@@ -388,17 +393,97 @@ def batch_means(x, nb=5):
             "u": max(ci, half), "batchLen": n, "nBatches": nb}
 
 
-def judge(case, window=200, group=None, avg_from=None):
+STEP_TOL = 1e-3       # p initial residual at the last outer iteration of a converged time step
+CO_LIMIT = 1.0        # max Courant number that scale-resolving runs (DES/LES) should stay under
+
+
+def transient_verdict(out, steps, window):
+    """Verdict for a transient run, from three separate questions:
+    - are the forces statistically stationary (mean drift < 2 % between the last two windows)?
+    - did each time step converge (p below STEP_TOL by the last PIMPLE outer iteration)?
+    - is the time step sane (max Courant <= CO_LIMIT, fields not being bounded)?
+    Oscillating forces are expected in a transient run and do not count against it."""
+    last = steps[-window:]
+    if last:
+        n = len(last)
+        ok = [s for s in last if s["last"] is not None and s["last"] <= STEP_TOL]
+        drops = sorted(s["last"] / s["first"] for s in last if s["first"] and s["last"] is not None)
+        co = [s["coMax"] for s in last if s["coMax"] is not None]
+        bounded = [s for s in last if s["bounded"]]
+        out["steps"] = {
+            "n": n, "outerIterations": max(s["outer"] for s in last),
+            "converged": len(ok) / n,
+            "medianLastOuterP": statistics.median([s["last"] for s in last if s["last"] is not None] or [0]),
+            "medianOuterDrop": drops[len(drops) // 2] if drops else None,
+            "maxCourant": max(co) if co else None,
+            "medianMaxCourant": statistics.median(co) if co else None,
+            "aboveCourantLimit": sum(c > CO_LIMIT for c in co) / len(co) if co else None,
+            "bounded": len(bounded) / n,
+            "boundedFields": sorted({f for s in bounded for f in s["bounded"]})}
+    f = out.get("forces", {})
+    drift = max((v["drift"] for v in f.values()), default=None)
+    flags = []
+    st = out.get("steps")
+    if st:
+        if st["converged"] < 0.9:
+            flags.append(f"time steps not converged: only {st['converged']:.0%} reach p < {STEP_TOL:g} "
+                         f"by outer iteration {st['outerIterations']} (median {st['medianLastOuterP']:.2g}); "
+                         "add outer correctors or a smaller time step")
+        if st["aboveCourantLimit"]:
+            flags.append(f"max Courant {st['maxCourant']:.3g} (above {CO_LIMIT:g} in "
+                         f"{st['aboveCourantLimit']:.0%} of steps); a scale-resolving run needs it <= {CO_LIMIT:g}")
+        if st["bounded"] > 0.05:
+            flags.append(f"{', '.join(st['boundedFields'])} bounded in {st['bounded']:.0%} of steps")
+    else:
+        flags.append("no per-step data in the log (pass --log)")
+    out["flags"] = flags
+    if drift is None:
+        out["verdict"] = "too short"
+    elif drift >= 0.02:
+        out["verdict"] = ("still developing (force means still drifting; average later)"
+                          + ("; also check: " + "; ".join(flags) if flags else ""))
+    elif flags:
+        out["verdict"] = "statistically stationary, but check: " + "; ".join(flags)
+    else:
+        out["verdict"] = "converged (statistically stationary, every time step converged)"
+    return out
+
+
+def upto(table, t_max):
+    """The rows of a {"Time": [...], column: [...]} table with Time <= t_max."""
+    t = table.get("Time") or []
+    n = bisect.bisect_right(t, t_max)
+    return {k: v[:n] if isinstance(v, list) else v for k, v in table.items()}
+
+
+def auto_window(n):
+    """The judge window for a run of n iterations: half of it, 10 to 200."""
+    return max(10, min(200, n // 2))
+
+
+def judge(case, window=200, group=None, avg_from=None, logs=None, to=None):
     """Convergence verdict + averaged forces.  Groups and directions come from
     the case (caseinfo.describe); `group` defaults to the group with the
-    largest drag, normally the whole model."""
-    res, frc = parse_residuals(case), parse_forces(case)
+    largest drag, normally the whole model.  `window` counts iterations, or
+    time steps for a transient case, which gets its own verdict (see
+    transient_verdict); None picks one from the run's length (auto_window).
+    `to` judges the run as it was at that iteration (or time): residuals and
+    forces after it are left out, so two runs can be judged over the same
+    iterations.  `logs`: solver logs, default log.foamRun*."""
+    res, frc = parse_residuals(case, logs), parse_forces(case)
+    if to is not None:
+        res, frc = upto(res, to), {g: upto(F, to) for g, F in frc.items()}
+    if window is None:
+        window = auto_window(len(res.get("Time") or []))
+    unsteady = caseinfo.transient(case)
     d = caseinfo.describe(case, frc)
     group = group or d["total"]
     vert = d["vertical"]
-    out = {"window": window, "group": group,
+    out = {"schemaVersion": schema.VERSIONS["judge"], "transient": unsteady, "window": window, "group": group,
            "axes": {"flow": ("-" if d["flowSign"] < 0 else "+") + "xyz"[d["flowAxis"]],
                     "up": "xyz"[d["upAxis"]], "vertical": vert, "source": d["source"]}}
+    if to is not None:
+        out["to"] = to
     # averaged forces with uncertainty over [avg_from, end] (default: last 2 windows):
     # main group's vertical force and drag, then every other group's vertical force
     avg = {}
@@ -408,7 +493,12 @@ def judge(case, window=200, group=None, avg_from=None):
         s = caseinfo.series(frc, d, g, what)
         if not s:
             continue
-        t0 = avg_from if avg_from is not None else s[-1][0] - 2 * window
+        if avg_from is not None:
+            t0 = avg_from
+        elif unsteady:                     # last 2 windows of time steps (t > t0), in seconds
+            t0 = s[max(0, len(s) - 2 * window - 1)][0]
+        else:
+            t0 = s[-1][0] - 2 * window
         bm = batch_means([v for t, v in s if t > t0])
         if bm:
             bm["from"], bm["to"] = t0, s[-1][0]
@@ -437,6 +527,8 @@ def judge(case, window=200, group=None, avg_from=None):
     blk = max(10, window // 5)
     out["pBlocks"] = [[t[i], statistics.median([x for x in res["p"][i:i + blk] if x is not None])]
                       for i in range(0, len(t) - blk + 1, blk)] if res.get("p") else []
+    if unsteady:
+        return transient_verdict(out, caseinfo.step_stats(logs or caseinfo.solver_logs(case)), window)
     r, f = out.get("residuals", {}), out.get("forces", {})
     pm, ptr = r.get("p", {}).get("median", 1), r.get("p", {}).get("trend", 1)
     drift = max((v["drift"] for v in f.values()), default=1)
@@ -477,7 +569,7 @@ def end_write_interval(start, end):
 def extend(top, end_iter, nproc=None, variant=None):
     """Continue the second run of an A/B to end_iter (optionally switching to
     another solver preset first), then judge convergence."""
-    result = json.load(open(os.path.join(top, "ab_result.json")))
+    result = schema.read(os.path.join(top, "ab_result.json"), "abtest")
     case = os.path.join(top, "fixed")
     nproc = nproc or result["nProcs"]
     t0 = latest_time(case)
@@ -502,7 +594,7 @@ def extend(top, end_iter, nproc=None, variant=None):
     result["fixedJudge"] = judge(case, window=min(200, max(40, (end_iter - int(float(t0))) // 2)),
                                  avg_from=first + 50)
     result["fixedFull"] = {"residualHistory": summarise(case, 200)["residualHistory"]}
-    json.dump(result, open(os.path.join(top, "ab_result.json"), "w"), indent=1)
+    schema.write(os.path.join(top, "ab_result.json"), result, indent=1)
     status(top, step="done")
     return result
 
@@ -524,9 +616,22 @@ def main(a):
     if len(a) < 2:
         print(__doc__); return
     if a[0] == "judge":
-        print(json.dumps(judge(os.path.abspath(os.path.expanduser(a[1])),
-                               int(a[2]) if len(a) > 2 else 200,
-                               avg_from=float(a[3]) if len(a) > 3 else None), indent=1))
+        # judge <case> [window|auto] [avgFrom] [--log <file or glob>] [--to <iteration or time>]
+        logs = to = None
+        if "--log" in a:
+            i = a.index("--log")
+            case_dir = os.path.abspath(os.path.expanduser(a[1]))
+            logs = caseinfo.solver_logs(case_dir, (a[i + 1],))
+            if not logs:
+                sys.exit(f"no log matches {a[i + 1]} in {case_dir}")
+            a = a[:i] + a[i + 2:]
+        if "--to" in a:
+            i = a.index("--to")
+            to = float(a[i + 1])
+            a = a[:i] + a[i + 2:]
+        window = None if len(a) > 2 and a[2] == "auto" else int(a[2]) if len(a) > 2 else 200
+        print(json.dumps(judge(os.path.abspath(os.path.expanduser(a[1])), window,
+                               avg_from=float(a[3]) if len(a) > 3 else None, logs=logs, to=to), indent=1))
         return
     if a[0] == "extend":
         # abtest.py extend <abDir> <endIter>
@@ -557,11 +662,11 @@ def main(a):
         return
     if a[0] == "resummarise":
         top = os.path.abspath(os.path.expanduser(a[1]))
-        r = json.load(open(os.path.join(top, "ab_result.json")))
+        r = schema.read(os.path.join(top, "ab_result.json"), "abtest")
         for t in ("base", "fixed"):
             if os.path.isdir(os.path.join(top, t, "postProcessing")):
                 r[t] = summarise(os.path.join(top, t), r["window"])
-        json.dump(r, open(os.path.join(top, "ab_result.json"), "w"), indent=1)
+        schema.write(os.path.join(top, "ab_result.json"), r, indent=1)
         return
     import repair                              # plain_name + source fingerprint (same folder)
     src = os.path.abspath(os.path.expanduser(a[0]))
@@ -597,7 +702,7 @@ def main(a):
     top = os.path.join(ROOT, label + "_ab")
     os.makedirs(top, exist_ok=True)
     window = max(20, iters // 4)
-    result = {"source": src, "fixedName": None if fixed_name == "-" else fixed_name,
+    result = {"schemaVersion": schema.VERSIONS["abtest"], "source": src, "fixedName": None if fixed_name == "-" else fixed_name,
               "variant": variant, "variantSettings": PRESETS.get(variant), "label": label,
               "iters": iters, "nProcs": nproc,
               "init": init, "window": window, "started": time.strftime("%Y-%m-%d %H:%M:%S")}
@@ -605,7 +710,7 @@ def main(a):
     if base_from:
         # reuse an earlier original-mesh run with identical settings
         base_from = os.path.abspath(os.path.expanduser(base_from))
-        prev = json.load(open(os.path.join(base_from, "ab_result.json")))
+        prev = schema.read(os.path.join(base_from, "ab_result.json"), "abtest")
         if (prev.get("source"), prev.get("iters"), prev.get("init"), prev.get("nProcs")) != (src, iters, init, nproc):
             sys.exit("--base-from run used different settings")
         for k in ("base", "baseRuns", "baseHotspots"):
@@ -631,7 +736,7 @@ def main(a):
         status(top, step=f"solving {tag}", case=case)
         result[tag + "Runs"] = run_one(case, iters, nproc)
         result[tag] = summarise(case, window)
-        json.dump(result, open(os.path.join(top, "ab_result.json"), "w"), indent=1)
+        schema.write(os.path.join(top, "ab_result.json"), result, indent=1)
     # verdict: lower plateau residuals and smaller force oscillation = better
     cmp = {}
     for k, b in result["base"]["residuals"].items():
@@ -641,7 +746,7 @@ def main(a):
     result["residualRatioFixedOverBase"] = cmp
     result["finished"] = time.strftime("%Y-%m-%d %H:%M:%S")
     result["sourceCheck"] = repair.source_check(fp0, src)
-    json.dump(result, open(os.path.join(top, "ab_result.json"), "w"), indent=1)
+    schema.write(os.path.join(top, "ab_result.json"), result, indent=1)
     if "--no-hotspots" not in a:
         hot_both(top)
     if "--extend" in a:

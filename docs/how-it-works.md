@@ -70,7 +70,7 @@ Options:
 
 ## 5. The convergence judge
 
-`meshdoctor judge <case> [window]` compares the last `window` iterations with the ones before. It reads residuals from the `residuals` function object, or else from `log.foamRun*`, and reads forces from `forces` or `forceCoeffs`:
+`meshdoctor judge <case> [window|auto] [--to N]` compares the last `window` iterations with the ones before (`auto`: half the run, 10 to 200). `--to N` judges the run as it was at iteration N, leaving out what came after, so two runs can be judged over the same iterations; the steady-run page does this for both runs of an A/B test (`GET /api/v1/abtests/{name}/judge?side=base|fixed&to=N`). It reads residuals from the `residuals` function object, or else from `log.foamRun*`, and reads forces from `forces` or `forceCoeffs`:
 
 | Verdict | Means |
 |---|---|
@@ -81,9 +81,27 @@ Options:
 
 Averages come with an uncertainty from batch means, so a slow swing is not hidden by a long average.
 
+**Transient runs** (any `ddtSchemes` other than `steadyState`) get their own verdict, with `window` counted in time steps. Oscillating forces are expected there, so it asks three separate questions:
+- are the force means stationary (drift under 2 % between the last two windows)?
+- did each time step converge, meaning p fell below 1e-3 by the last PIMPLE outer iteration?
+- is the time step sane: max Courant at most 1 (needed for DES/LES), and no field bounded in more than 5 % of steps?
+
+The answer is "converged", "statistically stationary, but check: …" or "still developing", with every failed check named. Logs not called `log.foamRun*` are passed with `--log`, for example `meshdoctor judge <case> 500 --log log.pimple`.
+
 Forces are reported as drag (along the flow) and the vertical force, named **downforce** or **lift** by its sign:
 - the flow direction is read from `0/U`, preferring an inlet patch;
 - the up axis comes from, in order: the `up_axis` setting, the `liftDir` of `forceCoeffs`, or the cross-flow axis with the larger force.
+
+### When a steady run cannot converge: the transient plan
+
+A steady run that plateaus on a physically unsteady flow (a wing-tip vortex, a tyre wake) will not converge however long it runs. The way on is a transient run with time-averaged forces, which costs far more. `meshdoctor transient-plan <case>` says how much before you start one:
+- it runs OpenFOAM's `CourantNo` function on the steady result, which gives each cell's Courant number per second of time step, `0.5 Σ|φ| / V`;
+- with `adjustTimeStep`, the largest of these sets the time step: `dt = maxCo / max`;
+- for each max Courant number (`--co`, default 1, 5 and 20) it gives the time step, the number of steps for the flow time, and the hours, from the steady run's seconds per iteration and `--outer` PIMPLE iterations per step (default 3);
+- the flow time is `--flow-time`, or 8 body lengths of flow from `--length` or a `forceCoeffs` `lRef`; without one, the plan gives hours per 0.1 s of flow;
+- it finds the 100 fastest cells (`--top`) and groups them by place, and says how much larger the time step would be without them. A few tiny cells often set the time step for the whole mesh.
+
+The case is only read: OpenFOAM runs in a temporary shadow case whose mesh, settings and flux are links to it. The answer is a versioned JSON document (`tplan` schema). DES and LES need max Co ≤ 1. URANS with enough outer correctors usually runs higher, so the plan shows both.
 
 ## 6. Hotspots and the map
 
@@ -105,6 +123,6 @@ The ground plane is found from the geometry and left out of the drawing. Its nor
 - `/meshdoctor`: start repairs and A/B tests, view highlighted cells and results;
 - `/meshmap`: the map;
 - `/run`: a steady run as it happens (residuals, forces and the live judge);
-- `/`: a transient run as it happens (forces, averaging window, time step).
+- `/`: a transient run as it happens (forces, averaging window, time step), and the transient judge's three answers for it, refreshed once a minute.
 
 Starting a job from the page runs the same commands as the command line.

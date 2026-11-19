@@ -23,6 +23,7 @@ import base64, glob, json, os, re, sys
 import numpy as np
 
 import config
+import schema
 
 ROOT = config.settings()["workspace"]          # Mesh Doctor runs live here (config.py)
 
@@ -149,7 +150,7 @@ def read_hot(case, n=3000):
 
 def main(a):
     md = os.path.join(ROOT, a[0])
-    res = json.load(open(os.path.join(md, "meshDoctor", "result.json")))
+    res = schema.read(os.path.join(md, "meshDoctor", "result.json"), "repair")
     step = float(a[a.index("--bin") + 1]) if "--bin" in a else 0.004
     hot = [x.split("=", 1) for i, x in enumerate(a) if i and a[i - 1] == "--hot"]
 
@@ -183,7 +184,7 @@ def main(a):
            "checkMeshBefore": res["checkMeshBefore"], "checkMeshAfter": res["checkMeshAfter"],
            "hot": layers}
     dst = os.path.join(md, "meshDoctor", "map.json")
-    json.dump(out, open(dst, "w"))
+    out = schema.write(dst, out, "map")
     print(dst, os.path.getsize(dst), "bytes;", len(out["defectsBefore"]), "->", len(out["defectsAfter"]),
           "defect clusters;", [(L["label"], len(L["cells"])) for L in layers])
 

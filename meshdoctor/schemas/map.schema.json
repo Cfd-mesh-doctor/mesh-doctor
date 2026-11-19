@@ -1,0 +1,242 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://meshdoctor.invalid/schemas/map/1",
+ "title": "Mesh Doctor repair map",
+ "description": "<workspace>/<run>/meshDoctor/map.json, written by meshdoctor map",
+ "type": "object",
+ "required": [
+  "schemaVersion",
+  "name",
+  "axes",
+  "ground",
+  "side",
+  "top",
+  "defectsBefore",
+  "defectsAfter",
+  "hot"
+ ],
+ "properties": {
+  "schemaVersion": {
+   "type": "string",
+   "pattern": "^1\\.\\d+$",
+   "description": "major.minor; readers accept any 1.x"
+  },
+  "name": {
+   "type": "string"
+  },
+  "source": {
+   "type": "string"
+  },
+  "bin": {
+   "type": "number"
+  },
+  "nCells": {
+   "type": [
+    "integer",
+    "null"
+   ]
+  },
+  "axes": {
+   "type": "object",
+   "required": [
+    "side",
+    "top"
+   ],
+   "properties": {
+    "side": {
+     "type": "array",
+     "items": {
+      "type": "integer"
+     }
+    },
+    "top": {
+     "type": "array",
+     "items": {
+      "type": "integer"
+     }
+    }
+   }
+  },
+  "ground": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "notes": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "side": {
+   "type": "object",
+   "required": [
+    "nx",
+    "ny",
+    "lo",
+    "hi",
+    "data"
+   ],
+   "properties": {
+    "nx": {
+     "type": "integer"
+    },
+    "ny": {
+     "type": "integer"
+    },
+    "lo": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     }
+    },
+    "hi": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     }
+    },
+    "data": {
+     "type": "string",
+     "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+     "description": "base64 of ny rows x nx uint8 wall-face density, top row first"
+    }
+   }
+  },
+  "top": {
+   "type": "object",
+   "required": [
+    "nx",
+    "ny",
+    "lo",
+    "hi",
+    "data"
+   ],
+   "properties": {
+    "nx": {
+     "type": "integer"
+    },
+    "ny": {
+     "type": "integer"
+    },
+    "lo": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     }
+    },
+    "hi": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     }
+    },
+    "data": {
+     "type": "string",
+     "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+     "description": "base64 of ny rows x nx uint8 wall-face density, top row first"
+    }
+   }
+  },
+  "defectsBefore": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "c",
+     "n"
+    ],
+    "properties": {
+     "c": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "n": {
+      "type": "integer"
+     },
+     "sev": {
+      "type": "integer"
+     },
+     "kinds": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "patches": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    }
+   }
+  },
+  "defectsAfter": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "c",
+     "n"
+    ],
+    "properties": {
+     "c": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "n": {
+      "type": "integer"
+     },
+     "sev": {
+      "type": "integer"
+     },
+     "kinds": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "patches": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    }
+   }
+  },
+  "checkMeshBefore": {
+   "type": "object"
+  },
+  "checkMeshAfter": {
+   "type": "object"
+  },
+  "hot": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "label",
+     "cells"
+    ],
+    "properties": {
+     "label": {
+      "type": "string"
+     },
+     "case": {
+      "type": "string"
+     },
+     "cells": {
+      "type": "array"
+     }
+    }
+   }
+  }
+ }
+}

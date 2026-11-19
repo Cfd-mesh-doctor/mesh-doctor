@@ -9,7 +9,7 @@ It never starts a job: the only accepted job request it sends uses the copy
 name "..", which the API must refuse.  With --start the server gets empty
 temporary cases and workspace folders and no config file.
 """
-import atexit, http.client, os, re, socket, subprocess, sys, tempfile, time
+import atexit, http.client, os, re, shutil, socket, subprocess, sys, tempfile, time
 
 
 def _start_server():
@@ -21,7 +21,15 @@ def _start_server():
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     p = subprocess.Popen([sys.executable, "-m", "meshdoctor", "serve", "--port", str(port)], cwd=repo, env=env,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    atexit.register(p.terminate)
+
+    def stop():
+        p.terminate()
+        try:
+            p.wait(10)
+        except subprocess.TimeoutExpired:
+            p.kill()
+        shutil.rmtree(tmp, ignore_errors=True)
+    atexit.register(stop)
     for _ in range(100):
         try:
             socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
@@ -35,18 +43,21 @@ PORT = _start_server() if "--start" in sys.argv else int(sys.argv[1]) if len(sys
 HOST = f"localhost:{PORT}"
 
 
-def req(method, path, headers=None):
+def req(method, path, headers=None, body=None):
     c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=30)
     h = {"Host": HOST}
+    if body is not None:
+        h["Content-Length"] = str(len(body))
     h.update(headers or {})
     c.putrequest(method, path, skip_host=True, skip_accept_encoding=True)
     for k, v in h.items():
         if v is not None:
             c.putheader(k, v)
-    c.endheaders()
+    c.endheaders(body)
     r = c.getresponse()
     body = r.read().decode("utf-8", "replace")
     c.close()
+    req.headers = r
     return r.status, body
 
 
@@ -54,12 +65,16 @@ page_status, page = req("GET", "/meshdoctor")
 m = re.search(r'<meta name="md-token" content="([^"]+)">', page)
 TOKEN = m.group(1) if m else ""
 JOB = "/api/md/start?src=example_case&name=..&profile=openfoam"
+V1JOB = b'{"kind": "repair", "params": {"source": "example_case", "name": ".."}}'
+JSON = "application/json"
+PAGES = ("/", "/run", "/meshdoctor", "/meshmap", "/report")
 
 CHECKS = [
     # (description, method, path, headers, expected status, text that must be in the body)
     ("page loads and carries a launch token", "GET", "/meshdoctor", {}, 200, "md-token"),
     ("other dashboard pages load", "GET", "/meshmap", {}, 200, "<canvas"),
     ("run page loads", "GET", "/run", {}, 200, "<html"),
+    ("report viewer loads, with its no-upload policy", "GET", "/report", {}, 200, "connect-src"),
     ("status API works", "GET", "/api/status", {}, 200, ""),
     ("map list API works", "GET", "/api/md/maplist", {}, 200, "["),
     ("server source is not served", "GET", "/server.py", {}, 404, ""),
@@ -77,14 +92,78 @@ CHECKS = [
      {"X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 200, "bad arguments"),
     ("A/B extend without token refused", "POST", "/api/md/abextend?label=x&to=10", {}, 403, "token"),
     ("HEAD does not fall back to file serving", "HEAD", "/server.py", {}, 501, ""),
+    # /api/v1: the same rules, and errors always {"error": {"code", "message"}}
+    ("v1 index works", "GET", "/api/v1", {}, 200, "apiVersion"),
+    ("v1 OpenAPI document is served", "GET", "/api/v1/openapi.json", {}, 200, '"openapi": "3.1.0"'),
+    ("v1 list works", "GET", "/api/v1/cases", {}, 200, '"items"'),
+    ("v1 unknown host refused", "GET", "/api/v1/cases", {"Host": f"evil.example:{PORT}"}, 403, '"code": "forbidden"'),
+    ("v1 cross-site read refused", "GET", "/api/v1/cases", {"Origin": "http://evil.example"}, 403, "cross-site"),
+    ("v1 unknown route", "GET", "/api/v1/nowhere", {}, 404, '"code": "not-found"'),
+    ("v1 A/B judge needs a side", "GET", "/api/v1/abtests/x/judge", {}, 400, "side"),
+    ("v1 A/B judge takes no other side", "GET", "/api/v1/abtests/x/judge?side=..", {}, 400, '"code": "bad-request"'),
+    ("v1 refuses non-finite numbers", "GET", "/api/v1/abtests/x/judge?side=base&to=nan", {}, 400, "finite"),
+    ("v1 A/B judge of a missing test", "GET", "/api/v1/abtests/nope/judge?side=base", {}, 404, '"code": "not-found"'),
+    ("v1 live judge window has a floor", "GET", "/api/v1/live/judge?window=5", {}, 400, "window"),
+    ("v1 live judge refuses non-finite times", "GET", "/api/v1/live/judge?avgFrom=nan", {}, 400, "finite"),
+    ("v1 wrong method", "GET", "/api/v1/jobs/20260101-000000-repair-x-abcd/cancel", {}, 405, '"code": "method-not-allowed"'),
+    ("v1 job without token refused", "POST", "/api/v1/jobs", {"Content-Type": JSON}, 403, "token", V1JOB),
+    ("v1 cancel without token refused", "POST", "/api/v1/jobs/20260101-000000-repair-x-abcd/cancel", {}, 403,
+     "token"),
+    ("v1 job with wrong token refused", "POST", "/api/v1/jobs", {"Content-Type": JSON, "X-MD-Token": "wrong"},
+     403, "token", V1JOB),
+    ("v1 job from another site refused, even with token", "POST", "/api/v1/jobs",
+     {"Content-Type": JSON, "X-MD-Token": TOKEN, "Origin": "http://evil.example"}, 403, "cross-site", V1JOB),
+    ("v1 job as a form post refused, even with token", "POST", "/api/v1/jobs",
+     {"Content-Type": "application/x-www-form-urlencoded", "X-MD-Token": TOKEN}, 415, "application/json", V1JOB),
+    ("v1 oversized body refused unread", "POST", "/api/v1/jobs",
+     {"Content-Type": JSON, "X-MD-Token": TOKEN, "Content-Length": "10000000"}, 413, "too-large", b""),
+    ("v1 job with token reaches the API, which refuses '..'", "POST", "/api/v1/jobs",
+     {"Content-Type": JSON, "X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 400, '"code": "bad-request"', V1JOB),
+    # page scripts: only plain names from web/js/
+    ("shared page script is served", "GET", "/js/md.js", {}, 200, "MD.render"),
+    ("unknown script is not served", "GET", "/js/nope.js", {}, 404, ""),
+    ("script route does not reach other files", "GET", "/js/../server.py", {}, 404, ""),
+    ("encoded traversal in the script route", "GET", "/js/%2e%2e%2fserver.py", {}, 404, ""),
+]
+
+
+def header(path, name):
+    req("GET", path)
+    return req.headers.getheader(name) or ""
+
+
+def csp(path):
+    """The page's Content-Security-Policy as {directive: [sources]}."""
+    return {d.split()[0]: d.split()[1:] for d in header(path, "Content-Security-Policy").split(";") if d.strip()}
+
+
+HEADERS = [
+    # (description, check)
+    ("page scripts are sent as JavaScript", lambda: header("/js/md.js", "Content-Type").startswith("text/javascript")),
+    ("pages load nothing from other sites", lambda: all(csp(p).get("default-src") == ["'none'"] for p in PAGES)),
+    ("pages connect only to this server", lambda: all(csp(p).get("connect-src") == ["'self'"] for p in PAGES)),
+    ("pages cannot be framed by another site", lambda: all(csp(p).get("frame-ancestors") == ["'none'"] for p in PAGES)),
+    ("no page runs inline script, the report viewer included", lambda: all(csp(p).get("script-src") == ["'self'"] for p in PAGES)),
+    ("the report viewer's own script is served", lambda: req("GET", "/js/report.js")[0] == 200),
+    ("v1 names the A/B test running now", lambda: req("GET", "/api/v1/live/abtest")[0] in (200, 404)),
+    ("v1 judges the live run, or says why not", lambda: req("GET", "/api/v1/live/judge")[0] in (200, 404, 503)),
+    ("old routes say they are deprecated, and point to v1",
+     lambda: all(header(p, "Deprecation").startswith("@") and "/api/v1/openapi.json" in header(p, "Link")
+                 for p in ("/api/status", "/api/md/maplist"))),
+    ("v1 and the pages are not deprecated", lambda: not any(header(p, "Deprecation") for p in ("/api/v1", "/meshdoctor"))),
 ]
 
 failed = 0
 print(f"token found in page: {'yes' if TOKEN else 'NO'} (page status {page_status})")
-for desc, method, path, headers, want, text in CHECKS:
-    got, body = req(method, path, headers)
+for desc, method, path, headers, want, text, *send in CHECKS:
+    got, body = req(method, path, headers, *send)
     ok = got == want and (text in body)
     failed += not ok
     print(f"{'PASS' if ok else 'FAIL'}  {desc}: {got}" + ("" if ok else f" (wanted {want}, body {body[:120]!r})"))
-print(f"\n{len(CHECKS) - failed}/{len(CHECKS)} passed")
+for desc, check in HEADERS:
+    ok = check()
+    failed += not ok
+    print(f"{'PASS' if ok else 'FAIL'}  {desc}")
+total = len(CHECKS) + len(HEADERS)
+print(f"\n{total - failed}/{total} passed")
 sys.exit(1 if failed or not TOKEN else 0)

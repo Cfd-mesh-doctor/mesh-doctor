@@ -50,6 +50,12 @@ h1{font-size:18px;margin:0;font-weight:650}
 .badge.stale{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin-top:8px;font-size:12.5px}
 .kv dt{color:var(--muted)} .kv dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.verdict{font-size:13px;margin-top:8px;font-weight:600}
+#judgeKv dd{white-space:nowrap}
+.flags{margin:8px 0 0;padding-left:18px;font-size:12.5px;color:var(--warn)}
+.badge.ok{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.badge.warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+[hidden]{display:none!important}
 .phase{font-size:12.5px;margin-top:6px;min-height:18px}
 .chart{position:relative}
 .chart canvas{width:100%;height:220px;display:block}
@@ -109,6 +115,14 @@ h1{font-size:18px;margin:0;font-weight:650}
     </section>
   </div>
 
+  <section class="card stage" id="judgeCard" hidden>
+    <h2>Is the transient run converged? <span class="badge" id="judgeBadge">–</span></h2>
+    <div class="verdict" id="judgeVerdict">–</div>
+    <dl class="kv" id="judgeKv"></dl>
+    <ul class="flags" id="judgeFlags"></ul>
+    <div class="sub" id="judgeNote" style="margin-top:6px">Three separate questions: are the force means stationary (drift below 2 % between the last two windows of time steps), did each time step converge (p below 1e-3 by its last PIMPLE outer iteration), and is the time step sane (max Courant within the limit, no field bounded). Oscillating forces are expected in a transient run; their window means are what counts.</div>
+  </section>
+
   <section class="card chart" id="forceChart">
     <h3><span id="fTitle">Forces by group (N)</span>
       <span class="tabs" id="forceTabs"><button data-k="ddes" class="on">Transient</button><button data-k="steady">Steady</button></span></h3>
@@ -125,167 +139,8 @@ h1{font-size:18px;margin:0;font-weight:650}
   <div class="sub">Refreshes every 15 s from the case logs. <span id="axesNote"></span></div>
 </div>
 
-<script>
-const $ = id => document.getElementById(id);
-const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-let last = null, forceKey = "ddes", resKey = "ddes", userPickedForce = false, userPickedRes = false;
-
-function fmtDur(s){ if(s==null||!isFinite(s)) return "–"; s=Math.max(0,s);
-  const h=Math.floor(s/3600), m=Math.floor(s%3600/60), sec=Math.floor(s%60);
-  return h? `${h} h ${m} min` : m? `${m} min ${sec} s` : `${sec} s`; }
-function fmtN(n,d=0){ return n==null? "–" : Number(n).toLocaleString(undefined,{maximumFractionDigits:d,minimumFractionDigits:d}); }
-function setBar(el, frac, state){ el.style.width = (Math.max(0,Math.min(1,frac||0))*100).toFixed(1)+"%";
-  el.className = state==="done"?"ok":state==="error"?"err":state==="running"?"run":""; }
-function badge(el, st){ const s = st.stale? "stale" : st.state; el.className = "badge "+s;
-  el.textContent = st.stale? "no output 10 min" : {pending:"waiting",running:"running",done:"done",error:"error"}[st.state]||st.state; }
-function kv(el, rows){ el.innerHTML=""; for(const [k,v] of rows){ const dt=document.createElement("dt"); dt.textContent=k;
-  const dd=document.createElement("dd"); dd.textContent=v; el.append(dt,dd);} }
-
-function render(d){
-  last = d;
-  const m=d.mesh, c=d.checkMesh, s=d.steady, t=d.ddes, pr=d.proc||{};
-  $("ovPct").textContent = (d.overall*100).toFixed(1)+" %";
-  const fin = d.single==="steady"? s.state==="done" : t.state==="done";
-  setBar($("ovBar"), d.overall, fin?"done":"running");
-  // a plain case (one foamRun) has no second solver stage: hide it
-  for(const [id,st] of [["stSteady",s],["stDdes",t]]) $(id).parentElement.style.display = st.state==="skipped"?"none":"";
-  $("steadyCard").style.display = s.state==="skipped"?"none":""; $("ddesCard").style.display = t.state==="skipped"?"none":"";
-  $("forceTabs").style.display = $("resTabs").style.display = d.single? "none":"";
-  if(d.single){ $("stSteady").previousElementSibling.textContent="3 · Steady solve"; $("stDdes").previousElementSibling.textContent="3 · Transient solve";
-    $("steadyCard").querySelector("h2").firstChild.textContent="Steady solve (foamRun) "; $("caseName").textContent=d.case||"Live run"; }
-  let stage="Waiting", eta="";
-  if(m.state==="running"){ stage="Meshing · "+(m.phase||""); }
-  else if(m.state==="error"){ stage="Meshing failed"; }
-  else if(s.state==="running"){ stage=`${d.single?"Steady solve":"Steady start"} · iteration ${fmtN(s.time)} of ${fmtN(s.end)}`; eta="Stage ETA "+fmtDur(s.eta); }
-  else if(t.state==="running"){ stage=`Transient · t = ${fmtN(t.time,4)} s of ${t.end} s`; eta="ETA "+fmtDur(t.eta)+(t.eta? " · done ≈ "+new Date(Date.now()+t.eta*1000).toLocaleString([], {weekday:"short",hour:"2-digit",minute:"2-digit"}):""); }
-  else if(fin){ stage="Finished"; }
-  else if(m.state==="done" && s.state==="pending"){ stage="Mesh done · checking / starting solver"; }
-  $("ovStage").textContent = stage; $("ovEta").textContent = eta;
-
-  const steps=[["stMesh","bMeshS",m],["stChk","bChkS",c],["stSteady","bSteadyS",s],["stDdes","bDdesS",t]];
-  for(const [a,b,st] of steps){ $(a).textContent = st.state==="pending"?"waiting":st.state;
-    setBar($(b), st.state==="done"?1:(st.fraction||0), st.state); }
-  if(pr.mem_total_mb) $("mem").textContent = `WSL memory ${fmtN(pr.mem_used_mb/1024,1)} / ${fmtN(pr.mem_total_mb/1024,1)} GB · processes: `+
-    ["snappyHexMesh","foamRun","checkMesh"].filter(k=>pr[k]).map(k=>`${k} ×${pr[k]}`).join(", ") || "none";
-  if(pr.mem_total_mb && !["snappyHexMesh","foamRun","checkMesh"].some(k=>pr[k])) $("mem").textContent += "none running";
-
-  // mesh
-  badge($("meshBadge"), m); setBar($("meshBar"), m.fraction, m.state);
-  $("meshPhase").textContent = m.phase||"";
-  const mrows=[["Cells",fmtN(m.cells)],["Elapsed",fmtDur(m.elapsed)]];
-  if(c.cells) mrows.push(["Final cells (checkMesh)",fmtN(c.cells)]);
-  if(c.maxNonOrtho!=null) mrows.push(["Max non-orthogonality",fmtN(c.maxNonOrtho,1)+"°"]);
-  if(c.maxSkewness!=null) mrows.push(["Max skewness",fmtN(c.maxSkewness,2)]);
-  if(c.state==="done") mrows.push(["Mesh check", c.ok? "OK" : `${(c.failed||[]).join(",")||"some"} checks failed`]);
-  kv($("meshKv"), mrows); $("meshErr").textContent = m.error||"";
-
-  // steady
-  badge($("steadyBadge"), s); setBar($("steadyBar"), s.fraction, s.state);
-  kv($("steadyKv"), [["Iteration",`${fmtN(s.time)} / ${fmtN(s.end)}`],["Wall time per iteration",s.wall_per_step? fmtN(s.wall_per_step,1)+" s":"–"],
-    ["Elapsed",fmtDur(s.clock)],["Remaining",fmtDur(s.eta)]]);
-  $("steadyErr").textContent = s.error||"";
-
-  // ddes
-  badge($("ddesBadge"), t); setBar($("ddesBar"), t.fraction, t.state);
-  kv($("ddesKv"), [["Flow time",`${fmtN(t.time,4)} / ${t.end} s`],["Time steps",t.time!=null&&t.deltaT? fmtN(t.time/t.deltaT)+" / "+fmtN(t.end/t.deltaT):"–"],
-    ["Wall time per step",t.wall_per_step? fmtN(t.wall_per_step,1)+" s":"–"],["Courant mean / max",t.courant_max!=null? `${fmtN(t.courant_mean,3)} / ${fmtN(t.courant_max,2)}`:"–"],
-    ["Elapsed",fmtDur(t.clock)],["Remaining",fmtDur(t.eta)],["Averaging window",t.avgFrom!=null? t.avgFrom+" – "+t.end+" s":"no fieldAverage in this case"]]);
-  $("ddesErr").textContent = t.error||"";
-
-  const tOn = !["pending","skipped"].includes(t.state);
-  if(!userPickedForce) forceKey = tOn? "ddes":"steady";
-  if(!userPickedRes) resKey = tOn? "ddes":"steady";
-  syncTabs(); drawForces(); drawRes();
-}
-
-function syncTabs(){
-  document.querySelectorAll("#forceTabs button").forEach(b=>b.classList.toggle("on",b.dataset.k===forceKey));
-  document.querySelectorAll("#resTabs button").forEach(b=>b.classList.toggle("on",b.dataset.k===resKey));
-}
-document.querySelectorAll("#forceTabs button").forEach(b=>b.onclick=()=>{forceKey=b.dataset.k;userPickedForce=true;syncTabs();drawForces();});
-document.querySelectorAll("#resTabs button").forEach(b=>b.onclick=()=>{resKey=b.dataset.k;userPickedRes=true;syncTabs();drawRes();});
-
-// ---- tiny canvas line chart with hover tooltip ----
-function lineChart(canvas, tip, series, opts){
-  const dpr=window.devicePixelRatio||1, W=canvas.clientWidth, H=canvas.clientHeight;
-  canvas.width=W*dpr; canvas.height=H*dpr; const g=canvas.getContext("2d"); g.scale(dpr,dpr);
-  g.clearRect(0,0,W,H);
-  const pad={l:48,r:10,t:8,b:26}, iw=W-pad.l-pad.r, ih=H-pad.t-pad.b;
-  const all=series.flatMap(s=>s.pts);
-  g.font="11px system-ui"; g.fillStyle=css("--muted");
-  if(!all.length){ g.fillText(opts.empty||"No data yet", pad.l, pad.t+ih/2); canvas._hit=null; return; }
-  let x0=Math.min(...all.map(p=>p[0])), x1=Math.max(...all.map(p=>p[0]));
-  let ys=all.map(p=>opts.log? Math.log10(p[1]) : p[1]);
-  let y0=Math.min(...ys), y1=Math.max(...ys);
-  if(opts.yClip){ const sorted=[...ys].sort((a,b)=>a-b); y0=sorted[Math.floor(sorted.length*0.02)]; y1=sorted[Math.ceil(sorted.length*0.98)-1]; }
-  if(x1===x0) x1=x0+1; if(y1===y0){y1+=1;y0-=1;}
-  const yp=(y1-y0)*0.06; y0-=yp; y1+=yp;
-  const X=x=>pad.l+(x-x0)/(x1-x0)*iw, Y=y=>pad.t+(1-((opts.log?Math.log10(y):y)-y0)/(y1-y0))*ih;
-  g.strokeStyle=css("--line"); g.lineWidth=1;
-  for(let i=0;i<=4;i++){ const yy=pad.t+ih*i/4; g.beginPath(); g.moveTo(pad.l,yy); g.lineTo(W-pad.r,yy); g.stroke();
-    const v=y1-(y1-y0)*i/4; g.fillStyle=css("--muted"); g.textAlign="right";
-    g.fillText(opts.log? "1e"+v.toFixed(1) : v.toFixed(2), pad.l-6, yy+4); }
-  g.textAlign="center";
-  for(let i=0;i<=4;i++){ const v=x0+(x1-x0)*i/4; g.fillText(opts.xfmt? opts.xfmt(v): v.toFixed(0), pad.l+iw*i/4, H-8); }
-  if(opts.band){ const [a,b]=opts.band; if(b>x0){ g.fillStyle=css("--track"); g.globalAlpha=.6;
-    g.fillRect(X(Math.max(a,x0)),pad.t,X(Math.min(b,x1))-X(Math.max(a,x0)),ih); g.globalAlpha=1; } }
-  g.save(); g.beginPath(); g.rect(pad.l,pad.t,iw,ih); g.clip();
-  for(const s of series){ if(!s.pts.length) continue; g.strokeStyle=s.color; g.lineWidth=1.6; g.beginPath();
-    s.pts.forEach((p,i)=>{ const xx=X(p[0]), yy=Y(p[1]); i? g.lineTo(xx,yy):g.moveTo(xx,yy); }); g.stroke(); }
-  g.restore();
-  canvas._hit={series,X,Y,pad,iw,x0,x1,opts};
-  canvas.onmousemove=e=>{
-    const r=canvas.getBoundingClientRect(), mx=e.clientX-r.left; const h=canvas._hit; if(!h) return;
-    const xv=h.x0+(mx-h.pad.l)/h.iw*(h.x1-h.x0); let lines=[];
-    for(const s of h.series){ if(!s.pts.length) continue; let best=s.pts[0];
-      for(const p of s.pts) if(Math.abs(p[0]-xv)<Math.abs(best[0]-xv)) best=p;
-      lines.push([s.name,best]); }
-    if(!lines.length){tip.style.display="none";return;}
-    tip.innerHTML=""; const head=document.createElement("div"); head.style.color=css("--muted");
-    head.textContent=(h.opts.xlabel||"x")+" "+(h.opts.xfmt? h.opts.xfmt(lines[0][1][0]) : lines[0][1][0]); tip.append(head);
-    for(const [n,p] of lines){ const dv=document.createElement("div"); dv.textContent=`${n}: ${h.opts.log? p[1].toExponential(2) : p[1].toFixed(3)}`; tip.append(dv); }
-    tip.style.display="block"; const tx=Math.min(mx+12, canvas.clientWidth-tip.offsetWidth-4);
-    tip.style.left=tx+"px"; tip.style.top=(e.clientY-r.top+canvas.offsetTop-10)+"px";
-  };
-  canvas.onmouseleave=()=>{tip.style.display="none";};
-}
-
-function drawForces(){
-  if(!last) return;
-  const f = forceKey==="ddes"? last.forces_ddes : last.forces_steady;
-  // every force group the case writes (largest drag first): drag, plus the main group's vertical force
-  const S=(f&&f.series)||{}, info=(f&&f.info)||{}, gs=(info.groups||[]).slice(0,5);
-  const col=[css("--s1"),css("--s2"),css("--s3"),css("--s4"),css("--s5"),css("--s6")];
-  const ser=gs.map((g,i)=>({name:g+" drag",color:col[i],pts:(S[g]||[]).map(p=>[p[0],p[1]])}));
-  if(info.total) ser.push({name:info.total+" "+(info.vertical||"vertical"),color:col[5],pts:(S[info.total]||[]).map(p=>[p[0],p[2]])});
-  $("fLegend").innerHTML=ser.map(s=>`<span style="--c:${s.color}"></span>`).join("");
-  $("fLegend").querySelectorAll("span").forEach((el,i)=>el.textContent=ser[i].name);
-  $("axesNote").textContent = info.flow? `Read from the case: drag is the force along the flow (${info.flow}, from ${(info.source||{}).flow||"?"}); ${info.vertical||"vertical"} is along ${info.vertical==="downforce"?"−":"+"}${info.up} (${(info.source||{}).up||"?"}). Main group: ${info.total}.` : "";
-  lineChart($("cForce"),$("tForce"),ser,{yClip:true, xlabel: forceKey==="ddes"?"t =":"iteration",
-    xfmt: forceKey==="ddes"? v=>v.toFixed(3)+" s" : v=>v.toFixed(0),
-    band: forceKey==="ddes"&&last.ddes.avgFrom!=null? [last.ddes.avgFrom, last.ddes.end] : null,
-    empty: forceKey==="ddes"? "Transient has not started yet" : "Steady start has not begun yet"});
-}
-function drawRes(){
-  if(!last) return;
-  const r = resKey==="ddes"? last.res_ddes : last.res_steady;
-  const cols=[css("--s1"),css("--s2"),css("--s3"),css("--s4"),css("--s5"),css("--s6")];
-  const names=Object.keys(r||{});
-  const ser=names.map((n,i)=>({name:n,color:cols[i%cols.length],pts:r[n]}));
-  const lg=$("resLegend"); lg.innerHTML=""; ser.forEach(s=>{const sp=document.createElement("span"); sp.style.setProperty("--c",s.color); sp.textContent=s.name; lg.append(sp);});
-  lineChart($("cRes"),$("tRes"),ser,{log:true, xlabel: resKey==="ddes"?"t =":"iteration",
-    xfmt: resKey==="ddes"? v=>v.toFixed(3)+" s" : v=>v.toFixed(0), empty:"No residuals yet"});
-}
-window.addEventListener("resize",()=>{drawForces();drawRes();});
-
-async function tick(){
-  try{ const res=await fetch("/api/status",{cache:"no-store"}); const d=await res.json();
-    if(d.error) throw new Error(d.error);
-    render(d); $("liveDot").className="dot live"; $("updated").textContent="live · "+new Date().toLocaleTimeString();
-  }catch(e){ $("liveDot").className="dot"; $("updated").textContent="monitor offline ("+e.message+")"; }
-  setTimeout(tick,15000);
-}
-tick();
-</script>
+<script src="js/md.js"></script>
+<script src="js/chart.js"></script>
+<script src="js/live.js"></script>
 </body>
 </html>

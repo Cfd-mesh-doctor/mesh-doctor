@@ -7,9 +7,13 @@
     python3 -m meshdoctor copy | inspect | fix ...                    single repair steps
     python3 -m meshdoctor ab     <srcCase> <name> [--iters N] ...     A/B solver test
     python3 -m meshdoctor ab     extend | hotspots | mode ...         A/B follow-ups
-    python3 -m meshdoctor judge  <case> [window]                      convergence verdict
+    python3 -m meshdoctor judge  <case> [window|auto] [--to N]        convergence verdict
+    python3 -m meshdoctor transient-plan <case> [--co 1,5,20]         time step and cost of a transient run
     python3 -m meshdoctor map    <name> [--hot "Label=<dir>"] ...     repair-vs-hotspot map
     python3 -m meshdoctor config                                      settings in use
+    python3 -m meshdoctor schema <kind> <file>                        validate a result file
+    python3 -m meshdoctor jobs   [list | show <id> | cancel <id>]     dashboard and API jobs
+    python3 -m meshdoctor report <name> [--html | --gzip] [-o file]   portable report (one file)
     python3 -m meshdoctor check                                       is this machine ready?
     python3 -m meshdoctor experimental polish | ratchet ...           experimental skills
 
@@ -25,9 +29,13 @@ SCRIPTS = {
     "full": "repair.py", "copy": "repair.py", "inspect": "repair.py", "fix": "repair.py",
     "ab": "abtest.py",
     "judge": "abtest.py",
+    "transient-plan": "tplan.py",
     "map": "mapdata.py",
     "config": "config.py",
     "check": "selfcheck.py",
+    "schema": "schema.py",
+    "jobs": "jobs.py",
+    "report": "report.py",
 }
 EXPERIMENTAL = {"polish": "polish.py", "ratchet": "ratchet.py"}
 

@@ -1,0 +1,207 @@
+# Architecture
+
+Where the code is today, where it is going, and why. The goal is that Mesh Doctor can later become a website without a rewrite: the parts that compute, the parts that serve, and the parts that draw stay separate, and they agree on versioned data.
+
+## The rule that shapes everything
+
+**Meshing and solving can never run on a web host.** OpenFOAM needs gigabytes of memory and runs for minutes to days. Serverless platforms such as Vercel stop a function after 300–800 s and give it 2–4 GB. So the computing always happens on a **worker**: your own machine, a lab PC, a cluster node, or a cloud VM. A website can only be the front end, plus a thin API that hands jobs to workers and shows their results.
+
+## Layers
+
+```
+ clients      CLI (meshdoctor ...)   local dashboard (web/)   future website
+                  |                        |                        |
+ api          ----+---- /api/v1 (JSON, versioned, OpenAPI) ---------+
+                  |
+ jobs         Job model + Runner:  LocalRunner (today)  |  Slurm / remote worker (later)
+                  |
+ core         case reading, repair, A/B, judge, map, RAM guard, config   (no HTTP, no UI)
+                  |
+ OpenFOAM     foamMeshDoctor, foamResidualHotspots, checkMesh, foamRun, ...
+```
+
+Rules between layers:
+- **core** never imports `api`, `web` or `jobs`, never prints for a UI, and returns plain data (dicts that match the schemas below). The CLI and the API are its only callers.
+- **jobs** is the only place that starts long-running processes. Admission rules (one big job at a time, the RAM guard) live here, so every client gets them.
+- **api** translates HTTP to core and jobs calls. It holds the security checks (host and origin, token, plain names) and nothing else.
+- **web** talks only to `/api/v1`. It never reads files or assumes it is served from the same machine as the worker.
+
+## Where the code is today
+
+| Today | Layer | Notes |
+|---|---|---|
+| `caseinfo.py`, `ramguard.py`, `config.py`, `mapdata.py` | core | already free of HTTP and UI |
+| `tplan.py` | core + CLI | the transient plan: `plan()` returns a `tplan` document; it runs OpenFOAM only in a throwaway shadow case, so the case is only read. Not yet a job kind or an API route |
+| `repair.py`, `abtest.py` | core + CLI | the library functions (`full`, `fix`, `judge`, `run_one`, ...) are core; their `main()` is CLI |
+| `md_api.py` | api | reads results; checks job requests and hands them to `jobs.py`; refusals carry an error code |
+| `jobs.py`, `jobrun.py` | jobs | job files, admission (one big job, RAM guard), the LocalRunner and its wrapper, cancel |
+| `api_v1.py` | api | the `/api/v1` route table, request checks, error format and OpenAPI document |
+| `server.py` | api | HTTP, the security checks, the live monitors, and the old `/api/md/*`, `/api/run` and `/api/status` routes |
+| `web/*.html` | web | five pages: HTML and CSS, plus the page's own script in `web/js/` |
+| `web/js/md.js` | web | the shared front-end core: `/api/v1` client, jobs, escaping templates, number formats, small DOM helpers |
+| `web/js/chart.js` | web | the one line chart (log or linear, stage band and marks, hover tooltip) |
+| `web/js/report.js` | web | the report viewer's script (on `md.js` + `chart.js`); `--html` inlines all three |
+| `__main__.py` | CLI | dispatches to the scripts |
+
+The modules import each other by plain name (`import caseinfo`), which `__main__` makes work from a clone, pip and the images. New code keeps that convention until the package is restructured. That restructure is the last step below, not the first, so the tree never goes through a broken state.
+
+## Results: portable and versioned
+
+Every file Mesh Doctor writes for another program to read carries `"schemaVersion": "<major>.<minor>"`, and has a JSON Schema in `meshdoctor/schemas/`:
+
+| File | Written by | Read by |
+|---|---|---|
+| `meshDoctor/result.json` | repair | dashboard, map, A/B, reports |
+| `<name>_ab/ab_result.json` | A/B test | dashboard, reports |
+| judge output | `judge` (CLI, API) | dashboard live pages, reports |
+| transient plan | `transient-plan` (CLI) | people deciding on a transient run; later the API |
+| `meshDoctor/map.json` | map | repair map page, reports |
+| `.jobs/<id>.json` | job runner (`jobs.py`, `jobrun.py`) | API, `meshdoctor jobs`, dashboard |
+| `<name>.mdreport.json` | `meshdoctor report` (`report.py`) | the report viewer, anywhere |
+
+- A minor bump only adds fields. A major bump changes or removes them.
+- Readers accept any minor version of the major version they know, and refuse a newer major version with a clear message.
+- Tests validate real outputs against the schemas, so a field cannot quietly disappear.
+- `meshdoctor schema <repair|abtest|judge|map|job|report> <file>` checks any file by hand. `meshdoctor/schema.py` holds the versions, the read and write helpers (which stamp the version and refuse a newer major version), and a small validator for the JSON Schema keywords the schemas use (standard library only, like the rest of the package).
+- Files written before versioning existed have no `schemaVersion`. They are read as "legacy" and never re-stamped, so an old file is not mislabelled as 1.0.
+
+This is what makes a **report bundle** possible.
+
+## Report bundles
+
+`meshdoctor report <name>` writes one file, `<name>.mdreport.json`, that holds a run's versioned documents: the repair result, its repair map and its A/B test, when they exist. `--gzip` makes it about 5× smaller. `--html` writes the viewer with the report inside: one file to email, which opens with a double-click. `--viewer` writes the same one-file viewer with no report in it, for a static host or a shared folder. `GET /api/v1/repairs/{name}/report` returns the same thing.
+
+- **Worker paths are replaced** before anything is written: `workspace/...`, `cases/...`, or just the file name. Encoded data (the map's base64 images) is never touched. The `redacted` field counts the replacements.
+- **What stays:** the case's geometry coordinates, patch and force-group names and all the numbers. A report is shared like the case itself; the viewer says so.
+- **Integrity:** `contents` lists each document's schema version (or `legacy`), size and the sha256 of its sorted compact JSON.
+
+The viewer is `web/report.html` with its script in `web/js/report.js`, on the same `md.js` and `chart.js` as the dashboard pages: no build step and no libraries. It works in three places:
+
+| Where | How it gets the report |
+|---|---|
+| the dashboard, `/report?name=<run>` | from `/api/v1/repairs/{name}/report` |
+| a static site (shape 2) serving `web/` (the page and `js/`), or the `--viewer` file anywhere | the user picks or drops a `.json`, `.json.gz` or exported `.html` file; it is read in the browser |
+| an exported `--html` report | the report is inside the page |
+
+An export (`--html` or `--viewer`) is one file: `report.py` copies `md.js`, `chart.js` and `report.js` into the page and swaps the policy's `script-src 'self'` for the sha256 hash of each one. The page runs exactly those three scripts and nothing else, not even an inline script injected later. That is why no file in `web/js/` may contain a closing script tag or an HTML comment opener: the export refuses to inline one that does.
+
+The page's Content-Security-Policy allows no network access except its own server (`connect-src 'self'`), and none at all in an exported report (`connect-src 'none'`). So the viewer cannot send a report anywhere, even by mistake. Everything from the file goes through `MD.html`, which escapes every value, so a report from someone else cannot run code in the page. An exported `.html` opened in the viewer is parsed as an inert document (its scripts never run) and only its report slot is read. Each card renders on its own: a damaged part of a file costs that card, not the page. A report from a newer major version is refused with a clear message.
+
+## API v1
+
+All routes live under `/api/v1` (`meshdoctor/api_v1.py`). The routes are a table that knows nothing about the HTTP server: `handle(method, path, query, body, content_type)` returns a status and a JSON document. `server.py` runs the security checks first and then hands the request over, so another server, or a test, can use the same table.
+
+- Responses are JSON. Errors are always `{"error": {"code": "...", "message": "..."}}`, with the HTTP status that the code maps to (below). Messages never contain the worker's file paths.
+- `GET /api/v1/openapi.json` describes the API in OpenAPI 3.1. It is built from the same table, so it cannot drift from the code. The result documents refer to `GET /api/v1/schemas/{kind}`, the JSON Schemas above.
+- List answers are objects, `{"items": [...]}`, so fields can be added later without breaking clients.
+
+| v1 route | Old route | Purpose |
+|---|---|---|
+| `GET /` | | API version, result-file versions, job kinds |
+| `GET /openapi.json`, `GET /schemas/{kind}` | | the API description and the result schemas |
+| `GET /cases` | `/api/md/sources` | source cases the worker may read |
+| `GET /repairs`, `GET /repairs/{name}` | `/api/md/results`, `/api/md/result` | repair runs, and a finished run's result (repair schema) |
+| `GET /repairs/{name}/clusters/{id}?tag=before\|after\|report` | `/api/md/cluster` | geometry of one defect cluster |
+| `GET /repairs/{name}/log` | `/api/md/log` | the repair sweeps from the log |
+| `GET /abtests`, `GET /abtests/{name}` | `/api/md/ablist`, `/api/md/ab` | A/B tests: status, result (abtest schema), residuals, oscillation maps |
+| `GET /abtests/{name}/live` | `/api/run?label=` | the steady-run page: stages, forces, residuals, live judge |
+| `GET /live/abtest` | `/api/run` (no label) | the same, for the A/B test running now (or else the one updated last); its name is in `label` |
+| `GET /live/judge?window=&avgFrom=` | (new) | the transient judge on the live case's transient log (`log.ddes*`, else `log.foamRun*`): force means stationary, each time step converged, Courant number, bounded fields. Kept until a log changes size or time, since it reads the whole log; the live page asks at most once a minute. 503 when the server has no live monitor, 404 when there is no live case or log |
+| `GET /maps`, `GET /maps/{name}` | `/api/md/maplist`, `/api/md/map` | repair maps (map schema) |
+| `GET /abtests/{name}/judge?side=base\|fixed&to=&window=&avgFrom=` | (new) | the judge on one run of an A/B test; `to` judges it as it was at that iteration, so both runs can be compared over the same iterations. A test that reused another's original-mesh run (`--base-from`) is judged on that run; `run` in the answer says which |
+| `GET /judge?case=&window=&avgFrom=&log=` | (CLI only) | convergence verdict for a case in the cases folder (judge schema); `log` picks the solver log, such as `log.pimple` |
+| `GET /live` | `/api/status` | the live (transient) case: forces, averaging window, time step, processes, memory |
+| `GET /variants` | `/api/md/variants` | solver-setting variants for an A/B second run |
+| `POST /jobs` | `/api/md/start`, `abstart`, `abextend` | start a repair, A/B test or A/B extension (202 Accepted, the job document) |
+| `GET /jobs?state=&limit=`, `GET /jobs/{job}` | | jobs, newest first, with progress and links to their runs (job schema) |
+| `POST /jobs/{job}/cancel` | | stop a job and everything it started (`409 finished` if it already ended) |
+
+A job request names its kind and its parameters, which are checked against a schema (also in the OpenAPI document) before anything starts. Unknown parameters are refused:
+
+```json
+{"kind": "repair", "params": {"source": "motorBike", "name": "mb", "profile": "openfoam"}}
+{"kind": "abtest", "params": {"name": "mb", "iters": 200, "init": "0.warm", "variant": ""}}
+{"kind": "abextend", "params": {"name": "mb", "to": 1000}}
+```
+
+A new repair or A/B test refuses to replace an existing run of the same name (`409 exists`) unless the request says `"replace": true`, because the copy step deletes the old run. The old routes keep their old behaviour.
+
+| Error code | HTTP | Meaning |
+|---|---|---|
+| `bad-request` | 400 | a bad name, parameter or body |
+| `forbidden` | 403 | unknown Host, another site's Origin, or a missing or wrong launch token |
+| `not-found` | 404 | no such route, run, case or log |
+| `method-not-allowed` | 405 | wrong method; the `Allow` header says which |
+| `exists`, `busy`, `not-ready`, `not-enough-memory`, `schema-version` | 409 | the request is fine, but the worker's state refuses it: the run exists, another OpenFOAM job is running, the run it needs is not finished, the RAM guard says no, or a result file is from a newer Mesh Doctor |
+| `too-large`, `unsupported-media-type` | 413, 415 | job bodies are JSON (`Content-Type: application/json`), at most 64 KB |
+| `unsupported` | 422 | something Mesh Doctor cannot do yet, such as an A/B test of a decomposed-only mesh |
+| `internal`, `unavailable` | 500, 503 | a bug (details go to the server window), or a route this server does not run |
+
+The security rules are the same as for the old routes: the Host and Origin checks on every request, and the launch token (`X-MD-Token`) on every POST. Requiring a JSON body adds one more barrier: a plain form on another site can only send form encodings, which `/jobs` refuses with 415. `tests/security_check.py` checks all of this against a running server.
+
+Every page uses only `/api/v1`. The old routes still answer for scripts that call them, but each answer carries a `Deprecation` header (RFC 9745, dated 2026-11-11) and a `Link` to the v1 OpenAPI document. They are removed in a major release.
+
+## Front end
+
+The pages are plain HTML and CSS with no build step, so they can be served by this server, copied to a static host, or ported to a framework later. Their rules:
+
+- **One shared core, `web/js/md.js`,** loaded first by every page:
+  - `MD.api` is the `/api/v1` client. It sends the launch token on every POST and reads the API's one error format into `MD.ApiError` (`.code` is the API's code: `not-found`, `busy`, `exists`, ...; `.api` is false when no Mesh Doctor API answered, such as a static host or a proxy's error page). `MD.api.find` gives `null` for not-found, for runs that have not finished.
+  - `MD.jobs` starts, follows and cancels jobs. If a run of that name exists, `submit` asks before replacing it. The old routes replaced it silently.
+  - `MD.html` is a template tag that escapes every value: ``MD.html`<b>${name}</b>` ``. `MD.render` puts its result into an element and refuses plain strings. Pages build markup only this way (or with `textContent`); `innerHTML` appears only inside `MD.render`.
+  - `MD.fmt` holds the number formats; `MD.ui` the small DOM helpers (a `<dl>` of rows, a progress bar, the live/offline line).
+- **One chart, `web/js/chart.js`** (`MD.chart.line`): log or linear y, outliers clipped on request, the start of a run left out of the y scale on request (`settle`, so a steady run's start-up spike does not flatten the forces), a shaded band (the current stage or averaging window), dashed marks where settings changed, a text-only hover tooltip, and 1-2-5 ticks. The tick and range maths are plain functions with their own tests.
+- **Each page's script is its own file in `web/js/`,** served at `/js/<name>.js` (plain names only).
+- **Every page gets a Content-Security-Policy header.** It allows nothing from other sites (`default-src 'none'`), connections only to this server, and no framing. Pages whose script is all in files (`STRICT` in `server.py`: every page, the report viewer included) run no inline script at all (`script-src 'self'`). Even if a bug let markup from a run file into the page, it could not run code.
+
+`tests/test_units.py` (`PagesTest`) checks these rules on every page, `tests/js/` tests `md.js` and the chart maths with Node's own test runner (`node --test tests/js/*.test.js`), and `tests/security_check.py` checks the headers and the `/js/` route on a running server.
+
+## Jobs
+
+`meshdoctor/jobs.py` is the only place that starts long-running work. A job is a file `<workspace>/.jobs/<id>.json` (`schemas/job.schema.json`):
+
+```json
+{"schemaVersion": "1.0", "id": "20261111-213000-repair-mb-3fa2", "kind": "repair",
+ "params": {"source": "motorBike", "name": "mb", "profile": "openfoam"}, "name": "mb",
+ "state": "running", "runner": "local", "created": "2026-11-11T21:30:00Z", "started": "...", "finished": null,
+ "pid": 4242, "exitCode": null, "log": "mb.log", "result": "mb/meshDoctor/result.json", "error": null,
+ "progress": {"step": "checkMesh (after)", "fraction": 0.75, "updated": "..."}}
+```
+
+- **States:** `queued` → `running` → `done` | `failed` | `cancelled`. Paths are relative to the workspace, so a job means the same thing on another worker.
+- **Admission** happens in `jobs.submit`, so every client gets the same rules. Only one big job runs at a time, judged both from the job files and from OpenFOAM processes started outside Mesh Doctor (from `/proc`). The RAM guard runs before the job is written.
+- **The LocalRunner** starts `jobrun.py`, a small wrapper, detached from the server. Init adopts it, so a finished job leaves no zombie process, and a job keeps running if the server stops. The wrapper:
+  - runs the command, an argument list with no shell, at nice 5 in its own process group;
+  - writes the log;
+  - records `running`, then the end state, exit code and finish time.
+
+  The command comes from the wrapper's own arguments, never from the job file. While a job is live, only the wrapper writes its file, so no update is lost.
+- **Cancel** sends SIGTERM to the wrapper. The wrapper stops the whole process group (mpirun ranks included), sends SIGKILL after 30 s, and records `cancelled`.
+- **Progress** is read when a job is read, from the tool's own `status.json` / `ab_status.json`. It holds the current step, and a rough fraction where the step is known.
+- **Lost jobs:** a `running` job whose wrapper is gone (machine restarted, process killed) is marked `failed` with a reason the next time it is read. So is a `queued` job that never started within a minute.
+- **Errors** are the last line of the job's log, with workspace paths removed, because they may be shown on a web page.
+- `md_api` (and so the old dashboard routes and `/api/v1/jobs`) starts work only through `jobs.submit`. `meshdoctor jobs [list | show <id> | cancel <id>]` follows jobs from the shell. The CLI commands (`full`, `ab`, ...) still run in the foreground without a job file.
+- **Later runners:** a `SlurmRunner` would submit the sbatch templates and read `squeue`. A remote **worker** would poll a queue over an outgoing connection, so no port on your machine is ever opened to the internet. Both write the same job files.
+
+## Three ways to put it on the web
+
+| Shape | What runs where | Team data | Needs |
+|---|---|---|---|
+| **1. Local (today)** | everything on your machine; the browser talks to 127.0.0.1 | stays on your machine | nothing more |
+| **2. Static report viewer** | a static site (for example Vercel) serves only `web/report.html`; you open a report bundle from your own disk, and it is read in the browser and never uploaded | never on the server | ready: `meshdoctor report --viewer` writes the one file to deploy |
+| **3. Hosted app + private workers** | the website and API are hosted; workers (your PC, cluster, cloud VM) pull jobs and push results to private storage | stored in the hosted service | real sign-in, per-user storage, a job queue, a worker that connects out, CORS and rate limits, and a decision about which data may leave the team's machines |
+
+Shape 2 comes first: it is useful on its own (share a result with a teammate as a file), costs nothing to host, and keeps the data rule simple. Shape 3 is only worth building once shapes 1 and 2 are solid, and it needs the team's agreement on where data may live. On Vercel's Hobby plan the production domain is public, so shape 3 would need a paid plan or another host with access control.
+
+## Order of work
+
+1. This document. (Done.)
+2. Schemas and `schemaVersion` for the result files, validated in tests. (Done.)
+3. The `/api/v1` router with the error format and `openapi.json`. Old routes become aliases. (Done.)
+4. The job model and `LocalRunner`. `md_api` starts jobs only through it. (Done.)
+5. `meshdoctor report <name>`: the portable bundle, and a viewer that reads only bundles. (Done.)
+6. Shared front-end modules (charts, 3D viewer, API client); pages move to `/api/v1`. (Done: `md.js` and `chart.js` under every page, the report viewer included; every page uses only `/api/v1` and runs no inline script; the old routes are marked deprecated; exports inline the scripts, pinned by hash. Left for later: the WebGL viewer as a module.)
+7. A pluggable auth layer: the launch token now, real sign-in for shape 3.
+8. The package restructure (`core/`, `jobs/`, `api/`) with shims, once the boundaries above are proven.
+
+Each step keeps every test passing and every command working, so the tool stays usable while it changes.

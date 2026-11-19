@@ -16,7 +16,7 @@ FAIL, WARN, OK = "FAIL", "warn", "ok"
 
 def foam_env(bashrc):
     """WM_PROJECT, WM_PROJECT_VERSION and where each needed program is, after sourcing bashrc."""
-    progs = "foamRun checkMesh decomposePar foamDictionary foamMeshDoctor foamResidualHotspots"
+    progs = "foamRun checkMesh decomposePar foamDictionary foamMeshDoctor foamResidualHotspots foamCourantCells"
     cmd = (f". {shlex.quote(bashrc)} >/dev/null 2>&1; echo \"$WM_PROJECT|$WM_PROJECT_VERSION|$FOAM_USER_APPBIN\"; "
            f"for p in {progs}; do echo \"$p|$(command -v $p)\"; done")
     try:

@@ -1,0 +1,28 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://meshdoctor.invalid/schemas/report/1",
+ "title": "Mesh Doctor report bundle",
+ "description": "one run's versioned documents in one portable file, written by meshdoctor report; worker paths replaced",
+ "type": "object",
+ "required": ["schemaVersion", "kind", "name", "created", "generator", "redacted", "contents", "documents"],
+ "properties": {
+  "schemaVersion": {"type": "string", "pattern": "^1\\.\\d+$", "description": "major.minor; readers accept any 1.x"},
+  "kind": {"enum": ["meshdoctor-report"]},
+  "name": {"type": "string", "description": "the workspace run"},
+  "created": {"type": "string", "description": "UTC, ISO 8601"},
+  "generator": {"type": "object", "required": ["meshdoctor"],
+                "properties": {"meshdoctor": {"type": "string"}, "openfoam": {"type": ["string", "null"]}}},
+  "redacted": {"type": "object", "required": ["paths"], "properties": {"paths": {"type": "integer", "minimum": 0},
+                                                                       "note": {"type": "string"}}},
+  "contents": {"type": "object", "description": "per document: its schema version (or legacy), sha256 of its sorted compact JSON, size",
+               "additionalProperties": {"type": "object", "required": ["schemaVersion", "sha256", "bytes"],
+                                        "properties": {"schemaVersion": {"type": "string"},
+                                                       "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                                                       "bytes": {"type": "integer", "minimum": 0},
+                                                       "problems": {"type": "array", "items": {"type": "string"}}}}},
+  "documents": {"type": "object", "required": ["repair"], "additionalProperties": false,
+                "properties": {"repair": {"type": "object", "description": "meshDoctor/result.json (repair schema)"},
+                               "map": {"type": "object", "description": "meshDoctor/map.json (map schema)"},
+                               "abtest": {"type": "object", "description": "<label>_ab/ab_result.json (abtest schema)"}}}
+ }
+}

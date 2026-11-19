@@ -10,6 +10,7 @@ For **OpenFOAM 14 (openfoam.org)** on Linux, Windows through WSL, Docker, or a S
 - [Dashboard tour](docs/dashboard.md)
 - [Safety model](docs/safety.md): what protects your cases and your machine
 - [Limits](docs/limits.md): what it does not do, and the experimental tools
+- [Architecture](docs/architecture.md): layers, versioned results, the API and jobs, and the path to a website
 - [AI agents](AGENTS.md): which skill guide to read for each task (works with any AI coding tool)
 - [Worked example](examples/ahmed-body/README.md): the Ahmed body from STL to wind-tunnel comparison; copy it for your own case ([templates](docs/templates.md))
 - [Gallery](docs/gallery.md): the pictures and charts the scripts make
@@ -113,11 +114,20 @@ meshdoctor serve                               # http://localhost:8765/meshdocto
 meshdoctor help                       # every command; <command> --help for its options
 meshdoctor full <case> <name>         # repair a copy of <case> as <workspace>/<name>
 meshdoctor ab <case> <name>           # A/B solver test: original vs repaired mesh
-meshdoctor judge <case>               # is this run converged?
+meshdoctor judge <case>               # is this run converged? (steady or transient)
+meshdoctor transient-plan <case>      # a steady run won't settle: time step and hours of a transient run
+meshdoctor schema <kind> <file>       # check a result file against its versioned schema
+meshdoctor jobs [list|show|cancel]    # jobs started from the dashboard or the API
+meshdoctor report <name> [--html]     # one portable file: repair, map and A/B, paths removed
+meshdoctor report --viewer            # the viewer alone, one file: opens report files anywhere
 meshdoctor serve [--case <case>]      # dashboard; --case picks the live run to watch
 ```
 
 Without the `bin/` launcher or pip, `python3 -m meshdoctor <command>` from the clone does the same.
+
+**Sharing a result:** `meshdoctor report <name>` writes one file with the repair, its map and its A/B test, with this machine's paths removed. Open it at `http://localhost:8765/report`, or send the `--html` version, which opens anywhere with a double-click and never goes online. `--viewer` writes the empty viewer as one file, for a shared folder or a static web host. It still holds the case's geometry and patch names, so share it like the case itself.
+
+The dashboard's data is also a versioned JSON API under `/api/v1`, described at `http://localhost:8765/api/v1/openapi.json` (see [Architecture](docs/architecture.md#api-v1)). Starting a job through it needs the launch token from a dashboard page.
 
 **On another machine** (a cluster node, a lab PC): the dashboard listens on 127.0.0.1 only. Reach it through an SSH tunnel, never a public address:
 

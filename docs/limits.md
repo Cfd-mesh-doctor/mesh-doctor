@@ -17,7 +17,7 @@
 
 ## The A/B test and the judge
 - **One mesh at a time:** the source must be a serial mesh (the case's own `constant/polyMesh` is the real mesh), and the repaired copy must have the same topology (point moves only).
-- Steady `foamRun` cases (SIMPLE-type iterations). The judge reads iterations, so for a transient run use the live page's averaging window instead.
+- The A/B test runs steady `foamRun` cases (SIMPLE-type iterations). The judge handles both steady and transient runs; for transient runs it reads the PIMPLE outer iterations and Courant numbers from the solver log.
 - A short A/B (tens of iterations) shows a trend, not a converged answer. Run enough iterations for the judge to give a verdict.
 - The solver variants (`simplec`, `simplec2`, `relax`, `lts`) change `system/fvSolution` or `fvSchemes` in the copy only. They are starting points to try, not tuned settings.
 

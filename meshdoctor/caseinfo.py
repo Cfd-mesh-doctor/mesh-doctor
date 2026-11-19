@@ -203,6 +203,68 @@ TIME_LINE = re.compile(r"^Time = (" + NUM + r")s?\s*$")
 RES_LINE = re.compile(r"Solving for (\w+), Initial residual = (" + NUM + r")")
 
 
+PIMPLE_LINE = re.compile(r"^PIMPLE: Iteration (\d+)")
+COURANT_LINE = re.compile(r"^Courant Number mean: (" + NUM + r") max: (" + NUM + r")")
+BOUNDING_LINE = re.compile(r"^bounding (\w+)")
+
+
+def transient(case):
+    """True unless system/fvSchemes says ddtSchemes { default steadyState; }."""
+    path = os.path.join(case, "system", "fvSchemes")
+    m = re.search(r"ddtSchemes\s*\{([^}]*)\}", read_text(path) if os.path.isfile(path) else "")
+    d = re.search(r"default\s+(\w+)", m.group(1)) if m else None
+    return bool(d) and d.group(1) != "steadyState"
+
+
+def step_stats(paths, field="p"):
+    """Per time step of a transient log: [{t, first, last, outer, coMean, coMax,
+    bounded}].  `first` is the initial residual of the first `field` solve in the
+    step, `last` that of the first solve in the last PIMPLE outer iteration (how
+    far the outer loop converged the step), `bounded` the names of fields
+    bounded in the step.  Values are None where the log does not say."""
+    steps, byt = [], {}
+    for path in paths:
+        try:
+            fh = open(path, encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        with fh:
+            cur = None
+            for line in fh:
+                m = TIME_LINE.match(line)
+                if m:
+                    t = float(m.group(1))
+                    cur = byt[t] = {"t": t, "first": None, "last": None, "outer": 0,
+                                    "coMean": None, "coMax": None, "bounded": [], "_new": True}
+                    continue
+                if cur is None:
+                    continue
+                m = PIMPLE_LINE.match(line)
+                if m:
+                    cur["outer"], cur["_new"] = int(m.group(1)), True
+                    continue
+                m = RES_LINE.search(line)
+                if m and m.group(1) == field and cur["_new"]:
+                    r = float(m.group(2))
+                    if cur["first"] is None:
+                        cur["first"] = r
+                    cur["last"], cur["_new"] = r, False
+                    continue
+                m = COURANT_LINE.match(line)
+                if m:
+                    cur["coMean"], cur["coMax"] = float(m.group(1)), float(m.group(2))
+                    continue
+                m = BOUNDING_LINE.match(line)
+                if m and m.group(1) not in cur["bounded"]:
+                    cur["bounded"].append(m.group(1))
+    for t in sorted(byt):
+        s = byt[t]
+        s.pop("_new")
+        if s["first"] is not None:
+            steps.append(s)
+    return steps
+
+
 def solver_logs(case, names=("log.foamRun*",)):
     """The case's solver logs, oldest first (a later log wins where times repeat)."""
     import glob

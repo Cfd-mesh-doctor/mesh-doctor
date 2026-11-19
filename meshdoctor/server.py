@@ -616,9 +616,16 @@ def run_status(label):
 #  - refuses requests that another web site's page sends (Origin check);
 #  - job-starting requests (POST) need a random token made at launch; the
 #    server writes it into the pages it serves, which other sites cannot read;
-#  - serves only the dashboard pages, never the other files in this folder;
+#  - serves only the dashboard pages and the scripts in web/js/, never the
+#    other files in this folder;
+#  - every page gets a Content-Security-Policy: no other site's scripts, styles,
+#    images or connections, no framing.  Pages whose script is all in web/js/
+#    (STRICT) run no inline script at all, so injected markup cannot run code;
 #  - error details go to this server's window; the browser gets a short message.
 import hmac, secrets, traceback
+
+import api_v1  # /api/v1: the versioned API (route table, error format, OpenAPI)
+api_v1.provide(abtest_live=run_status, live=status, live_case=lambda: CASE)
 
 TOKEN = secrets.token_urlsafe(24)
 HOSTS = {f"{h}:{PORT}" for h in ("localhost", "127.0.0.1", "[::1]")}
@@ -626,16 +633,28 @@ ORIGINS = {f"http://{h}" for h in HOSTS}
 PAGES = {"/": "index.html", "/index.html": "index.html",
          "/run": "run.html", "/run.html": "run.html",
          "/meshdoctor": "meshdoctor.html", "/meshdoctor.html": "meshdoctor.html",
-         "/meshmap": "meshmap.html", "/meshmap.html": "meshmap.html"}
+         "/meshmap": "meshmap.html", "/meshmap.html": "meshmap.html",
+         "/report": "report.html", "/report.html": "report.html"}
 TOKEN_META = '<meta name="md-token" content="">'
+SCRIPT = re.compile(r"^/js/([a-z0-9][a-z0-9-]{0,40}\.js)$")
+STRICT = {"index.html", "run.html", "meshdoctor.html", "meshmap.html", "report.html"}   # no inline script
+# The old routes still answer, but every page uses /api/v1 since 2026-11-11 (RFC 9745 header, a Unix time)
+OLD_API = {"Deprecation": "@1794355200", "Link": f'<{api_v1.PREFIX}/openapi.json>; rel="successor-version"'}
+CSP = ("default-src 'none'; script-src 'self'{inline}; style-src 'self' 'unsafe-inline'; "
+       "img-src 'self' data: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; "
+       "frame-ancestors 'none'")
 
 
 class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
-    def _send(self, code, ctype, body):
+    def _send(self, code, ctype, body, headers=None):
+        if getattr(self, "_old", False):
+            headers = dict(OLD_API, **(headers or {}))
         self.send_response(code)
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
@@ -644,11 +663,19 @@ class H(http.server.BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         self.end_headers(); self.wfile.write(body)
 
-    def _json(self, obj, code=200):
-        self._send(code, "application/json", json.dumps(obj).encode())
+    def _json(self, obj, code=200, headers=None):
+        self._send(code, "application/json", json.dumps(obj).encode(), headers)
+
+    def _v1path(self):
+        p = urlparse(self.path).path
+        return p == api_v1.PREFIX or p.startswith(api_v1.PREFIX + "/")
+
+    def _error(self, code, err, msg):
+        """Old routes answer {"error": msg}; /api/v1 answers {"error": {"code", "message"}}."""
+        self._json(api_v1.error_doc(err, msg) if self._v1path() else {"error": msg}, code)
 
     def _deny(self, code, msg):
-        self._json({"error": msg}, code)
+        self._error(code, {403: "forbidden", 404: "not-found"}.get(code, "bad-request"), msg)
         return False
 
     def _allowed(self, post=False):
@@ -664,7 +691,7 @@ class H(http.server.BaseHTTPRequestHandler):
     def _fail(self, where):
         traceback.print_exc()
         print(f"[server] error while handling {where}", file=sys.stderr, flush=True)
-        return self._json({"error": "internal error; details are in the server window"}, 500)
+        return self._error(500, "internal", "internal error; details are in the server window")
 
     def _page(self, name):
         try:
@@ -673,7 +700,16 @@ class H(http.server.BaseHTTPRequestHandler):
         except OSError:
             return self._deny(404, "not found")
         html = html.replace(TOKEN_META, f'<meta name="md-token" content="{TOKEN}">')
-        self._send(200, "text/html; charset=utf-8", html.encode())
+        csp = CSP.format(inline="" if name in STRICT else " 'unsafe-inline'")
+        self._send(200, "text/html; charset=utf-8", html.encode(), {"Content-Security-Policy": csp})
+
+    def _script(self, name):
+        try:
+            with open(os.path.join(WEB, "js", name), "rb") as f:
+                body = f.read()
+        except OSError:
+            return self._deny(404, "not found")
+        self._send(200, "text/javascript; charset=utf-8", body)
 
     def _md(self, method):
         u = urlparse(self.path); q = {k: v[0] for k, v in parse_qs(u.query).items()}
@@ -708,17 +744,45 @@ class H(http.server.BaseHTTPRequestHandler):
         except Exception:
             return self._fail(u.path)
 
+    def _v1(self, method):
+        u = urlparse(self.path)
+        q = {k: v[0] for k, v in parse_qs(u.query).items()}
+        body = b""
+        if method == "POST":
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                n = -1
+            if n < 0:
+                return self._error(400, "bad-request", "bad Content-Length")
+            if n > api_v1.MAX_BODY:
+                return self._error(413, "too-large", f"body over {api_v1.MAX_BODY} bytes")
+            body = self.rfile.read(n)
+        try:
+            code, doc, headers = api_v1.handle(method, u.path, q, body, self.headers.get("Content-Type", ""))
+        except Exception:
+            return self._fail(u.path)
+        self._json(doc, code, headers)
+
     def do_POST(self):
+        self._old = False
         if not self._allowed(post=True):
             return
+        if self._v1path():
+            return self._v1("POST")
         if urlparse(self.path).path.startswith("/api/md/"):
+            self._old = True
             return self._md("POST")
         self._deny(404, "not found")
 
     def do_GET(self):
+        self._old = False
         if not self._allowed():
             return
         path = urlparse(self.path).path
+        if self._v1path():
+            return self._v1("GET")
+        self._old = path.startswith("/api/md/") or path in ("/api/run", "/api/status")
         if path.startswith("/api/md/"):
             return self._md("GET")
         if path == "/api/run":
@@ -734,6 +798,9 @@ class H(http.server.BaseHTTPRequestHandler):
                 return self._fail(path)
         if path in PAGES:
             return self._page(PAGES[path])
+        m = SCRIPT.match(path)
+        if m:
+            return self._script(m.group(1))
         self._deny(404, "not found")
 
 

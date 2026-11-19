@@ -1,0 +1,344 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://meshdoctor.invalid/schemas/abtest/1",
+ "title": "Mesh Doctor solver A/B test",
+ "description": "<workspace>/<label>_ab/ab_result.json, written by meshdoctor ab; it grows while the test runs",
+ "type": "object",
+ "required": [
+  "schemaVersion",
+  "source",
+  "label",
+  "iters",
+  "nProcs",
+  "init",
+  "window",
+  "started"
+ ],
+ "properties": {
+  "schemaVersion": {
+   "type": "string",
+   "pattern": "^1\\.\\d+$",
+   "description": "major.minor; readers accept any 1.x"
+  },
+  "source": {
+   "type": "string"
+  },
+  "fixedName": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "variant": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "variantSettings": {
+   "type": [
+    "array",
+    "null"
+   ]
+  },
+  "label": {
+   "type": "string"
+  },
+  "iters": {
+   "type": "integer"
+  },
+  "nProcs": {
+   "type": "integer"
+  },
+  "init": {
+   "type": "string"
+  },
+  "window": {
+   "type": "integer"
+  },
+  "started": {
+   "type": "string"
+  },
+  "finished": {
+   "type": "string"
+  },
+  "baseRuns": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "cmd",
+     "log",
+     "exit",
+     "seconds"
+    ],
+    "properties": {
+     "cmd": {
+      "type": "string"
+     },
+     "log": {
+      "type": "string"
+     },
+     "exit": {
+      "type": "integer"
+     },
+     "seconds": {
+      "type": "number"
+     }
+    }
+   }
+  },
+  "fixedRuns": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "cmd",
+     "log",
+     "exit",
+     "seconds"
+    ],
+    "properties": {
+     "cmd": {
+      "type": "string"
+     },
+     "log": {
+      "type": "string"
+     },
+     "exit": {
+      "type": "integer"
+     },
+     "seconds": {
+      "type": "number"
+     }
+    }
+   }
+  },
+  "base": {
+   "type": "object",
+   "properties": {
+    "iterations": {
+     "type": [
+      "integer",
+      "null"
+     ]
+    },
+    "secondsPerIteration": {
+     "type": [
+      "number",
+      "null"
+     ]
+    },
+    "bounding": {
+     "type": [
+      "integer",
+      "null"
+     ]
+    },
+    "residuals": {
+     "type": "object"
+    },
+    "forces": {
+     "type": "object"
+    },
+    "residualHistory": {
+     "type": "object"
+    }
+   }
+  },
+  "fixed": {
+   "type": "object",
+   "properties": {
+    "iterations": {
+     "type": [
+      "integer",
+      "null"
+     ]
+    },
+    "secondsPerIteration": {
+     "type": [
+      "number",
+      "null"
+     ]
+    },
+    "bounding": {
+     "type": [
+      "integer",
+      "null"
+     ]
+    },
+    "residuals": {
+     "type": "object"
+    },
+    "forces": {
+     "type": "object"
+    },
+    "residualHistory": {
+     "type": "object"
+    }
+   }
+  },
+  "residualRatioFixedOverBase": {
+   "type": "object",
+   "additionalProperties": {
+    "type": [
+     "number",
+     "null"
+    ]
+   }
+  },
+  "baseHotspots": {
+   "type": "object",
+   "properties": {
+    "summary": {
+     "type": [
+      "object",
+      "null"
+     ]
+    },
+    "nHotCells": {
+     "type": [
+      "integer",
+      "null"
+     ]
+    },
+    "shareOfTopChangeNearMeshDefects": {
+     "type": [
+      "number",
+      "null"
+     ]
+    },
+    "top": {
+     "type": "array",
+     "items": {
+      "type": "object"
+     }
+    }
+   }
+  },
+  "fixedHotspots": {
+   "type": "object",
+   "properties": {
+    "summary": {
+     "type": [
+      "object",
+      "null"
+     ]
+    },
+    "nHotCells": {
+     "type": [
+      "integer",
+      "null"
+     ]
+    },
+    "shareOfTopChangeNearMeshDefects": {
+     "type": [
+      "number",
+      "null"
+     ]
+    },
+    "top": {
+     "type": "array",
+     "items": {
+      "type": "object"
+     }
+    }
+   }
+  },
+  "sourceCheck": {
+   "type": [
+    "object",
+    "null"
+   ],
+   "required": [
+    "unchanged"
+   ],
+   "description": "fingerprint of the source case before and after; unchanged must be true",
+   "properties": {
+    "unchanged": {
+     "type": "boolean"
+    },
+    "before": {
+     "$ref": "#/$defs/fingerprint"
+    },
+    "after": {
+     "$ref": "#/$defs/fingerprint"
+    }
+   }
+  },
+  "extensions": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "to": {
+      "type": "integer"
+     },
+     "variant": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "runs": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "cmd",
+        "log",
+        "exit",
+        "seconds"
+       ],
+       "properties": {
+        "cmd": {
+         "type": "string"
+        },
+        "log": {
+         "type": "string"
+        },
+        "exit": {
+         "type": "integer"
+        },
+        "seconds": {
+         "type": "number"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "fixedJudge": {
+   "type": "object",
+   "description": "a judge result; see judge.schema.json",
+   "required": [
+    "verdict"
+   ]
+  }
+ },
+ "$defs": {
+  "fingerprint": {
+   "type": "object",
+   "required": [
+    "sha256",
+    "files",
+    "bytes"
+   ],
+   "properties": {
+    "sha256": {
+     "type": "string"
+    },
+    "files": {
+     "type": "integer"
+    },
+    "bytes": {
+     "type": "integer"
+    },
+    "time": {
+     "type": "string"
+    }
+   }
+  }
+ }
+}

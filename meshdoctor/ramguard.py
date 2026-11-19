@@ -7,6 +7,8 @@ The need is estimated from the cell count, with figures measured on an
 
   repair (foamMeshDoctor, serial)   15.7 GB   -> 1.5 KB per cell
   solve (foamRun, 6 ranks, total)   ~14 GB    -> 1.35 KB per cell
+  post (transient-plan: foamPostProcess CourantNo, cell centres and volumes, 6 ranks,
+        plus reading the fields in Python): ~5 GB at peak   -> 0.5 KB per cell
 
 plus 0.5 GB of headroom.  Free memory is MemAvailable from /proc/meminfo,
 capped by the optional `ram_limit_mb` setting (config.py).  On a cluster,
@@ -16,7 +18,7 @@ import glob, gzip, os, re
 
 import config
 
-KB_PER_CELL = {"repair": 1.5, "solve": 1.35}
+KB_PER_CELL = {"repair": 1.5, "solve": 1.35, "post": 0.5}
 HEADROOM_MB = 512
 
 
@@ -64,7 +66,7 @@ def available_mb():
 
 
 def check(case, kind):
-    """(ok, message).  kind: "repair" or "solve".  Unknown sizes are let through."""
+    """(ok, message).  kind: "repair", "solve" or "post".  Unknown sizes are let through."""
     cells = mesh_cells(case)
     free = available_mb()
     if not cells or free is None:
