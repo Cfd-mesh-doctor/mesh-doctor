@@ -621,15 +621,28 @@ def run_status(label):
 #  - every page gets a Content-Security-Policy: no other site's scripts, styles,
 #    images or connections, no framing.  Pages whose script is all in web/js/
 #    (STRICT) run no inline script at all, so injected markup cannot run code;
-#  - error details go to this server's window; the browser gets a short message.
+#  - error details go to this server's window; the browser gets a short message;
+#  - the web app (pairing.py): pages served from an address in the app_origins
+#    setting may use /api/v1 (nothing else) when they send the pairing key on every
+#    request (X-MD-Key).  Only they get CORS answers, so no other site can read
+#    the API.  The key replaces the launch token for their job starts.
 import hmac, secrets, traceback
 
 import api_v1  # /api/v1: the versioned API (route table, error format, OpenAPI)
+import pairing
 api_v1.provide(abtest_live=run_status, live=status, live_case=lambda: CASE)
 
 TOKEN = secrets.token_urlsafe(24)
 HOSTS = {f"{h}:{PORT}" for h in ("localhost", "127.0.0.1", "[::1]")}
 ORIGINS = {f"http://{h}" for h in HOSTS}
+APP_ORIGINS = set()            # the web app's addresses (app_origins setting), set in main()
+APP_KEY = b""                  # the pairing key (pairing.py), set in main()
+APP_HEADERS = "Content-Type, X-MD-Key"
+
+
+def _same(given, secret):
+    """Constant-time compare that also copes with non-ASCII header text."""
+    return bool(secret) and hmac.compare_digest(given.encode("utf-8", "replace"), secret)
 PAGES = {"/": "index.html", "/index.html": "index.html",
          "/run": "run.html", "/run.html": "run.html",
          "/meshdoctor": "meshdoctor.html", "/meshdoctor.html": "meshdoctor.html",
@@ -653,6 +666,9 @@ class H(http.server.BaseHTTPRequestHandler):
         if getattr(self, "_old", False):
             headers = dict(OLD_API, **(headers or {}))
         self.send_response(code)
+        if getattr(self, "_cors", None):          # only ever an address from app_origins
+            self.send_header("Access-Control-Allow-Origin", self._cors)
+            self.send_header("Vary", "Origin")
         for k, v in (headers or {}).items():
             self.send_header(k, v)
         self.send_header("Content-Type", ctype)
@@ -678,13 +694,25 @@ class H(http.server.BaseHTTPRequestHandler):
         self._error(code, {403: "forbidden", 404: "not-found"}.get(code, "bad-request"), msg)
         return False
 
+    def _start(self):
+        """Per request: the app address to answer with CORS headers, if the Origin is one."""
+        self._old = False
+        origin = self.headers.get("Origin")
+        self._cors = origin if origin is not None and origin in APP_ORIGINS else None
+
     def _allowed(self, post=False):
         if self.headers.get("Host", "") not in HOSTS:
             return self._deny(403, "forbidden: unknown host")
         origin = self.headers.get("Origin")
+        if self._cors:
+            if not self._v1path():
+                return self._deny(403, "forbidden: the web app may use /api/v1 only")
+            if not _same(self.headers.get("X-MD-Key", ""), APP_KEY):
+                return self._deny(403, "forbidden: missing or wrong pairing key (pair again: meshdoctor pair)")
+            return True
         if origin is not None and origin not in ORIGINS:
             return self._deny(403, "forbidden: cross-site request")
-        if post and not hmac.compare_digest(self.headers.get("X-MD-Token", ""), TOKEN):
+        if post and not _same(self.headers.get("X-MD-Token", ""), TOKEN.encode()):
             return self._deny(403, "forbidden: missing or wrong token (reload the page)")
         return True
 
@@ -764,8 +792,26 @@ class H(http.server.BaseHTTPRequestHandler):
             return self._fail(u.path)
         self._json(doc, code, headers)
 
+    def do_OPTIONS(self):
+        """CORS preflight: answered for the web app's addresses on /api/v1 only.  It carries no
+        key (browsers never send custom headers on a preflight); the real request needs it."""
+        self._start()
+        if self.headers.get("Host", "") not in HOSTS:
+            return self._deny(403, "forbidden: unknown host")
+        if not self._cors or not self._v1path():
+            self._cors = None
+            return self._deny(403, "forbidden: cross-site request")
+        method = self.headers.get("Access-Control-Request-Method", "")
+        if method not in ("GET", "POST"):
+            return self._error(405, "method-not-allowed", "only GET and POST")
+        h = {"Access-Control-Allow-Methods": "GET, POST", "Access-Control-Allow-Headers": APP_HEADERS,
+             "Access-Control-Max-Age": "600"}
+        if self.headers.get("Access-Control-Request-Private-Network") == "true":   # older Chrome (PNA)
+            h["Access-Control-Allow-Private-Network"] = "true"
+        self._send(204, "text/plain", b"", h)
+
     def do_POST(self):
-        self._old = False
+        self._start()
         if not self._allowed(post=True):
             return
         if self._v1path():
@@ -776,7 +822,7 @@ class H(http.server.BaseHTTPRequestHandler):
         self._deny(404, "not found")
 
     def do_GET(self):
-        self._old = False
+        self._start()
         if not self._allowed():
             return
         path = urlparse(self.path).path
@@ -805,10 +851,12 @@ class H(http.server.BaseHTTPRequestHandler):
 
 
 def main(argv=None):
-    global CASE, PORT, HOSTS, ORIGINS
+    global CASE, PORT, HOSTS, ORIGINS, APP_ORIGINS, APP_KEY
     ap = argparse.ArgumentParser(prog="meshdoctor serve", description="Mesh Doctor dashboard (127.0.0.1 only).")
     ap.add_argument("--port", type=int, default=PORT, help="port on 127.0.0.1 (default %(default)s)")
     ap.add_argument("--case", default=None, help="live case for the transient page (default: live_case setting)")
+    ap.add_argument("--open-app", action="store_true",
+                    help="open the web app's pairing link in the browser (the Windows browser from WSL)")
     ap.add_argument("--container", action="store_true",
                     help="inside Docker only: listen on the container's interface so `docker run "
                          "-p 127.0.0.1:PORT:PORT` can reach it (the host still exposes it to itself only)")
@@ -838,6 +886,19 @@ def main(argv=None):
         print("WARNING: " + warn, flush=True)
     print("Security: answers only pages served from this address; job starts need the page's launch token.",
           flush=True)
+    good, bad = pairing.parse_origins(config.settings().get("app_origins", ""))
+    for b in bad:
+        print(f"WARNING: ignored app address {b!r} (use https://host[:port] or http://localhost:port)", flush=True)
+    APP_ORIGINS = set(good)
+    APP_KEY = pairing.load_key().encode() if good else b""
+    if good:
+        url = pairing.link(good[0], PORT, APP_KEY.decode())
+        print(f"Web app: {', '.join(good)} may use /api/v1 with the pairing key. Pair a browser once with:",
+              flush=True)
+        print(f"  {url}", flush=True)
+        print("  (the link holds the key: treat it like a password; a new key: meshdoctor pair --new)", flush=True)
+        if a.open_app and not pairing.open_url(url):
+            print("  could not open a browser here; copy the link instead", flush=True)
     print(f"Another machine? Use an SSH tunnel: ssh -L {PORT}:localhost:{PORT} <you>@<this host>", flush=True)
     http.server.ThreadingHTTPServer((bind, PORT), H).serve_forever()
 

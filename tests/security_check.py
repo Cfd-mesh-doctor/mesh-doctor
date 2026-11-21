@@ -11,12 +11,17 @@ temporary cases and workspace folders and no config file.
 """
 import atexit, http.client, os, re, shutil, socket, subprocess, sys, tempfile, time
 
+APP = "https://app.example.test"      # the web app's address the --start server allows (app_origins)
+START = "--start" in sys.argv
+
 
 def _start_server():
     s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
     tmp = tempfile.mkdtemp(prefix="md_sec_")
     env = dict(os.environ, MESHDOCTOR_CONFIG=os.devnull, MESHDOCTOR_CASES=os.path.join(tmp, "cases"),
-               MESHDOCTOR_WORKSPACE=os.path.join(tmp, "work"))
+               MESHDOCTOR_WORKSPACE=os.path.join(tmp, "work"), MESHDOCTOR_APP_ORIGINS=APP,
+               MESHDOCTOR_KEY_FILE=os.path.join(tmp, "app.key"))
+    _start_server.key_file = env["MESHDOCTOR_KEY_FILE"]
     os.makedirs(env["MESHDOCTOR_CASES"])
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     p = subprocess.Popen([sys.executable, "-m", "meshdoctor", "serve", "--port", str(port)], cwd=repo, env=env,
@@ -39,7 +44,7 @@ def _start_server():
     sys.exit("server did not start")
 
 
-PORT = _start_server() if "--start" in sys.argv else int(sys.argv[1]) if len(sys.argv) > 1 else 8765
+PORT = _start_server() if START else int(sys.argv[1]) if len(sys.argv) > 1 else 8765
 HOST = f"localhost:{PORT}"
 
 
@@ -68,6 +73,11 @@ JOB = "/api/md/start?src=example_case&name=..&profile=openfoam"
 V1JOB = b'{"kind": "repair", "params": {"source": "example_case", "name": ".."}}'
 JSON = "application/json"
 PAGES = ("/", "/run", "/meshdoctor", "/meshmap", "/report")
+APP_KEY = ""
+if START:                                     # the server made its pairing key before it listened
+    with open(_start_server.key_file, encoding="utf-8") as f:
+        APP_KEY = f.read().strip()
+EVIL = "https://evil.example"
 
 CHECKS = [
     # (description, method, path, headers, expected status, text that must be in the body)
@@ -124,12 +134,54 @@ CHECKS = [
     ("unknown script is not served", "GET", "/js/nope.js", {}, 404, ""),
     ("script route does not reach other files", "GET", "/js/../server.py", {}, 404, ""),
     ("encoded traversal in the script route", "GET", "/js/%2e%2e%2fserver.py", {}, 404, ""),
+    # CORS preflights: never for another site, a missing Origin or an unknown host
+    ("preflight from another site refused", "OPTIONS", "/api/v1/jobs",
+     {"Origin": EVIL, "Access-Control-Request-Method": "POST"}, 403, "cross-site"),
+    ("preflight without an Origin refused", "OPTIONS", "/api/v1/jobs", {}, 403, "cross-site"),
+    ("preflight to an unknown host refused", "OPTIONS", "/api/v1/jobs",
+     {"Host": f"evil.example:{PORT}", "Origin": APP, "Access-Control-Request-Method": "GET"}, 403, "unknown host"),
+    ("another site's read refused, even with a key header", "GET", "/api/v1/cases",
+     {"Origin": EVIL, "X-MD-Key": "anything"}, 403, "cross-site"),
 ]
 
+# The web app (pairing.py): only with --start, where this script knows the app address and the key
+APP_CHECKS = [
+    ("app: read without the pairing key refused", "GET", "/api/v1/cases", {"Origin": APP}, 403, "pairing key"),
+    ("app: read with a wrong key refused", "GET", "/api/v1/cases", {"Origin": APP, "X-MD-Key": "wrong"}, 403,
+     "pairing key"),
+    ("app: read with the key works", "GET", "/api/v1/cases", {"Origin": APP, "X-MD-Key": APP_KEY}, 200, '"items"'),
+    ("app: no dashboard pages, even with the key", "GET", "/meshdoctor", {"Origin": APP, "X-MD-Key": APP_KEY},
+     403, "/api/v1 only"),
+    ("app: no old routes, even with the key", "GET", "/api/md/maplist", {"Origin": APP, "X-MD-Key": APP_KEY},
+     403, "/api/v1 only"),
+    ("app: job start without the key refused, even with the launch token", "POST", "/api/v1/jobs",
+     {"Origin": APP, "Content-Type": JSON, "X-MD-Token": TOKEN}, 403, "pairing key", V1JOB),
+    ("app: job start with the key reaches the API, which refuses '..'", "POST", "/api/v1/jobs",
+     {"Origin": APP, "Content-Type": JSON, "X-MD-Key": APP_KEY}, 400, '"code": "bad-request"', V1JOB),
+    ("app: job as a form post refused, even with the key", "POST", "/api/v1/jobs",
+     {"Origin": APP, "Content-Type": "application/x-www-form-urlencoded", "X-MD-Key": APP_KEY}, 415,
+     "application/json", V1JOB),
+    ("app: preflight answered", "OPTIONS", "/api/v1/jobs",
+     {"Origin": APP, "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type,x-md-key"},
+     204, ""),
+    ("app: preflight for another method refused", "OPTIONS", "/api/v1/jobs",
+     {"Origin": APP, "Access-Control-Request-Method": "DELETE"}, 405, "method-not-allowed"),
+    ("app: preflight outside /api/v1 refused", "OPTIONS", "/meshdoctor",
+     {"Origin": APP, "Access-Control-Request-Method": "GET"}, 403, "cross-site"),
+    ("app: a look-alike address is another site", "GET", "/api/v1/cases",
+     {"Origin": APP + ".evil.example", "X-MD-Key": APP_KEY}, 403, "cross-site"),
+    ("app: the plain-http twin is another site", "GET", "/api/v1/cases",
+     {"Origin": APP.replace("https:", "http:"), "X-MD-Key": APP_KEY}, 403, "cross-site"),
+] if START else []
 
-def header(path, name):
-    req("GET", path)
+
+def header(path, name, method="GET", headers=None):
+    req(method, path, headers)
     return req.headers.getheader(name) or ""
+
+
+def _key_file_private():
+    return os.name != "posix" or (os.stat(_start_server.key_file).st_mode & 0o777) == 0o600
 
 
 def csp(path):
@@ -151,10 +203,34 @@ HEADERS = [
      lambda: all(header(p, "Deprecation").startswith("@") and "/api/v1/openapi.json" in header(p, "Link")
                  for p in ("/api/status", "/api/md/maplist"))),
     ("v1 and the pages are not deprecated", lambda: not any(header(p, "Deprecation") for p in ("/api/v1", "/meshdoctor"))),
+    ("another site never gets a CORS answer",
+     lambda: header("/api/v1/cases", "Access-Control-Allow-Origin", headers={"Origin": EVIL}) == ""
+     and header("/api/v1/jobs", "Access-Control-Allow-Origin", "OPTIONS",
+                {"Origin": EVIL, "Access-Control-Request-Method": "POST"}) == ""),
+    ("the dashboard's own pages get no CORS answer",
+     lambda: header("/api/v1/cases", "Access-Control-Allow-Origin", headers={"Origin": f"http://{HOST}"}) == ""),
 ]
+if START:
+    HEADERS += [
+        ("app: answers name the app's own address only",
+         lambda: header("/api/v1/cases", "Access-Control-Allow-Origin", headers={"Origin": APP, "X-MD-Key": APP_KEY})
+         == APP and "Origin" in header("/api/v1/cases", "Vary", headers={"Origin": APP, "X-MD-Key": APP_KEY})),
+        ("app: refusals carry CORS too, so the app can show them",
+         lambda: header("/api/v1/cases", "Access-Control-Allow-Origin", headers={"Origin": APP}) == APP),
+        ("app: the preflight allows the key header and caches briefly",
+         lambda: "X-MD-Key" in header("/api/v1/jobs", "Access-Control-Allow-Headers", "OPTIONS",
+                                      {"Origin": APP, "Access-Control-Request-Method": "POST"})
+         and header("/api/v1/jobs", "Access-Control-Max-Age", "OPTIONS",
+                    {"Origin": APP, "Access-Control-Request-Method": "POST"}) == "600"),
+        ("app: no cookies or credentials are ever allowed",
+         lambda: header("/api/v1/cases", "Access-Control-Allow-Credentials",
+                        headers={"Origin": APP, "X-MD-Key": APP_KEY}) == ""),
+        ("app: the key file is readable by its owner only", _key_file_private),
+    ]
 
 failed = 0
 print(f"token found in page: {'yes' if TOKEN else 'NO'} (page status {page_status})")
+CHECKS += APP_CHECKS
 for desc, method, path, headers, want, text, *send in CHECKS:
     got, body = req(method, path, headers, *send)
     ok = got == want and (text in body)

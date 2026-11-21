@@ -105,7 +105,13 @@ def _found(doc, what):
 
 
 @route("GET", "/", "This API: its version, the result-file versions, the OpenAPI document",
-       ok={"type": "object", "required": ["apiVersion", "schemas"]})
+       ok={"type": "object", "required": ["apiVersion", "schemas"], "properties": {
+           "apiVersion": {"type": "string", "description": "major.minor of this API"},
+           "version": {"type": "string", "description": "the Mesh Doctor release"},
+           "schemas": {"type": "object", "additionalProperties": {"type": "string"},
+                       "description": "result-document kind: its schema version"},
+           "openapi": {"type": "string"},
+           "jobKinds": {"type": "array", "items": {"type": "string"}}}})
 def info(p, q, b):
     return {"apiVersion": API_VERSION, "version": version.VERSION, "schemas": dict(schema.VERSIONS),
             "openapi": PREFIX + "/openapi.json", "jobKinds": sorted(JOBS)}
@@ -131,7 +137,18 @@ def cases(p, q, b):
 
 
 @route("GET", "/repairs", "Repair runs in the workspace, with their status and verdict",
-       ok=_items({"type": "object", "required": ["name", "status"]}))
+       ok=_items({"type": "object", "required": ["name", "status"], "properties": {
+           "name": {"type": "string"},
+           "status": {"type": "object", "description": "the repair's own status.json (step, state); {} if none"},
+           "source": {"type": ["string", "null"],
+                      "description": "the source case's folder on the worker (finished runs)"},
+           "profile": {"type": ["string", "null"]},
+           "verdict": {"type": ["object", "null"], "required": ["improved", "regressions", "unchanged"],
+                       "description": "checkMesh numbers that got better, worse, or stayed the same (finished runs)",
+                       "properties": {k: {"type": "array", "items": {"type": "string"}}
+                                      for k in ("improved", "regressions", "unchanged")}},
+           "finished": {"type": ["string", "null"], "description": "the worker's local time, yyyy-mm-dd hh:mm:ss"},
+           "nCells": {"type": ["integer", "null"]}}}))
 def repairs(p, q, b):
     return {"items": md_api.results()}
 
@@ -413,7 +430,8 @@ def get_job(p, q, b):
     return _job_out(_job(p["job"]))
 
 
-@route("POST", "/jobs/{job}/cancel", "Stop a queued or running job and everything it started.  Needs the token.",
+@route("POST", "/jobs/{job}/cancel",
+       "Stop a queued or running job and everything it started.  Needs the token or pairing key.",
        ok=_ref("job"))
 def cancel_job(p, q, b):
     if _job(p["job"])["state"] not in jobs.ACTIVE:
@@ -421,8 +439,9 @@ def cancel_job(p, q, b):
     return _job_out(jobs.cancel(p["job"]))
 
 
-@route("POST", "/jobs", "Start a repair, A/B test or A/B extension.  Needs the launch token (X-MD-Token).",
-       body=JOB_REQUEST, ok=_ref("job"), status=202)
+@route("POST", "/jobs",
+       "Start a repair, A/B test or A/B extension.  Needs the launch token (X-MD-Token) or the pairing key "
+       "(X-MD-Key).", body=JOB_REQUEST, ok=_ref("job"), status=202)
 def start_job(p, q, b):
     if not isinstance(b, dict) or b.get("kind") not in JOBS:
         raise ApiError("bad-request", "body must be {\"kind\": one of %s, \"params\": {...}}" % sorted(JOBS))
@@ -525,7 +544,7 @@ def openapi():
             del op["parameters"]
         if r.body is not None:
             op["requestBody"] = {"required": True, "content": {"application/json": {"schema": r.body}}}
-            op["security"] = [{"launchToken": []}]
+            op["security"] = [{"launchToken": []}, {"pairingKey": []}]
         paths.setdefault(r.template, {})[r.method.lower()] = op
     return {
         "openapi": "3.1.0",
@@ -533,7 +552,9 @@ def openapi():
                  "description": "Finds and repairs bad cells in OpenFOAM meshes and tests whether the repair "
                                 "helped the solver.  Served by `meshdoctor serve` on 127.0.0.1 only: requests "
                                 "must name this machine in Host, may not come from another site's page "
-                                "(Origin), and POST requests need the launch token from the dashboard page.",
+                                "(Origin), and POST requests need the launch token from the dashboard page.  "
+                                "The Mesh Doctor web app (an address in app_origins) sends the pairing key "
+                                "instead, on every request.",
                  "license": {"name": "GPL-3.0-or-later", "identifier": "GPL-3.0-or-later"}},
         "servers": [{"url": PREFIX}],
         "paths": paths,
@@ -546,5 +567,9 @@ def openapi():
             "securitySchemes": {"launchToken": {
                 "type": "apiKey", "in": "header", "name": "X-MD-Token",
                 "description": "made fresh at each server start and written into the dashboard pages "
-                               "(<meta name=\"md-token\">), which other sites cannot read"}}},
+                               "(<meta name=\"md-token\">), which other sites cannot read"},
+                "pairingKey": {
+                "type": "apiKey", "in": "header", "name": "X-MD-Key",
+                "description": "the web app's key from `meshdoctor pair` (~/.config/meshdoctor/app.key); "
+                               "accepted only from an address in app_origins, on every /api/v1 request"}}},
     }

@@ -15,6 +15,7 @@
     python3 -m meshdoctor jobs   [list | show <id> | cancel <id>]     dashboard and API jobs
     python3 -m meshdoctor report <name> [--html | --gzip] [-o file]   portable report (one file)
     python3 -m meshdoctor check                                       is this machine ready?
+    python3 -m meshdoctor pair   [--new] [--open]                     pair the web app with this engine
     python3 -m meshdoctor experimental polish | ratchet ...           experimental skills
 
 Run it from the folder that holds `meshdoctor/` (or after installing it).
@@ -36,6 +37,7 @@ SCRIPTS = {
     "schema": "schema.py",
     "jobs": "jobs.py",
     "report": "report.py",
+    "pair": "pairing.py",
 }
 EXPERIMENTAL = {"polish": "polish.py", "ratchet": "ratchet.py"}
 

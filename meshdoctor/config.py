@@ -14,6 +14,9 @@ an environment variable, the config file, or a generic default.
   up_axis     MESHDOCTOR_UP_AXIS            (none) e.g. z; else forceCoeffs liftDir, else the
                                             cross-flow axis with the larger force
   ram_limit_mb MESHDOCTOR_RAM_LIMIT_MB      (none) most memory a job may use (RAM guard)
+  app_origins MESHDOCTOR_APP_ORIGINS        https://mesh-doctor.vercel.app: web app addresses that
+                                            may use this engine once paired (pairing.py); separate
+                                            several with spaces
 
 MESHDOCTOR_CONFIG points at another config file than the one below.
 
@@ -32,6 +35,7 @@ WSL's localhost forwarding.
 import configparser, json, os, stat, sys
 
 CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".config", "meshdoctor", "config.ini")
+DEFAULT_APP_ORIGINS = "https://mesh-doctor.vercel.app"     # the published web app (pairing.py)
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -71,6 +75,7 @@ def resolve():
     pick("flow_axis", "MESHDOCTOR_FLOW_AXIS", "")
     pick("up_axis", "MESHDOCTOR_UP_AXIS", "")
     pick("ram_limit_mb", "MESHDOCTOR_RAM_LIMIT_MB", "")
+    pick("app_origins", "MESHDOCTOR_APP_ORIGINS", DEFAULT_APP_ORIGINS)
     return out
 
 

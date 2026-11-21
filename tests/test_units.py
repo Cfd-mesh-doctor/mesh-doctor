@@ -669,7 +669,10 @@ class ApiV1Test(unittest.TestCase):
                 declared = {x["name"] for x in o.get("parameters", []) if x["in"] == "path"}
                 self.assertEqual(declared, set(re.findall(r"{(\w+)}", t)), t)
                 self.assertIn("default", o["responses"])
-        self.assertEqual(doc["paths"]["/jobs"]["post"]["security"], [{"launchToken": []}])
+        # Starting a job needs the launch token (the local page) or the web app's pairing key: either one.
+        self.assertEqual(doc["paths"]["/jobs"]["post"]["security"], [{"launchToken": []}, {"pairingKey": []}])
+        key = doc["components"]["securitySchemes"]["pairingKey"]
+        self.assertEqual((key["type"], key["in"], key["name"]), ("apiKey", "header", "X-MD-Key"))
         self.assertEqual(sorted(doc["components"]["schemas"]["Error"]["properties"]["error"]["properties"]
                                 ["code"]["enum"]), sorted(self.api.STATUS))
         refs = re.findall(r'"\$ref": "schemas/(\w+)"', json.dumps(doc))
@@ -791,6 +794,71 @@ class PagesTest(unittest.TestCase):
                     "/js/md.js%00", "/js/" + "a" * 50 + ".js"]:
             self.assertIsNone(server.SCRIPT.match(bad), bad)
         self.assertEqual(server.SCRIPT.match("/js/md.js").group(1), "md.js")
+
+
+class PairingTest(unittest.TestCase):
+    """pairing.py: which app addresses count, the key file, and the pairing link."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="md_pair_")
+        self.old = os.environ.get("MESHDOCTOR_KEY_FILE")
+        os.environ["MESHDOCTOR_KEY_FILE"] = os.path.join(self.tmp, "sub", "app.key")
+
+    def tearDown(self):
+        if self.old is None:
+            os.environ.pop("MESHDOCTOR_KEY_FILE", None)
+        else:
+            os.environ["MESHDOCTOR_KEY_FILE"] = self.old
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_origins(self):
+        import pairing
+        good, bad = pairing.parse_origins(
+            "https://mesh-doctor.vercel.app, https://App.Example.org:8443/ http://localhost:5173 "
+            "http://127.0.0.1:5173 http://[::1]:4173 https://mesh-doctor.vercel.app")
+        self.assertEqual(good, ["https://mesh-doctor.vercel.app", "https://app.example.org:8443",
+                                "http://localhost:5173", "http://127.0.0.1:5173", "http://[::1]:4173"])
+        self.assertEqual(bad, [])
+        for b in ["http://example.org", "https://example.org/app", "https://*.vercel.app", "javascript:alert(1)",
+                  "https://ex_ample.org", "https://-bad.org", "ftp://localhost", "https://", "localhost:5173",
+                  "http://localhost.evil.org", "https://example.org?x=1", "https://user@example.invalid"]:
+            self.assertEqual(pairing.parse_origins(b), ([], [b]), b)
+        self.assertEqual(pairing.parse_origins(""), ([], []))
+
+    def test_key_file(self):
+        import pairing
+        k1 = pairing.load_key()
+        self.assertRegex(k1, pairing.KEY)
+        self.assertEqual(pairing.load_key(), k1)                        # kept, not remade
+        path = os.environ["MESHDOCTOR_KEY_FILE"]
+        if os.name == "posix":
+            self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+            os.chmod(path, 0o644)
+            self.assertEqual(pairing.load_key(), k1)
+            self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)       # made private again
+        k2 = pairing.new_key()
+        self.assertNotEqual(k2, k1)
+        self.assertEqual(pairing.load_key(), k2)
+        with open(path, "w") as f:
+            f.write("short")
+        self.assertEqual(pairing.load_key(create=False), "")
+        self.assertRegex(pairing.load_key(), pairing.KEY)                  # a bad file is replaced
+
+    def test_link_keeps_the_key_after_the_hash(self):
+        import pairing
+        key = "A" * 43
+        url = pairing.link("https://mesh-doctor.vercel.app", 8768, key)
+        before, after = url.split("#", 1)
+        self.assertEqual(before, "https://mesh-doctor.vercel.app/connect")
+        self.assertEqual(after, f"key={key}&engine=http%3A%2F%2Flocalhost%3A8768")
+
+    def test_server_compare(self):
+        import server
+        self.assertTrue(server._same("abc", b"abc"))
+        self.assertFalse(server._same("abd", b"abc"))
+        self.assertFalse(server._same("", b""))                             # no key set: never a match
+        self.assertFalse(server._same("éè", b"abc"))               # non-ASCII text: no exception
+        self.assertIn("X-MD-Key", server.APP_HEADERS)
 
 
 @unittest.skipUnless(os.path.isdir("/proc"), "the local runner needs Linux")
