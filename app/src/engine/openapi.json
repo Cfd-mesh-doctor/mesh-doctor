@@ -1,0 +1,3016 @@
+{
+  "components": {
+    "schemas": {
+      "Error": {
+        "properties": {
+          "error": {
+            "properties": {
+              "code": {
+                "enum": [
+                  "bad-request",
+                  "busy",
+                  "exists",
+                  "finished",
+                  "forbidden",
+                  "internal",
+                  "method-not-allowed",
+                  "not-enough-memory",
+                  "not-found",
+                  "not-ready",
+                  "schema-version",
+                  "too-large",
+                  "unavailable",
+                  "unsupported",
+                  "unsupported-media-type"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "Abtest_fingerprint": {
+        "type": "object",
+        "required": [
+          "sha256",
+          "files",
+          "bytes"
+        ],
+        "properties": {
+          "sha256": {
+            "type": "string"
+          },
+          "files": {
+            "type": "integer"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "time": {
+            "type": "string"
+          }
+        }
+      },
+      "Abtest": {
+        "title": "Mesh Doctor solver A/B test",
+        "description": "<workspace>/<label>_ab/ab_result.json, written by meshdoctor ab; it grows while the test runs",
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "source",
+          "label",
+          "iters",
+          "nProcs",
+          "init",
+          "window",
+          "started"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "pattern": "^1\\.\\d+$",
+            "description": "major.minor; readers accept any 1.x"
+          },
+          "source": {
+            "type": "string"
+          },
+          "fixedName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "variant": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "variantSettings": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "iters": {
+            "type": "integer"
+          },
+          "nProcs": {
+            "type": "integer"
+          },
+          "init": {
+            "type": "string"
+          },
+          "window": {
+            "type": "integer"
+          },
+          "started": {
+            "type": "string"
+          },
+          "finished": {
+            "type": "string"
+          },
+          "baseRuns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "cmd",
+                "log",
+                "exit",
+                "seconds"
+              ],
+              "properties": {
+                "cmd": {
+                  "type": "string"
+                },
+                "log": {
+                  "type": "string"
+                },
+                "exit": {
+                  "type": "integer"
+                },
+                "seconds": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "fixedRuns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "cmd",
+                "log",
+                "exit",
+                "seconds"
+              ],
+              "properties": {
+                "cmd": {
+                  "type": "string"
+                },
+                "log": {
+                  "type": "string"
+                },
+                "exit": {
+                  "type": "integer"
+                },
+                "seconds": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "base": {
+            "type": "object",
+            "properties": {
+              "iterations": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "secondsPerIteration": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "bounding": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "residuals": {
+                "type": "object"
+              },
+              "forces": {
+                "type": "object"
+              },
+              "residualHistory": {
+                "type": "object"
+              }
+            }
+          },
+          "fixed": {
+            "type": "object",
+            "properties": {
+              "iterations": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "secondsPerIteration": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "bounding": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "residuals": {
+                "type": "object"
+              },
+              "forces": {
+                "type": "object"
+              },
+              "residualHistory": {
+                "type": "object"
+              }
+            }
+          },
+          "residualRatioFixedOverBase": {
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "baseHotspots": {
+            "type": "object",
+            "properties": {
+              "summary": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "nHotCells": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "shareOfTopChangeNearMeshDefects": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "top": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "fixedHotspots": {
+            "type": "object",
+            "properties": {
+              "summary": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "nHotCells": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "shareOfTopChangeNearMeshDefects": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "top": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "sourceCheck": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "unchanged"
+            ],
+            "description": "fingerprint of the source case before and after; unchanged must be true",
+            "properties": {
+              "unchanged": {
+                "type": "boolean"
+              },
+              "before": {
+                "$ref": "#/components/schemas/Abtest_fingerprint"
+              },
+              "after": {
+                "$ref": "#/components/schemas/Abtest_fingerprint"
+              }
+            }
+          },
+          "extensions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "to": {
+                  "type": "integer"
+                },
+                "variant": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "runs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "cmd",
+                      "log",
+                      "exit",
+                      "seconds"
+                    ],
+                    "properties": {
+                      "cmd": {
+                        "type": "string"
+                      },
+                      "log": {
+                        "type": "string"
+                      },
+                      "exit": {
+                        "type": "integer"
+                      },
+                      "seconds": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "fixedJudge": {
+            "type": "object",
+            "description": "a judge result; see judge.schema.json",
+            "required": [
+              "verdict"
+            ]
+          }
+        }
+      },
+      "Job": {
+        "title": "Mesh Doctor job",
+        "description": "<workspace>/.jobs/<id>.json, written by jobs.py and jobrun.py; paths are relative to the workspace",
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "id",
+          "kind",
+          "params",
+          "name",
+          "state",
+          "runner",
+          "created",
+          "log"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "pattern": "^1\\.\\d+$",
+            "description": "major.minor; readers accept any 1.x"
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9]{8}-[0-9]{6}-[a-z]+-[A-Za-z0-9_.-]{1,80}-[0-9a-f]{4}$",
+            "description": "local start time (yyyymmdd-hhmmss), kind, run name and a random suffix"
+          },
+          "kind": {
+            "enum": [
+              "repair",
+              "abtest",
+              "abextend"
+            ]
+          },
+          "params": {
+            "type": "object",
+            "description": "the parameters the job was asked for"
+          },
+          "name": {
+            "type": "string",
+            "description": "the workspace run the job writes (an A/B test's label)"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "running",
+              "done",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "runner": {
+            "type": "string",
+            "description": "local, or later slurm / a remote worker"
+          },
+          "created": {
+            "type": "string",
+            "description": "UTC, ISO 8601"
+          },
+          "started": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "finished": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pid": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "the job's wrapper process on the worker"
+          },
+          "exitCode": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "log": {
+            "type": "string"
+          },
+          "result": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "why it failed, without worker paths"
+          },
+          "progress": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "added when read: the tool's own status",
+            "properties": {
+              "step": {
+                "type": "string"
+              },
+              "fraction": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "updated": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "links": {
+            "type": "object",
+            "description": "added by the API: where to follow the job and its run"
+          }
+        }
+      },
+      "Judge": {
+        "title": "Mesh Doctor convergence verdict",
+        "description": "output of meshdoctor judge, and fixedJudge inside ab_result.json",
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "window",
+          "group",
+          "axes",
+          "average",
+          "verdict"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "pattern": "^1\\.\\d+$",
+            "description": "major.minor; readers accept any 1.x"
+          },
+          "window": {
+            "type": "integer",
+            "description": "iterations (steady) or time steps (transient) judged"
+          },
+          "to": {
+            "type": "number",
+            "description": "added in 1.1: the run was judged as it was at this iteration or time; later residuals and forces were left out"
+          },
+          "run": {
+            "type": "string",
+            "description": "added in 1.1, API only: the A/B run judged, <test>_ab/base or <test>_ab/fixed (another test's, when its original-mesh run was reused)"
+          },
+          "group": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "transient": {
+            "type": "boolean"
+          },
+          "verdict": {
+            "type": "string"
+          },
+          "axes": {
+            "type": "object",
+            "required": [
+              "flow",
+              "up",
+              "vertical"
+            ],
+            "properties": {
+              "flow": {
+                "type": "string",
+                "pattern": "^[+-][xyz]$"
+              },
+              "up": {
+                "enum": [
+                  "x",
+                  "y",
+                  "z"
+                ]
+              },
+              "vertical": {
+                "enum": [
+                  "downforce",
+                  "lift"
+                ]
+              },
+              "source": {
+                "type": "object"
+              }
+            }
+          },
+          "average": {
+            "type": "object",
+            "description": "batch-means averages by name; u is the uncertainty",
+            "additionalProperties": {
+              "type": "object",
+              "required": [
+                "mean",
+                "u"
+              ],
+              "properties": {
+                "mean": {
+                  "type": "number"
+                },
+                "u": {
+                  "type": "number"
+                },
+                "from": {
+                  "type": "number"
+                },
+                "to": {
+                  "type": "number"
+                },
+                "nBatches": {
+                  "type": "integer"
+                },
+                "batchLen": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "residuals": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "median": {
+                  "type": "number"
+                },
+                "trend": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "forces": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "mean": {
+                  "type": "number"
+                },
+                "std": {
+                  "type": "number"
+                },
+                "osc": {
+                  "type": "number"
+                },
+                "drift": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "pBlocks": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "flags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "steps": {
+            "type": "object",
+            "description": "transient runs only: per-time-step convergence",
+            "required": [
+              "n",
+              "converged"
+            ],
+            "properties": {
+              "n": {
+                "type": "integer"
+              },
+              "outerIterations": {
+                "type": "integer"
+              },
+              "converged": {
+                "type": "number"
+              },
+              "medianLastOuterP": {
+                "type": "number"
+              },
+              "medianOuterDrop": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "maxCourant": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "medianMaxCourant": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "aboveCourantLimit": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "bounded": {
+                "type": "number"
+              },
+              "boundedFields": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Map": {
+        "title": "Mesh Doctor repair map",
+        "description": "<workspace>/<run>/meshDoctor/map.json, written by meshdoctor map",
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "name",
+          "axes",
+          "ground",
+          "side",
+          "top",
+          "defectsBefore",
+          "defectsAfter",
+          "hot"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "pattern": "^1\\.\\d+$",
+            "description": "major.minor; readers accept any 1.x"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "bin": {
+            "type": "number"
+          },
+          "nCells": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "axes": {
+            "type": "object",
+            "required": [
+              "side",
+              "top"
+            ],
+            "properties": {
+              "side": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              "top": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "ground": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "side": {
+            "type": "object",
+            "required": [
+              "nx",
+              "ny",
+              "lo",
+              "hi",
+              "data"
+            ],
+            "properties": {
+              "nx": {
+                "type": "integer"
+              },
+              "ny": {
+                "type": "integer"
+              },
+              "lo": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "hi": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "data": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+                "description": "base64 of ny rows x nx uint8 wall-face density, top row first"
+              }
+            }
+          },
+          "top": {
+            "type": "object",
+            "required": [
+              "nx",
+              "ny",
+              "lo",
+              "hi",
+              "data"
+            ],
+            "properties": {
+              "nx": {
+                "type": "integer"
+              },
+              "ny": {
+                "type": "integer"
+              },
+              "lo": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "hi": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "data": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+                "description": "base64 of ny rows x nx uint8 wall-face density, top row first"
+              }
+            }
+          },
+          "defectsBefore": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "c",
+                "n"
+              ],
+              "properties": {
+                "c": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
+                },
+                "n": {
+                  "type": "integer"
+                },
+                "sev": {
+                  "type": "integer"
+                },
+                "kinds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "patches": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "defectsAfter": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "c",
+                "n"
+              ],
+              "properties": {
+                "c": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
+                },
+                "n": {
+                  "type": "integer"
+                },
+                "sev": {
+                  "type": "integer"
+                },
+                "kinds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "patches": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "checkMeshBefore": {
+            "type": "object"
+          },
+          "checkMeshAfter": {
+            "type": "object"
+          },
+          "hot": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "label",
+                "cells"
+              ],
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "case": {
+                  "type": "string"
+                },
+                "cells": {
+                  "type": "array"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Repair_fingerprint": {
+        "type": "object",
+        "required": [
+          "sha256",
+          "files",
+          "bytes"
+        ],
+        "properties": {
+          "sha256": {
+            "type": "string"
+          },
+          "files": {
+            "type": "integer"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "time": {
+            "type": "string"
+          }
+        }
+      },
+      "Repair_checkMesh": {
+        "type": "object",
+        "required": [
+          "meshOK"
+        ],
+        "description": "numbers parsed from checkMesh; absent when checkMesh did not report them",
+        "properties": {
+          "meshOK": {
+            "type": "boolean"
+          },
+          "maxNonOrtho": {
+            "type": "number"
+          },
+          "avgNonOrtho": {
+            "type": "number"
+          },
+          "maxSkewness": {
+            "type": "number"
+          },
+          "minWeight": {
+            "type": "number"
+          },
+          "minVolRatio": {
+            "type": "number"
+          },
+          "failedChecks": {
+            "type": "integer"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": {
+          "type": [
+            "number",
+            "boolean",
+            "array"
+          ]
+        }
+      },
+      "Repair_cluster": {
+        "type": "object",
+        "required": [
+          "id",
+          "nFaces",
+          "kinds",
+          "severity",
+          "worst",
+          "centroid"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "nFaces": {
+            "type": "integer"
+          },
+          "kinds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "severity": {
+            "type": "integer"
+          },
+          "centroid": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "bbox": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "h": {
+            "type": "number"
+          },
+          "patches": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "worst": {
+            "type": "object",
+            "required": [
+              "badness"
+            ],
+            "properties": {
+              "badness": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      },
+      "Repair": {
+        "title": "Mesh Doctor repair result",
+        "description": "<workspace>/<run>/meshDoctor/result.json, written by meshdoctor full and fix",
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "case",
+          "source",
+          "layout",
+          "profile",
+          "targets",
+          "checkMeshBefore",
+          "checkMeshAfter",
+          "verdict",
+          "clustersBefore",
+          "clustersAfter",
+          "runs",
+          "finished"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "pattern": "^1\\.\\d+$",
+            "description": "major.minor; readers accept any 1.x"
+          },
+          "case": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "profile": {
+            "type": "string"
+          },
+          "options": {
+            "type": "string"
+          },
+          "openfoam": {
+            "type": "string"
+          },
+          "finished": {
+            "type": "string"
+          },
+          "layout": {
+            "type": "object",
+            "required": [
+              "parallel",
+              "nCells"
+            ],
+            "properties": {
+              "parallel": {
+                "type": "boolean"
+              },
+              "nProcs": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "nCells": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "rootCells": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          },
+          "targets": {
+            "type": "object",
+            "required": [
+              "nonOrthTarget",
+              "skewTarget",
+              "bSkewTarget",
+              "weightTarget",
+              "volRatioTarget"
+            ],
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "doctorBefore": {
+            "type": "object"
+          },
+          "doctorAfter": {
+            "type": "object"
+          },
+          "checkMeshBefore": {
+            "$ref": "#/components/schemas/Repair_checkMesh"
+          },
+          "checkMeshAfter": {
+            "$ref": "#/components/schemas/Repair_checkMesh"
+          },
+          "verdict": {
+            "type": "object",
+            "required": [
+              "improved",
+              "regressions",
+              "unchanged"
+            ],
+            "description": "checkMesh numbers that got better, worse, or stayed the same",
+            "properties": {
+              "improved": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "regressions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "unchanged": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "collapse": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "the face-collapse stage, or null when it did not run",
+            "properties": {
+              "accepted": {
+                "type": "boolean"
+              },
+              "facesCollapsed": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          },
+          "sweeps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "passes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "maxDisplacement_m": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "clustersBefore": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Repair_cluster"
+            }
+          },
+          "clustersAfter": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Repair_cluster"
+            }
+          },
+          "runs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "cmd",
+                "log",
+                "exit",
+                "seconds"
+              ],
+              "properties": {
+                "cmd": {
+                  "type": "string"
+                },
+                "log": {
+                  "type": "string"
+                },
+                "exit": {
+                  "type": "integer"
+                },
+                "seconds": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "sourceCheck": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "unchanged"
+            ],
+            "description": "fingerprint of the source case before and after; unchanged must be true",
+            "properties": {
+              "unchanged": {
+                "type": "boolean"
+              },
+              "before": {
+                "$ref": "#/components/schemas/Repair_fingerprint"
+              },
+              "after": {
+                "$ref": "#/components/schemas/Repair_fingerprint"
+              }
+            }
+          }
+        }
+      },
+      "Report": {
+        "title": "Mesh Doctor report bundle",
+        "description": "one run's versioned documents in one portable file, written by meshdoctor report; worker paths replaced",
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "kind",
+          "name",
+          "created",
+          "generator",
+          "redacted",
+          "contents",
+          "documents"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "pattern": "^1\\.\\d+$",
+            "description": "major.minor; readers accept any 1.x"
+          },
+          "kind": {
+            "enum": [
+              "meshdoctor-report"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "the workspace run"
+          },
+          "created": {
+            "type": "string",
+            "description": "UTC, ISO 8601"
+          },
+          "generator": {
+            "type": "object",
+            "required": [
+              "meshdoctor"
+            ],
+            "properties": {
+              "meshdoctor": {
+                "type": "string"
+              },
+              "openfoam": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "redacted": {
+            "type": "object",
+            "required": [
+              "paths"
+            ],
+            "properties": {
+              "paths": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          },
+          "contents": {
+            "type": "object",
+            "description": "per document: its schema version (or legacy), sha256 of its sorted compact JSON, size",
+            "additionalProperties": {
+              "type": "object",
+              "required": [
+                "schemaVersion",
+                "sha256",
+                "bytes"
+              ],
+              "properties": {
+                "schemaVersion": {
+                  "type": "string"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "bytes": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "problems": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "documents": {
+            "type": "object",
+            "required": [
+              "repair"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "repair": {
+                "type": "object",
+                "description": "meshDoctor/result.json (repair schema)"
+              },
+              "map": {
+                "type": "object",
+                "description": "meshDoctor/map.json (map schema)"
+              },
+              "abtest": {
+                "type": "object",
+                "description": "<label>_ab/ab_result.json (abtest schema)"
+              }
+            }
+          }
+        }
+      },
+      "Tplan": {
+        "title": "Mesh Doctor transient plan",
+        "description": "output of meshdoctor transient-plan: the time step a transient run of a steady case would need, what limits it, and what it would cost",
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "case",
+          "time",
+          "cells",
+          "courantPerSecond",
+          "cellsWithin2x",
+          "top",
+          "regions",
+          "options"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "pattern": "^1\\.\\d+$",
+            "description": "major.minor; readers accept any 1.x"
+          },
+          "case": {
+            "type": "string",
+            "description": "the case folder's name (not its path)"
+          },
+          "time": {
+            "type": "string",
+            "description": "the steady result time planned from"
+          },
+          "processors": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cells": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "courantPerSecond": {
+            "type": "object",
+            "description": "each cell's Courant number per second of time step, 0.5 sum|phi| / V, in 1/s; withoutTop is the largest once the top fastest cells are left out",
+            "required": [
+              "median",
+              "p99",
+              "p999",
+              "p9999",
+              "max",
+              "withoutTop"
+            ],
+            "properties": {
+              "median": {
+                "type": "number",
+                "minimum": 0
+              },
+              "p99": {
+                "type": "number",
+                "minimum": 0
+              },
+              "p999": {
+                "type": "number",
+                "minimum": 0
+              },
+              "p9999": {
+                "type": "number",
+                "minimum": 0
+              },
+              "max": {
+                "type": "number",
+                "minimum": 0
+              },
+              "withoutTop": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          },
+          "top": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "how many of the fastest cells were located"
+          },
+          "cellsWithin2x": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "cells whose Courant number is within 2x of the largest: the ones that set the time step"
+          },
+          "regions": {
+            "type": "array",
+            "description": "the fastest cells grouped by place, fastest group first",
+            "items": {
+              "type": "object",
+              "required": [
+                "nCells",
+                "centre",
+                "h",
+                "maxRate"
+              ],
+              "properties": {
+                "nCells": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "centre": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
+                },
+                "bbox": {
+                  "type": "array"
+                },
+                "h": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "median cell size (cube root of volume), m"
+                },
+                "maxRate": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "speed": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "freestream speed, m/s"
+          },
+          "length": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "reference length, m"
+          },
+          "flowTime": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "seconds of flow the costs are for"
+          },
+          "flowTimeSource": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "secondsPerIteration": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "wall seconds per steady iteration, from the solver log"
+          },
+          "outerCorrectors": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "maxCo",
+                "deltaT",
+                "deltaTWithoutTop",
+                "stepsPerSecond"
+              ],
+              "properties": {
+                "maxCo": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "deltaT": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "deltaTWithoutTop": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "stepsPerSecond": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "hoursPerFlowSecond": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "wall hours per second of simulated flow"
+                },
+                "steps": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "hours": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "hoursWithoutTop": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "seconds": {
+            "type": "number",
+            "description": "how long planning took"
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "launchToken": {
+        "description": "made fresh at each server start and written into the dashboard pages (<meta name=\"md-token\">), which other sites cannot read",
+        "in": "header",
+        "name": "X-MD-Token",
+        "type": "apiKey"
+      },
+      "pairingKey": {
+        "description": "the web app's key from `meshdoctor pair` (~/.config/meshdoctor/app.key); accepted only from an address in app_origins, on every /api/v1 request",
+        "in": "header",
+        "name": "X-MD-Key",
+        "type": "apiKey"
+      }
+    }
+  },
+  "info": {
+    "description": "Finds and repairs bad cells in OpenFOAM meshes and tests whether the repair helped the solver.  Served by `meshdoctor serve` on 127.0.0.1 only: requests must name this machine in Host, may not come from another site's page (Origin), and POST requests need the launch token from the dashboard page.  The Mesh Doctor web app (an address in app_origins) sends the pairing key instead, on every request.",
+    "license": {
+      "identifier": "GPL-3.0-or-later",
+      "name": "GPL-3.0-or-later"
+    },
+    "title": "Mesh Doctor API",
+    "version": "1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "info",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "apiVersion": {
+                      "description": "major.minor of this API",
+                      "type": "string"
+                    },
+                    "jobKinds": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "openapi": {
+                      "type": "string"
+                    },
+                    "schemas": {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "result-document kind: its schema version",
+                      "type": "object"
+                    },
+                    "version": {
+                      "description": "the Mesh Doctor release",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apiVersion",
+                    "schemas"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "This API: its version, the result-file versions, the OpenAPI document"
+      }
+    },
+    "/abtests": {
+      "get": {
+        "operationId": "abtests",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "A/B solver tests in the workspace"
+      }
+    },
+    "/abtests/{name}": {
+      "get": {
+        "operationId": "abtest",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "required": [
+                    "status",
+                    "result",
+                    "live",
+                    "modes"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "An A/B test: status, result (abtest schema), residual histories, oscillation maps"
+      }
+    },
+    "/abtests/{name}/judge": {
+      "get": {
+        "operationId": "abtest_judge",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "base: the original mesh; fixed: the repaired mesh",
+            "in": "query",
+            "name": "side",
+            "required": true,
+            "schema": {
+              "enum": [
+                "base",
+                "fixed"
+              ]
+            }
+          },
+          {
+            "description": "iterations to judge (default: half the run, 10 to 200)",
+            "in": "query",
+            "name": "window",
+            "required": false,
+            "schema": {
+              "maximum": 100000,
+              "minimum": 10,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "judge the run as it was at this iteration (default: all of it)",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "description": "average forces from this iteration on (default: the last 2 windows)",
+            "in": "query",
+            "name": "avgFrom",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Judge"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "Is one side of an A/B test converged?  The judge on its original-mesh (base) or repaired-mesh (fixed) run; with `to`, as the run was at that iteration, so both sides can be judged over the same iterations"
+      }
+    },
+    "/abtests/{name}/live": {
+      "get": {
+        "operationId": "abtest_live",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "The steady-run page data: stages, residuals, forces, live judge"
+      }
+    },
+    "/cases": {
+      "get": {
+        "operationId": "cases",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "Source cases this worker may read (only ever read, never changed)"
+      }
+    },
+    "/jobs": {
+      "get": {
+        "operationId": "list_jobs",
+        "parameters": [
+          {
+            "description": "only jobs in this state",
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "enum": [
+                "queued",
+                "running",
+                "done",
+                "failed",
+                "cancelled"
+              ]
+            }
+          },
+          {
+            "description": "",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 1000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/Job"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "Jobs on this worker, newest first, with their progress"
+      },
+      "post": {
+        "operationId": "start_job",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "description": "copy a source case, checkMesh, repair the copy, checkMesh again",
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "repair"
+                        ]
+                      },
+                      "params": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "description": "name of the new workspace run",
+                            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+                            "type": "string"
+                          },
+                          "profile": {
+                            "default": "openfoam",
+                            "enum": [
+                              "openfoam",
+                              "strict"
+                            ]
+                          },
+                          "replace": {
+                            "default": false,
+                            "description": "replace an existing run of the same name (its results are deleted)",
+                            "type": "boolean"
+                          },
+                          "source": {
+                            "description": "source case (GET /cases)",
+                            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "source",
+                          "name"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "params"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "description": "solve the original and the repaired mesh with the same settings and compare",
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "abtest"
+                        ]
+                      },
+                      "params": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "init": {
+                            "default": "0.warm",
+                            "enum": [
+                              "0.warm",
+                              "0.cold",
+                              "0"
+                            ]
+                          },
+                          "iters": {
+                            "default": 200,
+                            "maximum": 2000,
+                            "minimum": 20,
+                            "type": "integer"
+                          },
+                          "name": {
+                            "description": "a finished repair run (GET /repairs)",
+                            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+                            "type": "string"
+                          },
+                          "replace": {
+                            "default": false,
+                            "description": "replace an existing run of the same name (its results are deleted)",
+                            "type": "boolean"
+                          },
+                          "variant": {
+                            "default": "",
+                            "description": "solver-setting variant for the second run (GET /variants)",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "params"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "description": "continue the second run of a finished A/B test and judge it again",
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "abextend"
+                        ]
+                      },
+                      "params": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "description": "an A/B test (GET /abtests)",
+                            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+                            "type": "string"
+                          },
+                          "to": {
+                            "description": "continue to this iteration",
+                            "maximum": 5000,
+                            "minimum": 21,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "to"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "params"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "security": [
+          {
+            "launchToken": []
+          },
+          {
+            "pairingKey": []
+          }
+        ],
+        "summary": "Start a repair, A/B test or A/B extension.  Needs the launch token (X-MD-Token) or the pairing key (X-MD-Key)."
+      }
+    },
+    "/jobs/{job}": {
+      "get": {
+        "operationId": "get_job",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9]{8}-[0-9]{6}-[a-z]+-[A-Za-z0-9_.-]{1,80}-[0-9a-f]{4}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "One job: state, progress (the tool's own step), exit code, error"
+      }
+    },
+    "/jobs/{job}/cancel": {
+      "post": {
+        "operationId": "cancel_job",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9]{8}-[0-9]{6}-[a-z]+-[A-Za-z0-9_.-]{1,80}-[0-9a-f]{4}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "Stop a queued or running job and everything it started.  Needs the token or pairing key."
+      }
+    },
+    "/judge": {
+      "get": {
+        "operationId": "judge",
+        "parameters": [
+          {
+            "description": "a case in the cases folder: a source case (GET /cases), or a folder with just system/ and the solver logs",
+            "in": "query",
+            "name": "case",
+            "required": true,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "iterations (steady) or time steps (transient) to judge",
+            "in": "query",
+            "name": "window",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 100000,
+              "minimum": 10,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "average forces from this time on (default: the window)",
+            "in": "query",
+            "name": "avgFrom",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "description": "solver log file name or pattern in the case folder, such as log.pimple (default log.foamRun*)",
+            "in": "query",
+            "name": "log",
+            "required": false,
+            "schema": {
+              "pattern": "^log\\.[A-Za-z0-9_.*-]{1,60}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Judge"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "Is this source case converged?  Steady or transient verdict from its logs and forces"
+      }
+    },
+    "/live": {
+      "get": {
+        "operationId": "live",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "The live (transient) case: forces, averaging window, time step, processes, memory"
+      }
+    },
+    "/live/abtest": {
+      "get": {
+        "operationId": "live_abtest",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "required": [
+                    "label"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "The A/B test running now, or else the one updated last: the same steady-run page data as /abtests/{name}/live, with its name in `label`"
+      }
+    },
+    "/live/judge": {
+      "get": {
+        "operationId": "live_judge",
+        "parameters": [
+          {
+            "description": "time steps to judge (default: half the run, 10 to 200)",
+            "in": "query",
+            "name": "window",
+            "required": false,
+            "schema": {
+              "maximum": 100000,
+              "minimum": 10,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "average forces from this flow time on, in s (default: the last 2 windows)",
+            "in": "query",
+            "name": "avgFrom",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Judge"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "Is the live (transient) run converged?  The transient judge on the live case's transient log (log.ddes*, else log.foamRun*): force means, per-time-step convergence, Courant number"
+      }
+    },
+    "/maps": {
+      "get": {
+        "operationId": "maps",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "Repair runs that have a repair map"
+      }
+    },
+    "/maps/{name}": {
+      "get": {
+        "operationId": "repair_map",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Map"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "Repair map: where the mesh was repaired, over where the flow does not settle"
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "operationId": "openapi_json",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "This API described in OpenAPI 3.1"
+      }
+    },
+    "/repairs": {
+      "get": {
+        "operationId": "repairs",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "finished": {
+                            "description": "the worker's local time, yyyy-mm-dd hh:mm:ss",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "nCells": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "profile": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "source": {
+                            "description": "the source case's folder on the worker (finished runs)",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "status": {
+                            "description": "the repair's own status.json (step, state); {} if none",
+                            "type": "object"
+                          },
+                          "verdict": {
+                            "description": "checkMesh numbers that got better, worse, or stayed the same (finished runs)",
+                            "properties": {
+                              "improved": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "regressions": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "unchanged": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "improved",
+                              "regressions",
+                              "unchanged"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "status"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "Repair runs in the workspace, with their status and verdict"
+      }
+    },
+    "/repairs/{name}": {
+      "get": {
+        "operationId": "repair",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Repair"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "Result of a finished repair (meshDoctor/result.json)"
+      }
+    },
+    "/repairs/{name}/clusters/{id}": {
+      "get": {
+        "operationId": "repair_cluster",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9]{1,9}$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "which cluster list: before or after the repair, or the report",
+            "in": "query",
+            "name": "tag",
+            "required": false,
+            "schema": {
+              "default": "before",
+              "enum": [
+                "before",
+                "after",
+                "report"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "Geometry of one defect cluster, before or after the repair"
+      }
+    },
+    "/repairs/{name}/log": {
+      "get": {
+        "operationId": "repair_log",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "text"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "The repair sweeps from the repair log"
+      }
+    },
+    "/repairs/{name}/report": {
+      "get": {
+        "operationId": "repair_report",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "A/B test label to include (default: the run's own, if any)",
+            "in": "query",
+            "name": "ab",
+            "required": false,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Report"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "Portable report: the repair, its map and its A/B test in one file, worker paths replaced (open it in /report)"
+      }
+    },
+    "/schemas/{kind}": {
+      "get": {
+        "operationId": "result_schema",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "abtest",
+                "job",
+                "judge",
+                "map",
+                "repair",
+                "report",
+                "tplan"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "JSON Schema of a versioned result document (repair, abtest, judge, map)"
+      }
+    },
+    "/variants": {
+      "get": {
+        "operationId": "variants",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "label": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "label"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "Solver-setting variants an A/B second run can use"
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ]
+}

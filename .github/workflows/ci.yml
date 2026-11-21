@@ -39,6 +39,37 @@ jobs:
       - name: Front-end tests (web/js, Node's own test runner)
         run: node --test tests/js/*.test.js
 
+  app:
+    name: Web app (API types, lint, unit and browser tests, build)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Install (exact versions from the lock file, no install scripts)
+        run: npm ci
+      - name: API types match the engine's route table
+        run: npm run check:api
+      - run: npm run typecheck
+      - run: npm run lint
+      - name: Unit and screen tests
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Browser tests (Chromium, mocked engine)
+        run: |
+          npx playwright install --with-deps chromium
+          npm run e2e
+
   pip:
     name: pip install
     runs-on: ubuntu-22.04

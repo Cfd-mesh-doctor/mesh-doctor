@@ -1,0 +1,841 @@
+{
+ "_about": "Recorded on 2026-11-21 from a real Mesh Doctor 0.1.0 engine: repairs and A/B tests of the public Ahmed-body example (examples/ahmed-body: 25 degree slant in three mesh sizes, 35 degree slant) and OpenFOAM's pitzDaily tutorial. One repair was cancelled on purpose; one A/B test was recorded while running. Folder paths are removed and times are UTC; the demo moves them to look recent.",
+ "answers": {
+  "/": {
+   "apiVersion": "1.0",
+   "version": "0.1.0",
+   "schemas": {
+    "repair": "1.0",
+    "abtest": "1.0",
+    "judge": "1.1",
+    "map": "1.0",
+    "job": "1.0",
+    "report": "1.0",
+    "tplan": "1.0"
+   },
+   "openapi": "/api/v1/openapi.json",
+   "jobKinds": [
+    "abextend",
+    "abtest",
+    "repair"
+   ]
+  },
+  "/cases": {
+   "items": [
+    "ahmed-25-coarse",
+    "ahmed-25-fine",
+    "ahmed-25-medium",
+    "ahmed-35-medium",
+    "pitzDaily"
+   ]
+  },
+  "/jobs": {
+   "items": [
+    {
+     "schemaVersion": "1.0",
+     "id": "20261121-130610-abtest-ahmed25-medium-fix-13c2",
+     "kind": "abtest",
+     "params": {
+      "name": "ahmed25-medium-fix",
+      "iters": 200,
+      "init": "0",
+      "variant": ""
+     },
+     "name": "ahmed25-medium-fix",
+     "state": "running",
+     "runner": "local",
+     "created": "2026-11-21T19:06:10Z",
+     "started": "2026-11-21T19:06:10Z",
+     "finished": null,
+     "pid": 27107,
+     "exitCode": null,
+     "log": "ahmed25-medium-fix_ab.log",
+     "result": "ahmed25-medium-fix_ab/ab_result.json",
+     "error": null,
+     "progress": {
+      "step": "solving fixed",
+      "fraction": 0.5,
+      "updated": "2026-11-21T19:08:58Z"
+     },
+     "links": {
+      "self": "/api/v1/jobs/20261121-130610-abtest-ahmed25-medium-fix-13c2",
+      "cancel": "/api/v1/jobs/20261121-130610-abtest-ahmed25-medium-fix-13c2/cancel",
+      "abtest": "/api/v1/abtests/ahmed25-medium-fix",
+      "live": "/api/v1/abtests/ahmed25-medium-fix/live"
+     }
+    },
+    {
+     "schemaVersion": "1.0",
+     "id": "20261121-130250-abtest-ahmed25-coarse-fix-13d0",
+     "kind": "abtest",
+     "params": {
+      "name": "ahmed25-coarse-fix",
+      "iters": 200,
+      "init": "0",
+      "variant": ""
+     },
+     "name": "ahmed25-coarse-fix",
+     "state": "done",
+     "runner": "local",
+     "created": "2026-11-21T19:02:50Z",
+     "started": "2026-11-21T19:02:50Z",
+     "finished": "2026-11-21T19:06:09Z",
+     "pid": 11146,
+     "exitCode": 0,
+     "log": "ahmed25-coarse-fix_ab.log",
+     "result": "ahmed25-coarse-fix_ab/ab_result.json",
+     "error": null,
+     "progress": {
+      "step": "done",
+      "fraction": 1.0,
+      "updated": "2026-11-21T19:06:09Z"
+     },
+     "links": {
+      "self": "/api/v1/jobs/20261121-130250-abtest-ahmed25-coarse-fix-13d0",
+      "cancel": "/api/v1/jobs/20261121-130250-abtest-ahmed25-coarse-fix-13d0/cancel",
+      "abtest": "/api/v1/abtests/ahmed25-coarse-fix",
+      "live": "/api/v1/abtests/ahmed25-coarse-fix/live"
+     }
+    },
+    {
+     "schemaVersion": "1.0",
+     "id": "20261121-130141-repair-ahmed25-fine-strict-0266",
+     "kind": "repair",
+     "params": {
+      "source": "ahmed-25-fine",
+      "name": "ahmed25-fine-strict",
+      "profile": "strict"
+     },
+     "name": "ahmed25-fine-strict",
+     "state": "cancelled",
+     "runner": "local",
+     "created": "2026-11-21T19:01:41Z",
+     "started": "2026-11-21T19:01:41Z",
+     "finished": "2026-11-21T19:01:47Z",
+     "pid": 10615,
+     "exitCode": -15,
+     "log": "ahmed25-fine-strict.log",
+     "result": "ahmed25-fine-strict/meshDoctor/result.json",
+     "error": null,
+     "links": {
+      "self": "/api/v1/jobs/20261121-130141-repair-ahmed25-fine-strict-0266",
+      "cancel": "/api/v1/jobs/20261121-130141-repair-ahmed25-fine-strict-0266/cancel",
+      "repair": "/api/v1/repairs/ahmed25-fine-strict",
+      "log": "/api/v1/repairs/ahmed25-fine-strict/log"
+     }
+    },
+    {
+     "schemaVersion": "1.0",
+     "id": "20261121-130134-repair-pitzdaily-fix-b96c",
+     "kind": "repair",
+     "params": {
+      "source": "pitzDaily",
+      "name": "pitzdaily-fix",
+      "profile": "openfoam"
+     },
+     "name": "pitzdaily-fix",
+     "state": "done",
+     "runner": "local",
+     "created": "2026-11-21T19:01:34Z",
+     "started": "2026-11-21T19:01:35Z",
+     "finished": "2026-11-21T19:01:40Z",
+     "pid": 8623,
+     "exitCode": 0,
+     "log": "pitzdaily-fix.log",
+     "result": "pitzdaily-fix/meshDoctor/result.json",
+     "error": null,
+     "progress": {
+      "step": "done",
+      "fraction": 1.0,
+      "updated": "2026-11-21T19:01:40Z"
+     },
+     "links": {
+      "self": "/api/v1/jobs/20261121-130134-repair-pitzdaily-fix-b96c",
+      "cancel": "/api/v1/jobs/20261121-130134-repair-pitzdaily-fix-b96c/cancel",
+      "repair": "/api/v1/repairs/pitzdaily-fix",
+      "log": "/api/v1/repairs/pitzdaily-fix/log"
+     }
+    },
+    {
+     "schemaVersion": "1.0",
+     "id": "20261121-130031-repair-ahmed25-fine-fix-0fa7",
+     "kind": "repair",
+     "params": {
+      "source": "ahmed-25-fine",
+      "name": "ahmed25-fine-fix",
+      "profile": "openfoam"
+     },
+     "name": "ahmed25-fine-fix",
+     "state": "done",
+     "runner": "local",
+     "created": "2026-11-21T19:00:31Z",
+     "started": "2026-11-21T19:00:31Z",
+     "finished": "2026-11-21T19:01:33Z",
+     "pid": 6623,
+     "exitCode": 0,
+     "log": "ahmed25-fine-fix.log",
+     "result": "ahmed25-fine-fix/meshDoctor/result.json",
+     "error": null,
+     "progress": {
+      "step": "done",
+      "fraction": 1.0,
+      "updated": "2026-11-21T19:01:33Z"
+     },
+     "links": {
+      "self": "/api/v1/jobs/20261121-130031-repair-ahmed25-fine-fix-0fa7",
+      "cancel": "/api/v1/jobs/20261121-130031-repair-ahmed25-fine-fix-0fa7/cancel",
+      "repair": "/api/v1/repairs/ahmed25-fine-fix",
+      "log": "/api/v1/repairs/ahmed25-fine-fix/log"
+     }
+    },
+    {
+     "schemaVersion": "1.0",
+     "id": "20261121-125955-repair-ahmed35-medium-fix-a603",
+     "kind": "repair",
+     "params": {
+      "source": "ahmed-35-medium",
+      "name": "ahmed35-medium-fix",
+      "profile": "strict"
+     },
+     "name": "ahmed35-medium-fix",
+     "state": "done",
+     "runner": "local",
+     "created": "2026-11-21T18:59:55Z",
+     "started": "2026-11-21T18:59:55Z",
+     "finished": "2026-11-21T19:00:29Z",
+     "pid": 4632,
+     "exitCode": 0,
+     "log": "ahmed35-medium-fix.log",
+     "result": "ahmed35-medium-fix/meshDoctor/result.json",
+     "error": null,
+     "progress": {
+      "step": "done",
+      "fraction": 1.0,
+      "updated": "2026-11-21T19:00:29Z"
+     },
+     "links": {
+      "self": "/api/v1/jobs/20261121-125955-repair-ahmed35-medium-fix-a603",
+      "cancel": "/api/v1/jobs/20261121-125955-repair-ahmed35-medium-fix-a603/cancel",
+      "repair": "/api/v1/repairs/ahmed35-medium-fix",
+      "log": "/api/v1/repairs/ahmed35-medium-fix/log"
+     }
+    },
+    {
+     "schemaVersion": "1.0",
+     "id": "20261121-125922-repair-ahmed25-medium-fix-8c2f",
+     "kind": "repair",
+     "params": {
+      "source": "ahmed-25-medium",
+      "name": "ahmed25-medium-fix",
+      "profile": "openfoam"
+     },
+     "name": "ahmed25-medium-fix",
+     "state": "done",
+     "runner": "local",
+     "created": "2026-11-21T18:59:22Z",
+     "started": "2026-11-21T18:59:22Z",
+     "finished": "2026-11-21T18:59:53Z",
+     "pid": 2642,
+     "exitCode": 0,
+     "log": "ahmed25-medium-fix.log",
+     "result": "ahmed25-medium-fix/meshDoctor/result.json",
+     "error": null,
+     "progress": {
+      "step": "done",
+      "fraction": 1.0,
+      "updated": "2026-11-21T18:59:53Z"
+     },
+     "links": {
+      "self": "/api/v1/jobs/20261121-125922-repair-ahmed25-medium-fix-8c2f",
+      "cancel": "/api/v1/jobs/20261121-125922-repair-ahmed25-medium-fix-8c2f/cancel",
+      "repair": "/api/v1/repairs/ahmed25-medium-fix",
+      "log": "/api/v1/repairs/ahmed25-medium-fix/log"
+     }
+    },
+    {
+     "schemaVersion": "1.0",
+     "id": "20261121-125803-repair-ahmed25-coarse-fix-e255",
+     "kind": "repair",
+     "params": {
+      "source": "ahmed-25-coarse",
+      "name": "ahmed25-coarse-fix",
+      "profile": "openfoam"
+     },
+     "name": "ahmed25-coarse-fix",
+     "state": "done",
+     "runner": "local",
+     "created": "2026-11-21T18:58:03Z",
+     "started": "2026-11-21T18:58:03Z",
+     "finished": "2026-11-21T18:58:22Z",
+     "pid": 625,
+     "exitCode": 0,
+     "log": "ahmed25-coarse-fix.log",
+     "result": "ahmed25-coarse-fix/meshDoctor/result.json",
+     "error": null,
+     "progress": {
+      "step": "done",
+      "fraction": 1.0,
+      "updated": "2026-11-21T18:58:22Z"
+     },
+     "links": {
+      "self": "/api/v1/jobs/20261121-125803-repair-ahmed25-coarse-fix-e255",
+      "cancel": "/api/v1/jobs/20261121-125803-repair-ahmed25-coarse-fix-e255/cancel",
+      "repair": "/api/v1/repairs/ahmed25-coarse-fix",
+      "log": "/api/v1/repairs/ahmed25-coarse-fix/log"
+     }
+    }
+   ]
+  },
+  "/repairs": {
+   "items": [
+    {
+     "name": "ahmed25-coarse-fix",
+     "status": {
+      "step": "done",
+      "time": "2026-11-21T18:58:22Z",
+      "layout": {
+       "parallel": false,
+       "nProcs": 1,
+       "nCells": 478901,
+       "rootCells": 478901
+      },
+      "verdict": {
+       "improved": [],
+       "regressions": [],
+       "unchanged": [
+        "nWrongPyramids",
+        "nBadTets",
+        "nSkew",
+        "nSevereNonOrtho",
+        "nSmallDeterminant",
+        "nLowWeight",
+        "nLowVolRatio",
+        "failedChecks",
+        "nConcaveCells",
+        "maxNonOrtho",
+        "maxSkewness",
+        "minWeight",
+        "minVolRatio"
+       ]
+      }
+     },
+     "source": "~/cases/ahmed-25-coarse",
+     "profile": "openfoam",
+     "verdict": {
+      "improved": [],
+      "regressions": [],
+      "unchanged": [
+       "nWrongPyramids",
+       "nBadTets",
+       "nSkew",
+       "nSevereNonOrtho",
+       "nSmallDeterminant",
+       "nLowWeight",
+       "nLowVolRatio",
+       "failedChecks",
+       "nConcaveCells",
+       "maxNonOrtho",
+       "maxSkewness",
+       "minWeight",
+       "minVolRatio"
+      ]
+     },
+     "finished": "2026-11-21T18:58:20Z",
+     "nCells": 478901
+    },
+    {
+     "name": "ahmed25-fine-fix",
+     "status": {
+      "step": "done",
+      "time": "2026-11-21T19:01:33Z",
+      "layout": {
+       "parallel": false,
+       "nProcs": 1,
+       "nCells": 1565115,
+       "rootCells": 1565115
+      },
+      "verdict": {
+       "improved": [],
+       "regressions": [],
+       "unchanged": [
+        "nWrongPyramids",
+        "nBadTets",
+        "nSkew",
+        "nSevereNonOrtho",
+        "nSmallDeterminant",
+        "nLowWeight",
+        "nLowVolRatio",
+        "failedChecks",
+        "nConcaveCells",
+        "maxNonOrtho",
+        "maxSkewness",
+        "minWeight",
+        "minVolRatio"
+       ]
+      }
+     },
+     "source": "~/cases/ahmed-25-fine",
+     "profile": "openfoam",
+     "verdict": {
+      "improved": [],
+      "regressions": [],
+      "unchanged": [
+       "nWrongPyramids",
+       "nBadTets",
+       "nSkew",
+       "nSevereNonOrtho",
+       "nSmallDeterminant",
+       "nLowWeight",
+       "nLowVolRatio",
+       "failedChecks",
+       "nConcaveCells",
+       "maxNonOrtho",
+       "maxSkewness",
+       "minWeight",
+       "minVolRatio"
+      ]
+     },
+     "finished": "2026-11-21T19:01:32Z",
+     "nCells": 1565115
+    },
+    {
+     "name": "ahmed25-fine-strict",
+     "status": {
+      "step": "checkMesh (before)",
+      "time": "2026-11-21T19:01:41Z",
+      "layout": {
+       "parallel": false,
+       "nProcs": 1,
+       "nCells": 1565115,
+       "rootCells": 1565115
+      }
+     }
+    },
+    {
+     "name": "ahmed25-medium-fix",
+     "status": {
+      "step": "done",
+      "time": "2026-11-21T18:59:53Z",
+      "layout": {
+       "parallel": false,
+       "nProcs": 1,
+       "nCells": 835565,
+       "rootCells": 835565
+      },
+      "verdict": {
+       "improved": [],
+       "regressions": [],
+       "unchanged": [
+        "nWrongPyramids",
+        "nBadTets",
+        "nSkew",
+        "nSevereNonOrtho",
+        "nSmallDeterminant",
+        "nLowWeight",
+        "nLowVolRatio",
+        "failedChecks",
+        "nConcaveCells",
+        "maxNonOrtho",
+        "maxSkewness",
+        "minWeight",
+        "minVolRatio"
+       ]
+      }
+     },
+     "source": "~/cases/ahmed-25-medium",
+     "profile": "openfoam",
+     "verdict": {
+      "improved": [],
+      "regressions": [],
+      "unchanged": [
+       "nWrongPyramids",
+       "nBadTets",
+       "nSkew",
+       "nSevereNonOrtho",
+       "nSmallDeterminant",
+       "nLowWeight",
+       "nLowVolRatio",
+       "failedChecks",
+       "nConcaveCells",
+       "maxNonOrtho",
+       "maxSkewness",
+       "minWeight",
+       "minVolRatio"
+      ]
+     },
+     "finished": "2026-11-21T18:59:51Z",
+     "nCells": 835565
+    },
+    {
+     "name": "ahmed35-medium-fix",
+     "status": {
+      "step": "done",
+      "time": "2026-11-21T19:00:29Z",
+      "layout": {
+       "parallel": false,
+       "nProcs": 1,
+       "nCells": 837235,
+       "rootCells": 837235
+      },
+      "verdict": {
+       "improved": [
+        "nConcaveCells",
+        "maxNonOrtho",
+        "minWeight",
+        "minVolRatio"
+       ],
+       "regressions": [],
+       "unchanged": [
+        "nWrongPyramids",
+        "nBadTets",
+        "nSkew",
+        "nSevereNonOrtho",
+        "nSmallDeterminant",
+        "nLowWeight",
+        "nLowVolRatio",
+        "failedChecks",
+        "maxSkewness"
+       ]
+      }
+     },
+     "source": "~/cases/ahmed-35-medium",
+     "profile": "strict",
+     "verdict": {
+      "improved": [
+       "nConcaveCells",
+       "maxNonOrtho",
+       "minWeight",
+       "minVolRatio"
+      ],
+      "regressions": [],
+      "unchanged": [
+       "nWrongPyramids",
+       "nBadTets",
+       "nSkew",
+       "nSevereNonOrtho",
+       "nSmallDeterminant",
+       "nLowWeight",
+       "nLowVolRatio",
+       "failedChecks",
+       "maxSkewness"
+      ]
+     },
+     "finished": "2026-11-21T19:00:28Z",
+     "nCells": 837235
+    },
+    {
+     "name": "pitzdaily-fix",
+     "status": {
+      "step": "done",
+      "time": "2026-11-21T19:01:40Z",
+      "layout": {
+       "parallel": false,
+       "nProcs": 1,
+       "nCells": 12225,
+       "rootCells": 12225
+      },
+      "verdict": {
+       "improved": [
+        "maxSkewness",
+        "minVolRatio"
+       ],
+       "regressions": [
+        "maxNonOrtho"
+       ],
+       "unchanged": [
+        "nWrongPyramids",
+        "nBadTets",
+        "nSkew",
+        "nSevereNonOrtho",
+        "nSmallDeterminant",
+        "nLowWeight",
+        "nLowVolRatio",
+        "failedChecks",
+        "nConcaveCells",
+        "minWeight"
+       ]
+      }
+     },
+     "source": "~/cases/pitzDaily",
+     "profile": "openfoam",
+     "verdict": {
+      "improved": [
+       "maxSkewness",
+       "minVolRatio"
+      ],
+      "regressions": [
+       "maxNonOrtho"
+      ],
+      "unchanged": [
+       "nWrongPyramids",
+       "nBadTets",
+       "nSkew",
+       "nSevereNonOrtho",
+       "nSmallDeterminant",
+       "nLowWeight",
+       "nLowVolRatio",
+       "failedChecks",
+       "nConcaveCells",
+       "minWeight"
+      ]
+     },
+     "finished": "2026-11-21T19:01:38Z",
+     "nCells": 12225
+    }
+   ]
+  },
+  "/jobs/20261121-130610-abtest-ahmed25-medium-fix-13c2": {
+   "schemaVersion": "1.0",
+   "id": "20261121-130610-abtest-ahmed25-medium-fix-13c2",
+   "kind": "abtest",
+   "params": {
+    "name": "ahmed25-medium-fix",
+    "iters": 200,
+    "init": "0",
+    "variant": ""
+   },
+   "name": "ahmed25-medium-fix",
+   "state": "running",
+   "runner": "local",
+   "created": "2026-11-21T19:06:10Z",
+   "started": "2026-11-21T19:06:10Z",
+   "finished": null,
+   "pid": 27107,
+   "exitCode": null,
+   "log": "ahmed25-medium-fix_ab.log",
+   "result": "ahmed25-medium-fix_ab/ab_result.json",
+   "error": null,
+   "progress": {
+    "step": "solving fixed",
+    "fraction": 0.5,
+    "updated": "2026-11-21T19:08:58Z"
+   },
+   "links": {
+    "self": "/api/v1/jobs/20261121-130610-abtest-ahmed25-medium-fix-13c2",
+    "cancel": "/api/v1/jobs/20261121-130610-abtest-ahmed25-medium-fix-13c2/cancel",
+    "abtest": "/api/v1/abtests/ahmed25-medium-fix",
+    "live": "/api/v1/abtests/ahmed25-medium-fix/live"
+   }
+  },
+  "/jobs/20261121-130250-abtest-ahmed25-coarse-fix-13d0": {
+   "schemaVersion": "1.0",
+   "id": "20261121-130250-abtest-ahmed25-coarse-fix-13d0",
+   "kind": "abtest",
+   "params": {
+    "name": "ahmed25-coarse-fix",
+    "iters": 200,
+    "init": "0",
+    "variant": ""
+   },
+   "name": "ahmed25-coarse-fix",
+   "state": "done",
+   "runner": "local",
+   "created": "2026-11-21T19:02:50Z",
+   "started": "2026-11-21T19:02:50Z",
+   "finished": "2026-11-21T19:06:09Z",
+   "pid": 11146,
+   "exitCode": 0,
+   "log": "ahmed25-coarse-fix_ab.log",
+   "result": "ahmed25-coarse-fix_ab/ab_result.json",
+   "error": null,
+   "progress": {
+    "step": "done",
+    "fraction": 1.0,
+    "updated": "2026-11-21T19:06:09Z"
+   },
+   "links": {
+    "self": "/api/v1/jobs/20261121-130250-abtest-ahmed25-coarse-fix-13d0",
+    "cancel": "/api/v1/jobs/20261121-130250-abtest-ahmed25-coarse-fix-13d0/cancel",
+    "abtest": "/api/v1/abtests/ahmed25-coarse-fix",
+    "live": "/api/v1/abtests/ahmed25-coarse-fix/live"
+   }
+  },
+  "/jobs/20261121-130141-repair-ahmed25-fine-strict-0266": {
+   "schemaVersion": "1.0",
+   "id": "20261121-130141-repair-ahmed25-fine-strict-0266",
+   "kind": "repair",
+   "params": {
+    "source": "ahmed-25-fine",
+    "name": "ahmed25-fine-strict",
+    "profile": "strict"
+   },
+   "name": "ahmed25-fine-strict",
+   "state": "cancelled",
+   "runner": "local",
+   "created": "2026-11-21T19:01:41Z",
+   "started": "2026-11-21T19:01:41Z",
+   "finished": "2026-11-21T19:01:47Z",
+   "pid": 10615,
+   "exitCode": -15,
+   "log": "ahmed25-fine-strict.log",
+   "result": "ahmed25-fine-strict/meshDoctor/result.json",
+   "error": null,
+   "links": {
+    "self": "/api/v1/jobs/20261121-130141-repair-ahmed25-fine-strict-0266",
+    "cancel": "/api/v1/jobs/20261121-130141-repair-ahmed25-fine-strict-0266/cancel",
+    "repair": "/api/v1/repairs/ahmed25-fine-strict",
+    "log": "/api/v1/repairs/ahmed25-fine-strict/log"
+   }
+  },
+  "/jobs/20261121-130134-repair-pitzdaily-fix-b96c": {
+   "schemaVersion": "1.0",
+   "id": "20261121-130134-repair-pitzdaily-fix-b96c",
+   "kind": "repair",
+   "params": {
+    "source": "pitzDaily",
+    "name": "pitzdaily-fix",
+    "profile": "openfoam"
+   },
+   "name": "pitzdaily-fix",
+   "state": "done",
+   "runner": "local",
+   "created": "2026-11-21T19:01:34Z",
+   "started": "2026-11-21T19:01:35Z",
+   "finished": "2026-11-21T19:01:40Z",
+   "pid": 8623,
+   "exitCode": 0,
+   "log": "pitzdaily-fix.log",
+   "result": "pitzdaily-fix/meshDoctor/result.json",
+   "error": null,
+   "progress": {
+    "step": "done",
+    "fraction": 1.0,
+    "updated": "2026-11-21T19:01:40Z"
+   },
+   "links": {
+    "self": "/api/v1/jobs/20261121-130134-repair-pitzdaily-fix-b96c",
+    "cancel": "/api/v1/jobs/20261121-130134-repair-pitzdaily-fix-b96c/cancel",
+    "repair": "/api/v1/repairs/pitzdaily-fix",
+    "log": "/api/v1/repairs/pitzdaily-fix/log"
+   }
+  },
+  "/jobs/20261121-130031-repair-ahmed25-fine-fix-0fa7": {
+   "schemaVersion": "1.0",
+   "id": "20261121-130031-repair-ahmed25-fine-fix-0fa7",
+   "kind": "repair",
+   "params": {
+    "source": "ahmed-25-fine",
+    "name": "ahmed25-fine-fix",
+    "profile": "openfoam"
+   },
+   "name": "ahmed25-fine-fix",
+   "state": "done",
+   "runner": "local",
+   "created": "2026-11-21T19:00:31Z",
+   "started": "2026-11-21T19:00:31Z",
+   "finished": "2026-11-21T19:01:33Z",
+   "pid": 6623,
+   "exitCode": 0,
+   "log": "ahmed25-fine-fix.log",
+   "result": "ahmed25-fine-fix/meshDoctor/result.json",
+   "error": null,
+   "progress": {
+    "step": "done",
+    "fraction": 1.0,
+    "updated": "2026-11-21T19:01:33Z"
+   },
+   "links": {
+    "self": "/api/v1/jobs/20261121-130031-repair-ahmed25-fine-fix-0fa7",
+    "cancel": "/api/v1/jobs/20261121-130031-repair-ahmed25-fine-fix-0fa7/cancel",
+    "repair": "/api/v1/repairs/ahmed25-fine-fix",
+    "log": "/api/v1/repairs/ahmed25-fine-fix/log"
+   }
+  },
+  "/jobs/20261121-125955-repair-ahmed35-medium-fix-a603": {
+   "schemaVersion": "1.0",
+   "id": "20261121-125955-repair-ahmed35-medium-fix-a603",
+   "kind": "repair",
+   "params": {
+    "source": "ahmed-35-medium",
+    "name": "ahmed35-medium-fix",
+    "profile": "strict"
+   },
+   "name": "ahmed35-medium-fix",
+   "state": "done",
+   "runner": "local",
+   "created": "2026-11-21T18:59:55Z",
+   "started": "2026-11-21T18:59:55Z",
+   "finished": "2026-11-21T19:00:29Z",
+   "pid": 4632,
+   "exitCode": 0,
+   "log": "ahmed35-medium-fix.log",
+   "result": "ahmed35-medium-fix/meshDoctor/result.json",
+   "error": null,
+   "progress": {
+    "step": "done",
+    "fraction": 1.0,
+    "updated": "2026-11-21T19:00:29Z"
+   },
+   "links": {
+    "self": "/api/v1/jobs/20261121-125955-repair-ahmed35-medium-fix-a603",
+    "cancel": "/api/v1/jobs/20261121-125955-repair-ahmed35-medium-fix-a603/cancel",
+    "repair": "/api/v1/repairs/ahmed35-medium-fix",
+    "log": "/api/v1/repairs/ahmed35-medium-fix/log"
+   }
+  },
+  "/jobs/20261121-125922-repair-ahmed25-medium-fix-8c2f": {
+   "schemaVersion": "1.0",
+   "id": "20261121-125922-repair-ahmed25-medium-fix-8c2f",
+   "kind": "repair",
+   "params": {
+    "source": "ahmed-25-medium",
+    "name": "ahmed25-medium-fix",
+    "profile": "openfoam"
+   },
+   "name": "ahmed25-medium-fix",
+   "state": "done",
+   "runner": "local",
+   "created": "2026-11-21T18:59:22Z",
+   "started": "2026-11-21T18:59:22Z",
+   "finished": "2026-11-21T18:59:53Z",
+   "pid": 2642,
+   "exitCode": 0,
+   "log": "ahmed25-medium-fix.log",
+   "result": "ahmed25-medium-fix/meshDoctor/result.json",
+   "error": null,
+   "progress": {
+    "step": "done",
+    "fraction": 1.0,
+    "updated": "2026-11-21T18:59:53Z"
+   },
+   "links": {
+    "self": "/api/v1/jobs/20261121-125922-repair-ahmed25-medium-fix-8c2f",
+    "cancel": "/api/v1/jobs/20261121-125922-repair-ahmed25-medium-fix-8c2f/cancel",
+    "repair": "/api/v1/repairs/ahmed25-medium-fix",
+    "log": "/api/v1/repairs/ahmed25-medium-fix/log"
+   }
+  },
+  "/jobs/20261121-125803-repair-ahmed25-coarse-fix-e255": {
+   "schemaVersion": "1.0",
+   "id": "20261121-125803-repair-ahmed25-coarse-fix-e255",
+   "kind": "repair",
+   "params": {
+    "source": "ahmed-25-coarse",
+    "name": "ahmed25-coarse-fix",
+    "profile": "openfoam"
+   },
+   "name": "ahmed25-coarse-fix",
+   "state": "done",
+   "runner": "local",
+   "created": "2026-11-21T18:58:03Z",
+   "started": "2026-11-21T18:58:03Z",
+   "finished": "2026-11-21T18:58:22Z",
+   "pid": 625,
+   "exitCode": 0,
+   "log": "ahmed25-coarse-fix.log",
+   "result": "ahmed25-coarse-fix/meshDoctor/result.json",
+   "error": null,
+   "progress": {
+    "step": "done",
+    "fraction": 1.0,
+    "updated": "2026-11-21T18:58:22Z"
+   },
+   "links": {
+    "self": "/api/v1/jobs/20261121-125803-repair-ahmed25-coarse-fix-e255",
+    "cancel": "/api/v1/jobs/20261121-125803-repair-ahmed25-coarse-fix-e255/cancel",
+    "repair": "/api/v1/repairs/ahmed25-coarse-fix",
+    "log": "/api/v1/repairs/ahmed25-coarse-fix/log"
+   }
+  }
+ }
+}

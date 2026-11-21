@@ -1,0 +1,31 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vitest/config";
+
+const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as { version: string };
+
+// vite preview sends the same security headers as Vercel (vercel.json), so the browser tests run the
+// built site under its real Content-Security-Policy.
+type VercelHeaders = { headers: { source: string; headers: { key: string; value: string }[] }[] };
+const vercel = JSON.parse(readFileSync(new URL("./vercel.json", import.meta.url), "utf8")) as VercelHeaders;
+const siteHeaders = Object.fromEntries(
+  (vercel.headers.find((h) => h.source === "/(.*)")?.headers ?? []).map((h) => [h.key, h.value]),
+);
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
+  define: { "import.meta.env.VITE_APP_VERSION": JSON.stringify(pkg.version) },
+  build: { target: "es2022", sourcemap: false, assetsInlineLimit: 0 },
+  server: { port: 5173, strictPort: true },
+  preview: { port: 4173, strictPort: true, headers: siteHeaders },
+  test: {
+    environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
+    css: false,
+  },
+});

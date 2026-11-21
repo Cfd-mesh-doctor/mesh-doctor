@@ -1,0 +1,101 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// How the app reaches an engine. The real one is Mesh Doctor on this computer (http://localhost);
+// the demo answers from recorded data. Screens only see a Transport, so both look the same to them.
+import { EngineError, isEngineCode } from "./errors";
+import { localAccessState } from "./permission";
+import type { CaseList, EngineInfo, Job, JobList, RepairList } from "./types";
+import { API_MAJOR } from "./types";
+
+export type Method = "GET" | "POST";
+
+export interface Transport {
+  readonly kind: "engine" | "demo";
+  /** Keeps cached answers from different engines (and the demo) apart. */
+  readonly scope: string;
+  request<T>(method: Method, path: string, body?: unknown, signal?: AbortSignal): Promise<T>;
+}
+
+// Chrome's Local Network Access: says up front that the request goes to this computer.
+type LocalRequestInit = RequestInit & { targetAddressSpace?: "loopback" | "local" | "public" };
+
+const TIMEOUT_MS = 15_000;
+
+export function httpTransport(engine: string, key: string, timeoutMs = TIMEOUT_MS): Transport {
+  return {
+    kind: "engine",
+    scope: engine,
+    async request<T>(method: Method, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      const stop = () => ctrl.abort();
+      signal?.addEventListener("abort", stop, { once: true });
+      try {
+        let res: Response;
+        try {
+          const init: LocalRequestInit = {
+            method,
+            headers: body === undefined ? { "X-MD-Key": key } : { "X-MD-Key": key, "Content-Type": "application/json" },
+            body: body === undefined ? undefined : JSON.stringify(body),
+            signal: ctrl.signal,
+            cache: "no-store",
+            credentials: "omit",
+            mode: "cors",
+            redirect: "error",
+            referrerPolicy: "no-referrer",
+            targetAddressSpace: "loopback",
+          };
+          res = await fetch(`${engine}/api/v1${path}`, init);
+        } catch {
+          if (signal?.aborted) throw new EngineError("aborted", "Cancelled");
+          if (ctrl.signal.aborted) throw new EngineError("timeout", `No answer from ${engine} in ${timeoutMs / 1000} s`);
+          // A network error says nothing more: not running, blocked by the browser, or this site not allowed.
+          if ((await localAccessState()) === "denied") {
+            throw new EngineError("permission-denied", "The browser blocked access to apps on this device");
+          }
+          throw new EngineError("unreachable", `Nothing answered at ${engine}`);
+        }
+        let doc: unknown;
+        try {
+          doc = await res.json();
+        } catch {
+          if (ctrl.signal.aborted && !signal?.aborted) throw new EngineError("timeout", "The answer took too long");
+          throw new EngineError("bad-response", `HTTP ${res.status} without the engine's JSON`, res.status);
+        }
+        if (!res.ok) {
+          const err = (doc as { error?: { code?: unknown; message?: unknown } } | null)?.error;
+          throw new EngineError(
+            isEngineCode(err?.code) ? err.code : "bad-response",
+            typeof err?.message === "string" ? err.message : `HTTP ${res.status}`,
+            res.status,
+          );
+        }
+        return doc as T;
+      } finally {
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", stop);
+      }
+    },
+  };
+}
+
+/** The API calls the screens use; each one is a route in the engine's OpenAPI document. */
+export const api = {
+  async info(t: Transport, signal?: AbortSignal): Promise<EngineInfo> {
+    const info = await t.request<EngineInfo>("GET", "/", undefined, signal);
+    const major = Number(String(info?.apiVersion ?? "").split(".")[0]);
+    if (major !== API_MAJOR) {
+      throw new EngineError(
+        "incompatible",
+        `This app speaks API ${API_MAJOR}.x; the engine reports ${info?.apiVersion || "no version"}. ` +
+          (major > API_MAJOR ? "Reload the app to get the newest version." : "Update Mesh Doctor (git pull) and restart it."),
+      );
+    }
+    return info;
+  },
+  cases: (t: Transport, signal?: AbortSignal) => t.request<CaseList>("GET", "/cases", undefined, signal),
+  jobs: (t: Transport, signal?: AbortSignal) => t.request<JobList>("GET", "/jobs?limit=200", undefined, signal),
+  job: (t: Transport, id: string, signal?: AbortSignal) =>
+    t.request<Job>("GET", `/jobs/${encodeURIComponent(id)}`, undefined, signal),
+  cancelJob: (t: Transport, id: string) => t.request<Job>("POST", `/jobs/${encodeURIComponent(id)}/cancel`),
+  repairs: (t: Transport, signal?: AbortSignal) => t.request<RepairList>("GET", "/repairs", undefined, signal),
+};

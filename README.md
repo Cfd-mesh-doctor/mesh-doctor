@@ -121,13 +121,16 @@ meshdoctor jobs [list|show|cancel]    # jobs started from the dashboard or the A
 meshdoctor report <name> [--html]     # one portable file: repair, map and A/B, paths removed
 meshdoctor report --viewer            # the viewer alone, one file: opens report files anywhere
 meshdoctor serve [--case <case>]      # dashboard; --case picks the live run to watch
+meshdoctor pair [--new] [--open]      # pair the web app with this engine; --new replaces the key
 ```
 
 Without the `bin/` launcher or pip, `python3 -m meshdoctor <command>` from the clone does the same.
 
 **Sharing a result:** `meshdoctor report <name>` writes one file with the repair, its map and its A/B test, with this machine's paths removed. Open it at `http://localhost:8765/report`, or send the `--html` version, which opens anywhere with a double-click and never goes online. `--viewer` writes the empty viewer as one file, for a shared folder or a static web host. It still holds the case's geometry and patch names, so share it like the case itself.
 
-The dashboard's data is also a versioned JSON API under `/api/v1`, described at `http://localhost:8765/api/v1/openapi.json` (see [Architecture](docs/architecture.md#api-v1)). Starting a job through it needs the launch token from a dashboard page.
+The dashboard's data is also a versioned JSON API under `/api/v1`, described at `http://localhost:8765/api/v1/openapi.json` (see [Architecture](docs/architecture.md#api-v1)). Starting a job through it needs the launch token from a dashboard page, or the web app's pairing key.
+
+**The web app:** the same engine also works from the Mesh Doctor web app, a static site at `https://mesh-doctor.vercel.app` (source in [`app/`](app/)). It runs in your browser and talks straight to the engine on this computer, so your cases and results never go to the site. Start the engine with `meshdoctor serve`, then run `meshdoctor pair --open` once for each browser: it opens the pairing link, which holds the key, so treat it like a password. Chrome and Edge ask once to let the site reach apps on your device; Safari doesn't allow it. How it is kept safe: [Safety](docs/safety.md#the-dashboard-answers-only-you).
 
 **On another machine** (a cluster node, a lab PC): the dashboard listens on 127.0.0.1 only. Reach it through an SSH tunnel, never a public address:
 
@@ -155,9 +158,14 @@ workspace = ~/meshdoctor-work
 # up_axis = z
 # the most memory a job may use, in MB
 # ram_limit_mb = 16000
+
+[app]
+# web app addresses that may use this engine once paired, separated by spaces
+# (default https://mesh-doctor.vercel.app); add your own build's address here
+# app_origins = https://mesh-doctor.vercel.app http://localhost:5173
 ```
 
-Comments go on their own lines. Each setting has an environment variable that wins over the file: `MESHDOCTOR_CASES`, `MESHDOCTOR_WORKSPACE`, `MESHDOCTOR_FOAM_BASHRC` (the OpenFOAM bashrc, found automatically when OpenFOAM is loaded), `MESHDOCTOR_LIVE_CASE`, `MESHDOCTOR_FLOW_AXIS`, `MESHDOCTOR_UP_AXIS` and `MESHDOCTOR_RAM_LIMIT_MB`. `MESHDOCTOR_CONFIG` points to another config file.
+Comments go on their own lines. Each setting has an environment variable that wins over the file: `MESHDOCTOR_CASES`, `MESHDOCTOR_WORKSPACE`, `MESHDOCTOR_FOAM_BASHRC` (the OpenFOAM bashrc, found automatically when OpenFOAM is loaded), `MESHDOCTOR_LIVE_CASE`, `MESHDOCTOR_FLOW_AXIS`, `MESHDOCTOR_UP_AXIS`, `MESHDOCTOR_RAM_LIMIT_MB` and `MESHDOCTOR_APP_ORIGINS`. `MESHDOCTOR_CONFIG` points to another config file, and `MESHDOCTOR_KEY_FILE` to another pairing key file (default `~/.config/meshdoctor/app.key`).
 
 Force groups, flow direction and the up axis are read from each case (the `forces` or `forceCoeffs` function objects and `0/U`), so most cases need no settings.
 
