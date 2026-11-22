@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The frame around every app screen: sidebar, top bar, and the demo notice when showing recorded data.
-import { ArrowRight, Info, Menu as MenuIcon } from "lucide-react";
+import { ArrowRight, Compass, Info, Menu as MenuIcon } from "lucide-react";
 import { useState } from "react";
 import { Link, Outlet, useMatches } from "react-router";
 import { Logo } from "@/components/brand/Logo";
+import { AppTour } from "@/components/shared/AppTour";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/dialog";
 import { useAppPath, useEngine } from "@/engine/context";
@@ -26,15 +27,25 @@ function usePageTitle(): string | undefined {
 }
 
 function DemoNotice() {
+  const [tour, setTour] = useState(false);
   return (
     <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-info/20 bg-info-soft px-4 py-2 text-[13px] text-info">
       <span className="inline-flex items-center gap-2">
         <Info className="size-4" />
         Demo: recorded from a real run of the public Ahmed-body example. Nothing here runs.
       </span>
+      {/* A minute's walk through the app in plain words: the first thing a newcomer to the demo can do. */}
+      <button
+        type="button"
+        onClick={() => setTour(true)}
+        className="inline-flex items-center gap-1 font-semibold underline-offset-4 hover:underline"
+      >
+        <Compass className="size-3.5" /> Take the tour
+      </button>
       <Link to="/connect" className="inline-flex items-center gap-1 font-semibold underline-offset-4 hover:underline">
         Connect your own engine <ArrowRight className="size-3.5" />
       </Link>
+      <AppTour open={tour} onClose={() => setTour(false)} />
     </div>
   );
 }

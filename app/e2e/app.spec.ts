@@ -42,6 +42,24 @@ test("a newcomer's main button leads to the three steps, which say how often eac
   await expect(page).toHaveURL(/\/connect$/);
 });
 
+test("the demo's tour walks through the app in five steps from the keyboard, then hands the focus back", async ({ page }) => {
+  await page.goto("/demo");
+  const open = page.getByRole("button", { name: "Take the tour" });
+  await open.click();
+  const tour = page.getByRole("dialog", { name: "Welcome to Mesh Doctor" });
+  await expect(tour).toContainText("Step 1 of 5");
+  await expect(tour.getByRole("button", { name: "Next" })).toBeFocused();
+  for (let i = 2; i <= 5; i++) {
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog")).toContainText(`Step ${i} of 5`);
+  }
+  await expect(page.getByRole("dialog", { name: "Reports: did the repair help?" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Done" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(open).toBeFocused();
+});
+
 test("the body font starts loading with the page, and is fetched once", async ({ page, request }) => {
   const html = await (await request.get("/")).text();
   const link = html.match(/<link [^>]*rel="preload"[^>]*>/)?.[0] ?? "";
