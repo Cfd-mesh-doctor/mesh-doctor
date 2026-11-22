@@ -41,7 +41,7 @@ test("a job's details show its whole log and result paths, wrapping rather than 
   }
 });
 
-test("an active job's details open on Close: Enter twice opens and closes them, cancelling nothing", async ({ page }) => {
+test("an active job's details open on Close: Enter twice opens and closes them, cancelling nothing, and the focus goes back to the job", async ({ page }) => {
   await page.goto("/demo/jobs?show=active");
   const name = page.getByRole("button", { name: "ahmed25-medium-fix", exact: true });
   await name.focus();
@@ -55,6 +55,7 @@ test("an active job's details open on Close: Enter twice opens and closes them, 
   await expect(details).toBeHidden();
   await expect(page).toHaveURL(/\/demo\/jobs\?show=active$/);
   await expect(page.getByRole("dialog")).toHaveCount(0); // and no "Cancel ahmed25-medium-fix?"
+  await expect(name).toBeFocused(); // back where it was
 });
 
 test("the sidebar says how many jobs are active, not a bare number", async ({ page }) => {

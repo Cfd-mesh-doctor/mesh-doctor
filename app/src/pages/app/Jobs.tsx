@@ -96,21 +96,39 @@ function CancelDialog({ job, onClose }: { job: Job | null; onClose: () => void }
   );
 }
 
-function DetailsDialog({ job, onClose, onCancel }: { job: Job | null; onClose: () => void; onCancel: (j: Job) => void }) {
+function DetailsDialog({ job, onClose, onCancel, nameOf }: {
+  job: Job | null;
+  onClose: () => void;
+  onCancel: (j: Job) => void;
+  /** The job's name in the table, if it shows there. */
+  nameOf: (id: string) => HTMLElement | undefined;
+}) {
   const params = Object.entries(job?.params ?? {});
   const to = useAppPath();
   const report = job && reportPath(job);
   // The details open on Close, the calm way out. The first button is otherwise an active job's red "Cancel job": it
   // only asks to confirm, but a key pressed straight after opening shouldn't start a cancel.
   const close = useRef<HTMLButtonElement>(null);
+  // The job whose details are open, still known while they close (when `job` is already null).
+  const shown = useRef<string | null>(null);
   return (
     <Dialog open={job !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
         className="max-w-2xl"
         onOpenAutoFocus={(e) => {
+          shown.current = job?.id ?? null;
           if (!close.current) return;
           e.preventDefault();
           close.current.focus({ preventScroll: true });
+        }}
+        onCloseAutoFocus={(e) => {
+          // Radix hands the focus back only to a Dialog.Trigger, and the details open from the address. So the
+          // focus goes back to the job's name, rather than to the page itself, unless the cancel confirmation that
+          // replaced the details has it.
+          e.preventDefault();
+          const active = document.activeElement;
+          if (active && active !== document.body && active.isConnected) return;
+          if (shown.current) nameOf(shown.current)?.focus();
         }}
       >
         {job && (
@@ -190,6 +208,8 @@ export function Jobs() {
   const detailsId = params.get("job");
   const setDetailsId = (id: string | null) => setParam("job", id);
   const [cancelId, setCancelId] = useState<string | null>(null);
+  // Each job's name in the table: the focus goes back to it when the job's details close.
+  const names = useRef(new Map<string, HTMLButtonElement>());
 
   const items = useMemo(() => jobs.data?.items ?? [], [jobs.data]);
   const counts = useMemo(() => {
@@ -273,6 +293,10 @@ export function Jobs() {
                   <TD>
                     <button
                       type="button"
+                      ref={(el) => {
+                        if (el) names.current.set(j.id, el);
+                        return () => { names.current.delete(j.id); };
+                      }}
                       className="text-left font-medium underline-offset-4 hover:underline"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -313,6 +337,7 @@ export function Jobs() {
       </Card>
       <DetailsDialog
         job={details}
+        nameOf={(id) => names.current.get(id)}
         onClose={() => setDetailsId(null)}
         onCancel={(j) => {
           setDetailsId(null);

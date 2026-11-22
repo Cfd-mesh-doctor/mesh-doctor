@@ -90,6 +90,24 @@ describe("the Jobs screen", () => {
     expect(within(details).getByRole("button", { name: /Cancel job/ })).not.toHaveFocus();
   });
 
+  it("hands the focus back to the job's name when its details close, even when they opened from the address", async () => {
+    open(`${path}?job=20261121-130141-repair-ahmed25-fine-strict-0266`); // the demo's cancelled job
+    await screen.findByRole("dialog", { name: "ahmed25-fine-strict" });
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.getByRole("button", { name: "ahmed25-fine-strict" })).toHaveFocus());
+  });
+
+  it("leaves the focus in the cancel confirmation that replaces an active job's details", async () => {
+    open(`${path}?job=20261121-130610-abtest-ahmed25-medium-fix-13c2`); // the demo's running job
+    const details = await screen.findByRole("dialog", { name: "ahmed25-medium-fix" });
+    await userEvent.click(within(details).getByRole("button", { name: /Cancel job/ }));
+    const confirm = await screen.findByRole("dialog", { name: "Cancel ahmed25-medium-fix?" });
+    const keep = within(confirm).getByRole("button", { name: "Keep running" });
+    await waitFor(() => expect(keep).toHaveFocus());
+    await new Promise((r) => setTimeout(r, 50)); // the details hand the focus back a moment after they close
+    expect(keep).toHaveFocus();
+  });
+
   it("shows every job when the address names a filter it doesn't know", async () => {
     open(`${path}?show=nonsense`);
     expect(await screen.findAllByRole("button", { name: "ahmed25-medium-fix" })).toHaveLength(2);
