@@ -106,3 +106,17 @@ test("the repair map draws the model and says what each mark is", async ({ page 
   await expect(page.getByRole("img", { name: /^Top view of the model's wall faces/ })).toBeVisible();
   await expect(page.getByText("Defect left after the repair")).toHaveCount(0);
 });
+
+test("the sample reports open without a file, and nothing is sent", async ({ page }) => {
+  const seen = watchRequests(page);
+  await page.goto("/report");
+  await page.getByRole("button", { name: /35° slant, with a repair map/ }).click();
+  await expect(page.getByRole("heading", { name: "ahmed35-medium-fix" })).toBeVisible();
+  await expect(page.getByRole("img", { name: /^Side view of the model's wall faces .* with 26 defects found and repaired/ })).toBeVisible();
+  await page.getByRole("button", { name: "Open another report" }).click();
+  await page.getByRole("button", { name: /25° slant, with an A\/B test/ }).click();
+  await expect(page.getByRole("heading", { name: "ahmed25-medium-fix" })).toBeVisible();
+  await expect(page.getByRole("img", { name: /Initial residual of p per iteration/ })).toBeVisible();
+  expect([...seen.origins]).toEqual([SITE]);
+  expect(seen.sent).toEqual([]);
+});

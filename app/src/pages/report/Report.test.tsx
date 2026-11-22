@@ -59,6 +59,14 @@ describe("Report viewer", () => {
     noCanvas.mockRestore();
   });
 
+  it("opens a sample report made from the public Ahmed-body example", async () => {
+    renderScreen(<Report />, { path: "/report" });
+    await userEvent.click(screen.getByRole("button", { name: /25° slant, with an A\/B test/ }));
+    expect(await screen.findByRole("heading", { name: "ahmed25-medium-fix" })).toBeInTheDocument();
+    expect(screen.getByText(/from the public Ahmed-body example \(a sample\)$/)).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /Initial residual of p per iteration/ })).toBeInTheDocument();
+  });
+
   it("explains a file that isn't a report, and stays ready for another", async () => {
     renderScreen(<Report />, { path: "/report" });
     await userEvent.upload(screen.getByLabelText("Choose a report file"), file({ hello: "world" }, "notes.json"));

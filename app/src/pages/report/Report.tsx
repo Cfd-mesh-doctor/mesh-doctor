@@ -3,7 +3,8 @@
 // whether it helped the solver. The file is read in this tab and never uploaded: the site's security
 // policy only lets the page talk to itself and to an engine on this computer.
 import {
-  Activity, Boxes, Check, FileJson, FileUp, FolderOpen, Move, ShieldCheck, TrendingDown, TrendingUp, TriangleAlert,
+  Activity, Boxes, Check, FileJson, FileUp, FolderOpen, Move, ShieldCheck, Sparkles, TrendingDown, TrendingUp,
+  TriangleAlert,
 } from "lucide-react";
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { LineChart, type LineSeries } from "@/components/charts/LineChart";
@@ -19,7 +20,7 @@ import { formatDateTime, formatInt, formatNumber } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
 import { HEAT, viewHeading, type MapSummary, type MapViewName } from "@/report/map";
-import { ReportError, fileBytes, readReport } from "@/report/read";
+import { ReportError, checkReport, fileBytes, readReport } from "@/report/read";
 import { judgeTone, measureLabel, ratioChange, summarize, type Change, type ReportSummary } from "@/report/summary";
 import { RepairMap } from "./RepairMap";
 
@@ -30,6 +31,14 @@ type State =
   | { kind: "open"; summary: ReportSummary; from: string };
 
 const ACCEPT = ".json,.gz,.html,.htm,application/json,application/gzip,text/html";
+
+/** Real reports made from the public Ahmed-body example (examples/ahmed-body); each loads only when picked. */
+const SAMPLES = [
+  { name: "ahmed25-medium-fix", label: "25° slant, with an A/B test",
+    load: () => import("@/report/samples/ahmed25-medium-fix.mdreport.json") },
+  { name: "ahmed35-medium-fix", label: "35° slant, with a repair map",
+    load: () => import("@/report/samples/ahmed35-medium-fix.mdreport.json") },
+] as const;
 
 const changeText = (c: Change) => (c === "better" ? "text-success font-medium" : c === "worse" ? "text-danger font-medium" : "");
 
@@ -51,6 +60,25 @@ export function Report() {
       next = {
         kind: "error",
         message: e instanceof ReportError ? e.message : "This file couldn't be opened. Is it a Mesh Doctor report?",
+      };
+    }
+    if (n !== latest.current) return;
+    setState(next);
+    if (window.scrollY > 0) window.scrollTo({ top: 0 });
+  }, []);
+
+  const openSample = useCallback(async (sample: (typeof SAMPLES)[number]) => {
+    const n = ++latest.current;
+    setState({ kind: "reading", file: `the sample ${sample.name}` });
+    let next: State;
+    try {
+      const report = checkReport((await sample.load()).default);
+      next = { kind: "open", summary: summarize(report), from: "the public Ahmed-body example (a sample)" };
+    } catch (e) {
+      if (!(e instanceof ReportError)) console.error("Mesh Doctor report viewer:", e);
+      next = {
+        kind: "error",
+        message: e instanceof ReportError ? e.message : "The sample couldn't be loaded. Check the connection and try again.",
       };
     }
     if (n !== latest.current) return;
@@ -135,7 +163,22 @@ export function Report() {
                 </div>
               )}
             </Card>
-            <div className="mt-6 grid gap-4 md:grid-cols-3">
+            <Card className="mt-4 flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold">No report at hand? Try a sample</h2>
+                <p className="mt-0.5 text-[13.5px] text-muted-foreground">
+                  Real reports from the public Ahmed-body example: one with a solver A/B test, one with a repair map.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 sm:shrink-0">
+                {SAMPLES.map((sample) => (
+                  <Button key={sample.name} variant="secondary" size="sm" onClick={() => void openSample(sample)}>
+                    <Sparkles /> {sample.label}
+                  </Button>
+                ))}
+              </div>
+            </Card>
+            <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
               <Card className="p-5">
                 <ShieldCheck className="size-5 text-primary" aria-hidden />
                 <h3 className="mt-3 text-sm font-semibold">Stays in this browser</h3>
