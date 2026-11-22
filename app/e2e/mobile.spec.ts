@@ -58,6 +58,19 @@ test("on a small phone, jobs show progress under the name and every filter can b
   await expect(page.getByRole("row", { name: /pitzdaily-fix/ })).toHaveCount(0);
 });
 
+test("on a small phone a job's details fit the screen, scrolling inside rather than cut off", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 }); // the running A/B test's details were 759 px tall here
+  await page.emulateMedia({ reducedMotion: "reduce" }); // no pop-in while measuring
+  await page.goto("/demo/jobs?job=20261121-130610-abtest-ahmed25-medium-fix-13c2");
+  const details = page.getByRole("dialog", { name: "ahmed25-medium-fix" });
+  await expect(details).toBeVisible();
+  const box = (await details.boundingBox())!;
+  expect(box.y, "the title is above the screen").toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height, "the buttons are below the screen").toBeLessThanOrEqual(667);
+  await details.getByRole("button", { name: "Close", exact: true }).first().click(); // scrolled to, inside the dialog
+  await expect(details).toBeHidden();
+});
+
 test("on a small phone, a case's size and its estimate show under the name", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto("/demo/cases");

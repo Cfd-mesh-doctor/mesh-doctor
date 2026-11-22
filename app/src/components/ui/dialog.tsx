@@ -13,9 +13,12 @@ export function DialogContent({ className, children, ...props }: ComponentProps<
     <D.Portal>
       <D.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px] data-[state=open]:animate-fade-in" />
       <D.Content
+        // A dialog never grows past the screen: a tall one (a job's details on a small phone) scrolls inside, rather
+        // than losing its title above the screen and its buttons below it.
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl " +
-            "border border-border bg-surface p-6 shadow-pop focus:outline-none data-[state=open]:animate-pop-in",
+          "fixed top-1/2 left-1/2 z-50 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 " +
+            "-translate-y-1/2 overflow-y-auto overscroll-contain rounded-xl border border-border bg-surface p-6 " +
+            "shadow-pop focus:outline-none data-[state=open]:animate-pop-in",
           className,
         )}
         {...props}
