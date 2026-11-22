@@ -89,7 +89,7 @@ export function Cases() {
         description="OpenFOAM cases in the engine's cases folder. Mesh Doctor only ever reads them: every repair works on a copy."
       />
       {cases.isError && <ErrorPanel className="mb-6" error={cases.error} onRetry={() => cases.refetch()} retrying={cases.isFetching} />}
-      <Card>
+      <Card data-tour="cases">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
           {/* The site's search box: "/" puts the cursor in it, as in the Docs and Troubleshooting searches. */}
           <SearchInput

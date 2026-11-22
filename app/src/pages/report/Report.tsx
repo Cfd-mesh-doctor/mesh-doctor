@@ -289,7 +289,7 @@ export function ReportView({ summary: s, from, action }: { summary: ReportSummar
       </div>
 
       <Section title="Verdict">
-        <Card className="mt-4">
+        <Card className="mt-4" data-tour="verdict">
           <CardHeader><CardTitle>Verdict</CardTitle></CardHeader>
           <CardContent>
             <p className="text-[15px] leading-relaxed">{s.sentence}</p>

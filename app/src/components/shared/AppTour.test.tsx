@@ -8,10 +8,14 @@ import { renderScreen } from "@/test/render";
 import { AppTour } from "./AppTour";
 import { TOUR_STEPS } from "./tourSteps";
 
-function Opener() {
+const PARTS = ["tiles", "cases", "jobs", "verdict"];
+
+/** The tour's button, and stand-ins for the parts of the screens it rings. */
+function Opener({ parts }: { parts: string[] }) {
   const [open, setOpen] = useState(false);
   return (
     <>
+      {parts.map((p) => <div key={p} data-tour={p} />)}
       <button type="button" onClick={() => setOpen(true)}>Take the tour</button>
       <AppTour open={open} onClose={() => setOpen(false)} />
     </>
@@ -19,9 +23,11 @@ function Opener() {
 }
 
 /** The tour in the demo, opened from its Jobs screen; it stays open on every screen of the demo, as in the app. */
-const show = (at = "/demo/jobs") => renderScreen(<Opener />, { path: "/demo/*", at, transport: demoTransport(undefined, 0) });
+const show = (at = "/demo/jobs", parts = PARTS) =>
+  renderScreen(<Opener parts={parts} />, { path: "/demo/*", at, transport: demoTransport(undefined, 0) });
 const title = (i: number) => TOUR_STEPS[i]!.title;
 const last = TOUR_STEPS.length - 1;
+const ringed = () => [...document.querySelectorAll("[data-tour-spot]")].map((el) => el.getAttribute("data-tour"));
 
 describe("the app tour", () => {
   it("steps through with Enter and back again, then hands the focus back when done", async () => {
@@ -64,6 +70,34 @@ describe("the app tour", () => {
     await user.click(screen.getByRole("button", { name: "Skip tour" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(at()).toBe("/demo/jobs");
+  });
+
+  it("rings the part of the screen each step means, one at a time, and lets go when the tour closes", async () => {
+    const user = userEvent.setup();
+    show();
+    await user.click(screen.getByRole("button", { name: "Take the tour" }));
+    expect(ringed()).toEqual([]); // the welcome means no part
+    for (const part of PARTS) {
+      await user.keyboard("{Enter}");
+      await waitFor(() => expect(ringed()).toEqual([part]));
+    }
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await waitFor(() => expect(ringed()).toEqual(["jobs"]));
+    await user.click(screen.getByRole("button", { name: "Skip tour" }));
+    expect(ringed()).toEqual([]);
+  });
+
+  it("rings a part that shows up after its step opened, as a screen shows its data after it opens", async () => {
+    const user = userEvent.setup();
+    show("/demo/jobs", []);
+    await user.click(screen.getByRole("button", { name: "Take the tour" }));
+    await user.keyboard("{Enter}"); // the Overview, whose tiles aren't there yet
+    expect(ringed()).toEqual([]);
+    const tiles = document.createElement("div");
+    tiles.setAttribute("data-tour", "tiles");
+    document.body.append(tiles);
+    await waitFor(() => expect(ringed()).toEqual(["tiles"]));
+    tiles.remove();
   });
 
   it("can be skipped, or closed with Escape, at any step, and starts again from the beginning", async () => {

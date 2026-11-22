@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The app's short walkthrough: five steps in plain words on where things are and what each screen tells you, which
-// can be skipped at any step. Each step opens the screen it describes, and the tour stands aside so it shows. It opens
-// with the focus on Next, so Enter steps through it; each new step is read out, as the focus stays put while the
-// words change; and closing it hands the focus back to whatever opened it.
-import { useRef, useState } from "react";
+// can be skipped at any step. Each step opens the screen it describes and rings the part it means, and the tour stands
+// aside so it shows. It opens with the focus on Next, so Enter steps through it; each new step is read out, as the
+// focus stays put while the words change; and closing it hands the focus back to whatever opened it.
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogActions, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -16,8 +16,38 @@ export function AppTour({ open, onClose }: { open: boolean; onClose: () => void 
   const to = useAppPath();
   const next = useRef<HTMLButtonElement>(null);
   const opener = useRef<HTMLElement | null>(null);
-  const { title, text } = TOUR_STEPS[step]!;
+  const { title, text, spot } = TOUR_STEPS[step]!;
   const last = step === TOUR_STEPS.length - 1;
+  // Rings the part of the screen the step means once it's there (a screen shows its data after it opens), and brings
+  // it into view when it's off the screen or low on it, where the tour stands. CSS lifts it above the tour's shade.
+  useEffect(() => {
+    if (!open || !spot) return;
+    let lit: Element | null = null;
+    let settle: ReturnType<typeof setTimeout> | undefined;
+    const light = () => {
+      const el = document.querySelector(`[data-tour="${spot}"]`);
+      if (!el) return false;
+      lit = el;
+      el.setAttribute("data-tour-spot", "");
+      settle = setTimeout(() => { // after the screen has settled: opening one scrolls it to the top
+        const { top } = el.getBoundingClientRect();
+        if (top < 0 || top > window.innerHeight / 2) {
+          const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+          el.scrollIntoView({ block: "start", behavior: still ? "auto" : "smooth" });
+        }
+      }, 150);
+      return true;
+    };
+    const watch = new MutationObserver(() => {
+      if (light()) watch.disconnect();
+    });
+    if (!light()) watch.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      watch.disconnect();
+      clearTimeout(settle);
+      lit?.removeAttribute("data-tour-spot");
+    };
+  }, [open, spot]);
   const go = (i: number) => {
     setStep(i);
     const { page } = TOUR_STEPS[i]!;
@@ -30,9 +60,10 @@ export function AppTour({ open, onClose }: { open: boolean; onClose: () => void 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && close()}>
       <DialogContent
-        // At the foot of the screen (bottom right from 640 px), over a light shade: the screen it describes shows.
-        overlayClassName="bg-black/15 backdrop-blur-none"
-        className="top-auto bottom-4 translate-y-0 sm:right-6 sm:bottom-6 sm:left-auto sm:translate-x-0"
+        // At the foot of the screen (bottom right from 640 px), over a light shade: the screen it describes shows, and
+        // the ringed part stands out of the shade. Above that part (z 52 to its 51), should the two meet.
+        overlayClassName="bg-black/25 backdrop-blur-none"
+        className="top-auto bottom-4 z-[52] translate-y-0 sm:right-6 sm:bottom-6 sm:left-auto sm:translate-x-0"
         onOpenAutoFocus={(e) => {
           // Radix hands the focus back only to a Dialog.Trigger, so the tour keeps what opened it and goes back there.
           const was = document.activeElement;

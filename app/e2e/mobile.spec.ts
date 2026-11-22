@@ -133,3 +133,18 @@ test("on a phone the doc headings' copy-link buttons always show, as a touch scr
   await button.scrollIntoViewIfNeeded();
   await expect.poll(() => button.evaluate((b) => getComputedStyle(b).opacity)).toBe("1");
 });
+
+test("on a phone the tour brings the part it means into view, clear of the top bar and above the tour", async ({ page }) => {
+  await page.goto("/demo");
+  await page.getByRole("button", { name: "Take the tour" }).click();
+  for (let i = 1; i < 5; i++) await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog", { name: "Reports: did the repair help?" })).toBeVisible();
+  // A report's verdict is far down a phone's screen, below its five number tiles.
+  const verdict = page.locator('[data-tour="verdict"]');
+  await expect(verdict).toHaveAttribute("data-tour-spot", "");
+  await expect(async () => {
+    const part = await verdict.boundingBox();
+    const tour = await page.getByRole("dialog").boundingBox();
+    expect(part && tour && part.y >= 56 && part.y < tour.y).toBe(true);
+  }).toPass({ timeout: 5000 });
+});

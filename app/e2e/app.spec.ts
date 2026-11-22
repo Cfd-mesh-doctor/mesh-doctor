@@ -49,12 +49,18 @@ test("the demo's tour walks through the app's screens in five steps from the key
   const tour = page.getByRole("dialog", { name: "Welcome to Mesh Doctor" });
   await expect(tour).toContainText("Step 1 of 5");
   await expect(tour.getByRole("button", { name: "Next" })).toBeFocused();
-  // Each step opens the screen it describes, and the tour stands aside: the Overview's tiles show whole.
+  // Each step opens the screen it describes and rings the part it means, lifted above the shade; and the tour stands
+  // aside: the Overview's tiles show whole.
   const screens = [/\/demo$/, /\/demo\/cases$/, /\/demo\/jobs$/, /\/demo\/repairs\/ahmed35-medium-fix\/report$/];
+  const spots = ["tiles", "cases", "jobs", "verdict"];
   for (let i = 2; i <= 5; i++) {
     await page.keyboard.press("Enter");
     await expect(page.getByRole("dialog")).toContainText(`Step ${i} of 5`);
     await expect(page).toHaveURL(screens[i - 2]!);
+    const spot = page.locator("[data-tour-spot]");
+    await expect(spot).toHaveAttribute("data-tour", spots[i - 2]!);
+    await expect(spot).toHaveCount(1);
+    await expect(spot).toHaveCSS("z-index", "51");
     if (i === 2) {
       const tiles = await page.getByText("Source cases", { exact: true })
         .locator("xpath=ancestor::div[contains(@class, 'grid')][1]").boundingBox();
@@ -69,6 +75,7 @@ test("the demo's tour walks through the app's screens in five steps from the key
   await expect(page.getByRole("button", { name: "Done" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(page.locator("[data-tour-spot]")).toHaveCount(0);
   await expect(open).toBeFocused();
 });
 

@@ -147,6 +147,17 @@
   }
 }
 
+/* The part of the screen a step of the app tour describes (AppTour): ringed, and lifted above the tour's shade (z 50)
+   though not above the tour itself (z 52). Nothing between the page and the screen makes a layer of its own that
+   would hold it under the shade. Brought into view, it stops clear of the sticky top bar. */
+[data-tour-spot] {
+  position: relative;
+  z-index: 51;
+  outline: 3px solid var(--color-primary);
+  outline-offset: 6px;
+  scroll-margin-top: 6rem;
+}
+
 /* The copy-link button by a doc heading (HeadingLink): with a mouse it shows while the heading is pointed at, or the
    button has the focus or has just copied; on a touch screen, which can't point, it always shows. */
 @media (hover: hover) and (pointer: fine) {

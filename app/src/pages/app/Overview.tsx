@@ -47,7 +47,7 @@ export function Overview() {
       />
       {info.isError && <ErrorPanel className="mb-6" error={info.error} onRetry={() => info.refetch()} retrying={info.isFetching} />}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div data-tour="tiles" className="grid grid-cols-1 gap-4 rounded-xl sm:grid-cols-2 xl:grid-cols-4">
         <StatTile
           label="Engine"
           icon={Cpu}

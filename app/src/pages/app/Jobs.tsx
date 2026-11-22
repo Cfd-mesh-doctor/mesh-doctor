@@ -281,7 +281,7 @@ export function Jobs() {
         }
       />
       {jobs.isError && <ErrorPanel className="mb-6" error={jobs.error} onRetry={() => jobs.refetch()} retrying={jobs.isFetching} />}
-      <Card>
+      <Card data-tour="jobs">
         <div className="flex items-center gap-3 border-b border-border px-3 py-3 sm:px-4">
           <Segmented
             label="Show jobs"
