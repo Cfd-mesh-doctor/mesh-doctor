@@ -310,12 +310,15 @@ export function Jobs() {
           <Table>
             <THead>
               <TR className="hover:bg-transparent">
+                {/* A column shows from the width where the card has room for it, so the table never scrolls its
+                    Cancel and Report out of sight: Progress from sm, Duration from md, Started from xl (at lg the
+                    sidebar takes the room). At 640 and 1024 px the table was 25 and 37 px wider than its card. */}
                 <TH>Run</TH>
                 <TH>State</TH>
                 <TH className="hidden w-[32%] sm:table-cell">Progress</TH>
-                <TH className="hidden lg:table-cell">Started</TH>
+                <TH className="hidden xl:table-cell">Started</TH>
                 {/* Not "Took": a running job's time is how long it has run so far. */}
-                <TH className="hidden sm:table-cell">Duration</TH>
+                <TH className="hidden md:table-cell">Duration</TH>
                 <TH className="text-right"><span className="sr-only">Actions</span></TH>
               </TR>
             </THead>
@@ -343,11 +346,11 @@ export function Jobs() {
                   </TD>
                   <TD><JobStateBadge state={j.state} /></TD>
                   <TD className="hidden sm:table-cell"><ProgressCell job={j} /></TD>
-                  <TD className="hidden text-[13px] whitespace-nowrap text-muted-foreground lg:table-cell" title={j.started ? formatDateTime(j.started) : undefined}>
+                  <TD className="hidden text-[13px] whitespace-nowrap text-muted-foreground xl:table-cell" title={j.started ? formatDateTime(j.started) : undefined}>
                     {/* A queued job hasn't started: its creation time isn't its start. */}
                     {j.started ? formatRelative(j.started) : "–"}
                   </TD>
-                  <TD className="hidden text-[13px] whitespace-nowrap tabular-nums sm:table-cell">{duration(j)}</TD>
+                  <TD className="hidden text-[13px] whitespace-nowrap tabular-nums md:table-cell">{duration(j)}</TD>
                   <TD className="text-right" onClick={(e) => e.stopPropagation()}>
                     {isActive(j.state) ? (
                       <Button variant="danger-ghost" size="sm" onClick={() => setCancelId(j.id)}>Cancel</Button>

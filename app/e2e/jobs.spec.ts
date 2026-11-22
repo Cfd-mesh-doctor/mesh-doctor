@@ -85,6 +85,19 @@ test("a job's details wrap a long path at its hyphens or slashes, not inside a w
   expect(wrapped, "neither path wraps, so this tests nothing").toBeGreaterThan(0);
 });
 
+test("the Jobs table fits its card at every width, never scrolling its Cancel or Report out of sight", async ({ page }) => {
+  await page.goto("/demo/jobs");
+  const table = page.getByRole("table");
+  await expect(table.getByRole("row")).toHaveCount(9); // the head and the demo's eight jobs
+  // Each side of each breakpoint, where a column joins (Progress at 640, Duration at 768, Started at 1280) or the
+  // sidebar takes its room (1024). At 640 and 1024 px the table was 25 and 37 px wider than its card.
+  for (const width of [640, 700, 767, 768, 900, 1023, 1024, 1100, 1279, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    const over = await table.evaluate((t) => t.parentElement!.scrollWidth - t.parentElement!.clientWidth);
+    expect(over, `the table scrolls sideways in its card at ${width} px`).toBeLessThanOrEqual(0);
+  }
+});
+
 test("the sidebar says how many jobs are active, not a bare number", async ({ page }) => {
   await page.goto("/demo");
   const main = page.getByRole("navigation", { name: "Main" });
