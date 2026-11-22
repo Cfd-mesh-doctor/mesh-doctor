@@ -2,8 +2,8 @@
 // Searching all the docs at once: an entry for each section of the pages that show a doc's sections, and for each
 // group of Troubleshooting's problems, from the texts those pages show, found by the words typed. How it works,
 // Accuracy check, Gallery and Install are written as pages of their own rather than from a doc's sections, so they
-// aren't in it yet. It is kept apart from the pages, so the Docs page's search (DocSearch.tsx) loads it only when
-// it is used.
+// (and the two tools) are found by what the Docs page says about them. It is kept apart from the pages, so the Docs
+// page's search (DocSearch.tsx) loads it only when it is used.
 import { plainText, type DocBlock, type DocItem, type DocSection } from "@/lib/docSections";
 import { DESIGN } from "@/pages/architecture/design";
 import { GUIDE as CLAUDE } from "@/pages/claude/guide";
@@ -53,8 +53,8 @@ function blockText(b: DocBlock): string {
 const sections = (page: string, list: DocSection[]): SearchEntry[] =>
   list.map((s) => ({ page, pageTitle: titleOf(page), id: s.id, title: s.title, text: tidy(s.blocks.map(blockText).join(" ")) }));
 
-/** In the Docs page's order, so a tie between two sections goes to the page listed first. */
-export const SEARCH_INDEX: SearchEntry[] = [
+/** The sections, in the Docs page's order, so a tie between two sections goes to the page listed first. */
+const SECTIONS: SearchEntry[] = [
   ...sections("/dashboard-tour", TOUR),
   ...sections("/your-own-case", OWN_CASE),
   ...sections("/claude-code", CLAUDE),
@@ -70,8 +70,16 @@ export const SEARCH_INDEX: SearchEntry[] = [
   ...sections("/architecture", DESIGN),
 ];
 
-/** The names of the pages searched, in the Docs page's order. */
-export const SEARCHED = [...new Set(SEARCH_INDEX.map((e) => e.pageTitle))];
+/** The names of the pages whose text is searched, in the Docs page's order. */
+export const SEARCHED = [...new Set(SECTIONS.map((e) => e.pageTitle))];
+
+/** The sections, then each other page the Docs page lists (written as a page of its own, or a tool) by what the Docs
+ *  page says about it, opening at its top (no anchor). */
+export const SEARCH_INDEX: SearchEntry[] = [
+  ...SECTIONS,
+  ...ON_SITE.filter((d) => d.page && !SECTIONS.some((e) => e.page === d.page))
+    .map((d) => ({ page: d.page ?? "/", pageTitle: d.title, id: "", title: d.title, text: d.about })),
+];
 
 /** The words of a query, as they are looked for. */
 export const queryWords = (query: string) => plain(query).split(" ").filter(Boolean);
@@ -149,5 +157,5 @@ export function hitTarget(hit: SearchEntry, query: string): { pathname: string; 
   const q = query.trim();
   const group = hit.page === "/troubleshooting" ? GROUPS.find((g) => g.id === hit.id) : undefined;
   const search = group?.table.rows.some((row) => matches(row, q)) ? `?${new URLSearchParams({ q })}` : "";
-  return { pathname: hit.page, search, hash: `#${hit.id}` };
+  return { pathname: hit.page, search, hash: hit.id ? `#${hit.id}` : "" };
 }

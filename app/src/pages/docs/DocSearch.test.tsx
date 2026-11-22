@@ -48,7 +48,9 @@ describe("the Docs page's search", () => {
     await user.type(box(), "quantumflux");
     expect(await screen.findByText("No section of the docs holds “quantumflux”.")).toBeInTheDocument();
     expect(screen.getByText("No section matches.")).toBeInTheDocument();
-    expect(screen.getByText(new RegExp(`looks in ${SEARCHED[0]}, .+ and ${SEARCHED.at(-1)}\\.$`))).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(
+      `looks in the text of ${SEARCHED[0]}, .+ and ${SEARCHED.at(-1)}, and in what this page says about the others\\.$`,
+    ))).toBeInTheDocument();
 
     await user.clear(box());
     expect(screen.queryByText(/No section/)).toBeNull();

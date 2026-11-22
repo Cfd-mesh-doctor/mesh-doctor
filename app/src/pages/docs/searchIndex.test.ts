@@ -14,9 +14,19 @@ describe("searching the docs", () => {
     expect(at("/architecture").map((e) => e.id)).toEqual(DESIGN.map((s) => s.id));
     expect(at("/troubleshooting").map((e) => e.id)).toEqual(GROUPS.map((g) => g.id));
     expect(new Set(SEARCH_INDEX.map((e) => `${e.page}#${e.id}`)).size).toBe(SEARCH_INDEX.length);
-    expect(new Set(SEARCH_INDEX.map((e) => e.page))).toEqual(new Set([
+    expect(new Set(SEARCH_INDEX.filter((e) => e.id).map((e) => e.page))).toEqual(new Set([
       "/limits", "/safety", "/your-own-case", "/claude-code", "/dashboard-tour", "/architecture", "/troubleshooting",
     ]));
+    // Every other page the Docs page lists is in it once, by what the Docs page says about it.
+    for (const d of ON_SITE) expect(SEARCH_INDEX.some((e) => e.page === d.page), d.title).toBe(true);
+    expect(SEARCH_INDEX.filter((e) => !e.id)).toEqual(ON_SITE.filter((d) => !SEARCHED.includes(d.title))
+      .map((d) => ({ page: d.page, pageTitle: d.title, id: "", title: d.title, text: d.about })));
+  });
+
+  it("finds a page written as a page of its own by its summary, and opens it at its top", () => {
+    const install = searchDocs("WSL OpenFOAM Python").find((h) => h.page === "/install");
+    expect(install).toMatchObject({ id: "", title: "Install" });
+    expect(install && hitTarget(install, "WSL")).toEqual({ pathname: "/install", search: "", hash: "" });
   });
 
   it("finds the sections holding every word typed, whatever their case", () => {
@@ -83,7 +93,7 @@ describe("searching the docs", () => {
   });
 
   it("names the pages it looks in in the Docs page's order", () => {
-    expect(SEARCHED).toEqual(ON_SITE.map((d) => d.title).filter((t) => SEARCH_INDEX.some((e) => e.pageTitle === t)));
+    expect(SEARCHED).toEqual(ON_SITE.map((d) => d.title).filter((t) => SEARCH_INDEX.some((e) => e.pageTitle === t && e.id)));
     expect(SEARCHED).toHaveLength(7);
   });
 

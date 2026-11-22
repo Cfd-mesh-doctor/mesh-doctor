@@ -84,7 +84,7 @@ export function DocSearch() {
             <ol className="divide-y divide-border">
               {hits.slice(0, SHOWN).map((h) => (
                 <li key={`${h.page}#${h.id}`} className="px-4 py-3">
-                  <p className="text-xs text-muted-foreground">{h.pageTitle}</p>
+                  <p className="text-xs text-muted-foreground">{h.id ? h.pageTitle : "Page"}</p>
                   <Link to={ready.hitTarget(h, query)} className={link}><DocText text={h.title} /></Link>
                   <p className="mt-1 text-sm text-muted-foreground"><Marked text={h.snippet} words={words} /></p>
                 </li>
@@ -102,7 +102,8 @@ export function DocSearch() {
         <Card className="mt-4 max-w-3xl p-6 text-sm">
           <p className="font-medium">No section of the docs holds “{query.trim()}”.</p>
           <p className="mt-1 text-muted-foreground">
-            Try one distinctive word, such as a file or utility name. The search looks in {listed(ready.SEARCHED)}.
+            Try one distinctive word, such as a file or utility name. The search looks in the text of{" "}
+            {listed(ready.SEARCHED)}, and in what this page says about the others.
           </p>
         </Card>
       )}
