@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/shared/page";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { ADDRESS_FIELD } from "@/lib/addressField";
 import { useTitle } from "@/lib/useTitle";
 import { aboutPage } from "@/pages/docs/entries";
 import { DocSource } from "@/pages/docs/DocSource";
@@ -25,7 +26,7 @@ export function Troubleshooting() {
   useTitle("Troubleshooting", aboutPage("/troubleshooting"));
   const [params, setParams] = useSearchParams();
   const query = params.get("q") ?? "";
-  const setQuery = (q: string) => setParams(q ? { q } : {}, { replace: true, preventScrollReset: true });
+  const setQuery = (q: string) => setParams(q ? { q } : {}, ADDRESS_FIELD);
   const shown = GROUPS.map((g) => ({ ...g, rows: g.table.rows.filter((r) => matches(r, query)) })).filter((g) => g.rows.length);
   const found = shown.reduce((n, g) => n + g.rows.length, 0);
   const source = <DocSource file="troubleshooting.md" className="max-w-none" />;

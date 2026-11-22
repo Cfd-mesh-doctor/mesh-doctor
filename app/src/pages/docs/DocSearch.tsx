@@ -7,6 +7,7 @@ import { Fragment, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { Card } from "@/components/ui/card";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { ADDRESS_FIELD } from "@/lib/addressField";
 import { DocText } from "./DocText";
 
 type SearchIndex = typeof import("./searchIndex");
@@ -40,7 +41,7 @@ const listed = (names: string[]) => names.length < 2 ? names.join("") : `${names
 export function DocSearch() {
   const [params, setParams] = useSearchParams();
   const query = params.get("q") ?? "";
-  const setQuery = (q: string) => setParams(q ? { q } : {}, { replace: true, preventScrollReset: true });
+  const setQuery = (q: string) => setParams(q ? { q } : {}, ADDRESS_FIELD);
   const asked = query.trim() !== "";
   const [index, setIndex] = useState<SearchIndex | null>(null);
   const [failed, setFailed] = useState(false);

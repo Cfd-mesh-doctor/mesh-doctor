@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/misc";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
+import { ADDRESS_FIELD } from "@/lib/addressField";
 import { formatInt } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
 import { aboutPage } from "@/pages/docs/entries";
@@ -72,7 +73,7 @@ export function EstimateForm({ defaults, about, reset }: { defaults: EstimateInp
       if (value === String(defaults[f.key])) next.delete(f.param);
       else next.set(f.param, value);
       return next;
-    }, { replace: true, preventScrollReset: true });
+    }, ADDRESS_FIELD);
 
   // grid-cols-1, not the default: a wide table then scrolls inside its card instead of widening the page
   return (
