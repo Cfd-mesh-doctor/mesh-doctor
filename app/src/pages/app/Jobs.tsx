@@ -119,7 +119,12 @@ function DetailsDialog({ job, onClose, onCancel }: { job: Job | null; onClose: (
               <Field label="Created">{formatDateTime(job.created)}</Field>
               <Field label="Started">{formatDateTime(job.started)}</Field>
               <Field label="Finished">{formatDateTime(job.finished)}</Field>
-              <Field label={isActive(job.state) ? "Running for" : "Took"}>{duration(job)}</Field>
+              {/* A queued job isn't running yet: it says how long it has waited. */}
+              {job.state === "queued" ? (
+                <Field label="Waiting for">{formatDuration(elapsed(job.created, null))}</Field>
+              ) : (
+                <Field label={isActive(job.state) ? "Running for" : "Took"}>{duration(job)}</Field>
+              )}
               <Field label="Exit code">{job.exitCode ?? "–"}</Field>
               <Field label="Runner">{job.runner}</Field>
               <Field label="Log" mono>{job.log || "–"}</Field>

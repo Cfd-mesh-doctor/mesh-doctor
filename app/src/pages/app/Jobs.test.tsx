@@ -71,6 +71,17 @@ describe("the Jobs screen", () => {
     expect(within(queued).queryByText(/ago$|just now/)).toBeNull();
   });
 
+  it("says how long a queued job has waited, not how long it has run", async () => {
+    const answers = structuredClone(DEMO_ANSWERS);
+    for (const job of (answers["/jobs"] as JobList).items) {
+      if (job.state === "running") Object.assign(job, { state: "queued", started: null, progress: null });
+    }
+    renderScreen(<Jobs />, { path, at: `${path}?job=20261121-130610-abtest-ahmed25-medium-fix-13c2`, transport: demoTransport(answers, 0) });
+    const details = await screen.findByRole("dialog", { name: "ahmed25-medium-fix" });
+    expect(within(details).getByText("Waiting for")).toBeInTheDocument();
+    expect(within(details).queryByText("Running for")).toBeNull();
+  });
+
   it("shows every job when the address names a filter it doesn't know", async () => {
     open(`${path}?show=nonsense`);
     expect(await screen.findAllByRole("button", { name: "ahmed25-medium-fix" })).toHaveLength(2);
