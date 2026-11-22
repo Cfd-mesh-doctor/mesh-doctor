@@ -2,10 +2,20 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
+import { SAMPLES } from "@/report/samples";
 import { renderScreen } from "@/test/render";
 import { HowItWorks } from "./HowItWorks";
 
 describe("How it works", () => {
+  it("links each \"See one\" straight to its sample report", () => {
+    renderScreen(<HowItWorks />, { path: "/how-it-works" });
+    const names = SAMPLES.map((s) => s.name);
+    for (const [label, name] of [["the 25° sample", "ahmed25-medium-fix"], ["the 35° sample", "ahmed35-medium-fix"]] as const) {
+      expect(screen.getByRole("link", { name: label })).toHaveAttribute("href", `/report?sample=${name}`);
+      expect(names).toContain(name);
+    }
+  });
+
   it("lists the seven steps, and each contents link leads to its step", async () => {
     const { router } = renderScreen(<HowItWorks />, { path: "/how-it-works" });
     expect(screen.getByRole("heading", { level: 1, name: "How Mesh Doctor works" })).toBeInTheDocument();

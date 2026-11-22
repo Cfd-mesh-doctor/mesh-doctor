@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { screen, within } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { testReport } from "@/report/testReport";
@@ -60,12 +60,45 @@ describe("Report viewer", () => {
     noCanvas.mockRestore();
   });
 
-  it("opens a sample report made from the public Ahmed-body example", async () => {
-    renderScreen(<Report />, { path: "/report" });
-    await userEvent.click(screen.getByRole("button", { name: /25° slant, with an A\/B test/ }));
+  it("opens a sample report made from the public Ahmed-body example, named in the address", async () => {
+    const { router } = renderScreen(<Report />, { path: "/report" });
+    await userEvent.click(screen.getByRole("link", { name: /25° slant, with an A\/B test/ }));
     expect(await screen.findByRole("heading", { name: "ahmed25-medium-fix" })).toBeInTheDocument();
+    expect(router.state.location.search).toBe("?sample=ahmed25-medium-fix");
     expect(screen.getByText(/from the public Ahmed-body example \(a sample\)$/)).toBeInTheDocument();
+    expect(document.title).toBe("Report ahmed25-medium-fix · Mesh Doctor");
     expect(await screen.findByRole("img", { name: /Initial residual of p per iteration/ })).toBeInTheDocument();
+
+    // "Open another report" leaves the sample, and so does Back.
+    await userEvent.click(screen.getByRole("link", { name: "Open another report" }));
+    expect(await screen.findByRole("heading", { name: "Report viewer" })).toBeInTheDocument();
+    expect(router.state.location.search).toBe("");
+    await userEvent.click(screen.getByRole("link", { name: /35° slant, with a repair map/ }));
+    expect(await screen.findByRole("heading", { name: "ahmed35-medium-fix" })).toBeInTheDocument();
+    await act(() => router.navigate(-1));
+    expect(await screen.findByRole("heading", { name: "Report viewer" })).toBeInTheDocument();
+  });
+
+  it("opens a sample straight from a link", async () => {
+    renderScreen(<Report />, { path: "/report", at: "/report?sample=ahmed35-medium-fix" });
+    expect(await screen.findByRole("heading", { name: "ahmed35-medium-fix" })).toBeInTheDocument();
+  });
+
+  it("says when the address names no sample, and offers the ones there are", async () => {
+    renderScreen(<Report />, { path: "/report", at: "/report?sample=nope" });
+    expect(await screen.findByRole("alert"))
+      .toHaveTextContent('There\'s no sample called "nope": the samples are ahmed25-medium-fix and ahmed35-medium-fix.');
+    expect(screen.getByRole("link", { name: /35° slant, with a repair map/ })).toHaveAttribute("href", "/report?sample=ahmed35-medium-fix");
+  });
+
+  it("opens a dropped file in place of the sample on show", async () => {
+    const { router } = renderScreen(<Report />, { path: "/report", at: "/report?sample=ahmed35-medium-fix" });
+    expect(await screen.findByRole("heading", { name: "ahmed35-medium-fix" })).toBeInTheDocument();
+    const dropped = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(dropped, "dataTransfer", { value: { types: ["Files"], files: [file(testReport())] } });
+    document.dispatchEvent(dropped);
+    expect(await screen.findByRole("heading", { name: "ahmed25-fine-fix" })).toBeInTheDocument();
+    expect(router.state.location.search).toBe("");
   });
 
   it("explains a file that isn't a report, and stays ready for another", async () => {

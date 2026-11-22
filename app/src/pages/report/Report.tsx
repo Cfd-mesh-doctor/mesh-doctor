@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The report viewer: open a report file (meshdoctor report <name>) and read what the repair changed and
 // whether it helped the solver. The file is read in this tab and never uploaded: the site's security
-// policy only lets the page talk to itself and to an engine on this computer.
+// policy only lets the page talk to itself and to an engine on this computer. A sample report lives in the
+// address (/report?sample=<name>), so a link opens it and Back leaves it.
 import {
   Activity, Boxes, Check, FileJson, FileUp, FolderOpen, Move, ShieldCheck, Sparkles, TrendingDown, TrendingUp,
   TriangleAlert,
 } from "lucide-react";
+import { skipToken, useQuery } from "@tanstack/react-query";
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { LineChart, type LineSeries } from "@/components/charts/LineChart";
 import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
 import { CopyCommand } from "@/components/shared/CopyCommand";
@@ -35,14 +38,39 @@ const ACCEPT = ".json,.gz,.html,.htm,application/json,application/gzip,text/html
 
 const changeText = (c: Change) => (c === "better" ? "text-success font-medium" : c === "worse" ? "text-danger font-medium" : "");
 
+const SAMPLE_FROM = "the public Ahmed-body example (a sample)";
+const SAMPLE_NAMES = SAMPLES.map((s) => s.name).join(" and ");
+
 export function Report() {
   const [state, setState] = useState<State>({ kind: "empty" });
   const [over, setOver] = useState(false);
   const latest = useRef(0);
-  useTitle(state.kind === "open" ? `Report ${state.summary.name}` : "Report viewer");
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const sampleName = params.get("sample");
+  const sample = SAMPLES.find((s) => s.name === sampleName);
+  const loaded = useQuery({
+    queryKey: ["sample report", sampleName],
+    queryFn: sample ? async () => summarize(checkReport((await sample.load()).default)) : skipToken,
+    staleTime: Infinity,
+  });
+  // What the page shows: the sample the address names, else the file picked or dropped.
+  const view: State =
+    sampleName === null ? state
+    : !sample ? { kind: "error", message: `There's no sample called "${sampleName.slice(0, 60)}": the samples are ${SAMPLE_NAMES}.` }
+    : loaded.data ? { kind: "open", summary: loaded.data, from: SAMPLE_FROM }
+    : loaded.isError ? {
+      kind: "error",
+      message: loaded.error instanceof ReportError
+        ? loaded.error.message
+        : "The sample couldn't be loaded. Check the connection and try again.",
+    }
+    : { kind: "reading", file: `the sample ${sampleName}` };
+  useTitle(view.kind === "open" ? `Report ${view.summary.name}` : "Report viewer");
 
   const open = useCallback(async (file: File) => {
     const n = ++latest.current; // a second file picked while the first is read wins
+    if (sampleName !== null) void navigate({ search: "" }, { replace: true }); // the file takes the sample's place
     setState({ kind: "reading", file: file.name });
     let next: State;
     try {
@@ -58,26 +86,7 @@ export function Report() {
     if (n !== latest.current) return;
     setState(next);
     if (window.scrollY > 0) window.scrollTo({ top: 0 });
-  }, []);
-
-  const openSample = useCallback(async (sample: (typeof SAMPLES)[number]) => {
-    const n = ++latest.current;
-    setState({ kind: "reading", file: `the sample ${sample.name}` });
-    let next: State;
-    try {
-      const report = checkReport((await sample.load()).default);
-      next = { kind: "open", summary: summarize(report), from: "the public Ahmed-body example (a sample)" };
-    } catch (e) {
-      if (!(e instanceof ReportError)) console.error("Mesh Doctor report viewer:", e);
-      next = {
-        kind: "error",
-        message: e instanceof ReportError ? e.message : "The sample couldn't be loaded. Check the connection and try again.",
-      };
-    }
-    if (n !== latest.current) return;
-    setState(next);
-    if (window.scrollY > 0) window.scrollTo({ top: 0 });
-  }, []);
+  }, [navigate, sampleName]);
 
   // A file dropped anywhere on the page opens, also over an open report.
   useEffect(() => {
@@ -113,11 +122,15 @@ export function Report() {
     <div className="flex min-h-dvh flex-col">
       <PublicHeader />
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-6">
-        {state.kind === "open" ? (
+        {view.kind === "open" ? (
           <ReportView
-            summary={state.summary}
-            from={state.from}
-            action={<Button variant="secondary" onClick={() => setState({ kind: "empty" })}><FolderOpen /> Open another report</Button>}
+            summary={view.summary}
+            from={view.from}
+            action={sampleName !== null ? (
+              <Button variant="secondary" asChild><Link to={{ search: "" }}><FolderOpen /> Open another report</Link></Button>
+            ) : (
+              <Button variant="secondary" onClick={() => setState({ kind: "empty" })}><FolderOpen /> Open another report</Button>
+            )}
           />
         ) : (
           <>
@@ -151,12 +164,12 @@ export function Report() {
                   </label>
                 </Button>
               </div>
-              {state.kind === "reading" && (
-                <p className="mt-4 text-sm text-muted-foreground" role="status">Reading {state.file}…</p>
+              {view.kind === "reading" && (
+                <p className="mt-4 text-sm text-muted-foreground" role="status">Reading {view.file}…</p>
               )}
-              {state.kind === "error" && (
+              {view.kind === "error" && (
                 <div role="alert" className="mx-auto mt-5 max-w-lg rounded-lg border border-danger/25 bg-danger-soft/60 p-3 text-left text-sm">
-                  {state.message}
+                  {view.message}
                 </div>
               )}
             </Card>
@@ -168,9 +181,9 @@ export function Report() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 sm:shrink-0">
-                {SAMPLES.map((sample) => (
-                  <Button key={sample.name} variant="secondary" size="sm" onClick={() => void openSample(sample)}>
-                    <Sparkles /> {sample.label}
+                {SAMPLES.map((s) => (
+                  <Button key={s.name} variant="secondary" size="sm" asChild>
+                    <Link to={`?sample=${s.name}`}><Sparkles /> {s.label}</Link>
                   </Button>
                 ))}
               </div>

@@ -275,8 +275,8 @@ export function HowItWorks() {
                 <li><code>ab extend &lt;abDir&gt; &lt;endIter&gt;</code> continues the second run further.</li>
               </ul>
               <p>
-                See one: the 25° sample in the <Link to="/report" className={link}>report viewer</Link> has an A/B
-                test with both runs' residuals.
+                See one: <Link to="/report?sample=ahmed25-medium-fix" className={link}>the 25° sample</Link> in the
+                report viewer has an A/B test with both runs' residuals.
               </p>
             </Step>
 
@@ -370,8 +370,8 @@ export function HowItWorks() {
                 ground plane is found from the geometry and left out of the drawing; its normal is taken as "up".
               </p>
               <p>
-                See one: the 35° sample in the <Link to="/report" className={link}>report viewer</Link> has a repair
-                map with 26 defects found and repaired.
+                See one: <Link to="/report?sample=ahmed35-medium-fix" className={link}>the 35° sample</Link> in the
+                report viewer has a repair map with 26 defects found and repaired.
               </p>
             </Step>
 

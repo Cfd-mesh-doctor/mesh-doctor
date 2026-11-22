@@ -27,6 +27,11 @@ test("how it works: reached from the header, its contents scroll to each step, a
   await page.goto("/how-it-works#hotspots");
   await expect(page.getByRole("heading", { level: 2, name: "Hotspots and the map" })).toBeInViewport();
 
+  // "See one" opens the sample itself.
+  await page.getByRole("link", { name: "the 35° sample" }).click();
+  await expect(page).toHaveURL(/\/report\?sample=ahmed35-medium-fix$/);
+  await expect(page.getByRole("heading", { level: 1, name: "ahmed35-medium-fix" })).toBeVisible();
+
   // The home page's summary leads here too.
   await page.goto("/");
   await page.getByRole("link", { name: "How each step works, and the command behind it" }).click();
