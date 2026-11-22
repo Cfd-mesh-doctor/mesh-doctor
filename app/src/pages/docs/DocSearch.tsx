@@ -2,9 +2,10 @@
 // The Docs page's search: one box that finds a word, or a message from a log, in the doc pages at once, and lists
 // the sections that hold it, each a link to its heading. What's typed stays in the address (?q=), as on
 // Troubleshooting, so coming back from a section finds the same list. The texts (searchIndex.ts) load only when the
-// box is used, so they don't weigh on the page.
+// box is used, so they don't weigh on the page. Enter in the box opens the first match, so "/", a word and Enter
+// reach a section without the mouse.
 import { Fragment, useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { Card } from "@/components/ui/card";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { ADDRESS_FIELD } from "@/lib/addressField";
@@ -39,6 +40,7 @@ function Marked({ text, words }: { text: string; words: string[] }) {
 const listed = (names: string[]) => names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 
 export function DocSearch() {
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const query = params.get("q") ?? "";
   const setQuery = (q: string) => setParams(q ? { q } : {}, ADDRESS_FIELD);
@@ -58,9 +60,11 @@ export function DocSearch() {
   const ready = asked && index ? index : null;
   const hits = ready ? ready.searchDocs(query, Number.POSITIVE_INFINITY) : [];
   const words = ready ? ready.queryWords(query) : [];
+  const found = hits.length === 1 ? "1 match. Enter opens it." : `${hits.length} matches. Enter opens the first.`;
   const status = !asked ? ""
-    : ready ? (hits.length ? `${hits.length} ${hits.length === 1 ? "match" : "matches"}.` : "Nothing matches.")
+    : ready ? (hits.length ? found : "Nothing matches.")
       : failed ? "The search couldn't load. Reload the page to try again." : "Searching…";
+  const first = hits[0];
 
   return (
     <>
@@ -72,6 +76,12 @@ export function DocSearch() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => void load().catch(() => undefined)}
+          onKeyDown={(e) => {
+            // not while an input method is still composing a word: its Enter only finishes the word
+            if (e.key !== "Enter" || e.nativeEvent.isComposing || !ready || !first) return;
+            e.preventDefault();
+            void navigate(ready.hitTarget(first, query));
+          }}
           placeholder="A word, or a message from a log"
           autoComplete="off"
           spellCheck={false}

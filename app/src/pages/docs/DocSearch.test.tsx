@@ -21,7 +21,7 @@ describe("the Docs page's search", () => {
     const item = jobs.closest("li") as HTMLElement;
     expect(item.firstElementChild).toHaveTextContent("Architecture");
     expect(within(item).getByText("SIGKILL").tagName).toBe("MARK");
-    expect(screen.getByText(/^\d+ match(es)?\.$/)).toBeInTheDocument();
+    expect(screen.getByText(/^(1 match\. Enter opens it|\d+ matches\. Enter opens the first)\.$/)).toBeInTheDocument();
 
     // The page's own lists stay below.
     expect(screen.getByRole("region", { name: "On this site" })).toBeInTheDocument();
@@ -39,6 +39,24 @@ describe("the Docs page's search", () => {
     await user.keyboard("a/b");
     expect(box()).toHaveValue("a/b");
     expect(within(screen.getByRole("search")).queryByText("/")).toBeNull();
+  });
+
+  it("opens the first match on Enter, and stays when nothing matches", async () => {
+    const user = userEvent.setup();
+    const { router } = renderScreen(<Docs />, { path: "/docs" });
+    await user.type(box(), "qqqzzz");
+    expect(await screen.findByText("Nothing matches.")).toBeInTheDocument();
+    await user.keyboard("{Enter}");
+    expect(router.state.location.pathname).toBe("/docs");
+
+    await user.clear(box());
+    await user.type(box(), "sigkill");
+    const first = within(await results()).getAllByRole("link")[0];
+    expect(screen.getByText(/Enter opens/)).toBeInTheDocument();
+    await user.keyboard("{Enter}");
+    expect(await screen.findByText("elsewhere")).toBeInTheDocument();
+    const { pathname, search, hash } = router.state.location;
+    expect(pathname + search + hash).toBe(first?.getAttribute("href"));
   });
 
   it("opens at the search the address holds; a Troubleshooting group opens at the problems that match", async () => {

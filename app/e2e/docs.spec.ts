@@ -85,3 +85,15 @@ test("the docs search loads its texts only when used, opens the section found, a
   await expect(page.getByRole("searchbox")).toHaveValue("patchField");
   await expect(page.getByText(/^1 of \d+ problems matches\.$/)).toBeVisible();
 });
+
+test("the docs search from the keyboard: “/”, a word and Enter open the first match", async ({ page }) => {
+  await page.goto("/docs");
+  await page.locator("h1").first().waitFor();
+  await page.keyboard.press("/");
+  await page.keyboard.type("SIGKILL");
+  const href = await page.getByRole("region", { name: "Search results" }).getByRole("link").first().getAttribute("href");
+  await expect(page.getByText(/ Enter opens (it|the first)\.$/)).toBeVisible();
+  await page.keyboard.press("Enter");
+  await page.waitForURL((u) => u.pathname + u.search + u.hash === href);
+  await expect(page.locator("h1").first()).toBeVisible();
+});
