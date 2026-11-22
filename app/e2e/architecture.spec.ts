@@ -24,7 +24,7 @@ test("architecture: from the Docs page, the doc's tables, numbered steps and cod
   expect(sent).toEqual([]);
 });
 
-test("architecture: the On this page list goes to a section and stays in view beside the doc", async ({ page }) => {
+test("architecture: the On this page list goes to a section, stays in view beside the doc and marks the section read", async ({ page }) => {
   await page.goto("/architecture");
   const nav = page.getByRole("navigation", { name: "On this page" });
   await expect(nav.getByRole("link")).toHaveCount(10);
@@ -32,4 +32,11 @@ test("architecture: the On this page list goes to a section and stays in view be
   await expect(page).toHaveURL(/\/architecture#order-of-work$/);
   await expect(page.getByRole("heading", { level: 2, name: "Order of work" })).toBeInViewport();
   await expect(nav).toBeInViewport();
+  await expect(nav.getByRole("link", { name: "Order of work" })).toHaveAttribute("aria-current", "location");
+  await nav.getByRole("link", { name: "Jobs" }).click();
+  await expect(nav.getByRole("link", { name: "Jobs" })).toHaveAttribute("aria-current", "location");
+  await expect(nav.locator("[aria-current]")).toHaveCount(1);
+  // Above the first section, nothing is marked.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(nav.locator("[aria-current]")).toHaveCount(0);
 });

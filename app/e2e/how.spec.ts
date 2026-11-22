@@ -21,11 +21,16 @@ test("how it works: reached from the header, its contents scroll to each step, a
   const judge = page.getByRole("heading", { level: 2, name: "The convergence judge" });
   await expect(judge).toBeInViewport();
   expect((await judge.boundingBox())?.y).toBeGreaterThan(64);
+  // The list marks the step being read, and only that one.
+  const contents = page.getByRole("navigation", { name: "On this page" });
+  await expect(contents.getByRole("link", { name: "The convergence judge" })).toHaveAttribute("aria-current", "location");
+  await expect(contents.locator("[aria-current]")).toHaveCount(1);
 
   // A link to a step, opened from elsewhere, lands on that step.
   await page.goto("/");
   await page.goto("/how-it-works#hotspots");
   await expect(page.getByRole("heading", { level: 2, name: "Hotspots and the map" })).toBeInViewport();
+  await expect(contents.getByRole("link", { name: "Hotspots and the map" })).toHaveAttribute("aria-current", "location");
 
   // "See one" opens the sample itself.
   await page.getByRole("link", { name: "the 35° sample" }).click();

@@ -8,6 +8,7 @@ import {
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
+import { PageContents } from "@/components/shared/PageContents";
 import { PageHeader } from "@/components/shared/page";
 import { Button } from "@/components/ui/button";
 import { DocTableView } from "@/components/shared/DocTable";
@@ -97,24 +98,6 @@ function Pipeline() {
   );
 }
 
-function Contents() {
-  return (
-    <nav aria-label="On this page">
-      <p className="px-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">On this page</p>
-      <ol className="mt-2 grid gap-0.5 text-sm sm:grid-cols-2 lg:grid-cols-1">
-        {SECTIONS.map((s, i) => (
-          <li key={s.id}>
-            <Link to={`#${s.id}`} className="flex gap-2 rounded-md px-2 py-1.5 text-muted-foreground hover:bg-surface-2 hover:text-foreground">
-              <span className="font-mono text-xs leading-5" aria-hidden>0{i + 1}</span>
-              {s.title}
-            </Link>
-          </li>
-        ))}
-      </ol>
-    </nav>
-  );
-}
-
 export function HowItWorks() {
   useTitle("How it works");
   const [detect, highlight, correct, abTest, judge, hotspots, dashboard] = SECTIONS;
@@ -132,7 +115,7 @@ export function HowItWorks() {
         {/* grid-cols-1, not the default: a wide table then scrolls inside its card instead of widening the page */}
         <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-12">
           <aside className="rounded-xl border border-border bg-surface p-3 shadow-card lg:sticky lg:top-24 lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
-            <Contents />
+            <PageContents sections={SECTIONS} numbered />
           </aside>
 
           <article className="max-w-3xl min-w-0 space-y-10 text-[15px] leading-7 break-words">
