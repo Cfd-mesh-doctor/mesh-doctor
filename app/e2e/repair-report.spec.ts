@@ -19,9 +19,9 @@ test("the demo's overview opens a repair's report in the viewer, and nothing is 
   await page.getByRole("main").getByRole("link", { name: "Overview" }).click();
   await expect(page).toHaveURL(/\/demo$/);
 
-  // A run the demo has no report of says so, and offers the two it has.
-  await page.goto("/demo/repairs/pitzdaily-fix/report");
-  await expect(page.getByText("The demo has recorded reports only for ahmed25-medium-fix and ahmed35-medium-fix")).toBeVisible();
+  // A run the demo has no report of (it never finished) says so, and offers the ones it has.
+  await page.goto("/demo/repairs/ahmed25-fine-strict/report");
+  await expect(page.getByText("The demo has no recorded report of ahmed25-fine-strict: only its finished repairs have one")).toBeVisible();
   await page.getByRole("link", { name: "25° slant, with an A/B test" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "ahmed25-medium-fix" })).toBeVisible();
   await expect(page.getByRole("img", { name: /Initial residual of p per iteration/ })).toBeVisible();

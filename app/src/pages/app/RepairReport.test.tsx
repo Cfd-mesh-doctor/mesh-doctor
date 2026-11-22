@@ -19,9 +19,18 @@ describe("a repair's report", () => {
     expect(document.title).toBe("Report of ahmed25-medium-fix · Mesh Doctor");
   });
 
-  it("says when the demo has no recording of a run's report, and offers the ones it has", async () => {
+  it("opens the recorded report of each finished repair in the demo", async () => {
     renderScreen(<RepairReport />, { path, at: "/demo/repairs/pitzdaily-fix/report", transport: demoTransport(undefined, 0) });
-    expect(await screen.findByText("The demo has recorded reports only for ahmed25-medium-fix and ahmed35-medium-fix")).toBeInTheDocument();
+    expect(await screen.findByText(/from the recorded demo/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "pitzdaily-fix" })).toBeInTheDocument();
+  });
+
+  it("says when the demo has no recording of a run's report, and offers the ones it has", async () => {
+    renderScreen(<RepairReport />, { path, at: "/demo/repairs/ahmed25-fine-strict/report", transport: demoTransport(undefined, 0) });
+    expect(await screen.findByText("The demo has no recorded report of ahmed25-fine-strict: only its finished repairs have one"))
+      .toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "pitzDaily, OpenFOAM's tutorial" }))
+      .toHaveAttribute("href", "/demo/repairs/pitzdaily-fix/report");
     expect(screen.getByRole("link", { name: "25° slant, with an A/B test" }))
       .toHaveAttribute("href", "/demo/repairs/ahmed25-medium-fix/report");
     expect(screen.getByRole("link", { name: "35° slant, with a repair map" }))

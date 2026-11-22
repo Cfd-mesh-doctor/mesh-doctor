@@ -15,7 +15,7 @@ import { asEngineError } from "@/engine/errors";
 import { useTitle } from "@/lib/useTitle";
 import { ReportView } from "@/pages/report/Report";
 import { checkReport } from "@/report/read";
-import { SAMPLES } from "@/report/samples";
+import { RECORDED } from "@/report/samples";
 import { summarize } from "@/report/summary";
 
 const link = "font-medium text-primary underline-offset-4 hover:underline";
@@ -48,7 +48,7 @@ export function RepairReport() {
             <Card className="mt-4 p-5 text-sm">
               <p className="font-medium">Recorded reports in the demo</p>
               <ul className="mt-2 space-y-1.5">
-                {SAMPLES.map((s) => (
+                {RECORDED.map((s) => (
                   <li key={s.name}>
                     <Link to={to(`/repairs/${s.name}/report`)} className={link}>{s.label}</Link>
                     <span className="text-muted-foreground"> ({s.name})</span>

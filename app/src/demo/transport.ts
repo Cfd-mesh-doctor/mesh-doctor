@@ -5,7 +5,7 @@ import type { Method, Transport } from "@/engine/client";
 import { EngineError } from "@/engine/errors";
 import type { Job, JobList, MachineInfo } from "@/engine/types";
 import { toMillis } from "@/lib/format";
-import { SAMPLES } from "@/report/samples";
+import { RECORDED } from "@/report/samples";
 import recorded from "./fixtures.json";
 
 type Answers = Record<string, unknown>;
@@ -86,10 +86,9 @@ export function demoTransport(answers: Answers = (recorded as { answers: Answers
       }
       if (route.startsWith("/repairs/") && route.endsWith("/report")) {
         const name = decodeURIComponent(route.slice("/repairs/".length, -"/report".length));
-        const sample = SAMPLES.find((s) => s.name === name);
+        const sample = RECORDED.find((s) => s.name === name);
         if (!sample) {
-          const names = SAMPLES.map((s) => s.name).join(" and ");
-          throw new EngineError("not-found", `The demo has recorded reports only for ${names}`, 404);
+          throw new EngineError("not-found", `The demo has no recorded report of ${name}: only its finished repairs have one`, 404);
         }
         const doc: unknown = structuredClone((await sample.load()).default);
         moveTimes(doc, by);

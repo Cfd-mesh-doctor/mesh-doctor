@@ -22,6 +22,17 @@ function times(doc: unknown, at = ""): Map<string, number> {
 }
 
 describe("the demo's reports", () => {
+  it("cover every finished repair in the demo, each the report of that run", async () => {
+    const t = demoTransport(undefined, 0);
+    const list = await t.request<RepairList>("GET", "/repairs");
+    const finished = list.items.filter((r) => r.verdict).map((r) => r.name);
+    expect(finished).toHaveLength(5);
+    for (const name of finished) {
+      const report = await t.request<{ name?: string }>("GET", `/repairs/${name}/report`);
+      expect(report.name, name).toBe(name);
+    }
+  });
+
   it("are the recorded reports, with every time moved as far as the demo's own", async () => {
     const t = demoTransport(undefined, 0);
     const list = await t.request<RepairList>("GET", "/repairs");
@@ -38,8 +49,8 @@ describe("the demo's reports", () => {
     expect(times(sample)).toEqual(before); // the import itself is untouched
   });
 
-  it("are not found for a run the demo has no report of", async () => {
-    await expect(demoTransport(undefined, 0).request("GET", "/repairs/pitzdaily-fix/report"))
+  it("are not found for a run the demo has no report of (it never finished)", async () => {
+    await expect(demoTransport(undefined, 0).request("GET", "/repairs/ahmed25-fine-strict/report"))
       .rejects.toMatchObject({ code: "not-found", status: 404 });
   });
 });
