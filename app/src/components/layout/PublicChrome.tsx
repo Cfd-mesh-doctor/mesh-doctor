@@ -110,6 +110,7 @@ export function PublicFooter() {
           <a href={REPO_URL} {...ext}>Source code</a>
           <Link to="/docs" className={navLink}>Docs</Link>
           <Link to="/install" className={navLink}>Install</Link>
+          <Link to="/troubleshooting" className={navLink}>Troubleshooting</Link>
           <Link to="/how-it-works" className={navLink}>How it works</Link>
           <Link to="/accuracy" className={navLink}>Accuracy check</Link>
           <Link to="/gallery" className={navLink}>Gallery</Link>

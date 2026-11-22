@@ -21,9 +21,8 @@ describe("Docs", () => {
     const links = github.getAllByRole("link");
     expect(links.map((a) => a.textContent)).toEqual(["README", ...ON_GITHUB.map((d) => d.title)]);
     expect(github.getByRole("link", { name: "README" })).toHaveAttribute("href", DOCS.readme);
-    expect(github.getByRole("link", { name: "Troubleshooting" }))
-      .toHaveAttribute("href", `${REPO_URL}/blob/main/docs/troubleshooting.md`);
-    expect(github.getByText(/Search it for the message you see/)).toBeInTheDocument();
+    expect(github.getByRole("link", { name: "Limits" })).toHaveAttribute("href", `${REPO_URL}/blob/main/docs/limits.md`);
+    expect(github.getByText(/What Mesh Doctor is not/)).toBeInTheDocument();
     for (const a of links) expect(a).toHaveAttribute("target", "_blank");
   });
 });

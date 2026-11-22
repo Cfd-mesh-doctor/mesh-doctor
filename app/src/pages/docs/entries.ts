@@ -22,6 +22,8 @@ export const ON_SITE: DocEntry[] = [
     about: "What the toolkit's scripts make for the worked Ahmed-body example, each picture with the script that made it." },
   { title: "Install", page: "/install",
     about: "Setting it up on your own computer: Linux, or WSL on Windows, with OpenFOAM 14 and Python. From the README." },
+  { title: "Troubleshooting", page: "/troubleshooting", file: "troubleshooting.md",
+    about: "Problems people actually hit, with the fix. Search it for the message you see." },
   { title: "Report viewer", page: "/report",
     about: "Open a report to see what a repair changed in the mesh and whether it helped the solver. Never uploaded." },
   { title: "Size estimator", page: "/estimate",
@@ -30,8 +32,6 @@ export const ON_SITE: DocEntry[] = [
 
 /** Read on GitHub: the docs this site has no page for yet. Each title is the doc's own heading. */
 export const ON_GITHUB: DocEntry[] = [
-  { title: "Troubleshooting", file: "troubleshooting.md",
-    about: "Problems people actually hit, with the fix. Search it for the message you see." },
   { title: "Limits", file: "limits.md",
     about: "What Mesh Doctor is not, the versions it runs on, and where the repair, the A/B test, the map and the dashboard stop." },
   { title: "Safety model", file: "safety.md",

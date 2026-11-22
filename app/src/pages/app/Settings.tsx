@@ -163,7 +163,7 @@ function AboutCard() {
         {[
           ["Source code", REPO_URL],
           ["Safety model", DOCS.safety],
-          ["Troubleshooting", DOCS.troubleshooting],
+          ["Troubleshooting", "/troubleshooting"],
         ].map(([label, href]) => (
           <a key={href} href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
             {label} <ExternalLink className="size-3.5" />
