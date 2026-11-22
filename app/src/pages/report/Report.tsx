@@ -261,7 +261,7 @@ export function ReportView({ summary: s, from, action }: { summary: ReportSummar
           <h1 className="mt-1 text-2xl font-semibold tracking-tight break-words">{s.name}</h1>
           <p className="mt-1 text-sm break-words text-muted-foreground">{sub.join(" · ")}</p>
         </div>
-        {action}
+        <div className="print:hidden">{action}</div>
       </div>
 
       {/* grid-cols-1, not the default: a wide table then scrolls inside its card instead of widening the page */}

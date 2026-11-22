@@ -48,7 +48,7 @@ export function PublicHeader() {
   const { pairing } = usePairing();
   const [open, setOpen] = useState(false);
   return (
-    <header className="sticky top-0 z-30 border-b border-border/70 bg-background/80 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-border/70 bg-background/80 backdrop-blur print:hidden">
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4 sm:px-6 md:gap-6">
         <div className="flex items-center gap-1.5">
           <Button variant="ghost" size="icon-sm" className="-ml-1.5 md:hidden" aria-label="Open menu" onClick={() => setOpen(true)}>
@@ -96,7 +96,7 @@ export function PublicHeader() {
 export function PublicFooter() {
   const ext = { target: "_blank", rel: "noreferrer", className: navLink };
   return (
-    <footer className="border-t border-border">
+    <footer className="border-t border-border print:hidden">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 text-[13px] text-muted-foreground sm:px-6 md:flex-row md:items-start md:justify-between">
         <div className="max-w-md space-y-3">
           <Logo />

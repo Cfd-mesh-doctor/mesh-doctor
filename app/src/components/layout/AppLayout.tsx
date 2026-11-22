@@ -46,7 +46,7 @@ export function AppLayout() {
   const [open, setOpen] = useState(false);
   return (
     <div className="flex min-h-dvh">
-      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-border bg-sidebar lg:block">
+      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-border bg-sidebar lg:block print:hidden">
         <Sidebar />
       </aside>
       <Sheet open={open} onOpenChange={setOpen}>
@@ -57,7 +57,7 @@ export function AppLayout() {
       </Sheet>
       <div className="flex min-w-0 flex-1 flex-col">
         {mode === "demo" && <DemoNotice />}
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur sm:px-6">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur sm:px-6 print:hidden">
           <Button variant="ghost" size="icon-sm" className="lg:hidden" aria-label="Open navigation" onClick={() => setOpen(true)}>
             <MenuIcon />
           </Button>
