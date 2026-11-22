@@ -58,7 +58,10 @@ CI runs all of these (`.github/workflows/ci.yml`, job `app`).
   picture and marks, drawn by `pages/report/RepairMap.tsx`); `testReport.ts` is a small made-up report for the tests.
 - `src/pages/`, `src/components/`: the screens and the design system.
 - `e2e/`: the Playwright tests.
-- `vercel.json`: security headers and routing; `vite preview` serves the same headers.
+- `vercel.json`: security headers and routing; `vite preview` serves the same headers. Its `ignoreCommand` skips a
+  deploy when nothing the build reads changed: `app/` and `docs/images` (the gallery's pictures, imported from
+  outside `app/`, so Vercel's "Include files outside the root directory" must stay on). `src/test/vercel.test.ts`
+  fails if the code imports from a folder outside `app/` that the command doesn't watch.
 
 ## Rules
 
