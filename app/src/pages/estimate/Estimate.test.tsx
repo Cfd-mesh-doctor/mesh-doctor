@@ -54,5 +54,8 @@ describe("Size estimator", () => {
     await user.click(button);
     expect(await navigator.clipboard.readText()).toBe(`${window.location.origin}/estimate?cells=31.1`);
     expect(button).toHaveAccessibleName("Copied");
+    // On paper the same link stands in for the button.
+    expect(screen.getByText(/^Open this estimate again at /))
+      .toHaveTextContent(`Open this estimate again at ${window.location.origin}/estimate?cells=31.1`);
   });
 });

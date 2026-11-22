@@ -101,3 +101,24 @@ test("on paper the repair map's card leaves out its view switch and pointer hint
   await expect(hint).toBeHidden();
   await expect(page.getByText(/Every wall face of the model, seen from the side/).first()).toBeVisible();
 });
+
+test("the size estimator prints without its buttons, with the link to the estimate and its memory bars in colour", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/estimate?cells=31.1");
+  const copy = page.getByRole("button", { name: "Copy link" });
+  const back = page.getByRole("button", { name: "Back to the example" });
+  const again = page.getByText(/^Open this estimate again at /);
+  await expect(copy).toBeVisible();
+  await expect(back).toBeVisible();
+  await expect(again).toBeHidden();
+
+  await page.emulateMedia({ media: "print" });
+  await expect(copy).toBeHidden();
+  await expect(back).toBeHidden();
+  await expect(again).toBeVisible();
+  await expect(again).toHaveText("Open this estimate again at http://localhost:4173/estimate?cells=31.1");
+  // A browser leaves out backgrounds on paper unless the page asks for them, and the bars are backgrounds.
+  const bar = page.getByRole("table").locator("span[aria-hidden]").first();
+  await expect(bar).toBeVisible();
+  expect(await bar.evaluate((el) => getComputedStyle(el).getPropertyValue("print-color-adjust"))).toBe("exact");
+});

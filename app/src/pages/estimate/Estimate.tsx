@@ -122,7 +122,7 @@ export function EstimateForm({ defaults, about, reset }: { defaults: EstimateInp
               </div>
             );
           })}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 print:hidden">
             <CopyLink link={link} />
             {changed && (
               <Button variant="secondary" size="sm"
@@ -131,6 +131,8 @@ export function EstimateForm({ defaults, about, reset }: { defaults: EstimateInp
               </Button>
             )}
           </div>
+          {/* On paper, where the buttons can't be pressed: the link, to open the estimate again. */}
+          <p className="hidden text-xs break-all text-muted-foreground print:block">Open this estimate again at {link()}</p>
         </CardContent>
       </Card>
 
@@ -239,9 +241,11 @@ function Results({ input: i, result: e }: { input: EstimateInput; result: Return
   );
 }
 
+/** A step's share of the memory. Its colours are kept on paper too: a browser leaves out backgrounds when printing
+ *  unless the page asks for them. */
 function MemoryBar({ share, fits }: { share: number; fits: boolean }) {
   return (
-    <span className="relative mr-2 hidden h-2 w-24 rounded-full bg-surface-2 align-middle ring-1 ring-border ring-inset sm:inline-block" aria-hidden>
+    <span className="relative mr-2 hidden h-2 w-24 rounded-full bg-surface-2 align-middle ring-1 ring-border ring-inset [print-color-adjust:exact] sm:inline-block" aria-hidden>
       <span className={cn("absolute inset-y-0 left-0 rounded-full", fits ? "bg-success" : "bg-danger")}
         style={{ width: `${Math.min(1, share) * 100}%` }} />
       <span className="absolute -inset-y-0.5 w-px bg-muted-foreground" style={{ left: `${HEADROOM * 100}%` }} />
