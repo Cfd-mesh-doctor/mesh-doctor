@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The site's public pages, for search engines. app/src/test/sitemap.test.ts keeps it equal to the router's
+     pages, less those robots.txt keeps out. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://mesh-doctor.vercel.app/</loc></url>
+  <url><loc>https://mesh-doctor.vercel.app/report</loc></url>
+  <url><loc>https://mesh-doctor.vercel.app/estimate</loc></url>
+  <url><loc>https://mesh-doctor.vercel.app/how-it-works</loc></url>
+  <url><loc>https://mesh-doctor.vercel.app/accuracy</loc></url>
+  <url><loc>https://mesh-doctor.vercel.app/gallery</loc></url>
+  <url><loc>https://mesh-doctor.vercel.app/install</loc></url>
+  <url><loc>https://mesh-doctor.vercel.app/troubleshooting</loc></url>
+  <url><loc>https://mesh-doctor.vercel.app/limits</loc></url>
+  <url><loc>https://mesh-doctor.vercel.app/safety</loc></url>
+  <url><loc>https://mesh-doctor.vercel.app/docs</loc></url>
+  <url><loc>https://mesh-doctor.vercel.app/demo</loc></url>
+</urlset>

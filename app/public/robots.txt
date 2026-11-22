@@ -2,3 +2,5 @@ User-agent: *
 Allow: /
 Disallow: /app
 Disallow: /connect
+
+Sitemap: https://mesh-doctor.vercel.app/sitemap.xml

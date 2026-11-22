@@ -3,6 +3,8 @@
 
 export const APP_NAME = "Mesh Doctor";
 export const REPO_URL = "https://github.com/Cfd-mesh-doctor/mesh-doctor";
+/** The site's own address (Vercel's, no custom domain). public/sitemap.xml and robots.txt use it; a test checks. */
+export const SITE_URL = "https://mesh-doctor.vercel.app";
 export const DOCS = {
   readme: `${REPO_URL}#readme`,
   quickstart: `${REPO_URL}#quickstart`,
