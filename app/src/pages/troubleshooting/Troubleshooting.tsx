@@ -4,6 +4,7 @@
 // link can open the page at one problem.
 import { useSearchParams } from "react-router";
 import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
+import { PageContents } from "@/components/shared/PageContents";
 import { PageHeader } from "@/components/shared/page";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -25,6 +26,7 @@ export function Troubleshooting() {
   const setQuery = (q: string) => setParams(q ? { q } : {}, { replace: true, preventScrollReset: true });
   const shown = GROUPS.map((g) => ({ ...g, rows: g.table.rows.filter((r) => matches(r, query)) })).filter((g) => g.rows.length);
   const found = shown.reduce((n, g) => n + g.rows.length, 0);
+  const source = <DocSource file="troubleshooting.md" className="max-w-none" />;
   return (
     <div className="flex min-h-dvh flex-col">
       <PublicHeader />
@@ -54,36 +56,49 @@ export function Troubleshooting() {
           </p>
         </div>
         {found === 0 && (
-          <Card className="mt-8 p-6 text-sm">
-            <p className="font-medium">Nothing here matches “{query.trim()}”.</p>
-            <p className="mt-1 text-muted-foreground">Try one distinctive word from the message, such as a file or utility name.</p>
-            <Button variant="secondary" size="sm" className="mt-3" onClick={() => setQuery("")}>Show all problems</Button>
-          </Card>
+          <>
+            <Card className="mt-8 p-6 text-sm">
+              <p className="font-medium">Nothing here matches “{query.trim()}”.</p>
+              <p className="mt-1 text-muted-foreground">Try one distinctive word from the message, such as a file or utility name.</p>
+              <Button variant="secondary" size="sm" className="mt-3" onClick={() => setQuery("")}>Show all problems</Button>
+            </Card>
+            {source}
+          </>
         )}
-        <div className="mt-8 space-y-8">
-          {shown.map((g) => (
-            <section key={g.id} id={g.id} aria-labelledby={`${g.id}-title`} className="scroll-mt-20">
-              <h2 id={`${g.id}-title`} className="text-lg font-semibold tracking-tight">{g.title}</h2>
-              <Card className="mt-3 overflow-hidden">
-                <div aria-hidden className={`hidden border-b border-border px-4 py-2 text-xs font-medium text-muted-foreground md:grid ${COLUMNS}`}>
-                  {g.table.head.map((h) => <span key={h}>{h}</span>)}
-                </div>
-                <ul className="divide-y divide-border">
-                  {g.rows.map(([seen = "", why = "", fix = ""]) => (
-                    <li key={seen} className={`grid gap-1 px-4 py-3 text-sm ${COLUMNS}`}>
-                      <p className="font-medium"><span className="sr-only">{g.table.head[0]}: </span><DocText text={seen} /></p>
-                      <p className="text-muted-foreground">
-                        <span className="font-medium text-foreground md:sr-only">{g.table.head[1]}: </span><DocText text={why} />
-                      </p>
-                      <p><span className="font-medium md:sr-only">{g.table.head[2]}: </span><DocText text={fix} /></p>
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            </section>
-          ))}
-        </div>
-        <DocSource file="troubleshooting.md" className="max-w-none" />
+        {found > 0 && (
+          // The groups that show are listed beside them on a wide screen, as on the other long doc pages.
+          <div className="mt-8 grid grid-cols-1 items-start gap-8 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-12">
+            <aside className="rounded-xl border border-border bg-surface p-3 shadow-card lg:sticky lg:top-24 lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none print:hidden">
+              <PageContents sections={shown} />
+            </aside>
+            <div className="min-w-0">
+              <div className="space-y-8">
+                {shown.map((g) => (
+                  <section key={g.id} id={g.id} aria-labelledby={`${g.id}-title`} className="scroll-mt-20">
+                    <h2 id={`${g.id}-title`} className="text-lg font-semibold tracking-tight">{g.title}</h2>
+                    <Card className="mt-3 overflow-hidden">
+                      <div aria-hidden className={`hidden border-b border-border px-4 py-2 text-xs font-medium text-muted-foreground md:grid ${COLUMNS}`}>
+                        {g.table.head.map((h) => <span key={h}>{h}</span>)}
+                      </div>
+                      <ul className="divide-y divide-border">
+                        {g.rows.map(([seen = "", why = "", fix = ""]) => (
+                          <li key={seen} className={`grid gap-1 px-4 py-3 text-sm ${COLUMNS}`}>
+                            <p className="font-medium"><span className="sr-only">{g.table.head[0]}: </span><DocText text={seen} /></p>
+                            <p className="text-muted-foreground">
+                              <span className="font-medium text-foreground md:sr-only">{g.table.head[1]}: </span><DocText text={why} />
+                            </p>
+                            <p><span className="font-medium md:sr-only">{g.table.head[2]}: </span><DocText text={fix} /></p>
+                          </li>
+                        ))}
+                      </ul>
+                    </Card>
+                  </section>
+                ))}
+              </div>
+              {source}
+            </div>
+          </div>
+        )}
       </main>
       <PublicFooter />
     </div>

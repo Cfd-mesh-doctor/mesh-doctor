@@ -93,4 +93,10 @@ describe("the On this page list", () => {
     expect(within(nav).getAllByRole("link").map((a) => a.textContent)).toEqual(["01One", "02Two", "03Three"]);
     expect(within(nav).getByRole("link", { name: "Two" })).toHaveAttribute("href", "/guide#two");
   });
+
+  it("keeps the page's query in its links, so following one doesn't undo a search", () => {
+    renderScreen(<PageContents sections={SECTIONS} />, { path: "/guide", at: "/guide?q=mesh" });
+    const nav = screen.getByRole("navigation", { name: "On this page" });
+    expect(within(nav).getByRole("link", { name: "Two" })).toHaveAttribute("href", "/guide?q=mesh#two");
+  });
 });

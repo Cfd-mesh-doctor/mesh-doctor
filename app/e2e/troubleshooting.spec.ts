@@ -15,7 +15,8 @@ test("troubleshooting: from the Docs page, a message pasted from a log finds its
   await expect(page).toHaveURL(/\/troubleshooting$/);
   await expect(page.getByRole("heading", { level: 1, name: "Troubleshooting" })).toBeVisible();
   await expect(page).toHaveTitle("Troubleshooting · Mesh Doctor");
-  const problems = page.getByRole("main").getByRole("listitem");
+  // The items of each group's list (the "On this page" list is a list too).
+  const problems = page.getByRole("main").getByRole("region").getByRole("listitem");
   await expect(problems).toHaveCount(36);
 
   await page.getByRole("searchbox", { name: "Search for the message you see" }).fill(PASTED);
@@ -23,6 +24,12 @@ test("troubleshooting: from the Docs page, a message pasted from a log finds its
   await expect(page.getByRole("main").getByText(/split the fields/)).toBeVisible();
   await expect(page.getByText("1 of 36 problems matches.")).toBeVisible();
   await expect(page).toHaveURL(/\/troubleshooting\?q=/);
+  // The page's list now holds only that problem's group, and following it keeps the search.
+  const contents = page.getByRole("navigation", { name: "On this page" });
+  await expect(contents.getByRole("link")).toHaveCount(1);
+  await contents.getByRole("link").click();
+  await expect(page).toHaveURL(/\/troubleshooting\?q=.+#[a-z-]+$/);
+  await expect(problems).toHaveCount(1);
 
   await page.reload();
   await expect(page.getByRole("searchbox", { name: "Search for the message you see" })).toHaveValue(PASTED);

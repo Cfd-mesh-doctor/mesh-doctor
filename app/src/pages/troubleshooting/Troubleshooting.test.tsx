@@ -6,7 +6,9 @@ import { renderScreen } from "@/test/render";
 import { GROUPS } from "./problems";
 import { Troubleshooting } from "./Troubleshooting";
 
-const problems = () => within(screen.getByRole("main")).queryAllByRole("listitem");
+/** The problems shown: the items of each group's list (the page's "On this page" list is a list too). */
+const problems = () => screen.queryAllByRole("region").flatMap((g) => within(g).queryAllByRole("listitem"));
+const contents = () => screen.queryByRole("navigation", { name: "On this page" });
 
 describe("Troubleshooting", () => {
   it("shows every problem of the doc, group by group, with its cause and fix", () => {
@@ -51,5 +53,20 @@ describe("Troubleshooting", () => {
     await userEvent.click(screen.getByRole("button", { name: "Show all problems" }));
     expect(problems()).toHaveLength(36);
     expect(search).toHaveValue("");
+  });
+
+  it("lists the groups that show beside them, each link keeping the search", async () => {
+    renderScreen(<Troubleshooting />, { path: "/troubleshooting" });
+    const links = () => within(contents() as HTMLElement).getAllByRole("link");
+    expect(links().map((a) => a.textContent)).toEqual(GROUPS.map((g) => g.title));
+
+    const search = screen.getByRole("searchbox", { name: "Search for the message you see" });
+    await userEvent.type(search, "patchField");
+    const runs = GROUPS.find((g) => g.title === "OpenFOAM runs");
+    expect(links().map((a) => a.getAttribute("href"))).toEqual([`/troubleshooting?q=patchField#${runs?.id}`]);
+
+    await userEvent.clear(search);
+    await userEvent.type(search, "quantum flux");
+    expect(contents()).toBeNull();
   });
 });

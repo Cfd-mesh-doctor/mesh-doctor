@@ -2,15 +2,17 @@
 // A page's "On this page" list (How it works, and the pages that show a long doc): each section a link to its heading,
 // and the one being read marked (aria-current), so a reader of a long page sees where they are.
 import type { ReactNode } from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { useSectionInView } from "@/lib/useSectionInView";
 import { cn } from "@/lib/utils";
 
-/** `numbered` puts each section's number before it (01, 02, ...), for steps read in order. */
+/** `numbered` puts each section's number before it (01, 02, ...), for steps read in order. A link keeps the page's
+ *  query (Troubleshooting's search, ?q=), so following one doesn't undo what was typed. */
 export function PageContents({ sections, numbered = false }: {
   sections: readonly { id: string; title: ReactNode }[];
   numbered?: boolean;
 }) {
+  const { search } = useLocation();
   const current = useSectionInView(sections.map((s) => s.id));
   const List = numbered ? "ol" : "ul";
   return (
@@ -22,7 +24,7 @@ export function PageContents({ sections, numbered = false }: {
           return (
             <li key={s.id}>
               <Link
-                to={`#${s.id}`}
+                to={{ search, hash: `#${s.id}` }}
                 aria-current={here ? "location" : undefined}
                 className={cn(
                   "flex gap-2 rounded-md px-2 py-1.5",

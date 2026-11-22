@@ -86,7 +86,7 @@ test("an engine that isn't running gets a plain explanation, and a link to that 
   const [tab] = await Promise.all([page.waitForEvent("popup"), page.getByRole("link", { name: "How to fix this" }).click()]);
   await expect(tab).toHaveURL(/\/troubleshooting\?q=The\+engine\+isn%27t\+answering$/);
   await expect(tab.getByRole("searchbox", { name: "Search for the message you see" })).toHaveValue("The engine isn't answering");
-  await expect(tab.getByRole("main").getByRole("listitem")).toHaveCount(1);
+  await expect(tab.getByRole("main").getByRole("region").getByRole("listitem")).toHaveCount(1); // the problems, not the page list
   await expect(tab.getByRole("main").getByText(/app_origins/).first()).toBeVisible();
   await expect(page).toHaveURL(/\/connect$/); // the pairing page stays, with its error, for Try again
   await expect(page.getByText("The engine isn't answering")).toBeVisible();
