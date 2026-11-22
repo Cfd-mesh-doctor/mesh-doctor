@@ -79,6 +79,48 @@ export function moveTimes(doc: unknown, by: number): void {
   eachTime(doc, (t) => t + by);
 }
 
+/** The parts of a recorded report the demo changes. */
+interface RecordedReport {
+  created?: string;
+  documents?: Record<string, unknown>;
+  contents?: Record<string, unknown>;
+  redacted?: { paths?: number };
+}
+
+/** A path the engine replaced reads workspace/... or cases/..., or is the whole string workspace or cases
+ *  (report.py's Redactor; "worst cases" in a sentence is a word, not a path). */
+const REPLACED = /^(?:workspace|cases)$|(?<![^\s"'=([,:])(?:workspace|cases)\//g;
+
+/** How many of a report's replaced paths a document holds. (A path outside both folders became its file name, which
+ *  can't be told from any other word; the recorded reports have none.) */
+export function replacedPaths(doc: unknown): number {
+  if (typeof doc === "string") return doc.match(REPLACED)?.length ?? 0;
+  if (Array.isArray(doc)) return doc.reduce((n: number, d) => n + replacedPaths(d), 0);
+  if (doc && typeof doc === "object") return replacedPaths(Object.values(doc));
+  return 0;
+}
+
+/** A report without one of its documents, as the engine would have written it. */
+function withoutDocument(doc: RecordedReport, key: string): void {
+  const gone = doc.documents?.[key];
+  if (gone === undefined) return;
+  delete doc.documents?.[key];
+  delete doc.contents?.[key];
+  if (typeof doc.redacted?.paths === "number") doc.redacted.paths -= replacedPaths(gone);
+}
+
+/**
+ * Whether a run's report may hold its A/B test: not while the demo's job list has that test unfinished. The job
+ * list was recorded with the 25° medium A/B test still solving its second run, and that run's report afterwards, so
+ * its A/B test finishes after the demo's "now". (The engine would already hold the first run's half, written when
+ * that run ended; the demo leaves the whole test out rather than cut a recorded document.) A run with no A/B job
+ * in the list keeps what its report holds.
+ */
+export function abTestFinished(jobs: JobList | undefined, run: string): boolean {
+  const tests = jobs?.items.filter((j) => j.kind === "abtest" && j.params.name === run) ?? [];
+  return tests.length === 0 || tests.some((j) => j.state === "done");
+}
+
 export function demoTransport(answers: Answers = DEMO_ANSWERS, delayMs = DELAY_MS): Transport {
   // A private copy, so cancelling a demo job lasts until the page is reloaded and never touches the import.
   const data: Answers = { "/machine": DEMO_MACHINE, ...structuredClone(answers) };
@@ -108,8 +150,11 @@ export function demoTransport(answers: Answers = DEMO_ANSWERS, delayMs = DELAY_M
         if (!sample) {
           throw new EngineError("not-found", `The demo has no recorded report of ${name}: only its finished repairs have one`, 404);
         }
-        const doc: unknown = structuredClone((await sample.load()).default);
+        const doc = structuredClone((await sample.load()).default) as RecordedReport;
+        if (!abTestFinished(data["/jobs"] as JobList | undefined, name)) withoutDocument(doc, "abtest");
         moveTimes(doc, by);
+        // The engine builds a report when it's asked for one (meshdoctor report.build stamps the time), so it is new.
+        doc.created = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
         return doc as T;
       }
       if (!(route in data)) throw new EngineError("not-found", "Not in the demo data", 404);

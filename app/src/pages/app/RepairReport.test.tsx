@@ -13,13 +13,20 @@ const path = "/demo/repairs/:name/report";
 
 describe("a repair's report", () => {
   it("opens in the viewer, straight from the engine", async () => {
-    renderScreen(<RepairReport />, { path, at: "/demo/repairs/ahmed25-medium-fix/report", transport: demoTransport(undefined, 0) });
+    renderScreen(<RepairReport />, { path, at: "/demo/repairs/ahmed25-coarse-fix/report", transport: demoTransport(undefined, 0) });
     // The page names the run while it waits too, so wait for the report itself.
     expect(await screen.findByText(/from the recorded demo/)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 1, name: "ahmed25-medium-fix" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "ahmed25-coarse-fix" })).toBeInTheDocument();
     expect(await screen.findByRole("img", { name: /Initial residual of p per iteration/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute("href", "/demo");
-    expect(document.title).toBe("Report of ahmed25-medium-fix · Mesh Doctor");
+    expect(document.title).toBe("Report of ahmed25-coarse-fix · Mesh Doctor");
+  });
+
+  it("leaves out an A/B test that the demo's job list still has running", async () => {
+    renderScreen(<RepairReport />, { path, at: "/demo/repairs/ahmed25-medium-fix/report", transport: demoTransport(undefined, 0) });
+    expect(await screen.findByText(/There is no solver A\/B test in this report\./)).toBeInTheDocument();
+    expect(screen.queryByText("Did it help the solver?")).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /Initial residual of/ })).not.toBeInTheDocument();
   });
 
   it("saves the report as the file meshdoctor report makes", async () => {
@@ -47,7 +54,10 @@ describe("a repair's report", () => {
       .toBeInTheDocument();
     expect(screen.getByRole("link", { name: "pitzDaily, OpenFOAM's tutorial" }))
       .toHaveAttribute("href", "/demo/repairs/pitzdaily-fix/report");
-    expect(screen.getByRole("link", { name: "25° slant, with an A/B test" }))
+    expect(screen.getByRole("link", { name: "25° slant, coarse mesh, with an A/B test" }))
+      .toHaveAttribute("href", "/demo/repairs/ahmed25-coarse-fix/report");
+    // its A/B test is still running in the demo's job list, so the demo's report of it has none to show
+    expect(screen.getByRole("link", { name: "25° slant, medium mesh" }))
       .toHaveAttribute("href", "/demo/repairs/ahmed25-medium-fix/report");
     expect(screen.getByRole("link", { name: "35° slant, with a repair map" }))
       .toHaveAttribute("href", "/demo/repairs/ahmed35-medium-fix/report");

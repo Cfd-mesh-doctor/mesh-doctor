@@ -23,8 +23,8 @@ test("the demo's overview opens a repair's report in the viewer, and nothing is 
   // A run the demo has no report of (it never finished) says so, and offers the ones it has.
   await page.goto("/demo/repairs/ahmed25-fine-strict/report");
   await expect(page.getByText("The demo has no recorded report of ahmed25-fine-strict: only its finished repairs have one")).toBeVisible();
-  await page.getByRole("link", { name: "25° slant, with an A/B test" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "ahmed25-medium-fix" })).toBeVisible();
+  await page.getByRole("link", { name: "25° slant, coarse mesh, with an A/B test" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "ahmed25-coarse-fix" })).toBeVisible();
   await expect(page.getByRole("img", { name: /Initial residual of p per iteration/ })).toBeVisible();
   expect([...origins]).toEqual(["http://localhost:4173"]);
   expect(sent).toEqual([]);
@@ -73,4 +73,17 @@ test("the demo's Cases page opens a case's latest report", async ({ page }) => {
   await page.getByRole("row", { name: /pitzDaily/ }).getByRole("link", { name: "Report of pitzdaily-fix" }).click();
   await expect(page).toHaveURL(/\/demo\/repairs\/pitzdaily-fix\/report$/);
   await expect(page.getByRole("heading", { level: 1, name: "pitzdaily-fix" })).toBeVisible();
+});
+
+test("the demo's reports agree with its job list about A/B tests", async ({ page }) => {
+  // The 25° medium A/B test is still solving in the job list...
+  await page.goto("/demo/jobs");
+  await expect(page.getByRole("row", { name: "ahmed25-medium-fix A/B test" }).getByText("solving fixed").filter({ visible: true }))
+    .toHaveCount(1);
+  // ...so its run's report has no A/B test yet, while the coarse run's finished test is in its report.
+  await page.goto("/demo/repairs/ahmed25-medium-fix/report");
+  await expect(page.getByText(/There is no solver A\/B test in this report\./)).toBeVisible();
+  await expect(page.getByText("Did it help the solver?")).toHaveCount(0);
+  await page.goto("/demo/repairs/ahmed25-coarse-fix/report");
+  await expect(page.getByText("Did it help the solver?")).toBeVisible();
 });
