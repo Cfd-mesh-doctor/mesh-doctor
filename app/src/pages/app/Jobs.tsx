@@ -2,7 +2,7 @@
 // Every job on the engine: live progress while running, details, cancelling (after a confirmation), and the report
 // of a finished job's run. The filter lives in the address (?show=failed), so a reload or a link keeps it.
 import { FileText, ListChecks, OctagonX } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { JobStateBadge } from "@/components/shared/badges";
@@ -100,9 +100,19 @@ function DetailsDialog({ job, onClose, onCancel }: { job: Job | null; onClose: (
   const params = Object.entries(job?.params ?? {});
   const to = useAppPath();
   const report = job && reportPath(job);
+  // The details open on Close, the calm way out. The first button is otherwise an active job's red "Cancel job": it
+  // only asks to confirm, but a key pressed straight after opening shouldn't start a cancel.
+  const close = useRef<HTMLButtonElement>(null);
   return (
     <Dialog open={job !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent
+        className="max-w-2xl"
+        onOpenAutoFocus={(e) => {
+          if (!close.current) return;
+          e.preventDefault();
+          close.current.focus({ preventScroll: true });
+        }}
+      >
         {job && (
           <>
             <div className="flex flex-wrap items-center gap-3 pr-8">
@@ -149,7 +159,7 @@ function DetailsDialog({ job, onClose, onCancel }: { job: Job | null; onClose: (
                   <OctagonX /> Cancel job
                 </Button>
               )}
-              <Button variant="secondary" onClick={onClose}>Close</Button>
+              <Button ref={close} variant="secondary" onClick={onClose}>Close</Button>
               {report && (
                 <Button asChild>
                   <Link to={to(report)}><FileText /> Open report</Link>

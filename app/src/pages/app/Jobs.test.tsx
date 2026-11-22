@@ -82,6 +82,14 @@ describe("the Jobs screen", () => {
     expect(within(details).queryByText("Running for")).toBeNull();
   });
 
+  it("opens an active job's details on Close, not on the red Cancel job", async () => {
+    open(`${path}?job=20261121-130610-abtest-ahmed25-medium-fix-13c2`); // the demo's running job
+    const details = await screen.findByRole("dialog", { name: "ahmed25-medium-fix" });
+    const [close] = within(details).getAllByRole("button", { name: "Close" }); // the footer's, before the corner's
+    await waitFor(() => expect(close).toHaveFocus());
+    expect(within(details).getByRole("button", { name: /Cancel job/ })).not.toHaveFocus();
+  });
+
   it("shows every job when the address names a filter it doesn't know", async () => {
     open(`${path}?show=nonsense`);
     expect(await screen.findAllByRole("button", { name: "ahmed25-medium-fix" })).toHaveLength(2);
