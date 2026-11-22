@@ -79,6 +79,15 @@ describe("Report viewer", () => {
     expect(await screen.findByRole("heading", { name: "Report viewer" })).toBeInTheDocument();
   });
 
+  it("draws the original mesh's residuals in dark ink, dashed, apart from the repaired mesh's teal", async () => {
+    renderScreen(<Report />, { path: "/report", at: "/report?sample=ahmed25-medium-fix" });
+    const chart = await screen.findByRole("img", { name: /Initial residual of p per iteration/ });
+    expect(chart.querySelector("path.stroke-foreground")).toHaveAttribute("stroke-dasharray");
+    expect(chart.querySelector("path.stroke-primary")).not.toHaveAttribute("stroke-dasharray");
+    const legend = screen.getByText("original mesh", { selector: "span" }).querySelector("line");
+    expect(legend).toHaveClass("stroke-foreground");
+  });
+
   it("opens a sample straight from a link", async () => {
     renderScreen(<Report />, { path: "/report", at: "/report?sample=ahmed35-medium-fix" });
     expect(await screen.findByRole("heading", { name: "ahmed35-medium-fix" })).toBeInTheDocument();

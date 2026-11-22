@@ -515,9 +515,12 @@ function MapCard({ map }: { map: MapSummary }) {
 function ResidualCard({ history }: { history: NonNullable<ReportSummary["ab"]>["history"] }) {
   const { fields, original, repaired } = history;
   const [field, setField] = useState(() => (fields.includes("p") ? "p" : fields.includes("p_rgh") ? "p_rgh" : (fields[0] ?? "")));
+  // The original mesh is the reference: dark ink, dashed, as the accuracy chart's wind-tunnel tick. Against the
+  // repaired mesh's teal, the grey it had was too close to tell apart (OKLab difference 8.3, and 3.2 with red-green
+  // colour blindness, against a floor of 15); ink is 32 in the light theme and 21 in the dark one.
   const series = useMemo(() => {
     const out: LineSeries[] = [];
-    if (original) out.push({ name: "original mesh", stroke: "stroke-muted-foreground", swatch: "bg-muted-foreground", dashed: true, x: original.x, y: original.y[field] ?? [] });
+    if (original) out.push({ name: "original mesh", stroke: "stroke-foreground", swatch: "bg-foreground", dashed: true, x: original.x, y: original.y[field] ?? [] });
     if (repaired) out.push({ name: "repaired mesh", stroke: "stroke-primary", swatch: "bg-primary", x: repaired.x, y: repaired.y[field] ?? [] });
     return out;
   }, [original, repaired, field]);
@@ -535,7 +538,7 @@ function ResidualCard({ history }: { history: NonNullable<ReportSummary["ab"]>["
       </CardHeader>
       <CardContent>
         <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          {original && <LegendLine dashed className="stroke-muted-foreground">original mesh</LegendLine>}
+          {original && <LegendLine dashed className="stroke-foreground">original mesh</LegendLine>}
           {repaired && <LegendLine className="stroke-primary">repaired mesh</LegendLine>}
         </div>
         <LineChart series={series} log xLabel="iteration" empty="No residuals for this field"
