@@ -216,7 +216,7 @@ test("before anything has run, the Overview and Jobs say how to start: the engin
   const copy = main.getByRole("button", { name: "Copy “meshdoctor full <case> <name>”" });
   await expect(copy).toHaveCount(1); // the card at the bottom gives way to the empty list's own
   await expect(copy).toBeVisible();
-  await expect(main.getByText("Starting repairs from the app comes next")).toHaveCount(0);
+  await expect(main.getByRole("heading", { name: "Start a repair" })).toHaveCount(0);
   const dashboard = main.getByRole("link", { name: "Open the engine's dashboard" });
   await expect(dashboard).toHaveAttribute("href", `${ENGINE}/meshdoctor`);
   await expect(dashboard).toHaveAttribute("target", "_blank");
@@ -227,6 +227,23 @@ test("before anything has run, the Overview and Jobs say how to start: the engin
   await expect(main.getByRole("link", { name: "Open the engine's dashboard" })).toHaveAttribute("href", `${ENGINE}/meshdoctor`);
   // Only the engine's lists were asked for: a link to its dashboard sends nothing until it's opened.
   expect(engine.requests.some((r) => new URL(r.url()).pathname === "/meshdoctor")).toBe(false);
+});
+
+test("once a repair has run, the Overview's Start a repair card keeps the engine's dashboard linked, and the command", async ({ page }) => {
+  await mockEngine(page, {
+    repairs: [{ name: "old-fix", finished: "2026-11-21 12:05:00", nCells: 1000, profile: "medium", source: "wing", status: {}, verdict: null }],
+  });
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  const main = page.getByRole("main");
+  await expect(main.getByText("No verdict", { exact: true })).toBeVisible(); // the run is listed
+  await expect(main.getByRole("heading", { name: "No jobs yet" })).toHaveCount(0); // its own link has gone with it
+  await expect(main.getByRole("heading", { name: "Start a repair" })).toBeVisible();
+  const dashboard = main.getByRole("link", { name: "the engine's dashboard" });
+  await expect(dashboard).toHaveAttribute("href", `${ENGINE}/meshdoctor`);
+  await expect(dashboard).toHaveAttribute("target", "_blank");
+  await expect(main.getByRole("button", { name: "Copy “meshdoctor full <case> <name>”" })).toBeVisible();
 });
 
 test("a list the engine fails to give says it didn't load, with the reason above it, on the Overview and on Cases", async ({ page }) => {

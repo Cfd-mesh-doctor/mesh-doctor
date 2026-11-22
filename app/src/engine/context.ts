@@ -35,6 +35,16 @@ export function useEngine(): EngineValue {
   return v;
 }
 
+/**
+ * The engine's own dashboard (its Mesh Doctor page, with Copy + detect + correct and Run A/B), where repairs and A/B
+ * tests start until this app can start them. Only your own engine has one: null in the demo, or before pairing.
+ */
+export function useEngineDashboard(): string | null {
+  const { mode } = useEngine();
+  const { pairing } = usePairing();
+  return mode === "engine" && pairing ? `${pairing.engine}/meshdoctor` : null;
+}
+
 /** A path inside the current mode: to("/jobs") is /app/jobs, or /demo/jobs in the demo. */
 export function useAppPath(): (path?: string) => string {
   const { base } = useEngine();

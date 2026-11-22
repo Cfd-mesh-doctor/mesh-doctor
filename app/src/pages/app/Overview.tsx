@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The engine at a glance: what it is, its cases, its repair runs (each finished one opens its report) and what is
 // running now.
-import { ArrowRight, Cpu, FolderOpen, ListChecks, Terminal, Wrench } from "lucide-react";
+import { ArrowRight, Cpu, ExternalLink, FolderOpen, ListChecks, Terminal, Wrench } from "lucide-react";
 import { Link } from "react-router";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
@@ -11,7 +11,7 @@ import { EmptyState, PageHeader, StatTile, TableSkeleton } from "@/components/sh
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/misc";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
-import { useAppPath, useEngine, usePairing } from "@/engine/context";
+import { useAppPath, useEngine, useEngineDashboard, usePairing } from "@/engine/context";
 import { useCases, useEngineInfo, useJobs, useRepairs } from "@/engine/hooks";
 import { JOB_KIND_LABEL, isActive } from "@/engine/types";
 import { caseName, improvedCleanly, madeWorse, runStep, runUpdated } from "@/engine/verdict";
@@ -25,6 +25,7 @@ export function Overview() {
   useTitle("Overview");
   const { mode } = useEngine();
   const { pairing } = usePairing();
+  const dashboard = useEngineDashboard();
   const to = useAppPath();
   const info = useEngineInfo();
   const cases = useCases();
@@ -218,11 +219,21 @@ export function Overview() {
             <Terminal className="size-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold">Starting repairs from the app comes next</p>
-            <p className="mt-0.5 text-[13px] text-muted-foreground">
-              Until then, start one in WSL; the run shows up here when it finishes. It works on a copy, so your case is
-              never changed.
-            </p>
+            {/* Says how to start one now, rather than only that the app can't yet: this card is where the engine's
+                dashboard stays linked once the empty lists that first offer it have gone. */}
+            <CardTitle>Start a repair</CardTitle>
+            <CardDescription>
+              From{" "}
+              {dashboard ? (
+                <a href={dashboard} target="_blank" rel="noreferrer"
+                  className="font-medium whitespace-nowrap text-primary underline-offset-4 hover:underline">
+                  the engine's dashboard
+                  <ExternalLink className="ml-0.5 inline size-3 align-[-1px]" aria-hidden />
+                </a>
+              ) : "the engine's dashboard"}
+              , or with this command in WSL: the run shows up here when it finishes. It works on a copy, so your case is
+              never changed. Starting repairs from this app comes next.
+            </CardDescription>
           </div>
           <CopyCommand command={REPAIR_COMMAND} className="sm:w-80" />
         </Card>

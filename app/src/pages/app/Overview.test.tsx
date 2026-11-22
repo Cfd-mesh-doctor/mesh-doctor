@@ -84,7 +84,7 @@ describe("the Overview before anything has run", () => {
     expect(screen.getByRole("link", { name: "your cases" })).toHaveAttribute("href", "/app/cases");
     // The command is on the page once: in the empty list, where the card at the bottom of the page gives way to it.
     expect(screen.getAllByRole("button", { name: COPY_REPAIR })).toHaveLength(1);
-    expect(screen.queryByText("Starting repairs from the app comes next")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Start a repair" })).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull(); // everything loaded
     expect(screen.getByText("API 1.0 · 1 job kind")).toBeInTheDocument(); // one kind of job: not "1 job kinds"
     // No cases found: the tile links the screen that says where the engine looks for them.
@@ -99,7 +99,7 @@ describe("the Overview before anything has run", () => {
     expect(screen.queryByText(/^No (jobs|repair runs) yet$/)).toBeNull();
     expect(screen.queryByRole("link", { name: "Open the engine's dashboard" })).toBeNull();
     // The command stays in its card at the bottom of the page.
-    expect(screen.getByText("Starting repairs from the app comes next")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Start a repair" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: COPY_REPAIR })).toHaveLength(1);
   });
 
@@ -126,10 +126,27 @@ describe("the Overview before anything has run", () => {
 
   it("keeps the command in its card at the bottom once there are repair runs", async () => {
     open();
-    expect(await screen.findByText("Starting repairs from the app comes next")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Start a repair" })).toBeInTheDocument();
     expect((await screen.findAllByRole("link", { name: /^Report of / })).length).toBeGreaterThan(0);
     expect(screen.getByText("Only ever read, never changed")).toBeInTheDocument(); // the demo has cases
     expect(screen.queryByRole("link", { name: "Where the engine looks" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: COPY_REPAIR })).toHaveLength(1);
+    // The demo has no engine of its own: the card names the dashboard without linking it.
+    expect(screen.getByText(/^From the engine's dashboard, or with this command in WSL: /)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "the engine's dashboard" })).toBeNull();
+  });
+});
+
+describe("the Overview once something has run", () => {
+  it("says how to start a repair: from the engine's dashboard, linked in a new tab, or with the command", async () => {
+    ownEngine([], [{ name: "wing-fix", finished: "2026-11-21 12:05:00", nCells: 1000, profile: "medium", source: "wing", status: {}, verdict: null }]);
+    expect(await screen.findByText("wing-fix")).toBeInTheDocument();
+    // Once the empty lists that first offer it have gone, this card keeps the engine's dashboard linked.
+    const card = screen.getByRole("heading", { name: "Start a repair" }).closest("div")!;
+    const dashboard = within(card).getByRole("link", { name: "the engine's dashboard" });
+    expect(dashboard).toHaveAttribute("href", "http://localhost:8765/meshdoctor");
+    expect(dashboard).toHaveAttribute("target", "_blank");
+    expect(dashboard).toHaveAttribute("rel", "noreferrer");
     expect(screen.getAllByRole("button", { name: COPY_REPAIR })).toHaveLength(1);
   });
 });
