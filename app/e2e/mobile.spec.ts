@@ -4,7 +4,8 @@ import { testReport } from "../src/report/testReport";
 
 test("on a phone nothing scrolls sideways, and the menu works", async ({ page }) => {
   // The device's own width (412 px), then a small phone: the Jobs filter once fit the first and not the second.
-  for (const width of [page.viewportSize()?.width ?? 412, 360]) {
+  // Then the smallest phones (320 px), where the home and pairing pages were once 18-20 px too wide.
+  for (const width of [page.viewportSize()?.width ?? 412, 360, 320]) {
     await page.setViewportSize({ width, height: 800 });
     for (const path of ["/", "/connect", "/report", "/estimate?cells=31.1", "/demo", "/demo/jobs", "/demo/cases", "/demo/settings"]) {
       await page.goto(path);
@@ -50,4 +51,19 @@ test("on a small phone, jobs show progress under the name and every filter can b
   await page.getByRole("radio", { name: /Cancelled/ }).click(); // scrolled off to the right at first
   await expect(page.getByRole("row", { name: /ahmed25-fine-strict/ })).toBeVisible();
   await expect(page.getByRole("row", { name: /pitzdaily-fix/ })).toHaveCount(0);
+});
+
+test("on a phone the public pages have a menu", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto("/report");
+  await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("dialog").getByRole("link", { name: "Size estimator" }).click();
+  await expect(page).toHaveURL(/\/estimate$/);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Size estimator" })).toBeVisible();
+  // A section of the home page, from another page: it opens scrolled to that section.
+  await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("dialog").getByRole("link", { name: "Privacy" }).click();
+  await expect(page).toHaveURL(/\/#privacy$/);
+  await expect(page.getByRole("heading", { name: "Your meshes never leave your computer" })).toBeInViewport();
 });

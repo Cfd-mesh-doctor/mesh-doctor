@@ -91,7 +91,7 @@ export function Landing() {
             aria-hidden
             className="pointer-events-none absolute inset-0 [background-image:radial-gradient(circle_at_1px_1px,var(--border)_1px,transparent_0)] [background-size:22px_22px] [mask-image:radial-gradient(ellipse_at_top,black_30%,transparent_75%)]"
           />
-          <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[1.05fr_1fr]">
+          <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-12 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[1.05fr_1fr]">
             <div>
               <span className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-[13px] font-medium text-muted-foreground shadow-card">
                 <span className="size-1.5 rounded-full bg-primary" /> Open source · runs on your own PC
@@ -129,7 +129,7 @@ export function Landing() {
           title="Detect, highlight, correct, prove"
           lead="The repair needs only the mesh. The checks that it helped run your case on both meshes and compare."
         >
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {STEPS.map((s, i) => (
               <div key={s.title} className="rounded-xl border border-border bg-surface p-5 shadow-card">
                 <div className="flex items-center justify-between">
@@ -143,7 +143,7 @@ export function Landing() {
               </div>
             ))}
           </div>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {TOOLS.map((t) => (
               <div key={t.title} className="flex gap-3 rounded-xl border border-dashed border-border p-4">
                 <t.icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
@@ -163,14 +163,14 @@ export function Landing() {
             title="Your meshes never leave your computer"
             lead="This website is only the screens. The work happens in Mesh Doctor on your PC, and your browser talks to it directly."
           >
-            <div className="grid items-stretch gap-2 lg:grid-cols-[1fr_auto_1fr_auto_1fr]">
+            <div className="grid grid-cols-1 items-stretch gap-2 lg:grid-cols-[1fr_auto_1fr_auto_1fr]">
               <FlowBox icon={Globe} title="This website" sub="Static files: no server code, no accounts, no analytics, no uploads." />
               <Arrow label="loads the page" />
               <FlowBox icon={Laptop} title="Your browser" sub="Runs the screens and asks you before the page may reach apps on your device." />
               <Arrow label="localhost only" />
               <FlowBox icon={Cpu} title="Mesh Doctor on your PC" sub="OpenFOAM in WSL or Linux. Your cases, results and pictures stay here." accent />
             </div>
-            <div className="mt-8 grid gap-6 sm:grid-cols-3">
+            <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-3">
               {[
                 [KeyRound, "Paired, not signed in", "A pairing key links one browser to your engine. The key travels after the # in a link, which never reaches the website."],
                 [ShieldCheck, "Only this site, only with the key", "The engine answers this site's address and no other, and every request must carry the key."],
@@ -190,7 +190,8 @@ export function Landing() {
         </div>
 
         <Section id="start" eyebrow="Get started" title="Running in three steps" lead="One script to install, one command to start, one link to pair this browser.">
-          <ol className="grid gap-4 lg:grid-cols-3">
+          {/* grid-cols-1: on the smallest phones a long command scrolls inside its box instead of widening the page */}
+          <ol className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             {[
               ["Install", "From a clone of the repository, one script installs WSL, OpenFOAM 14 and Mesh Doctor, and checks the result.", "bash tools/setup_linux.sh"],
               ["Start and pair", "Start the engine. It prints a pairing link for this site; open it in Chrome, Edge or Firefox.", "meshdoctor serve"],

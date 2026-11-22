@@ -257,7 +257,7 @@ export function Connect() {
         <ThemeMenu />
       </header>
       <main className="flex flex-1 items-start justify-center px-4 pt-6 pb-16 sm:pt-12">
-        <div className="grid w-full max-w-5xl gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid w-full max-w-5xl grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
           <Card className="p-6 sm:p-8">{body}</Card>
           <aside className="space-y-5 lg:pt-2">
             <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">How pairing keeps you safe</p>
