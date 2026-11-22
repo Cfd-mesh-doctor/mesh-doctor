@@ -90,6 +90,9 @@ describe("the Overview before anything has run", () => {
     // No cases found: the tile links the screen that says where the engine looks for them.
     expect(screen.getByRole("link", { name: "Where the engine looks" })).toHaveAttribute("href", "/app/cases");
     expect(screen.queryByText("Only ever read, never changed")).toBeNull();
+    // No runs: the tile says so, rather than "0 improved, none worse".
+    expect(screen.getByText("None yet")).toBeInTheDocument();
+    expect(screen.queryByText(/improved/)).toBeNull();
   });
 
   it("doesn't call a list that didn't load empty, or offer first steps for it", async () => {
@@ -157,5 +160,8 @@ describe("the Overview once something has run", () => {
     expect(dashboard).toHaveAttribute("target", "_blank");
     expect(dashboard).toHaveAttribute("rel", "noreferrer");
     expect(screen.getAllByRole("button", { name: COPY_REPAIR })).toHaveLength(1);
+    // With a run, the tile counts the verdicts, even when none is in yet.
+    expect(screen.getByText("0 improved, none worse")).toBeInTheDocument();
+    expect(screen.queryByText("None yet")).toBeNull();
   });
 });

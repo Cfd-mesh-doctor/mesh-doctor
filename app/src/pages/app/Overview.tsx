@@ -93,7 +93,12 @@ export function Overview() {
           tone="success"
           loading={repairs.isPending}
           value={repairs.data ? repairItems.length : "–"}
-          hint={repairs.data ? `${improved} improved, ${worse ? `${worse} made worse` : "none worse"}` : undefined}
+          hint={!repairs.data ? undefined : repairItems.length ? (
+            `${improved} improved, ${worse ? `${worse} made worse` : "none worse"}`
+          ) : (
+            // Not "0 improved, none worse": before the first run there is nothing to compare yet.
+            "None yet"
+          )}
         />
         <StatTile
           label="Active jobs"

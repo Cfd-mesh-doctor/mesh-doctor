@@ -213,6 +213,7 @@ test("before anything has run, the Overview and Jobs say how to start: the engin
   await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
   const main = page.getByRole("main");
   await expect(main.getByRole("heading", { name: "No repair runs yet" })).toBeVisible();
+  await expect(main.getByText("None yet", { exact: true })).toBeVisible(); // the tile: not "0 improved, none worse"
   const copy = main.getByRole("button", { name: "Copy “meshdoctor full <case> <name>”" });
   await expect(copy).toHaveCount(1); // the card at the bottom gives way to the empty list's own
   await expect(copy).toBeVisible();
