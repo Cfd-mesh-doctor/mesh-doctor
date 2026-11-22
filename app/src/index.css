@@ -118,6 +118,8 @@
     -moz-osx-font-smoothing: grayscale;
   }
   :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  /* The skip link's target: no ring around the whole page; the next Tab shows where you are. */
+  main[tabindex="-1"]:focus-visible { outline: none; }
   ::selection { background: var(--primary-soft); }
   code, kbd, samp, pre { font-family: var(--font-mono); font-size: 0.92em; }
 }

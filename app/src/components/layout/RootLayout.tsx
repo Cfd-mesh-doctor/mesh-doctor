@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { Outlet, ScrollRestoration, type Location } from "react-router";
+import { SkipLink } from "./SkipLink";
 
 /** Where the scroll position of a page is remembered. A page opened from outside the site (a typed, shared or
  *  bookmarked link) has no key of its own: React Router calls them all "default", so a shared link to a step
@@ -9,11 +10,12 @@ function scrollKey(location: Location): string {
 }
 
 /** Around every page: a new page starts at its top, or at the section a link names (/#how), and Back
- *  returns to where you were. */
+ *  returns to where you were. The skip link comes first, so it is the first thing Tab reaches. */
 export function RootLayout() {
   return (
     <>
       <ScrollRestoration getKey={scrollKey} />
+      <SkipLink />
       <Outlet />
     </>
   );
