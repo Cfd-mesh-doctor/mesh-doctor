@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The source cases the engine may read, with what has been done to each so far, the report of each one's latest
-// finished repair, and the size estimate for its mesh.
+// finished repair, and the size estimate for its mesh. What's typed in the filter box stays in the address (?q=), as
+// in the site's other search boxes, so a reload or a link keeps it.
 import { FolderOpen, Search } from "lucide-react";
-import { useMemo, useState } from "react";
-import { Link } from "react-router";
+import { useMemo } from "react";
+import { Link, useSearchParams } from "react-router";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { VerdictBadge } from "@/components/shared/badges";
@@ -16,6 +17,7 @@ import { useCases, useRepairs } from "@/engine/hooks";
 import type { RepairSummary } from "@/engine/types";
 import { caseName } from "@/engine/verdict";
 import { cellsField } from "@/estimate/estimate";
+import { ADDRESS_FIELD } from "@/lib/addressField";
 import { formatCells, formatDateTime, formatRelative } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
@@ -56,7 +58,9 @@ export function Cases() {
   useTitle("Cases");
   const cases = useCases();
   const repairs = useRepairs();
-  const [query, setQuery] = useState("");
+  const [params, setParams] = useSearchParams();
+  const query = params.get("q") ?? "";
+  const setQuery = (q: string) => setParams(q ? { q } : {}, ADDRESS_FIELD);
 
   const rows = useMemo<Row[]>(() => {
     const bySource = new Map<string, RepairSummary[]>();

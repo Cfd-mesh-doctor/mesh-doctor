@@ -63,6 +63,12 @@ test("the demo's cases show what was done to each", async ({ page }) => {
   await expect(page.getByRole("row", { name: /pitzDaily/ })).toContainText("2 better, 1 worse");
   await page.getByLabel("Filter cases").fill("ahmed-25");
   await expect(page.getByRole("row", { name: /pitzDaily/ })).toHaveCount(0);
+  // What's typed is kept in the address, so a reload keeps it.
+  await expect(page).toHaveURL(/\/demo\/cases\?q=ahmed-25$/);
+  await page.reload();
+  await expect(page.getByLabel("Filter cases")).toHaveValue("ahmed-25");
+  await expect(page.getByText("3 of 5 cases")).toBeVisible();
+  await expect(page.getByRole("row", { name: /pitzDaily/ })).toHaveCount(0);
 });
 
 test("pairing: the key leaves the address bar, then the app connects", async ({ page }) => {
