@@ -82,8 +82,24 @@ test("the demo's tour walks through the app's screens in five steps from the key
   await expect(page.getByRole("dialog", { name: "Welcome to Mesh Doctor" })).toBeVisible();
 });
 
-test.describe("in a browser new to the demo", () => {
+test.describe("in a browser that hasn't seen the tour", () => {
   test.use({ storageState: { cookies: [], origins: [] } }); // the other tests start with the tour seen
+
+  test("your own app's front page offers the tour with a note after pairing; No thanks puts it away for good", async ({ page }) => {
+    await mockEngine(page);
+    await page.goto(pairingLink());
+    await page.getByRole("button", { name: "Connect", exact: true }).click();
+    await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+    const note = page.getByRole("note", { name: "Tour" });
+    await expect(note).toContainText("New to Mesh Doctor?");
+    await expect(page.getByRole("dialog")).toHaveCount(0); // a note, not the tour itself
+    await note.getByRole("button", { name: "No thanks" }).click();
+    await expect(note).toHaveCount(0);
+    await expect(page.locator("main")).toBeFocused();
+    await page.reload();
+    await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+    await expect(note).toHaveCount(0);
+  });
 
   test("the demo's front page opens the tour by itself, once; a link straight to a report opens the report alone", async ({ page }) => {
     await page.goto("/demo/repairs/ahmed35-medium-fix/report");

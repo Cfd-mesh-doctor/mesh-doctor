@@ -2,8 +2,8 @@
 // The app tour's steps, in plain words: where things are and what each screen tells you. No imports, so the browser
 // tests (e2e/) can load it too.
 
-/** Kept in this browser once a tour has been open (the demo's or your own app's), so the demo opens its tour by itself
- * only the first time. */
+/** Kept in this browser once a tour has been open (the demo's or your own app's) or turned down, so the demo opens its
+ * tour by itself, and your own app offers its tour, only the first time. */
 export const TOUR_SEEN = "md-tour-seen";
 
 export interface TourStep {

@@ -2,13 +2,14 @@
 // The app's short walkthrough: five steps in plain words on where things are and what each screen tells you, which
 // can be skipped at any step. Each step opens the screen it describes and rings the part it means, and the tour stands
 // aside so it shows. It opens with the focus on Next, so Enter steps through it; each new step is read out, as the
-// focus stays put while the words change; and closing it hands the focus back to whatever opened it. The steps are the
-// demo's or your own app's (tourSteps.ts).
+// focus stays put while the words change; and closing it hands the focus back to whatever opened it, or on to the
+// page's content when that's gone. The steps are the demo's or your own app's (tourSteps.ts).
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogActions, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useAppPath } from "@/engine/context";
+import { focusOnce } from "@/lib/focusOnce";
 import type { TourStep } from "./tourSteps";
 
 export function AppTour({ open, onClose, steps }: { open: boolean; onClose: () => void; steps: readonly TourStep[] }) {
@@ -74,7 +75,13 @@ export function AppTour({ open, onClose, steps }: { open: boolean; onClose: () =
         }}
         onCloseAutoFocus={(e) => {
           e.preventDefault();
-          opener.current?.focus();
+          // Back to what opened it; or, when that's gone (the note that offers the tour goes as it opens) or there was
+          // none (the demo opened it by itself), on to the page's content, as the skip link does.
+          if (opener.current?.isConnected) opener.current.focus();
+          else {
+            const main = document.querySelector("main");
+            if (main) focusOnce(main);
+          }
         }}
       >
         <div aria-live="polite" aria-atomic="true">
