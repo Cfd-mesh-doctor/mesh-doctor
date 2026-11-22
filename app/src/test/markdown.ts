@@ -3,7 +3,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { githubAnchor, type DocSection } from "@/lib/docSections";
+import { githubAnchor, type DocBlock, type DocItem, type DocSection } from "@/lib/docSections";
 import type { DocTable } from "@/lib/docTable";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -24,42 +24,81 @@ export function readRepo(path: string): string {
 }
 
 /**
- * A doc's "## " sections, each with its paragraphs (lines joined by spaces) and lists (one string per "- " item), in
- * order. Text before the first section (the "# " title) is left out; a blank line or a paragraph ends a list.
+ * A doc's "## " sections in order, each as blocks (markdownBlocks). Text before the first section is left out:
+ * markdownOpening reads it.
  */
 export function markdownSections(md: string): DocSection[] {
-  const sections: DocSection[] = [];
+  const [, ...parts] = md.split(/^## /m);
+  return parts.map((part) => {
+    const [title = "", ...body] = part.split(/\r?\n/);
+    return { id: githubAnchor(title), title, blocks: markdownBlocks(body) };
+  });
+}
+
+/** The blocks before a doc's first "## " section, without its "# " title. */
+export function markdownOpening(md: string): DocBlock[] {
+  const [opening = ""] = md.split(/^## /m);
+  return markdownBlocks(opening.split(/\r?\n/).filter((line) => !line.startsWith("# ")));
+}
+
+/**
+ * Lines of a doc as blocks: paragraphs (lines joined by spaces), lists (one entry per "- " item, with the item's
+ * indented lines joined to it and a fenced code block indented under it kept with it) and fenced code blocks, with
+ * the language the doc names. A paragraph ends a list, and so does a blank line unless the item's own indented lines
+ * follow it.
+ */
+function markdownBlocks(lines: string[]): DocBlock[] {
+  const blocks: DocBlock[] = [];
   let para: string[] = [];
-  let inList = false;
+  let list: DocItem[] | undefined;
   const flush = () => {
-    if (para.length) sections.at(-1)?.blocks.push({ text: para.join(" ") });
+    if (para.length) blocks.push({ text: para.join(" ") });
     para = [];
   };
-  for (const line of md.split(/\r?\n/)) {
-    const heading = /^## (.+)$/.exec(line)?.[1];
-    if (heading) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    const last = list?.at(-1);
+    const fence = /^( *)```(\w*)\s*$/.exec(line);
+    if (fence) {
+      const indent = fence[1]?.length ?? 0;
+      const lang = fence[2];
+      const body: string[] = [];
+      for (i++; i < lines.length && !/^ *```\s*$/.test(lines[i] ?? ""); i++) body.push((lines[i] ?? "").slice(indent));
+      const code = body.join("\n");
       flush();
-      inList = false;
-      sections.push({ id: githubAnchor(heading), title: heading, blocks: [] });
+      if (indent > 0 && list && typeof last === "string") list[list.length - 1] = { text: last, code };
+      else {
+        list = undefined;
+        blocks.push(lang ? { code, lang } : { code });
+      }
       continue;
     }
-    const blocks = sections.at(-1)?.blocks;
-    if (!blocks) continue;
     const item = /^- (.+)$/.exec(line)?.[1];
-    const last = blocks.at(-1);
     if (item) {
       flush();
-      if (inList && last && "list" in last) last.list.push(item);
-      else blocks.push({ list: [item] });
-      inList = true;
+      if (list) list.push(item);
+      else {
+        list = [item];
+        blocks.push({ list });
+      }
+      continue;
+    }
+    const more = /^ {2,}(\S.*)$/.exec(line)?.[1];
+    if (more && list && typeof last === "string") {
+      list[list.length - 1] = `${last} ${more.trim()}`;
+      continue;
+    }
+    if (line.trim()) {
+      list = undefined;
+      para.push(line.trim());
     } else {
-      if (line.trim()) para.push(line.trim());
-      else flush();
-      inList = false;
+      flush();
+      const next = lines.slice(i + 1).find((l) => l.trim());
+      if (!next || !/^ {2,}\S/.test(next)) list = undefined;
     }
   }
   flush();
-  return sections;
+  return blocks;
 }
 
 /** Every table in a Markdown text, in order (these tables hold no escaped "|"). */

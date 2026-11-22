@@ -46,6 +46,7 @@ export const routes: RouteObject[] = [
       { path: "/accuracy", lazy: async () => ({ Component: (await import("@/pages/accuracy/Accuracy")).Accuracy }) },
       { path: "/gallery", lazy: async () => ({ Component: (await import("@/pages/gallery/Gallery")).Gallery }) },
       { path: "/install", lazy: async () => ({ Component: (await import("@/pages/install/Install")).Install }) },
+      { path: "/your-own-case", lazy: async () => ({ Component: (await import("@/pages/own-case/OwnCase")).OwnCase }) },
       {
         path: "/troubleshooting",
         lazy: async () => ({ Component: (await import("@/pages/troubleshooting/Troubleshooting")).Troubleshooting }),
