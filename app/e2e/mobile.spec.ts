@@ -6,7 +6,7 @@ test("on a phone nothing scrolls sideways, and the menu works", async ({ page })
   // The device's own width (412 px), then a small phone: the Jobs filter once fit the first and not the second.
   for (const width of [page.viewportSize()?.width ?? 412, 360]) {
     await page.setViewportSize({ width, height: 800 });
-    for (const path of ["/", "/connect", "/report", "/demo", "/demo/jobs", "/demo/cases", "/demo/settings"]) {
+    for (const path of ["/", "/connect", "/report", "/estimate?cells=31.1", "/demo", "/demo/jobs", "/demo/cases", "/demo/settings"]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

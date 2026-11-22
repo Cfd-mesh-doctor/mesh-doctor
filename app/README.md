@@ -10,6 +10,7 @@ no server of its own: the host (Vercel) only serves the built files, and no case
 | `/demo` | the app on answers recorded from public example cases; needs no engine |
 | `/connect` | pairing this browser with an engine |
 | `/app` | the app on your own engine |
+| `/estimate` | the size estimator: memory, solve time and cloud cost for a cell count, from measured runs (a browser port of `skills/cfd-results/scripts/size_estimate.py`); needs no engine, and the fields live in the address so an estimate can be shared |
 | `/report` | the report viewer: opens a `meshdoctor report` file (`.mdreport.json`, `.json.gz` or exported `.html`) in the browser, with the residual chart and the repair map when the report has them; needs no engine, and the file is never uploaded |
 
 **Pairing:** `meshdoctor pair --open` opens `https://<site>/connect#key=…&engine=http://localhost:8765`. The key

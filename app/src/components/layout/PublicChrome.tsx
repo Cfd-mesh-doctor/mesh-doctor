@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The header and footer of the public pages (home, report viewer). The app screens have their own sidebar.
+// The header and footer of the public pages (home, report viewer, estimator). The app screens have their own sidebar.
 import { Link, NavLink } from "react-router";
 import { Logo } from "@/components/brand/Logo";
 import { ThemeMenu } from "@/components/layout/ThemeMenu";
@@ -22,6 +22,9 @@ export function PublicHeader() {
           <Link to="/#start" className={navLink}>Get started</Link>
           <NavLink to="/report" className={({ isActive }) => cn(navLink, isActive && "font-medium text-foreground")}>
             Report viewer
+          </NavLink>
+          <NavLink to="/estimate" className={({ isActive }) => cn(navLink, isActive && "font-medium text-foreground")}>
+            Estimator
           </NavLink>
           <a href={DOCS.readme} target="_blank" rel="noreferrer" className={navLink}>Docs</a>
         </nav>
@@ -60,6 +63,7 @@ export function PublicFooter() {
           <a href={DOCS.example} {...ext}>Worked example</a>
           <a href={DOCS.license} {...ext}>Licence</a>
           <Link to="/report" className={navLink}>Report viewer</Link>
+          <Link to="/estimate" className={navLink}>Size estimator</Link>
           <Link to="/demo" className={navLink}>Demo</Link>
         </nav>
       </div>
