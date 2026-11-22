@@ -159,7 +159,6 @@ function DetailsDialog({ job, onClose, onCancel }: { job: Job | null; onClose: (
 }
 
 export function Jobs() {
-  useTitle("Jobs");
   const jobs = useJobs();
   // The filter and the job whose details are open live in the address, so a reload or a link keeps them. No
   // filter, or a word the page doesn't know, shows every job; a job that isn't on record opens nothing.
@@ -189,6 +188,8 @@ export function Jobs() {
   const shown = items.filter((j) => matches(filter, j.state));
   // Look the job up again on every refresh, so an open dialog shows live progress.
   const details = items.find((j) => j.id === detailsId) ?? null;
+  // Open details have an address of their own, so the tab names the job too: a bookmark or history entry tells it apart.
+  useTitle(details ? `${details.name} · Jobs` : "Jobs");
   const cancelling = items.find((j) => j.id === cancelId) ?? null;
   const live = counts.active > 0;
 

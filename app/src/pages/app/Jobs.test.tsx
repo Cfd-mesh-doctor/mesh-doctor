@@ -33,10 +33,12 @@ describe("the Jobs screen", () => {
     const strict = "20261121-130141-repair-ahmed25-fine-strict-0266"; // the demo's cancelled job
     const { router } = open(`${path}?show=cancelled&job=${strict}`);
     expect(await screen.findByRole("dialog", { name: "ahmed25-fine-strict" })).toBeInTheDocument();
+    await waitFor(() => expect(document.title).toBe("ahmed25-fine-strict · Jobs · Mesh Doctor")); // the tab names the job
 
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(router.state.location.search).toBe("?show=cancelled"); // closing keeps the filter
+    await waitFor(() => expect(document.title).toBe("Jobs · Mesh Doctor"));
 
     await userEvent.click(screen.getByRole("button", { name: "ahmed25-fine-strict" }));
     expect(router.state.location.search).toBe(`?show=cancelled&job=${strict}`);
