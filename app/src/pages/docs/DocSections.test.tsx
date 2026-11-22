@@ -2,8 +2,10 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
+import { copyBlockLabel } from "@/components/shared/CopyBlock";
 import { githubAnchor } from "@/lib/docSections";
 import { DESIGN } from "@/pages/architecture/design";
+import { GUIDE as CLAUDE } from "@/pages/claude/guide";
 import { TOUR } from "@/pages/dashboard/tour";
 import { renderScreen } from "@/test/render";
 import { CONTENTS_FROM, DocSectionsView } from "./DocSections";
@@ -58,5 +60,18 @@ describe("a page that shows a doc", () => {
     await user.click(screen.getByRole("button", { name: `Copy a link to “${sub}”` }));
     expect(await navigator.clipboard.readText()).toBe(`${window.location.origin}/dashboard-tour#${githubAnchor(sub)}`);
     expect(document.getElementById(githubAnchor(sub))?.tagName).toBe("H3");
+  });
+
+  it("puts a button on each code block that copies it as the doc writes it", async () => {
+    const user = userEvent.setup(); // its clipboard stands in for the browser's
+    renderScreen(<DocSectionsView sections={DESIGN} />, { path: "/architecture" });
+    const blocks = DESIGN.flatMap((s) => s.blocks).flatMap((b) => ("code" in b ? [b.code] : []));
+    expect(blocks.length).toBeGreaterThan(1);
+    expect(screen.getAllByRole("button", { name: /^Copy (the \d+ lines starting )?“/ })).toHaveLength(blocks.length);
+
+    const install = CLAUDE.flatMap((s) => s.blocks).flatMap((b) => ("code" in b ? [b.code] : [])).find((c) => c.includes("/plugin install"));
+    renderScreen(<DocSectionsView sections={CLAUDE} />, { path: "/claude-code" });
+    await user.click(screen.getByRole("button", { name: copyBlockLabel(install ?? "") }));
+    expect(await navigator.clipboard.readText()).toBe(install);
   });
 });

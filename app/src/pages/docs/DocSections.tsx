@@ -3,6 +3,7 @@
 // Dashboard tour, Architecture): headings with GitHub's anchors, paragraphs, lists and tables with the doc's own
 // `code`, **bold** and links (DocText), code blocks, and pictures; an "On this page" list for a long doc, and the line
 // saying which doc the page follows.
+import { CopyBlock } from "@/components/shared/CopyBlock";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { PageContents } from "@/components/shared/PageContents";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
@@ -33,14 +34,11 @@ function DocTableBlock({ table }: { table: DocTable }) {
   );
 }
 
-/** A fenced code block: a one-line shell command gets the site's copy box, anything else is shown as the doc has it. */
+/** A fenced code block: a one-line shell command gets the site's copy box, anything else is shown as the doc has it,
+ *  with a button that copies it. */
 function DocCode({ code, lang, className }: { code: string; lang?: string; className?: string }) {
   if (lang === "bash" && !code.includes("\n")) return <CopyCommand command={code} className={className} />;
-  return (
-    <pre className={cn("overflow-x-auto rounded-lg border border-border bg-surface-2 px-3 py-2.5 font-mono text-[13px] leading-relaxed", className)}>
-      <code>{code}</code>
-    </pre>
-  );
+  return <CopyBlock code={code} className={className} />;
 }
 
 /** A picture as the gallery shows one: its own size or the column's width, whichever is smaller, opening full size

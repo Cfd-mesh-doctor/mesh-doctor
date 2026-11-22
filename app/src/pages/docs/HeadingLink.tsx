@@ -4,30 +4,17 @@
 // own name. On a screen with a mouse it shows while the heading is pointed at or the button has the focus (index.css,
 // .heading-link); on a touch screen, which can't point, it always shows.
 import { Check, Link2 } from "lucide-react";
-import { useEffect, useState } from "react";
 import { useLocation } from "react-router";
 import { plainText } from "@/lib/docSections";
+import { useCopy } from "@/lib/useCopy";
 
 export function HeadingLink({ id, title }: { id: string; title: string }) {
   const { pathname, search } = useLocation();
-  const [copied, setCopied] = useState(false);
-  useEffect(() => {
-    if (!copied) return;
-    const t = setTimeout(() => setCopied(false), 1600);
-    return () => clearTimeout(t);
-  }, [copied]);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(new URL(`${pathname}${search}#${id}`, window.location.origin).href);
-      setCopied(true);
-    } catch {
-      /* no clipboard access (insecure context or denied): the address bar still has the section once followed */
-    }
-  };
+  const { copied, copy } = useCopy();
   return (
     <button
       type="button"
-      onClick={copy}
+      onClick={() => void copy(new URL(`${pathname}${search}#${id}`, window.location.origin).href)}
       aria-label={copied ? "Copied" : `Copy a link to “${plainText(title)}”`}
       className="heading-link grid size-6 shrink-0 place-items-center self-center rounded-md text-muted-foreground transition-opacity hover:bg-surface-2 hover:text-foreground print:hidden"
     >
