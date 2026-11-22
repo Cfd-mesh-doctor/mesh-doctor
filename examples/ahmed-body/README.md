@@ -82,7 +82,7 @@ The forces keep a small regular wiggle (drag ±0.5 N, a period of about 25 itera
 settle the unsteady wake behind the base. That is normal for bluff bodies, and why you average a window rather than
 read the last value (the last single value is Cd 0.269).
 
-![Total drag and lift](../../docs/images/ahmed_forces_total.png)
+![Total drag and downforce (negative: the Ahmed body makes lift)](../../docs/images/ahmed_forces_total.png)
 
 ## 5. Pictures
 

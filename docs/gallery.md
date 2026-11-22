@@ -25,7 +25,7 @@ Planes from a JSON list (`examples/ahmed-body/cuts.json`), coloured by speed, Cp
 Forces with the averaging window shaded, residuals on a log scale, and a summary table with the window means and the
 drift between windows.
 
-![Total drag and lift](images/ahmed_forces_total.png)
+![Total drag and downforce (negative: the Ahmed body makes lift)](images/ahmed_forces_total.png)
 ![Residuals](images/ahmed_residuals.png)
 
 ## Dashboard: `meshdoctor serve`

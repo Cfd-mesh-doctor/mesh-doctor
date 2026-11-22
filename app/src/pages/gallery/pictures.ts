@@ -61,7 +61,7 @@ export const GALLERY: GallerySection[] = [
     text: "Forces with the averaging window shaded, residuals on a log scale, and a summary table with the window " +
       "means and the drift between windows.",
     pictures: [
-      still("ahmed_forces_total.png", forces, "Total drag and lift"),
+      still("ahmed_forces_total.png", forces, "Total drag and downforce (negative: the Ahmed body makes lift)"),
       still("ahmed_residuals.png", residuals, "Residuals"),
     ],
   },
