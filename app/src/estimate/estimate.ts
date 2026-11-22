@@ -38,6 +38,16 @@ export function parseField(field: Field, text: string): number | null {
   return Number.isFinite(v) && v >= min && v <= max && (!integer || Number.isInteger(v)) ? v : null;
 }
 
+/**
+ * The mesh-size field for a mesh of `n` cells: millions, exact (12,225 cells is "0.012225", so the estimate says
+ * "For 12,225 cells"), or null for a size the field would refuse (under 1,000 cells) or one that isn't known.
+ */
+export function cellsField(n: number | null | undefined): string | null {
+  if (n == null || !Number.isFinite(n)) return null;
+  const text = String(n / 1e6);
+  return parseField("cells", text) == null ? null : text;
+}
+
 /** Memory, GB per million cells (measured). */
 export const GB_PER_MILLION = { snappy: 2.1, solver: 1.75, decompose: 1.9, checkMesh: 0.67, meshDoctor: 1.5 } as const;
 /** Mesh Doctor's repair needs about 1.5 KB per cell plus half a gigabyte. */

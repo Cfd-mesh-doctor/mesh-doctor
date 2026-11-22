@@ -2,7 +2,7 @@
 // The reference numbers come from the engine's own script (skills/cfd-results/scripts/size_estimate.py) run with
 // the same inputs; the page words some of them more precisely (cents, tenths of a core hour).
 import { describe, expect, it } from "vitest";
-import { DEFAULTS, coreHours, duration, estimate, gigabytes, money, parseField } from "./estimate";
+import { DEFAULTS, cellsField, coreHours, duration, estimate, gigabytes, money, parseField } from "./estimate";
 
 const gb = (e: ReturnType<typeof estimate>) => e.memory.map((s) => gigabytes(s.gb));
 
@@ -59,5 +59,19 @@ describe("size estimate", () => {
     expect(parseField("iterations", "1e3")).toBe(1000);
     expect(parseField("price", "0")).toBe(0);
     expect(parseField("ram", "100000")).toBeNull();
+  });
+
+  it("gives a mesh's size in millions, exactly, and none the field would refuse", () => {
+    expect(cellsField(12_225)).toBe("0.012225");
+    expect(cellsField(1_565_115)).toBe("1.565115");
+    expect(cellsField(31_100_000)).toBe("31.1");
+    expect(cellsField(1000)).toBe("0.001"); // the smallest the field takes
+    expect(cellsField(999)).toBeNull();
+    expect(cellsField(null)).toBeNull();
+    expect(cellsField(undefined)).toBeNull();
+    // read back by the form ("For 12,225 cells" multiplies by a million), each is the mesh's own count
+    for (const n of [12_225, 478_901, 835_565, 1_565_115, 987_654_321]) {
+      expect(Math.round((parseField("cells", cellsField(n) ?? "") ?? 0) * 1e6)).toBe(n);
+    }
   });
 });

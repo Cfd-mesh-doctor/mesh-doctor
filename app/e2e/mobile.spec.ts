@@ -58,6 +58,17 @@ test("on a small phone, jobs show progress under the name and every filter can b
   await expect(page.getByRole("row", { name: /pitzdaily-fix/ })).toHaveCount(0);
 });
 
+test("on a small phone, a case's size and its estimate show under the name", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto("/demo/cases");
+  const row = page.getByRole("row", { name: /pitzDaily/ });
+  // No Cells column on a phone: the size shows once, under the name, with the link.
+  await expect(row.getByText("12 k cells").filter({ visible: true })).toHaveCount(1);
+  await row.getByRole("link", { name: "Size estimate for pitzDaily" }).click();
+  await expect(page).toHaveURL(/\/demo\/estimate\?cells=0\.012225$/);
+  await expect(page.getByLabel("Mesh size")).toHaveValue("0.012225");
+});
+
 test("on a phone the public pages have a menu", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto("/report");

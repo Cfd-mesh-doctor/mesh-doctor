@@ -4,9 +4,12 @@
 import type { components, operations } from "./schema";
 
 type Json<R> = R extends { content: { "application/json": infer T } } ? T : never;
+/** Fields the app reads that older 1.x engines leave out: the app speaks to any 1.x, so it must not count on them. */
+type Since<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 
 export type EngineInfo = Json<operations["info"]["responses"][200]>;
-export type CaseList = Json<operations["cases"]["responses"][200]>;
+/** `cells` (each case's size) is new in API 1.2. */
+export type CaseList = Since<Json<operations["cases"]["responses"][200]>, "cells">;
 export type JobList = Json<operations["list_jobs"]["responses"][200]>;
 export type RepairList = Json<operations["repairs"]["responses"][200]>;
 export type MachineInfo = Json<operations["machine"]["responses"][200]>;

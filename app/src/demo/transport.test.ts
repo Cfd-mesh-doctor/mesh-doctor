@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { api } from "@/engine/client";
 import type { Job } from "@/engine/types";
 import recorded from "./fixtures.json";
-import { demoTransport, shiftTimes } from "./transport";
+import { demoTransport, shiftTimes, withCaseSizes } from "./transport";
 
 const job = (id: string, state: Job["state"], at: string): Job => ({
   schemaVersion: "1.0", id, kind: "repair", params: {}, name: id, state, runner: "local", created: at, started: at, log: "x.log",
@@ -57,6 +57,22 @@ describe("demo transport", () => {
     expect(Array.isArray(cases.items)).toBe(true);
     expect(Array.isArray(jobs.items)).toBe(true);
     expect(Array.isArray(repairs.items)).toBe(true);
+  });
+
+  it("says each case's size, as the recording's own repairs counted it", async () => {
+    // The recording's engine predates API 1.2; these are the cell counts its repairs of each case give.
+    expect((await api.cases(demoTransport(undefined, 0))).cells).toEqual({
+      "ahmed-25-coarse": 478_901, "ahmed-25-fine": 1_565_115, "ahmed-25-medium": 835_565, "ahmed-35-medium": 837_235,
+      pitzDaily: 12_225,
+    });
+    const repairs = { items: [{ name: "wing-fix", source: "~/cases/wing", nCells: 2_000_000 }] };
+    expect(withCaseSizes({ "/cases": { items: ["wing", "bracket"] }, "/repairs": repairs })["/cases"])
+      .toEqual({ items: ["wing", "bracket"], cells: { wing: 2_000_000, bracket: null } });
+    // an engine that already says is left alone, and so are answers without cases
+    const told = { "/cases": { items: ["wing"], cells: { wing: 5 } }, "/repairs": repairs };
+    expect(withCaseSizes(told)).toBe(told);
+    const none = { "/repairs": repairs };
+    expect(withCaseSizes(none)).toBe(none);
   });
 
   it("ships no paths from the recording machine", () => {

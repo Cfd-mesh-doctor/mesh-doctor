@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The source cases the engine may read, with what has been done to each so far and the report of each one's latest
-// finished repair.
+// The source cases the engine may read, with what has been done to each so far, the report of each one's latest
+// finished repair, and the size estimate for its mesh.
 import { FolderOpen, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
@@ -15,6 +15,7 @@ import { useAppPath } from "@/engine/context";
 import { useCases, useRepairs } from "@/engine/hooks";
 import type { RepairSummary } from "@/engine/types";
 import { caseName } from "@/engine/verdict";
+import { cellsField } from "@/estimate/estimate";
 import { formatCells, formatDateTime, formatRelative } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
@@ -23,15 +24,30 @@ interface Row {
   name: string;
   runs: RepairSummary[];
   latest?: RepairSummary;
+  /** the case's cell count: the engine's (API 1.2), else what its latest repair counted, else unknown */
+  cells: number | null;
 }
+
+const LINK = "font-medium text-primary hover:underline";
 
 /** The report of a case's latest finished run, named like the Overview's link. */
 function ReportLink({ run, className }: { run: string; className?: string }) {
   const to = useAppPath();
   return (
-    <Link to={to(`/repairs/${encodeURIComponent(run)}/report`)} aria-label={`Report of ${run}`}
-      className={cn("font-medium text-primary hover:underline", className)}>
+    <Link to={to(`/repairs/${encodeURIComponent(run)}/report`)} aria-label={`Report of ${run}`} className={cn(LINK, className)}>
       Report
+    </Link>
+  );
+}
+
+/** The size estimator for a case's mesh; none when its size is unknown or too small for the estimator. */
+function EstimateLink({ name, cells, className }: { name: string; cells: number | null; className?: string }) {
+  const to = useAppPath();
+  const field = cellsField(cells);
+  if (!field) return null;
+  return (
+    <Link to={to(`/estimate?cells=${field}`)} aria-label={`Size estimate for ${name}`} className={cn(LINK, className)}>
+      Estimate
     </Link>
   );
 }
@@ -53,7 +69,9 @@ export function Cases() {
     }
     return (cases.data?.items ?? []).map((name) => {
       const runs = (bySource.get(name) ?? []).sort((a, b) => (b.finished ?? "").localeCompare(a.finished ?? ""));
-      return { name, runs, latest: runs[0] };
+      // An engine older than API 1.2 doesn't say a case's size: its repairs counted the same mesh.
+      const cells = cases.data?.cells?.[name] ?? runs.find((r) => r.nCells != null)?.nCells ?? null;
+      return { name, runs, latest: runs[0], cells };
     });
   }, [cases.data, repairs.data]);
 
@@ -125,6 +143,13 @@ export function Cases() {
                               : "Not repaired yet"}
                           {r.latest?.verdict && <> · <ReportLink run={r.latest.name} /></>}
                         </div>
+                        {/* The Cells column shows from md: below that, the size and its estimate go here. */}
+                        {r.cells != null && (
+                          <div className="text-xs text-muted-foreground md:hidden">
+                            {formatCells(r.cells)} cells
+                            {cellsField(r.cells) && <> · <EstimateLink name={r.name} cells={r.cells} /></>}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </TD>
@@ -139,7 +164,12 @@ export function Cases() {
                       {r.latest?.verdict && <ReportLink run={r.latest.name} className="hidden text-[13px] sm:inline" />}
                     </div>
                   </TD>
-                  <TD className="hidden tabular-nums md:table-cell">{formatCells(r.latest?.nCells)}</TD>
+                  <TD className="hidden md:table-cell">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span className="tabular-nums">{formatCells(r.cells)}</span>
+                      <EstimateLink name={r.name} cells={r.cells} className="text-[13px]" />
+                    </div>
+                  </TD>
                   <TD className="hidden text-right text-[13px] whitespace-nowrap text-muted-foreground sm:table-cell" title={formatDateTime(r.latest?.finished)}>
                     {r.latest?.finished ? formatRelative(r.latest.finished) : "–"}
                   </TD>

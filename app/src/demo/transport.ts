@@ -3,7 +3,8 @@
 // "_about"), served without any engine. It can cancel its own jobs; it cannot start anything.
 import type { Method, Transport } from "@/engine/client";
 import { EngineError } from "@/engine/errors";
-import type { Job, JobList, MachineInfo } from "@/engine/types";
+import type { CaseList, Job, JobList, MachineInfo, RepairList } from "@/engine/types";
+import { caseName } from "@/engine/verdict";
 import { toMillis } from "@/lib/format";
 import { RECORDED } from "@/report/samples";
 import recorded from "./fixtures.json";
@@ -13,6 +14,23 @@ type Answers = Record<string, unknown>;
 /** The demo engine's computer, written by hand (the recording's engine predates GET /machine): a laptop that
  *  gives WSL 25 GB and 8 cores. */
 export const DEMO_MACHINE: MachineInfo = { cpus: 8, cores: 8, memoryMb: 25_600, ramLimitMb: null };
+
+/**
+ * Each case's size, which the recording's engine predates (API 1.2 added `cells` to GET /cases): the cell count
+ * the recording's own repairs give for their case, or null for a case it never repaired. Answers that already
+ * say, or have no cases, stay as they are.
+ */
+export function withCaseSizes(answers: Answers): Answers {
+  const cases = answers["/cases"] as CaseList | undefined;
+  if (!cases || cases.cells) return answers;
+  const repairs = (answers["/repairs"] as RepairList | undefined)?.items ?? [];
+  const cells = Object.fromEntries(cases.items.map((name) =>
+    [name, repairs.find((r) => caseName(r.source) === name && r.nCells != null)?.nCells ?? null]));
+  return { ...answers, "/cases": { ...cases, cells } };
+}
+
+/** The demo's answers: the recording, with the cases' sizes added. */
+export const DEMO_ANSWERS: Answers = withCaseSizes((recorded as { answers: Answers }).answers);
 
 const DELAY_MS = 220;
 
@@ -61,7 +79,7 @@ export function moveTimes(doc: unknown, by: number): void {
   eachTime(doc, (t) => t + by);
 }
 
-export function demoTransport(answers: Answers = (recorded as { answers: Answers }).answers, delayMs = DELAY_MS): Transport {
+export function demoTransport(answers: Answers = DEMO_ANSWERS, delayMs = DELAY_MS): Transport {
   // A private copy, so cancelling a demo job lasts until the page is reloaded and never touches the import.
   const data: Answers = { "/machine": DEMO_MACHINE, ...structuredClone(answers) };
   const by = shiftTimes(data);

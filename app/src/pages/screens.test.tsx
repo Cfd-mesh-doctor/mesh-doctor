@@ -150,4 +150,40 @@ describe("Cases", () => {
     const bracket = screen.getByText("bracket").closest("tr") as HTMLElement;
     expect(within(bracket).queryByRole("link")).not.toBeInTheDocument();
   });
+
+  const row = async (name: string) => (await screen.findByText(name)).closest("tr") as HTMLElement;
+  const estimates = (tr: HTMLElement) => within(tr).queryAllByRole("link", { name: /^Size estimate for / })
+    .map((l) => l.getAttribute("href"));
+
+  it("links each case to the size estimate for its mesh, from the size the engine gives", async () => {
+    const sized = {
+      "/cases": { items: ["wing", "car", "cavity", "odd"], cells: { wing: 12_225, car: 31_100_000, cavity: 400, odd: null } },
+      "/repairs": { items: [] },
+    };
+    renderScreen(<Cases />, { transport: demoTransport(sized, 0) });
+    // Twice in jsdom (no CSS): the Cells column, and under the name below md.
+    expect(estimates(await row("wing"))).toEqual(Array(2).fill("/demo/estimate?cells=0.012225"));
+    expect(estimates(await row("car"))).toEqual(Array(2).fill("/demo/estimate?cells=31.1"));
+    // too small for the estimator (under 1,000 cells): the size, but no link
+    const cavity = await row("cavity");
+    expect(within(cavity).getAllByText(/^400/)).toHaveLength(2);
+    expect(estimates(cavity)).toEqual([]);
+    // a mesh whose header doesn't say, never repaired: no size and no link
+    const odd = await row("odd");
+    expect(estimates(odd)).toEqual([]);
+    expect(within(odd).queryByText(/ cells$/)).not.toBeInTheDocument();
+  });
+
+  it("takes the size its repairs counted from an engine older than API 1.2", async () => {
+    const older = {
+      "/cases": { items: ["wing"] },
+      "/repairs": { items: [
+        { name: "wing-running", source: "~/cases/wing", finished: null, verdict: null, nCells: null },
+        { name: "wing-fix", source: "~/cases/wing", finished: "2026-11-21T10:00:00Z", verdict, nCells: 478_901 },
+      ] },
+    };
+    renderScreen(<Cases />, { transport: demoTransport(older, 0) });
+    expect(estimates(await row("wing"))).toEqual(Array(2).fill("/demo/estimate?cells=0.478901"));
+    expect(screen.getAllByText(/^479 k/)).toHaveLength(2);
+  });
 });

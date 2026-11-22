@@ -26,3 +26,16 @@ test("the app's size estimator fills in the engine's computer, and nothing is se
   expect([...origins]).toEqual(["http://localhost:4173"]);
   expect(sent).toEqual([]);
 });
+
+test("a case on the demo's Cases page opens the estimate for its mesh", async ({ page }) => {
+  await page.goto("/demo/cases");
+  const row = page.getByRole("row", { name: /ahmed-25-fine/ });
+  await expect(row.getByText("1.57 M", { exact: true })).toBeVisible();
+  await row.getByRole("link", { name: "Size estimate for ahmed-25-fine" }).click();
+  await expect(page).toHaveURL(/\/demo\/estimate\?cells=1\.565115$/);
+  await expect(page.getByLabel("Mesh size")).toHaveValue("1.565115");
+  await expect(page.getByText(/^For 1,565,115 cells\./)).toBeVisible();
+  // the rest is still the engine's computer
+  await expect(page.getByLabel("Memory for OpenFOAM")).toHaveValue("25");
+  await expect(page.getByLabel("Solver ranks on this computer")).toHaveValue("8");
+});
