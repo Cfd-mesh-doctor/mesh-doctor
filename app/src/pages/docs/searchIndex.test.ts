@@ -4,7 +4,7 @@ import { DESIGN } from "@/pages/architecture/design";
 import { GALLERY } from "@/pages/gallery/pictures";
 import { GROUPS } from "@/pages/troubleshooting/problems";
 import { ON_SITE } from "./entries";
-import { SEARCHED, SEARCH_INDEX, hitTarget, searchDocs } from "./searchIndex";
+import { SEARCH_INDEX, SUMMED, hitTarget, searchDocs } from "./searchIndex";
 
 const at = (page: string) => SEARCH_INDEX.filter((e) => e.page === page);
 
@@ -28,7 +28,7 @@ describe("searching the docs", () => {
     // Every page the Docs page lists is in it; the two whose words aren't searched (the tools) once, by what the
     // Docs page says about them.
     for (const d of ON_SITE) expect(SEARCH_INDEX.some((e) => e.page === d.page), d.title).toBe(true);
-    const summed = ON_SITE.filter((d) => !SEARCHED.includes(d.title));
+    const summed = ON_SITE.filter((d) => SUMMED.includes(d.title));
     expect(summed.map((d) => d.page)).toEqual(["/report", "/estimate"]);
     for (const d of summed) {
       expect(at(d.page ?? "")).toEqual([{ page: d.page, pageTitle: d.title, id: "", title: d.title, text: d.about }]);
@@ -121,9 +121,8 @@ describe("searching the docs", () => {
     expect(searchDocs("the", 3)).toHaveLength(3);
   });
 
-  it("names the pages it looks in in the Docs page's order", () => {
-    expect(SEARCHED).toEqual(ON_SITE.filter((d) => d.page !== "/report" && d.page !== "/estimate").map((d) => d.title));
-    expect(SEARCHED).toHaveLength(11);
+  it("names the pages it finds only by what the Docs page says about them, in its order", () => {
+    expect(SUMMED).toEqual(["Report viewer", "Size estimator"]);
   });
 
   it("opens a section at its heading, and a Troubleshooting group at its problems that hold all the words", () => {

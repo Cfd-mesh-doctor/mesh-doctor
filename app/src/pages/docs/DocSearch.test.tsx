@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 import { renderScreen } from "@/test/render";
 import { Docs } from "./Docs";
 import { SHOWN } from "./DocSearch";
-import { SEARCHED } from "./searchIndex";
 
 const box = () => screen.getByRole("searchbox", { name: "Search all the docs" });
 const results = () => screen.findByRole("region", { name: "Search results" });
@@ -48,9 +47,10 @@ describe("the Docs page's search", () => {
     await user.type(box(), "quantumflux");
     expect(await screen.findByText("Nothing in the docs holds “quantumflux”.")).toBeInTheDocument();
     expect(screen.getByText("Nothing matches.")).toBeInTheDocument();
-    expect(screen.getByText(new RegExp(
-      `looks in the text of ${SEARCHED[0]}, .+ and ${SEARCHED.at(-1)}, and in what this page says about the others\\.$`,
-    ))).toBeInTheDocument();
+    expect(screen.getByText(
+      "Try one distinctive word, such as a file or utility name. The search reads every page listed below except " +
+      "Report viewer and Size estimator, which it finds by what this page says about them.",
+    )).toBeInTheDocument();
 
     await user.clear(box());
     expect(screen.queryByText(/^Nothing/)).toBeNull();

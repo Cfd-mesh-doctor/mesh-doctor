@@ -102,8 +102,10 @@ export function DocSearch() {
         <Card className="mt-4 max-w-3xl p-6 text-sm">
           <p className="font-medium">Nothing in the docs holds “{query.trim()}”.</p>
           <p className="mt-1 text-muted-foreground">
-            Try one distinctive word, such as a file or utility name. The search looks in the text of{" "}
-            {listed(ready.SEARCHED)}, and in what this page says about the others.
+            Try one distinctive word, such as a file or utility name. The search reads every page listed below
+            {ready.SUMMED.length
+              ? ` except ${listed(ready.SUMMED)}, which it finds by what this page says about ${ready.SUMMED.length > 1 ? "them" : "it"}.`
+              : "."}
           </p>
         </Card>
       )}

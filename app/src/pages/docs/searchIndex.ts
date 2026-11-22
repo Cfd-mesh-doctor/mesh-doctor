@@ -84,15 +84,18 @@ const SECTIONS: SearchEntry[] = [
   ...sections("/architecture", DESIGN),
 ].sort((a, b) => listedAt(a.page) - listedAt(b.page));
 
-/** The names of the pages whose text is searched, in the Docs page's order. */
-export const SEARCHED = [...new Set(SECTIONS.map((e) => e.pageTitle))];
+/** The pages the Docs page lists whose words aren't searched (the two tools): each is found by what the Docs page
+ *  says about it instead. */
+const summed = ON_SITE.filter((d) => d.page && !SECTIONS.some((e) => e.page === d.page));
 
-/** The sections, then each other page the Docs page lists (the two tools) by what the Docs page says about it, opening
- *  at its top (no anchor). */
+/** Their names, in the Docs page's order. */
+export const SUMMED = summed.map((d) => d.title);
+
+/** The sections, then each page whose words aren't searched, by what the Docs page says about it, opening at its top
+ *  (no anchor). */
 export const SEARCH_INDEX: SearchEntry[] = [
   ...SECTIONS,
-  ...ON_SITE.filter((d) => d.page && !SECTIONS.some((e) => e.page === d.page))
-    .map((d) => ({ page: d.page ?? "/", pageTitle: d.title, id: "", title: d.title, text: d.about })),
+  ...summed.map((d) => ({ page: d.page ?? "/", pageTitle: d.title, id: "", title: d.title, text: d.about })),
 ];
 
 /** The words of a query, as they are looked for. */
