@@ -30,6 +30,13 @@ test("a job's details stay open through a reload, and closing them keeps the fil
   await expect(page).toHaveURL(/\/demo\/jobs\?show=cancelled$/);
 });
 
+test("the Overview's recent jobs open their details on the Jobs screen", async ({ page }) => {
+  await page.goto("/demo");
+  await page.getByRole("link", { name: "ahmed25-fine-strict" }).click();
+  await expect(page).toHaveURL(/\/demo\/jobs\?job=[\w-]*ahmed25-fine-strict[\w-]*$/);
+  await expect(page.getByRole("dialog", { name: "ahmed25-fine-strict" })).toBeVisible();
+});
+
 test("the Overview's running-jobs tile links to the running jobs", async ({ page }) => {
   await page.goto("/demo");
   await page.getByRole("link", { name: "Show the running job" }).click();

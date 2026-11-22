@@ -29,3 +29,11 @@ describe("the Overview's running-jobs tile", () => {
     expect(screen.queryByRole("link", { name: /^Show the running/ })).toBeNull();
   });
 });
+
+describe("the Overview's recent jobs", () => {
+  it("link each job's details on the Jobs screen", async () => {
+    open();
+    expect(await screen.findByRole("link", { name: "ahmed25-fine-strict" }))
+      .toHaveAttribute("href", "/demo/jobs?job=20261121-130141-repair-ahmed25-fine-strict-0266");
+  });
+});

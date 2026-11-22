@@ -115,7 +115,10 @@ export function Overview() {
                 {jobItems.slice(0, 6).map((j) => (
                   <TR key={j.id}>
                     <TD>
-                      <div className="font-medium">{j.name}</div>
+                      {/* Each job opens its details on the Jobs screen, which keeps them in its address. */}
+                      <Link to={to(`/jobs?job=${encodeURIComponent(j.id)}`)} className="font-medium underline-offset-4 hover:underline">
+                        {j.name}
+                      </Link>
                       <div className="text-xs text-muted-foreground">{JOB_KIND_LABEL[j.kind] ?? j.kind}</div>
                     </TD>
                     <TD className="sm:w-48">
