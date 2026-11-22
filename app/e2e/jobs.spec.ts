@@ -41,6 +41,12 @@ test("a job's details show its whole log and result paths, wrapping rather than 
   }
 });
 
+test("the sidebar says how many jobs run, not a bare number", async ({ page }) => {
+  await page.goto("/demo");
+  const main = page.getByRole("navigation", { name: "Main" });
+  await expect(main.getByRole("link", { name: "Jobs (1 running)", exact: true })).toBeVisible();
+});
+
 test("the Overview's recent jobs open their details on the Jobs screen", async ({ page }) => {
   await page.goto("/demo");
   await page.getByRole("link", { name: "ahmed25-fine-strict" }).click();
