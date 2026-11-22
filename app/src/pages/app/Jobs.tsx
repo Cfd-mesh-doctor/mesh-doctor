@@ -314,7 +314,8 @@ export function Jobs() {
                 <TH>State</TH>
                 <TH className="hidden w-[32%] sm:table-cell">Progress</TH>
                 <TH className="hidden lg:table-cell">Started</TH>
-                <TH className="hidden sm:table-cell">Took</TH>
+                {/* Not "Took": a running job's time is how long it has run so far. */}
+                <TH className="hidden sm:table-cell">Duration</TH>
                 <TH className="text-right"><span className="sr-only">Actions</span></TH>
               </TR>
             </THead>
@@ -346,12 +347,7 @@ export function Jobs() {
                     {/* A queued job hasn't started: its creation time isn't its start. */}
                     {j.started ? formatRelative(j.started) : "–"}
                   </TD>
-                  <TD className="hidden text-[13px] tabular-nums sm:table-cell">
-                    {/* A running job hasn't finished: its time is so far, as its details' "Running for" says.
-                        "so far" may take a line of its own, so the column needs no more room than a time. */}
-                    <span className="whitespace-nowrap">{duration(j)}</span>
-                    {j.state === "running" && <> <span className="whitespace-nowrap">so far</span></>}
-                  </TD>
+                  <TD className="hidden text-[13px] whitespace-nowrap tabular-nums sm:table-cell">{duration(j)}</TD>
                   <TD className="text-right" onClick={(e) => e.stopPropagation()}>
                     {isActive(j.state) ? (
                       <Button variant="danger-ghost" size="sm" onClick={() => setCancelId(j.id)}>Cancel</Button>

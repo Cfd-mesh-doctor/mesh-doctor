@@ -138,12 +138,11 @@ describe("the Jobs screen", () => {
     expect(within(running).queryByRole("button", { name: "Cancel" })).toBeNull(); // the button that asked has gone
   });
 
-  it("says a running job's time is so far, as it hasn't finished", async () => {
+  it("heads the jobs' times Duration, not Took, as a running job's time is so far", async () => {
     open(path);
     await screen.findAllByRole("button", { name: "ahmed25-medium-fix" });
-    const running = rows().find((r) => r.textContent?.includes("Running"))!;
-    expect(running.textContent).toMatch(/\d s so far/);
-    for (const row of rows().filter((r) => r !== running)) expect(row.textContent).not.toMatch(/so far/);
+    expect(screen.getByRole("columnheader", { name: "Duration" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Took" })).toBeNull();
   });
 
   it("shows every job when the address names a filter it doesn't know", async () => {
