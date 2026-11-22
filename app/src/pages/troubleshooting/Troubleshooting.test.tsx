@@ -30,6 +30,16 @@ describe("Troubleshooting", () => {
     expect(screen.getByText("#includeEtc \"caseDicts/setConstraintTypes\"")).not.toHaveClass("whitespace-nowrap");
   });
 
+  it("puts the cursor in its search box on “/”, as the Docs page does", async () => {
+    const user = userEvent.setup();
+    renderScreen(<Troubleshooting />, { path: "/troubleshooting" });
+    const box = screen.getByRole("searchbox", { name: "Search for the message you see" });
+    expect(box).toHaveAttribute("aria-keyshortcuts", "/");
+    await user.keyboard("/");
+    expect(box).toHaveFocus();
+    expect(box).toHaveValue("");
+  });
+
   it("narrows to the problems that match what's typed, and keeps it in the address", async () => {
     const { router } = renderScreen(<Troubleshooting />, { path: "/troubleshooting" });
     await userEvent.type(screen.getByRole("searchbox", { name: "Search for the message you see" }), "patchField");

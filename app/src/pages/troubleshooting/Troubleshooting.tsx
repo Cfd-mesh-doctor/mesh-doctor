@@ -8,7 +8,7 @@ import { PageContents } from "@/components/shared/PageContents";
 import { PageHeader } from "@/components/shared/page";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/misc";
+import { SearchInput } from "@/components/shared/SearchInput";
 import { useTitle } from "@/lib/useTitle";
 import { aboutPage } from "@/pages/docs/entries";
 import { DocSource } from "@/pages/docs/DocSource";
@@ -39,10 +39,9 @@ export function Troubleshooting() {
         />
         <div role="search" className="max-w-xl">
           <label htmlFor="problem-search" className="text-sm font-medium">Search for the message you see</label>
-          <Input
+          <SearchInput
             id="problem-search"
-            type="search"
-            className="mt-1.5 [font-variant-ligatures:none]"
+            className="mt-1.5"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="For example: Cannot find patchField entry"

@@ -3,10 +3,10 @@
 // the sections that hold it, each a link to its heading. What's typed stays in the address (?q=), as on
 // Troubleshooting, so coming back from a section finds the same list. The texts (searchIndex.ts) load only when the
 // box is used, so they don't weigh on the page.
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/misc";
+import { SearchInput } from "@/components/shared/SearchInput";
 import { DocText } from "./DocText";
 
 type SearchIndex = typeof import("./searchIndex");
@@ -54,20 +54,6 @@ export function DocSearch() {
     return () => { live = false; };
   }, [asked, index]);
 
-  // "/" puts the cursor in the box, as on most docs sites, unless a field elsewhere has it.
-  const box = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
-      const at = e.target;
-      if (at instanceof HTMLElement && (at.isContentEditable || at.closest("input, textarea, select"))) return;
-      e.preventDefault();
-      box.current?.focus();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, []);
-
   const ready = asked && index ? index : null;
   const hits = ready ? ready.searchDocs(query, Number.POSITIVE_INFINITY) : [];
   const words = ready ? ready.queryWords(query) : [];
@@ -79,30 +65,16 @@ export function DocSearch() {
     <>
       <div role="search" className="max-w-xl">
         <label htmlFor="doc-search" className="text-sm font-medium">Search all the docs</label>
-        <div className="relative mt-1.5">
-          <Input
-            ref={box}
-            id="doc-search"
-            type="search"
-            className="peer pr-9 [font-variant-ligatures:none]"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onFocus={() => void load().catch(() => undefined)}
-            placeholder="A word, or a message from a log"
-            autoComplete="off"
-            spellCheck={false}
-            aria-keyshortcuts="/"
-          />
-          {!query && (
-            // The key that puts the cursor here; not on a phone, which has no keyboard to press it on.
-            <kbd
-              aria-hidden
-              className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded border border-border bg-surface-2 px-1.5 font-mono text-xs leading-5 text-muted-foreground peer-focus:hidden sm:block"
-            >
-              /
-            </kbd>
-          )}
-        </div>
+        <SearchInput
+          id="doc-search"
+          className="mt-1.5"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => void load().catch(() => undefined)}
+          placeholder="A word, or a message from a log"
+          autoComplete="off"
+          spellCheck={false}
+        />
         <p aria-live="polite" className="mt-2 text-[13px] text-muted-foreground">{status}</p>
       </div>
       {ready && hits.length > 0 && (
