@@ -154,9 +154,14 @@ export function Landing() {
               </div>
             ))}
           </div>
-          <Link to="/how-it-works" className="mt-6 inline-flex items-center gap-1.5 text-sm font-medium text-primary underline-offset-4 hover:underline">
-            How each step works, and the command behind it <ArrowRight className="size-4" aria-hidden />
-          </Link>
+          <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm font-medium text-primary">
+            <Link to="/how-it-works" className="inline-flex items-center gap-1.5 underline-offset-4 hover:underline">
+              How each step works, and the command behind it <ArrowRight className="size-4" aria-hidden />
+            </Link>
+            <Link to="/accuracy" className="inline-flex items-center gap-1.5 underline-offset-4 hover:underline">
+              How close it gets to a wind tunnel <ArrowRight className="size-4" aria-hidden />
+            </Link>
+          </div>
         </Section>
 
         <div className="border-y border-border bg-surface-2/60">

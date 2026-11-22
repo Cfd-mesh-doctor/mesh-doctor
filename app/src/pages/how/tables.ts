@@ -2,9 +2,7 @@
 // The tables of the "How it works" page, written exactly as docs/how-it-works.md writes them (`code` in
 // backticks). tables.test.ts compares them with the doc, so when the engine's targets or verdicts change
 // there, the test asks for this page to change too.
-
-/** A table as the doc writes it: the header cells, then the rows. */
-export type DocTable = { head: string[]; rows: string[][] };
+import type { DocTable } from "@/lib/docTable";
 
 /** What each command needs and gives. */
 export const COMMANDS: DocTable = {

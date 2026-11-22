@@ -10,11 +10,11 @@ import { Link } from "react-router";
 import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
 import { PageHeader } from "@/components/shared/page";
 import { Button } from "@/components/ui/button";
+import { DocTableView } from "@/components/shared/DocTable";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
 import { DOCS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
-import { COMMANDS, PROFILES, VERDICTS, type DocTable } from "./tables";
+import { COMMANDS, PROFILES, VERDICTS } from "./tables";
 
 const SECTIONS = [
   { id: "detect", title: "Detect", icon: ScanSearch },
@@ -30,32 +30,6 @@ type Section = (typeof SECTIONS)[number];
 
 const link = "font-medium text-primary underline-offset-4 hover:underline";
 const list = "list-disc space-y-1.5 pl-5 marker:text-muted-foreground";
-
-/** Text as the doc writes it, with `code` in backticks. A command name, and a number with its "%", stay on one line. */
-function Inline({ text }: { text: string }) {
-  const parts = text.replace(/ %/g, "\u00a0%").split("`");
-  return <>{parts.map((part, i) => (i % 2 ? <code key={i} className="whitespace-nowrap">{part}</code> : part))}</>;
-}
-
-function DocTableView({ table, caption }: { table: DocTable; caption: string }) {
-  return (
-    <Table>
-      <caption className="sr-only">{caption}</caption>
-      <THead>
-        <TR className="hover:bg-transparent">{table.head.map((h) => <TH key={h}>{h}</TH>)}</TR>
-      </THead>
-      <TBody>
-        {table.rows.map((row) => (
-          <TR key={row[0]}>
-            {row.map((cell, i) => (
-              <TD key={i} className={i === 0 ? "align-top font-medium" : "align-top"}><Inline text={cell} /></TD>
-            ))}
-          </TR>
-        ))}
-      </TBody>
-    </Table>
-  );
-}
 
 function Doc({ href, children }: { href: string; children: ReactNode }) {
   return <a href={href} target="_blank" rel="noreferrer" className={link}>{children}</a>;
@@ -434,7 +408,9 @@ export function HowItWorks() {
                 <Button size="sm" variant="secondary" asChild><Link to="/estimate"><Calculator />Size estimator</Link></Button>
               </div>
               <p className="mt-4 text-[13px] text-muted-foreground">
-                This page follows <Doc href={DOCS.howItWorks}>docs/how-it-works.md</Doc> in the source.
+                How close are the answers? The <Link to="/accuracy" className={link}>accuracy check</Link> compares
+                the whole chain with a wind tunnel. This page follows{" "}
+                <Doc href={DOCS.howItWorks}>docs/how-it-works.md</Doc> in the source.
               </p>
             </Card>
           </article>

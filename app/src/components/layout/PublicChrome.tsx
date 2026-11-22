@@ -2,7 +2,9 @@
 // The header and footer of the public pages (home, how it works, report viewer, estimator). The app screens have
 // their own sidebar.
 // Below tablet width the header's links move into a menu that slides in from the left, as the app's sidebar does.
-import { BookOpen, Calculator, CirclePlay, FileSearch, Menu as MenuIcon, Rocket, ShieldCheck, Workflow } from "lucide-react";
+import {
+  BookOpen, Calculator, CirclePlay, FileSearch, Menu as MenuIcon, Rocket, ShieldCheck, Target, Workflow,
+} from "lucide-react";
 import { useState } from "react";
 import { Link, NavLink } from "react-router";
 import { Logo } from "@/components/brand/Logo";
@@ -27,6 +29,7 @@ function PhoneMenu({ onNavigate }: { onNavigate: () => void }) {
       </div>
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-3" aria-label="Site menu">
         <NavLink to="/how-it-works" onClick={onNavigate} className={page}><Workflow aria-hidden />How it works</NavLink>
+        <NavLink to="/accuracy" onClick={onNavigate} className={page}><Target aria-hidden />Accuracy check</NavLink>
         <Link to="/#privacy" onClick={onNavigate} className={menuItem}><ShieldCheck aria-hidden />Privacy</Link>
         <Link to="/#start" onClick={onNavigate} className={menuItem}><Rocket aria-hidden />Get started</Link>
         <NavLink to="/report" onClick={onNavigate} className={page}><FileSearch aria-hidden />Report viewer</NavLink>
@@ -103,6 +106,7 @@ export function PublicFooter() {
         <nav className="grid grid-cols-2 gap-x-10 gap-y-2" aria-label="Footer">
           <a href={REPO_URL} {...ext}>Source code</a>
           <Link to="/how-it-works" className={navLink}>How it works</Link>
+          <Link to="/accuracy" className={navLink}>Accuracy check</Link>
           <a href={DOCS.safety} {...ext}>Safety model</a>
           <a href={DOCS.limits} {...ext}>Limits</a>
           <a href={DOCS.example} {...ext}>Worked example</a>

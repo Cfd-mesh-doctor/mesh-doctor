@@ -120,7 +120,9 @@ test("every page runs under the site's Content-Security-Policy", async ({ page }
       (window as unknown as { cspViolations: string[] }).cspViolations.push(`${e.violatedDirective} ${e.blockedURI}`);
     });
   });
-  for (const path of ["/", "/connect", "/report", "/estimate", "/how-it-works", "/demo", "/demo/cases", "/demo/jobs", "/demo/settings"]) {
+  for (const path of [
+    "/", "/connect", "/report", "/estimate", "/how-it-works", "/accuracy", "/demo", "/demo/cases", "/demo/jobs", "/demo/settings",
+  ]) {
     await page.goto(path);
     await page.waitForLoadState("networkidle");
     const v = await page.evaluate(() => (window as unknown as { cspViolations?: string[] }).cspViolations ?? []);
