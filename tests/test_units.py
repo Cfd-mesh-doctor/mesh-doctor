@@ -4,7 +4,8 @@
 
     python3 -m unittest discover -s tests
 """
-import json, math, os, re, shutil, sys, tempfile, time, unittest
+import contextlib, io, json, math, os, re, shutil, sys, tempfile, time, unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "meshdoctor"))
 os.environ["MESHDOCTOR_CONFIG"] = os.devnull
@@ -38,6 +39,65 @@ class NamesTest(unittest.TestCase):
             with self.assertRaises(SystemExit, msg=n):
                 repair.plain_name(n)
             self.assertFalse(md_api.SAFE.match(n), n)
+
+
+class SourceCaseTest(unittest.TestCase):
+    """A command's source case: the folder as given, else the case of that name in the cases folder."""
+
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp(prefix="md_src_"))
+        self.addCleanup(shutil.rmtree, self.tmp)
+        self.cases = os.path.join(self.tmp, "cases")
+        os.makedirs(os.path.join(self.cases, "case7", "constant", "polyMesh"))
+        os.makedirs(os.path.join(self.tmp, "outside"))    # next to the cases folder: never looked up in it
+        self.here = os.path.join(self.tmp, "a", "b")        # where the command runs
+        os.makedirs(os.path.join(self.here, "case1"))
+        env = mock.patch.dict(os.environ, {"MESHDOCTOR_CASES": self.cases})
+        env.start()
+        self.addCleanup(env.stop)
+        cwd = os.getcwd()
+        os.chdir(self.here)
+        self.addCleanup(os.chdir, cwd)
+
+    def no_case(self, run):
+        """The message a command stops with: no case."""
+        with self.assertRaises(SystemExit) as e, contextlib.redirect_stdout(io.StringIO()):
+            run()
+        return str(e.exception.code)
+
+    def test_a_folder_where_you_are_as_given(self):
+        self.assertEqual(repair.source_case("case1"), os.path.join(self.here, "case1"))
+        self.assertEqual(repair.source_case(os.path.join(self.cases, "case7")), os.path.join(self.cases, "case7"))
+
+    def test_a_case_in_the_cases_folder_by_name_from_any_folder(self):
+        with contextlib.redirect_stderr(io.StringIO()) as said:
+            self.assertEqual(repair.source_case("case7"), os.path.join(self.cases, "case7"))
+        self.assertEqual(said.getvalue(), f"using the case case7 in {self.cases}\n")   # which folder it used
+
+    def test_a_folder_where_you_are_comes_first(self):
+        os.makedirs(os.path.join(self.here, "case7"))
+        self.assertEqual(repair.source_case("case7"), os.path.join(self.here, "case7"))
+
+    def test_neither_stops_with_a_plain_message(self):
+        # a path is only ever taken as given: "../outside" is next to the cases folder, not in it
+        for arg in ("case9", "../outside", "sub/case7"):
+            said = self.no_case(lambda: repair.source_case(arg))
+            self.assertIn(f"no case {arg!r}: it is not a folder here, nor a case in the cases folder {self.cases}", said)
+
+    def test_copy_full_and_ab_find_the_case_by_name(self):
+        work = os.path.join(self.tmp, "work")
+        with mock.patch.object(repair, "ROOT", work), contextlib.redirect_stdout(io.StringIO()) as out, \
+                contextlib.redirect_stderr(io.StringIO()):
+            repair.main(["copy", "case7", "case7-copy"])
+        self.assertEqual(out.getvalue(), os.path.join(work, "case7-copy") + "\n")
+        self.assertTrue(os.path.isdir(os.path.join(work, "case7-copy", "constant", "polyMesh")))
+        with open(os.path.join(work, "case7-copy", ".meshDoctorCopy")) as f:
+            self.assertEqual(f.read(), os.path.join(self.cases, "case7") + "\n")
+        # an unknown case stops both before anything is copied, checked or solved
+        with mock.patch.object(repair, "ROOT", work), mock.patch.object(abtest, "ROOT", work):
+            self.assertIn("no case 'case9'", self.no_case(lambda: repair.main(["full", "case9", "x"])))
+            self.assertIn("no case 'case9'", self.no_case(lambda: abtest.main(["case9", "x"])))
+        self.assertEqual(sorted(os.listdir(work)), ["case7-copy"])
 
 
 def write_steady_run(d, n, p_of, drag_of):

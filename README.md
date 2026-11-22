@@ -107,6 +107,7 @@ meshdoctor serve                               # http://localhost:8765/meshdocto
 - `ab` runs both solves on copies and compares residuals, forces and where the residuals are highest. `--iters 200` is enough to see a difference; use more for a converged answer.
 - `map` draws where the mesh was repaired on top of where the flow will not settle.
 - With OpenFOAM loaded, the default source folder is `$FOAM_RUN` and the workspace is `$FOAM_RUN/meshdoctor`; `meshdoctor config` shows the ones in use.
+- A command's `<case>` is a case folder, or the name of a case in the source folder, so `meshdoctor full motorBike mb` works from any folder.
 
 ## Running it
 

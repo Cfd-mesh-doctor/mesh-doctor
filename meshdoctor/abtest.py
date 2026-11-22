@@ -668,8 +668,8 @@ def main(a):
                 r[t] = summarise(os.path.join(top, t), r["window"])
         schema.write(os.path.join(top, "ab_result.json"), r, indent=1)
         return
-    import repair                              # plain_name + source fingerprint (same folder)
-    src = os.path.abspath(os.path.expanduser(a[0]))
+    import repair                              # plain_name, source_case + fingerprint (same folder)
+    src = repair.source_case(a[0])
     fixed_name = a[1]
     if "--no-ram-check" not in a:
         ok, msg = ramguard.check(src, "solve")

@@ -9,6 +9,9 @@
     python3 -m meshdoctor full    <srcCase> <name> [--profile P]
                                    # copy -> checkMesh -> fix -> checkMesh -> report
 
+A <srcCase> is a folder, or the name of a case in the cases folder (config.py),
+so `full motorBike mb` works from any folder.
+
 Copies live in <workspace>/<name> (see config.py); the source case is only
 ever read, and a checksum taken before and after proves it.  Every step writes
 a log and the final result.json records commands, versions, before/after
@@ -84,12 +87,31 @@ def par(lay, cmd):
 
 
 # --------------------------------------------------------------------------
+PLAIN = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}")
+
+
 def plain_name(name, what="copy name"):
     """Folders under ROOT are deleted and re-made, so their names must be plain
     folder names: never ".", "..", a path, or anything that leaves ROOT."""
-    if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}", name or ""):
+    if not PLAIN.fullmatch(name or ""):
         sys.exit(f"refusing: {what} must be a plain folder name (letters, digits, _ . -)")
     return name
+
+
+def source_case(arg):
+    """The source case a command names, as an absolute path: the folder as given
+    (from where you are), else, for a plain name, the case of that name in the
+    cases folder (config.py), so `full motorBike mb` works from any folder.  When
+    it is neither, a plain message now rather than a traceback or an empty copy."""
+    path = os.path.abspath(os.path.expanduser(arg))
+    if os.path.isdir(path):
+        return path
+    cases = os.path.abspath(config.settings()["cases"])
+    if PLAIN.fullmatch(arg) and os.path.isdir(os.path.join(cases, arg)):
+        print(f"using the case {arg} in {cases}", file=sys.stderr, flush=True)
+        return os.path.join(cases, arg)
+    sys.exit(f"no case {arg!r}: it is not a folder here, nor a case in the cases folder {cases} "
+             "(meshdoctor config shows that folder)")
 
 
 def source_fingerprint(src):
@@ -608,14 +630,14 @@ def main(a):
     if "--profile" in a:
         prof = a[a.index("--profile") + 1]
     if a[0] == "copy":
-        print(copy_case(a[1], a[2]))
+        print(copy_case(source_case(a[1]), a[2]))
     elif a[0] == "inspect":
         r = inspect(a[1], prof); print(json.dumps(r["summary"], indent=1))
     elif a[0] == "fix":
         r = fix(a[1], prof); print(json.dumps(r["verdict"], indent=1))
         sys.exit(exit_code(r))
     elif a[0] == "full":
-        src = os.path.abspath(os.path.expanduser(a[1]))
+        src = source_case(a[1])
         plain_name(a[2])
         if "--no-ram-check" not in a:
             ok, msg = ramguard.check(src, "repair")

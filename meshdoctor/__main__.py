@@ -21,6 +21,7 @@
 Run it from the folder that holds `meshdoctor/` (or after installing it).
 Each command's own help: python3 -m meshdoctor <command> --help
 Source cases are only ever read; every job works on a copy in the workspace.
+A <srcCase> is a folder, or the name of a case in the cases folder (meshdoctor config).
 """
 import os, runpy, sys
 

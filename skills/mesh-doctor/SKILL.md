@@ -31,7 +31,8 @@ meshdoctor experimental ratchet <src> <name>         push max non-ortho below th
 meshdoctor experimental polish  <src> <name> [--tets] [--tet-cap 1]   gradient polish of the worst clusters
 ```
 
-Every command has `--help`. Results land in the workspace copy's `meshDoctor/` folder as JSON (verdict, checkMesh
+Every command has `--help`. A `<srcCase>` is a case folder, or the name of a case in the cases folder
+(`meshdoctor config` shows it). Results land in the workspace copy's `meshDoctor/` folder as JSON (verdict, checkMesh
 before/after, regressions, rollback flag).
 
 ## How to run a repair well
