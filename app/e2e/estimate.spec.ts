@@ -34,6 +34,8 @@ test("the size estimator works in the page and keeps the estimate in the address
   await copy.click();
   await expect(copy).toHaveAccessibleName("Copied");
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("http://localhost:4173/estimate?cells=31.1");
+  // A screen reader is told, whether or not it reads the button's new name.
+  await expect(page.locator("body > [aria-live='polite']")).toHaveText("Copied to the clipboard");
   expect([...origins]).toEqual(["http://localhost:4173"]);
   expect(sent).toEqual([]);
 });

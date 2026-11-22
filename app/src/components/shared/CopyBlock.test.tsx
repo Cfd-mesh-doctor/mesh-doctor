@@ -2,7 +2,8 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { COPIED_FOR } from "@/lib/useCopy";
+import { ANNOUNCE_DELAY } from "@/lib/announce";
+import { COPIED_FOR, COPIED_SAID } from "@/lib/useCopy";
 import { CopyBlock } from "./CopyBlock";
 import { copyBlockLabel } from "./copyBlockLabel";
 
@@ -20,6 +21,8 @@ describe("a code block's copy button", () => {
     await user.click(screen.getByRole("button", { name: "Copy the 2 lines starting “meshdoctor serve”" }));
     expect(await navigator.clipboard.readText()).toBe(CODE);
     expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(ANNOUNCE_DELAY); });
+    expect(screen.getByText(COPIED_SAID).closest("[aria-live]")).toHaveAttribute("aria-live", "polite"); // said aloud too
 
     act(() => { vi.advanceTimersByTime(COPIED_FOR); });
     expect(screen.getByRole("button", { name: /^Copy the 2 lines/ })).toBeInTheDocument();
