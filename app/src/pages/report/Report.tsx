@@ -26,6 +26,7 @@ import { HEAT, viewHeading, type MapSummary, type MapViewName } from "@/report/m
 import { ReportError, checkReport, fileBytes, readReport } from "@/report/read";
 import { judgeTone, measureLabel, ratioChange, summarize, type Change, type ReportSummary } from "@/report/summary";
 import { SAMPLES } from "@/report/samples";
+import { MapMarks } from "./MapMarks";
 import { RepairMap } from "./RepairMap";
 
 type State =
@@ -509,6 +510,7 @@ function MapCard({ map }: { map: MapSummary }) {
         </div>
         <RepairMap map={map} view={view} layer={layer} />
         {map.notes.length > 0 && <p className="mt-3 text-xs text-muted-foreground">{map.notes.join(" ")}</p>}
+        <MapMarks map={map} />
       </CardContent>
     </Card>
   );

@@ -53,6 +53,13 @@ describe("Report viewer", () => {
     expect(screen.getByText("found and repaired (4)")).toBeInTheDocument();
     expect(screen.getByText("left after the repair (1)")).toBeInTheDocument();
     expect(screen.getByText("Made-up map for the tests.")).toBeInTheDocument();
+    // The marks as a table too, for keyboards and screen readers: the one left after the repair first.
+    await userEvent.click(screen.getByText("List the 5 marks"));
+    const rows = within(screen.getByRole("table", { name: "Marks on the repair map" })).getAllByRole("row");
+    expect(rows).toHaveLength(6);
+    const cells = (i: number) => within(rows[i]!).getAllByRole("cell").map((c) => c.textContent);
+    expect(cells(1)).toEqual(["left after the repair", "(-0.300, 0.100, 0.050)", "1", "skewed · non-ortho 40.2° · skew 4.1", "body"]);
+    expect(cells(2)).toEqual(["found and repaired", "(0.000, 0.030, 0.330)", "3", "non-orthogonal · non-ortho 71.3° · skew 1.2", "body"]);
     // Printed, the switches and the pointer hint are left out, and the key names the heat layer (no CSS here: the
     // classes are what can be checked; e2e/print.spec.ts prints the card in a real browser).
     expect(screen.getByRole("radiogroup", { name: "View" }).parentElement).toHaveClass("print:hidden");

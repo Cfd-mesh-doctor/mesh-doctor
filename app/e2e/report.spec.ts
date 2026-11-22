@@ -128,3 +128,17 @@ test("the sample reports open without a file, and nothing is sent", async ({ pag
   expect([...seen.origins]).toEqual([SITE]);
   expect(seen.sent).toEqual([]);
 });
+
+test("the repair map's marks can be listed with the keyboard alone", async ({ page }) => {
+  await page.goto("/report?sample=ahmed35-medium-fix");
+  const list = page.getByRole("table", { name: "Marks on the repair map" });
+  const open = page.getByText("List the 26 marks");
+  await expect(open).toBeVisible();
+  await expect(list).toBeHidden();
+  await open.focus();
+  await page.keyboard.press("Enter");
+  await expect(list).toBeVisible();
+  await expect(list.getByRole("row")).toHaveCount(27); // a header and the 26 defects found and repaired
+  await expect(list.getByRole("row").nth(1).getByRole("cell").first()).toHaveText("found and repaired");
+  await expect(list.getByRole("columnheader", { name: "Patch" })).toHaveCount(0); // this map names no patches
+});
