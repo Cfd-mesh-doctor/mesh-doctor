@@ -30,6 +30,11 @@ const last = TOUR_STEPS.length - 1;
 const ringed = () => [...document.querySelectorAll("[data-tour-spot]")].map((el) => el.getAttribute("data-tour"));
 
 describe("the app tour", () => {
+  it("says, at the Cases screen, how to repair a case: copy its command and run it in WSL", () => {
+    const cases = TOUR_STEPS.find((s) => s.spot === "cases")!;
+    expect(cases.text).toMatch(/To repair one, copy its repair command and run it in WSL\.$/);
+  });
+
   it("steps through with Enter and back again, then hands the focus back when done", async () => {
     const user = userEvent.setup();
     show();

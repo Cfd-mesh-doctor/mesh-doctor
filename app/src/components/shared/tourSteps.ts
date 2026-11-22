@@ -29,7 +29,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
   },
   {
     title: "Cases: the meshes you start from",
-    text: "Cases lists the OpenFOAM cases the engine found, with each one's size and the verdict of its latest repair. Mesh Doctor only ever reads a case: every repair works on a copy.",
+    text: "Cases lists the OpenFOAM cases the engine found, with each one's size and the verdict of its latest repair. Mesh Doctor only ever reads a case: every repair works on a copy. To repair one, copy its repair command and run it in WSL.",
     page: "/cases",
     spot: "cases",
   },
