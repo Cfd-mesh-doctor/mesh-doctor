@@ -4,6 +4,7 @@
 import { FileText, ListChecks, OctagonX } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
+import { DashboardLink } from "@/components/shared/DashboardLink";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { JobStateBadge } from "@/components/shared/badges";
 import { NoJobsYet } from "@/components/shared/NoJobsYet";
@@ -271,7 +272,13 @@ export function Jobs() {
     <>
       <PageHeader
         title="Jobs"
-        description="Repairs and A/B tests the engine has run or is running. Only one big job runs at a time, to keep memory safe."
+        description={
+          // Where jobs start stays said once there are some (the empty list says it too, with its own button).
+          <>
+            Repairs and A/B tests the engine has run or is running. They start from <DashboardLink />. Only one big job
+            runs at a time, to keep memory safe.
+          </>
+        }
         actions={
           jobs.data && (
             <span className="inline-flex items-center gap-2 text-[13px] text-muted-foreground">

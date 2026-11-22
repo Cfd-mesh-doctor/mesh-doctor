@@ -163,14 +163,15 @@ describe("the Jobs screen", () => {
   });
 });
 
-/** Opens the Jobs screen of your own engine, paired, before any job has run on it, or whose jobs don't load. */
-function ownEngine(jobsLoad = true) {
+/** Opens the Jobs screen of your own engine, paired, before any job has run on it (or with these jobs); null: its jobs
+ * don't load. */
+function ownEngine(jobs: unknown[] | null = []) {
   savePairing({ engine: "http://localhost:8765", key: "TestKey_0123456789abcdefghijklmnopqrstuvwxy", paired: "2026-11-22T12:00:00Z" });
   const transport: Transport = {
     kind: "engine",
     scope: "test",
     request: async <T,>(_method: string, route: string) => {
-      if (route.split("?")[0] === "/jobs" && jobsLoad) return { items: [] } as T;
+      if (route.split("?")[0] === "/jobs" && jobs) return { items: jobs } as T;
       throw new EngineError("unreachable", "nothing answered");
     },
   };
@@ -189,10 +190,28 @@ describe("the Jobs screen before any job has run", () => {
   });
 
   it("doesn't call a list that didn't load empty: the message above says why", async () => {
-    ownEngine(false);
+    ownEngine(null);
     expect(await screen.findByRole("heading", { name: "The jobs didn't load" })).toBeInTheDocument();
     expect(screen.getByRole("alert")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "No jobs yet" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Open the engine's dashboard" })).toBeNull();
+  });
+});
+
+describe("the Jobs screen once jobs have run", () => {
+  it("still says where they start: its description links the engine's dashboard, in a new tab", async () => {
+    ownEngine((DEMO_ANSWERS["/jobs"] as JobList).items.filter((j) => j.state === "done").slice(0, 1));
+    await waitFor(() => expect(rows()).toHaveLength(1));
+    expect(screen.queryByRole("heading", { name: "No jobs yet" })).toBeNull(); // nor its button
+    const dashboard = screen.getByRole("link", { name: "the engine's dashboard" });
+    expect(dashboard).toHaveAttribute("href", "http://localhost:8765/meshdoctor");
+    expect(dashboard).toHaveAttribute("target", "_blank");
+    expect(dashboard).toHaveAttribute("rel", "noreferrer");
+  });
+
+  it("names the dashboard without linking it in the demo, which has no engine of its own", async () => {
+    open(path);
+    expect(await screen.findByText(/They start from the engine's dashboard\. Only one big job runs at a time/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "the engine's dashboard" })).toBeNull();
   });
 });

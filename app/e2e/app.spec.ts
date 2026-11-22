@@ -229,7 +229,7 @@ test("before anything has run, the Overview and Jobs say how to start: the engin
   expect(engine.requests.some((r) => new URL(r.url()).pathname === "/meshdoctor")).toBe(false);
 });
 
-test("once a repair has run, the Overview's Start a repair card keeps the engine's dashboard linked, and the command", async ({ page }) => {
+test("once something has run, the Overview's Start a repair card and the Jobs screen keep the engine's dashboard linked", async ({ page }) => {
   await mockEngine(page, {
     repairs: [{ name: "old-fix", finished: "2026-11-21 12:05:00", nCells: 1000, profile: "medium", source: "wing", status: {}, verdict: null }],
   });
@@ -244,6 +244,11 @@ test("once a repair has run, the Overview's Start a repair card keeps the engine
   await expect(dashboard).toHaveAttribute("href", `${ENGINE}/meshdoctor`);
   await expect(dashboard).toHaveAttribute("target", "_blank");
   await expect(main.getByRole("button", { name: "Copy “meshdoctor full <case> <name>”" })).toBeVisible();
+  // The Jobs screen, with its two jobs, says where they start. (One is running: the sidebar says "Jobs (1 active)".)
+  await page.getByRole("complementary").getByRole("link", { name: /^Jobs\b/ }).click();
+  await expect(page).toHaveURL(/\/app\/jobs$/);
+  await expect(main.getByRole("button", { name: "old-fix", exact: true })).toBeVisible();
+  await expect(main.getByRole("link", { name: "the engine's dashboard" })).toHaveAttribute("href", `${ENGINE}/meshdoctor`);
 });
 
 test("a list the engine fails to give says it didn't load, with the reason above it, on the Overview and on Cases", async ({ page }) => {
