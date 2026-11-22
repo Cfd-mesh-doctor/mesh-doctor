@@ -38,9 +38,7 @@ function PhoneMenu({ onNavigate }: { onNavigate: () => void }) {
         <NavLink to="/report" onClick={onNavigate} className={page}><FileSearch aria-hidden />Report viewer</NavLink>
         <NavLink to="/estimate" onClick={onNavigate} className={page}><Calculator aria-hidden />Size estimator</NavLink>
         <NavLink to="/demo" onClick={onNavigate} className={page}><CirclePlay aria-hidden />Demo</NavLink>
-        <a href={DOCS.readme} target="_blank" rel="noreferrer" onClick={onNavigate} className={menuItem}>
-          <BookOpen aria-hidden />Docs
-        </a>
+        <NavLink to="/docs" onClick={onNavigate} className={page}><BookOpen aria-hidden />Docs</NavLink>
       </nav>
     </div>
   );
@@ -70,7 +68,9 @@ export function PublicHeader() {
           <NavLink to="/estimate" className={({ isActive }) => cn(navLink, isActive && "font-medium text-foreground")}>
             Estimator
           </NavLink>
-          <a href={DOCS.readme} target="_blank" rel="noreferrer" className={navLink}>Docs</a>
+          <NavLink to="/docs" className={({ isActive }) => cn(navLink, isActive && "font-medium text-foreground")}>
+            Docs
+          </NavLink>
         </nav>
         <div className="ml-auto flex items-center gap-1.5">
           <ThemeMenu />
@@ -108,6 +108,7 @@ export function PublicFooter() {
         </div>
         <nav className="grid grid-cols-2 gap-x-10 gap-y-2" aria-label="Footer">
           <a href={REPO_URL} {...ext}>Source code</a>
+          <Link to="/docs" className={navLink}>Docs</Link>
           <Link to="/install" className={navLink}>Install</Link>
           <Link to="/how-it-works" className={navLink}>How it works</Link>
           <Link to="/accuracy" className={navLink}>Accuracy check</Link>

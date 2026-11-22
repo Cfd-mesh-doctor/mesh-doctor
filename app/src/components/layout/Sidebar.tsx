@@ -11,7 +11,7 @@ import { Dot } from "@/components/ui/badge";
 import { useAppPath, useEngine } from "@/engine/context";
 import { useJobs } from "@/engine/hooks";
 import { isActive } from "@/engine/types";
-import { APP_VERSION, DOCS } from "@/lib/site";
+import { APP_VERSION } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { useConnection } from "./connection";
 
@@ -101,8 +101,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
       <div className="space-y-0.5 border-t border-border px-3 py-3">
         <NavItem item={{ label: "Settings", icon: Settings, path: "/settings" }} onNavigate={onNavigate} />
+        {/* The site's Docs page, in a new tab so the app stays as it is. */}
         <a
-          href={DOCS.readme}
+          href="/docs"
           target="_blank"
           rel="noreferrer"
           className="flex h-9 items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"

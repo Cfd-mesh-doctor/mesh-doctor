@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Reading the repository's docs (docs/, the README) for the tests that keep pages equal to them.
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { DocTable } from "@/lib/docTable";
@@ -10,6 +10,11 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 /** A doc's text, e.g. readDoc("how-it-works.md"). */
 export function readDoc(name: string): string {
   return readRepo(`docs/${name}`);
+}
+
+/** The file names of the repository's docs (docs/*.md), sorted. */
+export function docNames(): string[] {
+  return readdirSync(resolve(ROOT, "docs")).filter((f) => f.endsWith(".md")).sort();
 }
 
 /** A file of the repository, e.g. readRepo("README.md"). */

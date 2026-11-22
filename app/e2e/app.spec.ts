@@ -121,8 +121,8 @@ test("every page runs under the site's Content-Security-Policy", async ({ page }
     });
   });
   for (const path of [
-    "/", "/connect", "/install", "/report", "/estimate", "/how-it-works", "/accuracy", "/gallery", "/demo", "/demo/cases",
-    "/demo/jobs", "/demo/settings", "/demo/estimate", "/demo/repairs/ahmed35-medium-fix/report",
+    "/", "/connect", "/install", "/report", "/estimate", "/how-it-works", "/accuracy", "/gallery", "/docs", "/demo",
+    "/demo/cases", "/demo/jobs", "/demo/settings", "/demo/estimate", "/demo/repairs/ahmed35-medium-fix/report",
   ]) {
     await page.goto(path);
     await page.waitForLoadState("networkidle");

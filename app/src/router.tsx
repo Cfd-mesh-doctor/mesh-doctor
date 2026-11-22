@@ -2,7 +2,7 @@
 // The screens. /app talks to the paired engine; /demo shows the same screens with recorded data;
 // /report opens a report file in the browser; /estimate sizes a case; /how-it-works explains each step;
 // /accuracy compares the chain with a wind tunnel; /gallery shows the pictures the toolkit's scripts make;
-// /install gives the README's set-up steps.
+// /install gives the README's set-up steps; /docs lists all the documentation.
 // Everything but the home page loads when first opened, so the home page stays small.
 import { createBrowserRouter, type RouteObject } from "react-router";
 import type { RouteHandle } from "@/components/layout/AppLayout";
@@ -45,6 +45,7 @@ export const routes: RouteObject[] = [
       { path: "/accuracy", lazy: async () => ({ Component: (await import("@/pages/accuracy/Accuracy")).Accuracy }) },
       { path: "/gallery", lazy: async () => ({ Component: (await import("@/pages/gallery/Gallery")).Gallery }) },
       { path: "/install", lazy: async () => ({ Component: (await import("@/pages/install/Install")).Install }) },
+      { path: "/docs", lazy: async () => ({ Component: (await import("@/pages/docs/Docs")).Docs }) },
       {
         path: "/app",
         lazy: async () => ({ Component: (await import("@/pages/app/shell")).EngineShell }),
