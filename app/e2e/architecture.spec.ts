@@ -18,5 +18,8 @@ test("architecture: from the Docs page, the doc's tables, numbered steps and cod
   await expect(page.getByRole("region", { name: "Order of work" }).locator("ol > li")).toHaveCount(8);
   await expect(main.locator("code", { hasText: "MD.html`<b>${name}</b>`" })).toBeVisible();
   await expect(main.getByText(/^The command comes from the wrapper's own arguments/)).toBeVisible();
+  // The foot of the page says which doc it follows, linked on GitHub.
+  await expect(main.getByRole("link", { name: "docs/architecture.md" }))
+    .toHaveAttribute("href", "https://github.com/Cfd-mesh-doctor/mesh-doctor/blob/main/docs/architecture.md");
   expect(sent).toEqual([]);
 });

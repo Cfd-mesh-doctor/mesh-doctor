@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/misc";
 import { useTitle } from "@/lib/useTitle";
+import { DocSource } from "@/pages/docs/DocSource";
 import { DocText } from "@/pages/docs/DocText";
 import { GROUPS } from "./problems";
 import { matches } from "./search";
@@ -82,6 +83,7 @@ export function Troubleshooting() {
             </section>
           ))}
         </div>
+        <DocSource file="troubleshooting.md" className="max-w-none" />
       </main>
       <PublicFooter />
     </div>

@@ -6,6 +6,7 @@ import { CopyCommand } from "@/components/shared/CopyCommand";
 import { PageHeader } from "@/components/shared/page";
 import { useTitle } from "@/lib/useTitle";
 import { DocSectionsView } from "@/pages/docs/DocSections";
+import { DocSource } from "@/pages/docs/DocSource";
 import { DocText } from "@/pages/docs/DocText";
 import { COPY, GUIDE, INTRO, TITLE } from "./guide";
 
@@ -18,6 +19,7 @@ export function OwnCase() {
         <PageHeader title={TITLE} description={<DocText text={INTRO} />} />
         <CopyCommand command={COPY} className="mb-10 max-w-3xl" />
         <DocSectionsView sections={GUIDE} />
+        <DocSource file="templates.md" />
       </main>
       <PublicFooter />
     </div>
