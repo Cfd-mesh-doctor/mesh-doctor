@@ -39,3 +39,20 @@ test("the size estimator works in the page and keeps the estimate in the address
   expect([...origins]).toEqual(["http://localhost:4173"]);
   expect(sent).toEqual([]);
 });
+
+test("at 1024 px the number tiles' notes wrap rather than being cut off", async ({ page }) => {
+  // Beside the sidebar (and the estimator's inputs) a tile is about 180 px wide: "8 ranks; does not fit in memory"
+  // lost its end, and so did a report's "inside the mesh; the CAD is untouched".
+  await page.setViewportSize({ width: 1024, height: 900 });
+  for (const [path, notes] of [
+    ["/demo/estimate?cells=31.1", [/; too big for \d+ GB$/, /ranks; does not fit in memory$/, /^about .+ an hour$/, /^above its limit of about/]],
+    ["/demo/repairs/ahmed25-medium-fix/report", [/^inside the mesh; the CAD is untouched$/]],
+  ] as const) {
+    await page.goto(path);
+    for (const note of notes) {
+      const el = page.getByText(note);
+      await expect(el).toBeVisible();
+      expect(await el.evaluate((e) => e.scrollWidth - e.clientWidth), `${path}: ${note.source} is cut off`).toBeLessThanOrEqual(0);
+    }
+  }
+});

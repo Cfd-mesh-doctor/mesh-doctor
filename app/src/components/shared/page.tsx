@@ -32,7 +32,13 @@ export function StatTile({ label, value, hint, icon: Icon, loading, tone }: {
       <div className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">
         {loading ? <Skeleton className="h-8 w-20" /> : value}
       </div>
-      {hint && <div className="mt-1 truncate text-xs text-muted-foreground">{loading ? <Skeleton className="h-3.5 w-28" /> : hint}</div>}
+      {/* A note wraps rather than being cut off: it can be why a run won't fit ("8 ranks; does not fit in memory"), or
+          the list of the numbers a repair made worse. */}
+      {hint && (
+        <div className="mt-1 text-xs wrap-break-word text-muted-foreground">
+          {loading ? <Skeleton className="h-3.5 w-28" /> : hint}
+        </div>
+      )}
     </Card>
   );
 }
