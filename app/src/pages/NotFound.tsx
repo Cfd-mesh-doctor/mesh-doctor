@@ -13,6 +13,7 @@ export function NotFound({ home = "/" }: { home?: string }) {
     <EmptyState
       icon={Compass}
       title="This page doesn't exist"
+      heading="h1"
       className="py-24"
       action={
         <Button variant="secondary" asChild>
@@ -60,7 +61,7 @@ export function RouteError() {
   }, [err, notFound, oldBuild]);
   if (notFound) return <NotFoundPage />;
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center px-4 text-center">
+    <main className="flex min-h-dvh flex-col items-center justify-center px-4 text-center">
       <Logo />
       <h1 className="mt-8 text-xl font-semibold">{oldBuild ? "Mesh Doctor has been updated" : "Something went wrong on this page"}</h1>
       <p className="mt-2 max-w-md text-sm text-muted-foreground">
@@ -72,6 +73,6 @@ export function RouteError() {
         <Button onClick={() => window.location.reload()}>Reload</Button>
         <Button variant="secondary" asChild><Link to="/">Home</Link></Button>
       </div>
-    </div>
+    </main>
   );
 }

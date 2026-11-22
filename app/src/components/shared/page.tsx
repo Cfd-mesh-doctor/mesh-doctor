@@ -37,15 +37,17 @@ export function StatTile({ label, value, hint, icon: Icon, loading, tone }: {
   );
 }
 
-export function EmptyState({ icon: Icon, title, children, action, className }: {
+export function EmptyState({ icon: Icon, title, children, action, className, heading: Heading = "h3" }: {
   icon: LucideIcon; title: string; children?: ReactNode; action?: ReactNode; className?: string;
+  /** The title's heading level: h1 when the empty state is the whole page (one that doesn't exist). */
+  heading?: "h1" | "h2" | "h3";
 }) {
   return (
     <div className={cn("flex flex-col items-center px-6 py-12 text-center", className)}>
       <div className="grid size-11 place-items-center rounded-xl bg-surface-2 ring-1 ring-border">
         <Icon className="size-5 text-muted-foreground" aria-hidden />
       </div>
-      <h3 className="mt-4 text-sm font-semibold">{title}</h3>
+      <Heading className="mt-4 text-sm font-semibold">{title}</Heading>
       {children && <div className="mt-1 max-w-md text-sm text-muted-foreground">{children}</div>}
       {action && <div className="mt-5">{action}</div>}
     </div>
