@@ -1,0 +1,93 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Written by pageText.test.tsx from the pages themselves: don't edit it by hand. The words of How it works,
+// Accuracy check and Install as each page shows them, at its top and section by section, for the Docs page's
+// search. After changing one of those pages: npx vitest run -u src/pages/docs/pageText.test.tsx
+
+/** A page's top (id "") or one of its sections, and its words in single spaces. */
+export interface PageText {
+  page: string;
+  id: string;
+  title: string;
+  text: string;
+}
+
+export const PAGE_TEXT: PageText[] = [
+  {
+    page: "/how-it-works",
+    id: "",
+    title: "How it works",
+    text: "The repair looks only at the mesh and needs no simulation results. The checks that it helped run or read a simulation. Here is each step, and the command behind it. The repair Finds bad faces, shows where they are and corrects them on a copy. It needs only the mesh. The checks that it helped Solve both meshes and compare them, judge convergence, and draw the repairs over where the flow won't settle. Each step is a command They all run on your PC: on the command line, or started from the engine's pages. Command Needs Gives inspect, fix, full a mesh (constant/polyMesh, serial or decomposed) bad faces found, highlighted and corrected on a copy ab a case that runs (0/, constant/, system/) and a repaired copy from full both meshes solved, residuals, forces and hotspots compared judge a run's log or residuals, and its forces a convergence verdict ab hotspots, ab mode a solved case with written times where the residuals, or a slow oscillation, are largest map a full run, plus optional hotspot layers repairs drawn over hotspots, side and top views serve any of the above the dashboard pages See it on real data The report viewer opens sample reports from the public Ahmed-body example, the demo shows the app on recorded answers, and the estimator sizes your own case. None of them needs the engine. Report viewer Demo Size estimator How close are the answers? The accuracy check compares the whole chain with a wind tunnel. This page follows docs/how-it-works.md in the source.",
+  },
+  {
+    page: "/how-it-works",
+    id: "detect",
+    title: "Detect",
+    text: "foamMeshDoctor, an OpenFOAM 14 utility, scores every face with OpenFOAM's own quality formulas, the same ones checkMesh and snappyHexMesh use: non-orthogonality; skewness (internal and boundary faces); face weight; the volume ratio of the two cells either side; face pyramids (an inverted pyramid means a cell is turned inside out). 1 or less: meets every target over 1: misses a target 100 or more: an inverted pyramid A face's badness is its worst metric divided by its target, for example nonOrtho / 65 or 0.05 / weight. The targets come from a profile. Choose one with --profile strict. Profile Non-ortho Skew Boundary skew Min weight Min volume ratio openfoam (default) 65° 4 4 0.05 0.01 strict 60° 3 4 0.1 0.05 Bad faces close together are grouped into defect clusters, so you see a handful of problem regions rather than thousands of faces.",
+  },
+  {
+    page: "/how-it-works",
+    id: "highlight",
+    title: "Highlight",
+    text: "The worst faces, the cells around them and the nearby wall faces are written to <copy>/meshDoctor/, and the engine's Mesh Doctor page shows them in 3D, with the clusters listed by size. inspect stops here.",
+  },
+  {
+    page: "/how-it-works",
+    id: "correct",
+    title: "Correct",
+    text: "fix runs foamMeshDoctor -fix on the copy. It only moves mesh points: no cells are added or removed, so the decomposition, fields and patch names stay valid; points on walls may slide only along the wall: inside the plane on flat patches, back onto the original surface on smooth curved walls, and along the original edge on feature edges. Corners, sharp edges, patch-to-patch junctions and processor boundaries never move, so the geometry is kept; a point move is kept only if the worst face around that point gets better (or stays equal while the total badness drops), and no face pyramid or cell volume becomes invalid. The local worst quality can never get worse; passes repeat while they still help (up to 3). Some faces can't be fixed by moving points, typically inverted pyramids squeezed between walls. For those, fix collapses just those faces with OpenFOAM's collapseEdges, smooths with one more pass, and keeps the result only if checkMesh shows no regression; otherwise it puts the mesh back. That step changes the topology (a few faces and points fewer), so the A/B test can't be used on such a copy. See the limits. full does the whole repair on a copy: copy checkMesh fix checkMesh result.json Its <copy>/meshDoctor/result.json records: every command run, with its log and exit code; the OpenFOAM version; checkMesh before and after, and the verdict (improved, regressions, unchanged); the defect clusters before and after; the largest point move; a checksum of the source case taken before and after (see the safety model).",
+  },
+  {
+    page: "/how-it-works",
+    id: "ab-test",
+    title: "Did it help? The A/B test",
+    text: "meshdoctor ab <case> <name> makes two copies of your case with the same setup: one with the original mesh, one with the repaired points. It solves both with foamRun for --iters iterations on --np cores. Both runs get the same split across cores (scotch, which depends only on the mesh connectivity), so the only difference is where the points are. Its ab_result.json holds, for both runs: residual levels, and the ratio repaired / original for each field (below 1 means the repaired mesh converges further); force means and how much they oscillate; seconds per iteration; the residual hotspots (step 06). Options --init 0 starts both from the case's 0/ fields; --init 0.warm or another folder starts from a solution you already have. --variant simplec|simplec2|relax|lts changes a solver setting on the second run instead. With - as the name, it compares a setting on the original mesh only. ab extend <abDir> <endIter> continues the second run further. See one: the 25° sample in the report viewer has an A/B test with both runs' residuals.",
+  },
+  {
+    page: "/how-it-works",
+    id: "judge",
+    title: "The convergence judge",
+    text: "meshdoctor judge <case> [window|auto] [--to N] compares the last window iterations with the ones before (auto: half the run, 10 to 200). --to N judges the run as it was at iteration N, leaving out what came after, so two runs can be judged over the same iterations. It reads residuals from the residuals function object, or else from log.foamRun*, and forces from forces or forceCoeffs. Verdict Means converged p residual below 1e-4, forces drift and oscillate less than 0.5 % statistically steady forces stationary (drift < 1 %, oscillation < 2 %) but residuals not low: use the window means still converging the p residual is still falling (by more than 10 % between windows) not converged residuals flat and forces still moving: a plateau or a slow oscillation Averages come with an uncertainty from batch means, so a slow swing is not hidden by a long average. Transient runs Any ddtSchemes other than steadyState gets its own verdict, with the window counted in time steps. Oscillating forces are expected there, so it asks three separate questions: are the force means stationary (drift under 2 % between the last two windows)? did each time step converge, meaning p fell below 1e-3 by the last PIMPLE outer iteration? is the time step sane: max Courant at most 1 (needed for DES/LES), and no field bounded in more than 5 % of steps? The answer is \"converged\", \"statistically stationary, but check: …\" or \"still developing\", with every failed check named. Logs not called log.foamRun* are passed with --log. Drag and downforce Forces are reported as drag (along the flow) and the vertical force, named downforce or lift by its sign. The flow direction is read from 0/U, preferring an inlet patch. The up axis comes from the up_axis setting, else the liftDir of forceCoeffs, else the cross-flow axis with the larger force. When a steady run cannot converge: the transient plan A steady run that plateaus on a physically unsteady flow (a wing-tip vortex, a tyre wake) will not converge however long it runs. The way on is a transient run with time-averaged forces, which costs far more. meshdoctor transient-plan <case> says how much before you start one: it runs OpenFOAM's CourantNo function on the steady result, which gives each cell's Courant number per second of time step, 0.5 Σ|φ| / V; with adjustTimeStep, the largest of these sets the time step: dt = maxCo / max; for each max Courant number (--co, default 1, 5 and 20) it gives the time step, the number of steps for the flow time, and the hours, from the steady run's seconds per iteration and --outer PIMPLE iterations per step (default 3); the flow time is --flow-time, or 8 body lengths of flow from --length or a forceCoeffs lRef; without one, the plan gives hours per 0.1 s of flow; it finds the 100 fastest cells (--top), groups them by place, and says how much larger the time step would be without them. A few tiny cells often set the time step for the whole mesh. The case is only read: OpenFOAM runs in a temporary shadow case whose mesh, settings and flux are links to it. DES and LES need max Co ≤ 1. URANS with enough outer correctors usually runs higher, so the plan shows both.",
+  },
+  {
+    page: "/how-it-works",
+    id: "hotspots",
+    title: "Hotspots and the map",
+    text: "foamResidualHotspots finds the cells where the solution still changes most: over one iteration (a residual map), or between two written times (ab mode), which catches a slow oscillation's shape. The A/B test reports what share of the top hotspot cells lies near the defect clusters, for each mesh. If hotspots sit on defects in the original and move away after the repair, the bad cells were what held the run back. meshdoctor map <name> --hot \"Label=<case>\" draws the defect clusters before and after repair, and the top hotspot cells of each layer, on side and top views of the model. The ground plane is found from the geometry and left out of the drawing; its normal is taken as \"up\". See one: the 35° sample in the report viewer has a repair map with 26 defects found and repaired.",
+  },
+  {
+    page: "/how-it-works",
+    id: "dashboard",
+    title: "The dashboard",
+    text: "meshdoctor serve shows four pages (see the dashboard tour): /meshdoctor: start repairs and A/B tests, view highlighted cells and results; /meshmap: the map; /run: a steady run as it happens (residuals, forces and the live judge); /: a transient run as it happens (forces, averaging window, time step), and the transient judge's three answers for it, refreshed once a minute. Starting a job from a page runs the same commands as the command line. This website's app is another set of screens for the same engine: pair it once, or look around the demo first.",
+  },
+  {
+    page: "/accuracy",
+    id: "",
+    title: "Accuracy check",
+    text: "Before trusting a toolkit with your own car, check it on a case with a known answer. The Ahmed body, a simple car-like shape measured in a wind tunnel, runs through the same chain you would use for a car: snappyHexMesh, Mesh Doctor, a steady k-omega SST solve on a moving ground, then the charts. 25° slant, medium mesh −1.7 % Cd 0.280 against 0.285 in the tunnel Mesh study < 0.5 % Cd change, medium to fine mesh 35° slant +57 % steady RANS misses the separation Solve time, medium mesh 27 min 0.84 M cells, 2000 iterations, 6 cores Drag: the Mesh Doctor run against the wind tunnel Cd is the mean over the last 500 of 2000 iterations. The three 25° meshes differ only in cell size. What it shows The mesh is fine enough at 0.84 M cells Going from the medium to the fine mesh (twice the cells) changes Cd by less than 0.5 % and Cl by 1 %. The coarse mesh is 7 % higher: too coarse for numbers, fine for a quick look. Do the same on your own car: run two meshes and only quote numbers that stop changing. 25°: within 2 % of the wind tunnel Better than steady RANS usually manages on this shape, and partly luck: the real flow separates at the top of the slant and reattaches, which two-equation models get only roughly. The big features (stagnation, base wake, the slant-edge vortices) are right. 35°: steady RANS gets it wrong In the wind tunnel the flow leaves the slant completely above about 30° and the drag drops to 0.26. Here the flow stays on the slant, the edge vortices grow, and Cd rises to 0.408 (the high lift, 0.445, shows the same). A settled, smooth-looking result can still be wrong: where a part sits near a separation point (a steep diffuser, a highly loaded flap), check with a transient DDES run or a test, and compare designs rather than trusting the absolute number. All the numbers OpenFOAM 14, 2000 iterations per case on 6 cores. Drift is the change between the two halves of the averaging window: under 1 % means settled. Case Slant Cells Cd Drift Cl Wind tunnel Cd Difference Solve time coarse 25° 0.48 M 0.299 −0.11 % 0.298 0.285 +4.8 % 14 min medium 25° 0.84 M 0.280 −0.02 % 0.295 0.285 −1.7 % 27 min fine 25° 1.57 M 0.280 −0.05 % 0.292 0.285 −1.8 % 51 min 35° 35° 0.84 M 0.408 −0.15 % 0.445 0.26 +57 % 24 min Wind tunnel: Ahmed, Ramm & Faltin, SAE 840300 (1984), 60 m/s; the 35° value (about 0.26) as quoted from it in later papers. Simulation: 40 m/s, half model with a symmetry plane, moving ground, no stilts. Every refinement level follows the background cell size, so each mesh step roughly doubles the cells. Using this on your own work Treat differences between designs (A against B on the same mesh and setup) as more reliable than absolute numbers. Settled forces (drift under 1 %) only mean the solver has stopped changing, not that it is right. Report a mesh study with the result: two meshes, and the change between them. Run it yourself About 2 hours on 6 cores and 4.5 GB of memory at the peak. It writes the table above to ../ahmed_validation/results.md. . /opt/openfoam14/etc/bashrc cp -r examples/ahmed-body $FOAM_RUN/ahmed && cd $FOAM_RUN/ahmed ./Allvalidate 6 2000 # ranks, iterations per case; writes ../ahmed_validation/results.md Size your own case How it works This page follows docs/validation.md in the source.",
+  },
+  {
+    page: "/install",
+    id: "",
+    title: "Install",
+    text: "Mesh Doctor runs on your own computer, inside Linux: on Windows, that is WSL with Ubuntu 22.04. It needs OpenFOAM 14 from openfoam.org and Python 3.8 or newer (numpy only for the repair map). One script sets it all up.",
+  },
+  {
+    page: "/install",
+    id: "one-command",
+    title: "One command",
+    text: "Run it from a copy of the repository: a git clone, or its ZIP from GitHub. It installs only what is missing, so it is safe to run again, and it never touches your cases. Windows 10 or 11 In PowerShell. Sets up WSL with Ubuntu 22.04, then runs the Linux script inside it. powershell -ExecutionPolicy Bypass -File tools\\setup_windows.ps1 Ubuntu 22.04, or inside WSL In a terminal. Asks for your sudo password once. bash tools/setup_linux.sh What it does Installs OpenFOAM 14, numpy, matplotlib, PIL and ParaView, then builds Mesh Doctor's OpenFOAM utilities (./Allwmake). Makes OpenFOAM load in every new terminal. Ends with tools/toolkit_check.py, which says what works. Options -DryRun or --dry-run: print the steps without running them. -NoParaView or --no-paraview: skip ParaView (about 600 MB; only the picture scripts need it). First time on Windows: installing WSL needs PowerShell opened as administrator, and a restart. Ubuntu then opens and asks for a Linux user name and password (your choice; the password is for sudo). Run the script again after that.",
+  },
+  {
+    page: "/install",
+    id: "by-hand",
+    title: "By hand",
+    text: "The same steps, one at a time. Windows (WSL) Install Ubuntu 22.04 from the Microsoft Store, or from PowerShell opened as administrator: wsl --install -d Ubuntu-22.04 Then follow Linux below, inside the Ubuntu window. Start the engine inside WSL: meshdoctor serve. Open http://localhost:8765 in your Windows browser. WSL forwards the port to Windows' own localhost only, not to the network. Keep cases inside the WSL file system (~/...), not under /mnt/c: OpenFOAM is many times slower on Windows drives. Linux (Ubuntu 22.04, or WSL) OpenFOAM 14 (skip if you have it) sudo sh -c \"wget -qO /etc/apt/trusted.gpg.d/openfoam.asc https://dl.openfoam.org/gpg.key\" echo \"deb http://dl.openfoam.org/ubuntu jammy main\" | sudo tee /etc/apt/sources.list.d/openfoam.list sudo apt update && sudo apt install openfoam14 python3-numpy Mesh Doctor git clone https://github.com/Cfd-mesh-doctor/mesh-doctor mesh-doctor && cd mesh-doctor . /opt/openfoam14/etc/bashrc ./Allwmake builds foamMeshDoctor and foamResidualHotspots bin/meshdoctor check says \"ready\", or lists what is missing To type just meshdoctor, add the clone's bin/ folder to your PATH. With pip instead: pip install \".[map]\" in a virtual environment (or pipx install .); ./Allwmake is still needed for the OpenFOAM utilities. Docker (OpenFOAM included) docker build -t meshdoctor . docker run --rm -p 127.0.0.1:8765:8765 -v /path/to/cases:/cases:ro -v meshdoctor-work:/work meshdoctor Then open http://localhost:8765. Cases are mounted read-only; results go to the meshdoctor-work volume. Always publish the port as 127.0.0.1:8765:8765: plain 8765:8765 would put the dashboard on your network. On a university cluster (Apptainer and Slurm), see the cluster steps in the README.",
+  },
+  {
+    page: "/install",
+    id: "next",
+    title: "Then",
+    text: "Mesh Doctor is ready when meshdoctor check says so. Try the motorBike tutorial OpenFOAM's own case: repair, A/B test and map, about 15 to 20 minutes on 4 cores, before you use your own cases. First run, in the README Pair this site Start the engine and open its pairing link once per browser, so this site can show your runs. Connect Size your case Memory, time and disk for a mesh, before you start a job. Size estimator",
+  },
+];

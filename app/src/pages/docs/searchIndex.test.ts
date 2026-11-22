@@ -16,20 +16,38 @@ describe("searching the docs", () => {
     expect(at("/troubleshooting").map((e) => e.id)).toEqual(GROUPS.map((g) => g.id));
     expect(at("/gallery").map((e) => e.id)).toEqual(GALLERY.map((s) => s.id));
     expect(new Set(SEARCH_INDEX.map((e) => `${e.page}#${e.id}`)).size).toBe(SEARCH_INDEX.length);
+    // The pages written as pages of their own: their top, then each of their sections.
+    expect(at("/how-it-works").map((e) => e.id))
+      .toEqual(["", "detect", "highlight", "correct", "ab-test", "judge", "hotspots", "dashboard"]);
+    expect(at("/accuracy").map((e) => e.id)).toEqual([""]);
+    expect(at("/install").map((e) => e.id)).toEqual(["", "one-command", "by-hand", "next"]);
     expect(new Set(SEARCH_INDEX.filter((e) => e.id).map((e) => e.page))).toEqual(new Set([
-      "/gallery", "/limits", "/safety", "/your-own-case", "/claude-code", "/dashboard-tour", "/architecture",
-      "/troubleshooting",
+      "/how-it-works", "/gallery", "/install", "/limits", "/safety", "/your-own-case", "/claude-code", "/dashboard-tour",
+      "/architecture", "/troubleshooting",
     ]));
-    // Every other page the Docs page lists is in it once, by what the Docs page says about it.
+    // Every page the Docs page lists is in it; the two whose words aren't searched (the tools) once, by what the
+    // Docs page says about them.
     for (const d of ON_SITE) expect(SEARCH_INDEX.some((e) => e.page === d.page), d.title).toBe(true);
-    expect(SEARCH_INDEX.filter((e) => !e.id)).toEqual(ON_SITE.filter((d) => !SEARCHED.includes(d.title))
-      .map((d) => ({ page: d.page, pageTitle: d.title, id: "", title: d.title, text: d.about })));
+    const summed = ON_SITE.filter((d) => !SEARCHED.includes(d.title));
+    expect(summed.map((d) => d.page)).toEqual(["/report", "/estimate"]);
+    for (const d of summed) {
+      expect(at(d.page ?? "")).toEqual([{ page: d.page, pageTitle: d.title, id: "", title: d.title, text: d.about }]);
+    }
   });
 
-  it("finds a page written as a page of its own by its summary, and opens it at its top", () => {
-    const install = searchDocs("WSL OpenFOAM Python").find((h) => h.page === "/install");
-    expect(install).toMatchObject({ id: "", title: "Install" });
-    expect(install && hitTarget(install, "WSL")).toEqual({ pathname: "/install", search: "", hash: "" });
+  it("finds a page of its own by the words it shows: a section at its heading, the rest at the page's top", () => {
+    const docker = searchDocs("docker volume").find((h) => h.page === "/install");
+    expect(docker).toMatchObject({ pageTitle: "Install", id: "by-hand", title: "By hand" });
+    expect(docker && hitTarget(docker, "docker")).toEqual({ pathname: "/install", search: "", hash: "#by-hand" });
+    const tunnel = searchDocs("Faltin").find((h) => h.page === "/accuracy");
+    expect(tunnel).toMatchObject({ pageTitle: "Accuracy check", id: "", title: "Accuracy check" });
+    expect(tunnel && hitTarget(tunnel, "Faltin")).toEqual({ pathname: "/accuracy", search: "", hash: "" });
+  });
+
+  it("finds a tool by what the Docs page says about it, and opens it at its top", () => {
+    const viewer = searchDocs("uploaded").find((h) => h.page === "/report");
+    expect(viewer).toMatchObject({ id: "", title: "Report viewer" });
+    expect(viewer && hitTarget(viewer, "uploaded")).toEqual({ pathname: "/report", search: "", hash: "" });
   });
 
   it("finds a Gallery section by what its pictures show, and opens it at its heading", () => {
@@ -77,7 +95,8 @@ describe("searching the docs", () => {
   });
 
   it("reads a section as its page does: a link by its words, not its address", () => {
-    expect(searchDocs("how-it-works.md")).toEqual([]);
+    // Only the page whose own words name the file finds it ("This page follows docs/how-it-works.md").
+    expect(searchDocs("how-it-works.md").map((h) => `${h.page}#${h.id}`)).toEqual(["/how-it-works#"]);
     const safety = at("/safety").map((e) => e.text).join(" ");
     expect(safety).toContain("(see how it works)");
     for (const e of SEARCH_INDEX) expect(e.text, `${e.page}#${e.id}`).not.toMatch(/\]\(|\*\*|\s{2}/);
@@ -103,8 +122,8 @@ describe("searching the docs", () => {
   });
 
   it("names the pages it looks in in the Docs page's order", () => {
-    expect(SEARCHED).toEqual(ON_SITE.map((d) => d.title).filter((t) => SEARCH_INDEX.some((e) => e.pageTitle === t && e.id)));
-    expect(SEARCHED).toHaveLength(8);
+    expect(SEARCHED).toEqual(ON_SITE.filter((d) => d.page !== "/report" && d.page !== "/estimate").map((d) => d.title));
+    expect(SEARCHED).toHaveLength(11);
   });
 
   it("opens a section at its heading, and a Troubleshooting group at its problems that hold all the words", () => {

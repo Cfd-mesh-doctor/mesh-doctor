@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Searching all the docs at once: an entry for each section of the pages that show a doc's sections, for each of the
-// Gallery's sections and for each group of Troubleshooting's problems, from the texts those pages show, found by the
-// words typed. How it works, Accuracy check and Install are written as pages of their own rather than from a doc's
-// sections, so they (and the two tools) are found by what the Docs page says about them. It is kept apart from the
-// pages, so the Docs page's search (DocSearch.tsx) loads it only when it is used.
+// Searching all the docs at once, by the words typed: an entry for each section of the pages that show a doc's
+// sections, for each of the Gallery's sections and for each group of Troubleshooting's problems, from the texts
+// those pages show; and for How it works, Accuracy check and Install, written as pages of their own, one for the
+// page's top and one for each of its sections, from the words those pages show (pageText.ts, which a test writes
+// from them). The two tools are found by what the Docs page says about them. It is kept apart from the pages, so the
+// Docs page's search (DocSearch.tsx) loads it only when it is used.
 import { plainText, type DocBlock, type DocItem, type DocSection } from "@/lib/docSections";
 import { DESIGN } from "@/pages/architecture/design";
 import { GUIDE as CLAUDE } from "@/pages/claude/guide";
@@ -15,9 +16,10 @@ import { SAFETY } from "@/pages/safety/rules";
 import { GROUPS } from "@/pages/troubleshooting/problems";
 import { holdsMessage, matches, plain } from "@/pages/troubleshooting/search";
 import { ON_SITE } from "./entries";
+import { PAGE_TEXT } from "./pageText";
 
-/** A section to find: its page and the page's name on the Docs page, its anchor, its title as the doc writes it (so
- *  its `code` can show as code) and its text as the page reads, in single spaces. */
+/** A section to find, or a page's top (no anchor): its page and the page's name on the Docs page, its anchor, its title
+ *  as the doc writes it (so its `code` can show as code) and its text as the page reads, in single spaces. */
 export interface SearchEntry {
   page: string;
   pageTitle: string;
@@ -60,8 +62,12 @@ const gallery = (s: GallerySection): SearchEntry => {
   return { page: "/gallery", pageTitle: titleOf("/gallery"), id: s.id, title: s.title, text: tidy(said.join(" ")) };
 };
 
+/** Where a page is in the Docs page's list. */
+const listedAt = (page: string) => ON_SITE.findIndex((d) => d.page === page);
+
 /** The sections, in the Docs page's order, so a tie between two sections goes to the page listed first. */
 const SECTIONS: SearchEntry[] = [
+  ...PAGE_TEXT.map((e) => ({ ...e, pageTitle: titleOf(e.page) })),
   ...GALLERY.map(gallery),
   ...sections("/dashboard-tour", TOUR),
   ...sections("/your-own-case", OWN_CASE),
@@ -76,13 +82,13 @@ const SECTIONS: SearchEntry[] = [
   ...sections("/limits", LIMITS),
   ...sections("/safety", SAFETY),
   ...sections("/architecture", DESIGN),
-];
+].sort((a, b) => listedAt(a.page) - listedAt(b.page));
 
 /** The names of the pages whose text is searched, in the Docs page's order. */
 export const SEARCHED = [...new Set(SECTIONS.map((e) => e.pageTitle))];
 
-/** The sections, then each other page the Docs page lists (written as a page of its own, or a tool) by what the Docs
- *  page says about it, opening at its top (no anchor). */
+/** The sections, then each other page the Docs page lists (the two tools) by what the Docs page says about it, opening
+ *  at its top (no anchor). */
 export const SEARCH_INDEX: SearchEntry[] = [
   ...SECTIONS,
   ...ON_SITE.filter((d) => d.page && !SECTIONS.some((e) => e.page === d.page))
