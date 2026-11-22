@@ -290,6 +290,20 @@ test("a list the engine fails to give says it didn't load, with the reason above
   await expect(main.getByRole("heading", { name: "No cases found" })).toHaveCount(0);
 });
 
+test("when the repair runs don't load, the Cases screen says so, rather than that no case was repaired", async ({ page }) => {
+  await mockEngine(page, { broken: ["/repairs"] });
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  await page.getByRole("complementary").getByRole("link", { name: "Cases", exact: true }).click();
+  const main = page.getByRole("main");
+  await expect(main.getByRole("alert")).toContainText("The engine hit an error");
+  await expect(main.getByText("· repair runs didn't load")).toBeVisible();
+  await expect(main.getByRole("row", { name: /^motorBike/ })).toBeVisible(); // the cases themselves are listed
+  await expect(main.getByText("none", { exact: true })).toHaveCount(0);
+  await expect(main.getByText("Not repaired yet", { exact: true })).toHaveCount(0);
+});
+
 test("the site talks to nothing but itself and the engine", async ({ page }) => {
   await mockEngine(page);
   const seen = new Set<string>();

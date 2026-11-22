@@ -112,6 +112,11 @@ export function Cases() {
 
   const q = query.trim().toLowerCase();
   const shown = q ? rows.filter((r) => r.name.toLowerCase().includes(q)) : rows;
+  // What didn't load, and why, at the top: the cases first, else the repair runs. Try again asks again for each one
+  // that failed. Runs that didn't load are unknown, not none: no case is called "Not repaired yet" for that.
+  const lists = [cases, repairs];
+  const failed = lists.find((list) => list.isError);
+  const runsFailed = repairs.isError && !repairs.data;
 
   return (
     <>
@@ -125,7 +130,16 @@ export function Cases() {
           </>
         }
       />
-      {cases.isError && <ErrorPanel className="mb-6" error={cases.error} onRetry={() => cases.refetch()} retrying={cases.isFetching} />}
+      {failed && (
+        <ErrorPanel
+          className="mb-6"
+          error={failed.error}
+          onRetry={() => {
+            for (const list of lists) if (list.isError) void list.refetch();
+          }}
+          retrying={lists.some((list) => list.isError && list.isFetching)}
+        />
+      )}
       <Card data-tour="cases">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
           {/* The site's search box: "/" puts the cursor in it, as in the Docs and Troubleshooting searches. */}
@@ -140,7 +154,9 @@ export function Cases() {
             spellCheck={false}
           />
           <span className="text-[13px] text-muted-foreground tabular-nums">
-            {cases.data ? `${shown.length} of ${formatCount(rows.length, "case")}` : ""}
+            <span>{cases.data ? `${shown.length} of ${formatCount(rows.length, "case")}` : ""}</span>
+            {/* What the message at the top is about: the cases are here, but not what was done to them. */}
+            {cases.data && runsFailed && <span> · repair runs didn't load</span>}
           </span>
         </div>
         {cases.isPending ? (
@@ -179,14 +195,17 @@ export function Cases() {
                       </div>
                       <div className="min-w-0">
                         <div className="font-medium">{r.name}</div>
-                        {/* Phones have only two columns: the runs and the date go under the name. */}
-                        <div className="text-xs text-muted-foreground sm:hidden">
-                          {repairs.isPending
-                            ? "…"
-                            : r.runs.length
-                              ? `${r.runs.length} ${r.runs.length === 1 ? "run" : "runs"} · ${formatRelative(r.latest?.finished)}`
-                              : "Not repaired yet"}
-                        </div>
+                        {/* Phones have only two columns: the runs and the date go under the name; nothing when the
+                            runs didn't load, as they are unknown. */}
+                        {!runsFailed && (
+                          <div className="text-xs text-muted-foreground sm:hidden">
+                            {repairs.isPending
+                              ? "…"
+                              : r.runs.length
+                                ? `${r.runs.length} ${r.runs.length === 1 ? "run" : "runs"} · ${formatRelative(r.latest?.finished)}`
+                                : "Not repaired yet"}
+                          </div>
+                        )}
                         {/* The Cells column shows from md: below that, the size and its estimate go here. */}
                         {r.cells != null && (
                           <div className="text-xs text-muted-foreground md:hidden">
@@ -199,7 +218,8 @@ export function Cases() {
                     </div>
                   </TD>
                   <TD className="hidden tabular-nums sm:table-cell">
-                    {repairs.isPending ? "…" : r.runs.length || <span className="text-muted-foreground">none</span>}
+                    {repairs.isPending ? "…" : runsFailed ? <span className="text-muted-foreground">–</span>
+                      : r.runs.length || <span className="text-muted-foreground">none</span>}
                   </TD>
                   <TD>
                     {/* The latest run is the latest finished one when there is one (unfinished runs sort last). On

@@ -49,18 +49,20 @@ describe("the Cases screen", () => {
  * these repair runs (none by default), runs that never come (null), or runs that don't load ("broken"). */
 function ownEngine(cases: string[] | null, at = "/app/cases", runs: unknown[] | null | "broken" = []) {
   savePairing({ engine: "http://localhost:8765", key: "TestKey_0123456789abcdefghijklmnopqrstuvwxy", paired: "2026-11-22T12:00:00Z" });
+  const asked: string[] = [];
   const transport: Transport = {
     kind: "engine",
     scope: "test",
     request: async <T,>(_method: string, path: string) => {
-      const route = path.split("?")[0];
+      const route = path.split("?")[0]!;
+      asked.push(route);
       if (route === "/repairs" && runs === null) return new Promise<T>(() => {});
       if (route === "/repairs" && runs !== "broken") return { items: runs } as T;
       if (route === "/cases" && cases) return { items: cases } as T;
       throw new EngineError("internal", "internal error; details are in the server window", 500);
     },
   };
-  return renderScreen(<Cases />, { path: "/app/cases", at, transport });
+  return { ...renderScreen(<Cases />, { path: "/app/cases", at, transport }), asked };
 }
 /** A finished repair run of a case, with no verdict. */
 const run = (name: string, source: string) =>
@@ -125,6 +127,32 @@ describe("the Cases screen of your own engine", () => {
     expect(await screen.findByText("1 of 1 case")).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("…")).toBeNull()); // the runs have answered
     expect(screen.queryByRole("button", { name: COPY })).toBeNull();
+  });
+
+  it("says when the repair runs didn't load, and why, rather than that no case was repaired", async () => {
+    const { asked } = ownEngine(["wing"], undefined, "broken");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("The engine hit an error"); // why, at the top
+    expect(screen.getByText("· repair runs didn't load")).toBeInTheDocument(); // and what, next to the count
+    expect(screen.getByText("1 of 1 case")).toBeInTheDocument();
+    // Unknown, not none: neither "Not repaired yet" (phones) nor "none" (the Repair runs column).
+    expect(screen.queryByText("Not repaired yet")).toBeNull();
+    expect(screen.queryByText("none")).toBeNull();
+    expect(within(caseRow("wing")).getAllByRole("cell")[1]).toHaveTextContent(/^–$/);
+    // Try again asks again for the runs alone: the cases loaded.
+    const count = (route: string) => asked.filter((r) => r === route).length;
+    const [cases, runs] = [count("/cases"), count("/repairs")];
+    await userEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(count("/repairs")).toBe(runs + 1));
+    expect(count("/cases")).toBe(cases);
+  });
+
+  it("says nothing failed when the runs load, and counts them", async () => {
+    ownEngine(["wing"], undefined, [run("wing-fix", "wing")]);
+    expect(await screen.findByText(/^1 run · /)).toBeInTheDocument();
+    expect(within(caseRow("wing")).getAllByRole("cell")[1]).toHaveTextContent(/^1$/);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(/didn't load/)).toBeNull();
   });
 
   it("says how to repair a case: its command, or the engine's dashboard, linked in a new tab", async () => {
