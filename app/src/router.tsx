@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The screens. /app talks to the paired engine; /demo shows the same screens with recorded data;
-// /report opens a report file in the browser; /estimate sizes a case; /how-it-works explains each step;
-// /accuracy compares the chain with a wind tunnel; /gallery shows the pictures the toolkit's scripts make;
-// /install gives the README's set-up steps; /dashboard-tour the engine's own dashboard; /troubleshooting the known problems, with a search; /limits where it
-// stops; /safety its safety model; /docs lists all the documentation.
+// The screens. /app talks to the engine that /connect pairs, and /demo shows the same screens with recorded data.
+// Besides the home page, the rest are /docs and the pages it lists: the report viewer, the size estimator and a page
+// for each doc, from pages/docs/entries.ts, whose test checks that each has a route here (so they aren't named here).
 // Everything but the home page loads when first opened, so the home page stays small.
 import { createBrowserRouter, type RouteObject } from "react-router";
 import type { RouteHandle } from "@/components/layout/AppLayout";
