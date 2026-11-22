@@ -17,8 +17,10 @@ export function Progress({ value, tone = "primary", label, className }: {
       aria-valuenow={v == null ? undefined : Math.round(v * 100)}
       className={cn("h-1.5 w-full overflow-hidden rounded-full bg-surface-2 ring-1 ring-inset ring-border", className)}
     >
+      {/* With no value yet, a faint bar across the whole track: a third of it would read as 33 %, the more so when
+          it stands still for those who ask for less motion. */}
       <div
-        className={cn("h-full rounded-full transition-[width] duration-500", colour, v == null && "w-1/3 animate-pulse")}
+        className={cn("h-full rounded-full transition-[width] duration-500", colour, v == null && "w-full animate-pulse opacity-30")}
         style={v == null ? undefined : { width: `${v * 100}%` }}
       />
     </div>
