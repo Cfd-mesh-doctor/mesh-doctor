@@ -140,9 +140,14 @@ test("every page runs under the site's Content-Security-Policy", async ({ page }
   }
 });
 
-test("unknown pages say so", async ({ page }) => {
+test("unknown pages say so, and link the page a near address meant", async ({ page }) => {
   await page.goto("/nowhere");
   await expect(page.getByText("This page doesn't exist")).toBeVisible();
   await page.goto("/demo/nowhere");
   await expect(page.getByText("This page doesn't exist")).toBeVisible();
+  await page.goto("/docs/validation"); // the Accuracy check's doc
+  await expect(page.getByText("This page doesn't exist")).toBeVisible();
+  await page.getByRole("link", { name: "Accuracy check" }).click();
+  await expect(page).toHaveURL(/\/accuracy$/);
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 });

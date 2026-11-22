@@ -1,8 +1,46 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { RouterProvider, createMemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { RouteError } from "./NotFound";
+import { NotFound, NotFoundPage, RouteError } from "./NotFound";
+
+/** Opens an address no page has: the site's own not-found page, or an app screen's (whose sidebar lists the rest). */
+function openUnknown(address: string, inApp = false) {
+  const router = createMemoryRouter([{ path: "*", element: inApp ? <NotFound home="/demo" /> : <NotFoundPage /> }],
+    { initialEntries: [address] });
+  render(<RouterProvider router={router} />);
+}
+
+/** Waits until the page has read its guess (it loads meantPage.ts once shown). */
+async function guessed() {
+  await import("./meantPage");
+  await act(async () => {});
+}
+
+describe("a page that doesn't exist", () => {
+  it("links the page the address most likely meant", async () => {
+    openUnknown("/docs/validation.md");
+    expect(await screen.findByRole("heading", { level: 1, name: "This page doesn't exist" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Accuracy check" })).toHaveAttribute("href", "/accuracy");
+    expect(screen.getByText(/Did you mean/)).toHaveTextContent(/^Did you mean Accuracy check\?$/);
+    expect(screen.getByRole("link", { name: "Back to the start" })).toHaveAttribute("href", "/");
+  });
+
+  it("guesses nothing when no page is near the address", async () => {
+    openUnknown("/nowhere");
+    expect(await screen.findByRole("heading", { level: 1, name: "This page doesn't exist" })).toBeInTheDocument();
+    await guessed();
+    expect(screen.queryByText(/Did you mean/)).toBeNull();
+  });
+
+  it("guesses nothing on an app screen, whose sidebar lists the screens", async () => {
+    openUnknown("/demo/instal", true);
+    expect(await screen.findByRole("heading", { level: 1, name: "This page doesn't exist" })).toBeInTheDocument();
+    await guessed();
+    expect(screen.queryByText(/Did you mean/)).toBeNull();
+    expect(screen.getByRole("link", { name: "Back to the start" })).toHaveAttribute("href", "/demo");
+  });
+});
 
 /** Opens a page whose code fails to load, under a parent with the site's error page, as in the site's router. */
 function openFailing(error: Error) {

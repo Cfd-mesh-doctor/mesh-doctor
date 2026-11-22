@@ -1,14 +1,34 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { ArrowLeft, Compass } from "lucide-react";
-import { useEffect } from "react";
-import { Link, isRouteErrorResponse, useRouteError } from "react-router";
+import { useEffect, useState } from "react";
+import { Link, isRouteErrorResponse, useLocation, useRouteError } from "react-router";
 import { Logo } from "@/components/brand/Logo";
 import { EmptyState } from "@/components/shared/page";
 import { Button } from "@/components/ui/button";
 import { useTitle } from "@/lib/useTitle";
+import type { Meant } from "./meantPage";
 
-export function NotFound({ home = "/" }: { home?: string }) {
+/** The page this address most likely meant (meantPage.ts, loaded only once a page isn't found), if any. */
+function useMeant(on: boolean): Meant | undefined {
+  const { pathname } = useLocation();
+  const [meant, setMeant] = useState<{ pathname: string; page?: Meant }>();
+  useEffect(() => {
+    if (!on) return;
+    let live = true;
+    import("./meantPage").then(
+      (m) => { if (live) setMeant({ pathname, page: m.meantPage(pathname) }); },
+      () => undefined, // without the guess the page still says what it must
+    );
+    return () => { live = false; };
+  }, [on, pathname]);
+  return meant?.pathname === pathname ? meant.page : undefined;
+}
+
+/** `suggest`: also link the page the address most likely meant. The site's own page does; the app's screens don't, as
+ *  their sidebar lists them beside it. */
+export function NotFound({ home = "/", suggest = false }: { home?: string; suggest?: boolean }) {
   useTitle("Not found");
+  const meant = useMeant(suggest);
   return (
     <EmptyState
       icon={Compass}
@@ -22,6 +42,12 @@ export function NotFound({ home = "/" }: { home?: string }) {
       }
     >
       Check the address, or go back to where you started.
+      {meant && (
+        <p className="mt-3">
+          Did you mean{" "}
+          <Link to={meant.page} className="font-medium text-primary underline-offset-4 hover:underline">{meant.title}</Link>?
+        </p>
+      )}
     </EmptyState>
   );
 }
@@ -33,7 +59,7 @@ export function NotFoundPage() {
         <Link to="/" className="rounded-md"><Logo /></Link>
       </header>
       <main className="flex flex-1 items-center justify-center px-4">
-        <NotFound />
+        <NotFound suggest />
       </main>
     </div>
   );
