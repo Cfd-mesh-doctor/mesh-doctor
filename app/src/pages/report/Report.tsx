@@ -5,13 +5,15 @@
 import {
   Activity, Boxes, Check, FileJson, FileUp, FolderOpen, Move, ShieldCheck, TrendingDown, TrendingUp, TriangleAlert,
 } from "lucide-react";
-import { Component, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { LineChart, type LineSeries } from "@/components/charts/LineChart";
 import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { PageHeader, StatTile } from "@/components/shared/page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Segmented } from "@/components/ui/misc";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
 import { formatDateTime, formatInt, formatNumber } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
@@ -206,7 +208,8 @@ function ReportView({ summary: s, from, onClose }: { summary: ReportSummary; fro
         <Button variant="secondary" onClick={onClose}><FolderOpen /> Open another report</Button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {/* grid-cols-1, not the default: a wide table then scrolls inside its card instead of widening the page */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatTile label="checkMesh numbers improved" value={s.improved.length} hint={`${s.unchanged.length} unchanged`}
           icon={TrendingUp} tone={s.improved.length ? "success" : undefined} />
         <StatTile label="Numbers made worse" value={s.regressions.length}
@@ -249,7 +252,7 @@ function ReportView({ summary: s, from, onClose }: { summary: ReportSummary; fro
         </Card>
       </Section>
 
-      <div className="mt-4 grid items-start gap-4 lg:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         <Section title="checkMesh, before and after the repair">
           <CheckMeshCard rows={s.checkMesh} />
         </Section>
@@ -259,6 +262,12 @@ function ReportView({ summary: s, from, onClose }: { summary: ReportSummary; fro
           </Section>
         )}
       </div>
+
+      {s.ab && s.ab.history.fields.length > 0 && (
+        <Section title="Residuals, original vs repaired mesh">
+          <ResidualCard history={s.ab.history} />
+        </Section>
+      )}
 
       {s.judge && (
         <Section title="Is the repaired-mesh run converged?">
@@ -368,6 +377,50 @@ function AbCard({ ab }: { ab: NonNullable<ReportSummary["ab"]> }) {
         the same case, settings and start on both meshes. Below 1× the repaired mesh converges further.
         {spi && ` Time per iteration: ${spi.original.toFixed(2)} s original, ${spi.repaired.toFixed(2)} s repaired.`}
       </p>
+    </Card>
+  );
+}
+
+function LegendLine({ dashed, className, children }: { dashed?: boolean; className: string; children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <svg width="18" height="4" aria-hidden>
+        <line x1="0" y1="2" x2="18" y2="2" strokeWidth="2" className={className} strokeDasharray={dashed ? "4 3" : undefined} />
+      </svg>
+      {children}
+    </span>
+  );
+}
+
+function ResidualCard({ history }: { history: NonNullable<ReportSummary["ab"]>["history"] }) {
+  const { fields, original, repaired } = history;
+  const [field, setField] = useState(() => (fields.includes("p") ? "p" : fields.includes("p_rgh") ? "p_rgh" : (fields[0] ?? "")));
+  const series = useMemo(() => {
+    const out: LineSeries[] = [];
+    if (original) out.push({ name: "original mesh", stroke: "stroke-muted-foreground", swatch: "bg-muted-foreground", dashed: true, x: original.x, y: original.y[field] ?? [] });
+    if (repaired) out.push({ name: "repaired mesh", stroke: "stroke-primary", swatch: "bg-primary", x: repaired.x, y: repaired.y[field] ?? [] });
+    return out;
+  }, [original, repaired, field]);
+  return (
+    <Card className="mt-4">
+      <CardHeader className="flex-wrap">
+        <div>
+          <CardTitle>Residuals, original vs repaired mesh</CardTitle>
+          <CardDescription>Initial residual per iteration, log scale: lower and still falling is better.</CardDescription>
+        </div>
+        {fields.length > 1 && (
+          <Segmented label="Field" value={field} onChange={setField}
+            options={fields.map((f) => ({ value: f, label: <span className="font-mono">{f}</span> }))} />
+        )}
+      </CardHeader>
+      <CardContent>
+        <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          {original && <LegendLine dashed className="stroke-muted-foreground">original mesh</LegendLine>}
+          {repaired && <LegendLine className="stroke-primary">repaired mesh</LegendLine>}
+        </div>
+        <LineChart series={series} log xLabel="iteration" empty="No residuals for this field"
+          label={`Initial residual of ${field} per iteration on the original and the repaired mesh, log scale`} />
+      </CardContent>
     </Card>
   );
 }

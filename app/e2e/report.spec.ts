@@ -31,6 +31,13 @@ test("a report file opens in the browser, and nothing is sent anywhere", async (
   await expect(page.getByRole("row", { name: /^p / })).toContainText("0.50×");
   await expect(page.getByText("so the repair helped the solver.", { exact: false })).toBeVisible();
   await expect(page).toHaveTitle("Report ahmed25-fine-fix · Mesh Doctor");
+  // The residual chart: two lines, and a read-out where the pointer is.
+  const chart = page.getByRole("img", { name: /Initial residual of p per iteration/ });
+  await expect(chart.locator("path")).toHaveCount(2);
+  await chart.hover({ position: { x: 300, y: 100 } });
+  await expect(page.getByText(/^iteration \d+$/)).toBeVisible();
+  await page.getByRole("radio", { name: "Ux" }).click();
+  await expect(page.getByRole("img", { name: /Initial residual of Ux per iteration/ })).toBeVisible();
   expect([...seen.origins]).toEqual([SITE]);
   expect(seen.sent).toEqual([]);
 });

@@ -4,7 +4,9 @@ import { cn } from "@/lib/utils";
 
 export function Table({ className, ...props }: ComponentProps<"table">) {
   return (
-    <div className="w-full overflow-x-auto">
+    // relative: screen-reader-only labels in the cells (absolutely positioned) stay inside this scroll box,
+    // instead of sticking out past a phone's screen when the table scrolls sideways.
+    <div className="relative w-full overflow-x-auto">
       <table className={cn("w-full border-collapse text-sm", className)} {...props} />
     </div>
   );

@@ -9,7 +9,7 @@ test("on a phone nothing scrolls sideways, and the menu works", async ({ page })
     for (const path of ["/", "/connect", "/report", "/demo", "/demo/jobs", "/demo/cases", "/demo/settings"]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
-      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(overflow, `${path} is wider than a ${width} px screen`).toBeLessThanOrEqual(1);
     }
   }
@@ -21,13 +21,21 @@ test("on a phone nothing scrolls sideways, and the menu works", async ({ page })
 });
 
 test("on a small phone an open report fits the screen", async ({ page }) => {
+  // Six A/B fields with long numbers, as a real k-omega run has: the table once widened the page.
+  const report = testReport() as { documents: { abtest: Record<string, Record<string, unknown>> } };
+  const ab = report.documents.abtest;
+  for (const f of ["Uy", "Uz", "k", "omega"]) {
+    (ab.residualRatioFixedOverBase as Record<string, number>)[f] = 1.0042;
+    (ab.base!.residuals as Record<string, unknown>)[f] = { mean: 0.000467123 };
+    (ab.fixed!.residuals as Record<string, unknown>)[f] = { mean: 0.000465871 };
+  }
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto("/report");
   await page.getByLabel("Choose a report file").setInputFiles({
-    name: "ahmed25-fine-fix.mdreport.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(testReport())),
+    name: "ahmed25-fine-fix.mdreport.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(report)),
   });
   await expect(page.getByRole("heading", { name: "ahmed25-fine-fix" })).toBeVisible();
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow, "the open report is wider than a 360 px screen").toBeLessThanOrEqual(1);
 });
 

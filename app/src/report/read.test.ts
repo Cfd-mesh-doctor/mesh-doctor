@@ -77,6 +77,9 @@ describe("what a report says", () => {
     expect(s.ab?.meanRatio).toBeCloseTo(Math.sqrt(0.45));
     expect(s.ab?.meta).toEqual(["300 iterations", "started from 0", "4 processes", "the same settings on both meshes"]);
     expect(s.ab?.finished).toBe("2026-11-21T19:18:41Z");
+    expect(s.ab?.history.fields).toEqual(["p", "Ux"]);
+    expect(s.ab?.history.original?.x).toHaveLength(60);
+    expect(s.ab?.history.repaired?.y.p?.[0]).toBeCloseTo(0.9 * (1 + 0.15 * Math.sin(1)), 3);
     expect(s.sentence).toBe(
       "The repair improved 5 checkMesh numbers but made 1 worse (Max skewness). Problem clusters went from 4 to 1. " +
         "In the solver test, the repaired mesh's residuals are 0.50–0.90× those of the original mesh, so the repair helped the solver.",

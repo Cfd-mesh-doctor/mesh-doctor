@@ -31,6 +31,11 @@ describe("Report viewer", () => {
     expect(screen.getByText("lift still drifting slowly")).toBeInTheDocument();
     expect(screen.getByText(/7 folder paths on the worker were replaced/)).toBeInTheDocument();
 
+    // The residual chart starts on p and switches field.
+    expect(screen.getByRole("img", { name: /Initial residual of p per iteration/ })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: "Ux" }));
+    expect(screen.getByRole("img", { name: /Initial residual of Ux per iteration/ })).toBeInTheDocument();
+
     await userEvent.click(screen.getByRole("button", { name: /open another report/i }));
     expect(screen.getByRole("heading", { name: "Report viewer" })).toBeInTheDocument();
   });
@@ -52,5 +57,6 @@ describe("Report viewer", () => {
     expect(await screen.findByText(/There is no solver A\/B test in this report\./)).toBeInTheDocument();
     expect(screen.queryByText("Did it help the solver?")).not.toBeInTheDocument();
     expect(screen.queryByText("Is the repaired-mesh run converged?")).not.toBeInTheDocument();
+    expect(screen.queryByText("Residuals, original vs repaired mesh")).not.toBeInTheDocument();
   });
 });

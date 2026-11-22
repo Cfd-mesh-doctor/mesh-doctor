@@ -2,6 +2,13 @@
 // A small, made-up report for the unit and browser tests: the shape `meshdoctor report` writes, with
 // invented numbers. No imports, so the browser tests (e2e/) can load it too.
 
+/** 60 iterations of residuals falling at `rate` per iteration, with a little wobble. */
+function history(rate: number) {
+  const it = Array.from({ length: 60 }, (_, i) => i + 1);
+  const fall = (scale: number) => it.map((i) => Number((scale * rate ** i * (1 + 0.15 * Math.sin(i))).toPrecision(4)));
+  return { Time: it, p: fall(1), Ux: fall(0.4) };
+}
+
 export function testReport(): Record<string, unknown> {
   const sha = (c: string) => c.repeat(64);
   return {
@@ -54,8 +61,8 @@ export function testReport(): Record<string, unknown> {
         nProcs: 4,
         variant: "",
         window: 50,
-        base: { residuals: { p: { mean: 0.0021 }, Ux: { mean: 0.00104 } }, secondsPerIteration: 0.612 },
-        fixed: { residuals: { p: { mean: 0.00105 }, Ux: { mean: 0.000936 } }, secondsPerIteration: 0.598 },
+        base: { residuals: { p: { mean: 0.0021 }, Ux: { mean: 0.00104 } }, secondsPerIteration: 0.612, residualHistory: history(0.92) },
+        fixed: { residuals: { p: { mean: 0.00105 }, Ux: { mean: 0.000936 } }, secondsPerIteration: 0.598, residualHistory: history(0.9) },
         residualRatioFixedOverBase: { p: 0.5, Ux: 0.9, k: null },
         fixedJudge: {
           schemaVersion: "1.1",

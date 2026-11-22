@@ -53,6 +53,12 @@ export interface AbRow {
   change: Change;
 }
 
+/** One run's residual history: iteration numbers and, per field, the initial residual at each. */
+export interface HistoryRun {
+  x: number[];
+  y: Record<string, (number | null)[]>;
+}
+
 export interface JudgeSummary {
   verdict: string;
   group: string;
@@ -96,6 +102,8 @@ export interface ReportSummary {
     finished: string | null;
     window: number | null;
     secondsPerIteration: { original: number; repaired: number } | null;
+    /** residuals per iteration of both runs, for the chart; fields in the order the solver logged them */
+    history: { fields: string[]; original: HistoryRun | null; repaired: HistoryRun | null };
   } | null;
   judge: JudgeSummary | null;
   sentence: string;
@@ -154,6 +162,15 @@ function checkMeshRows(rep: Obj, improved: string[], regressions: string[]): Che
     }));
 }
 
+function historyRun(run: unknown): HistoryRun | null {
+  const h = obj(obj(run).residualHistory);
+  const time = arr(h.Time);
+  if (!time.length) return null;
+  const y: HistoryRun["y"] = {};
+  for (const [field, v] of Object.entries(h)) if (field !== "Time" && Array.isArray(v)) y[field] = v.map(num);
+  return { x: time.map((t) => num(t) ?? NaN), y };
+}
+
 function abSummary(abDoc: unknown): ReportSummary["ab"] {
   if (!abDoc) return null;
   const ab = obj(abDoc), base = obj(ab.base), fixed = obj(ab.fixed);
@@ -177,7 +194,11 @@ function abSummary(abDoc: unknown): ReportSummary["ab"] {
     extensions > 0 && `continued ${extensions}×`,
   ].filter((x): x is string => typeof x === "string");
   const sb = num(base.secondsPerIteration), sf = num(fixed.secondsPerIteration);
+  // A continued A/B test keeps the repaired run's whole history in fixedFull.
+  const original = historyRun(ab.base), repaired = historyRun(ab.fixedFull) ?? historyRun(ab.fixed);
+  const fields = [...new Set([...Object.keys(original?.y ?? {}), ...Object.keys(repaired?.y ?? {})])];
   return {
+    history: { fields, original, repaired },
     rows,
     meanRatio: geomean(rows.map((r) => r.ratio)),
     meta,
