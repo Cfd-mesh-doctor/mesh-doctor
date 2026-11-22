@@ -44,15 +44,21 @@ export function Input({ className, ...props }: ComponentProps<"input">) {
   );
 }
 
-export function Segmented<T extends string>({ value, onChange, options, label }: {
+export function Segmented<T extends string>({ value, onChange, options, label, wrap }: {
   value: T; onChange: (v: T) => void; options: { value: T; label: ReactNode }[]; label: string;
+  /** Options that don't fit on one line go on to the next, so every one shows, rather than scrolling sideways. */
+  wrap?: boolean;
 }) {
   return (
-    // On a narrow phone the options scroll sideways inside the control instead of widening the page.
+    // On a narrow phone the options scroll sideways inside the control instead of widening the page (with no
+    // scrollbar, the last one is cut at the edge), or, with `wrap`, go on to a second line.
     <div
       role="radiogroup"
       aria-label={label}
-      className="inline-flex max-w-full overflow-x-auto rounded-lg border border-border bg-surface-2 p-0.5 [scrollbar-width:none]"
+      className={cn(
+        "inline-flex max-w-full rounded-lg border border-border bg-surface-2 p-0.5",
+        wrap ? "flex-wrap gap-y-0.5" : "overflow-x-auto [scrollbar-width:none]",
+      )}
     >
       {options.map((o) => (
         <button

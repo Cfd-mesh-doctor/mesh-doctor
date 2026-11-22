@@ -291,8 +291,11 @@ export function Jobs() {
       {jobs.isError && <ErrorPanel className="mb-6" error={jobs.error} onRetry={() => jobs.refetch()} retrying={jobs.isFetching} />}
       <Card data-tour="jobs">
         <div className="flex items-center gap-3 border-b border-border px-3 py-3 sm:px-4">
+          {/* Its five choices and their counts need 356 px, more than a phone up to 414 px wide has: the ones that
+              don't fit go on to a second line, rather than Cancelled being cut at the edge. */}
           <Segmented
             label="Show jobs"
+            wrap
             value={filter}
             onChange={setFilter}
             options={[

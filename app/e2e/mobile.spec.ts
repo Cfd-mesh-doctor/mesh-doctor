@@ -63,15 +63,34 @@ test("on a small phone an open report fits the screen", async ({ page }) => {
   expect(overflow, "the open report is wider than a 360 px screen").toBeLessThanOrEqual(1);
 });
 
-test("on a small phone, jobs show progress under the name and every filter can be reached", async ({ page }) => {
+test("on a small phone, jobs show progress under the name and every filter shows whole", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto("/demo/jobs");
   const running = page.getByRole("row", { name: /ahmed25-medium-fix A\/B test/ });
   // No Progress column on a phone: the step shows once, under the name.
   await expect(running.getByText("solving fixed").filter({ visible: true })).toHaveCount(1);
-  await page.getByRole("radio", { name: /Cancelled/ }).click(); // scrolled off to the right at first
+  // The filter's five choices need 356 px: on a phone the ones that don't fit go on to a second line, so none is cut
+  // at the edge (Cancelled was, at "Canc", with the rest scrolled out of sight), down to the smallest phones.
+  const filter = page.getByRole("radiogroup", { name: "Show jobs" });
+  for (const width of [412, 360, 320]) {
+    await page.setViewportSize({ width, height: 800 });
+    const cut = await filter.evaluate((el) => {
+      const box = el.getBoundingClientRect();
+      return Array.from(el.querySelectorAll<HTMLElement>('[role="radio"]'))
+        .filter((r) => r.getBoundingClientRect().right > box.right + 0.5 || r.scrollWidth > r.clientWidth)
+        .map((r) => r.innerText);
+    });
+    expect(cut, `filter choices cut at ${width} px`).toEqual([]);
+    expect(await filter.evaluate((el) => el.scrollWidth - el.clientWidth), `the filter scrolls at ${width} px`).toBeLessThanOrEqual(0);
+  }
+  await page.getByRole("radio", { name: /Cancelled/ }).click();
   await expect(page.getByRole("row", { name: /ahmed25-fine-strict/ })).toBeVisible();
   await expect(page.getByRole("row", { name: /pitzdaily-fix/ })).toHaveCount(0);
+  // With room, the choices keep to one line.
+  await page.setViewportSize({ width: 768, height: 800 });
+  const tops = await filter.evaluate((el) =>
+    Array.from(el.querySelectorAll('[role="radio"]')).map((r) => Math.round(r.getBoundingClientRect().top)));
+  expect(new Set(tops).size, "the filter's lines at 768 px").toBe(1);
 });
 
 test("on a small phone a job's details fit the screen, scrolling inside rather than cut off", async ({ page }) => {
