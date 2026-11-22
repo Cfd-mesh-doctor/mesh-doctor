@@ -19,7 +19,8 @@ test("the size estimator works in the page and keeps the estimate in the address
   const cells = page.getByLabel("Mesh size");
   await cells.fill("31.1");
   await expect(page).toHaveURL(/\/estimate\?cells=31\.1$/);
-  expect(await page.evaluate(() => window.scrollY)).toBe(120);
+  // Still where it was, not back at the top (a pixel either way is the layout settling as the results change).
+  expect(Math.abs((await page.evaluate(() => window.scrollY)) - 120)).toBeLessThanOrEqual(2);
   await expect(page.getByText("too big", { exact: true })).toHaveCount(4);
   await expect(page.getByText("about 19.0 h, $16")).toBeVisible();
 

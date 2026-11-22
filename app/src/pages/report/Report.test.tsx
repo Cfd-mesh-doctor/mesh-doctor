@@ -48,7 +48,8 @@ describe("Report viewer", () => {
     renderScreen(<Report />, { path: "/report" });
     await userEvent.upload(screen.getByLabelText("Choose a report file"), file(testReport({ map: true })));
     expect(await screen.findByText("Where the mesh was repaired")).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: /^Side view of the model's wall faces \(x along the flow, z up\), with 4 defects found and repaired and 1 defect left, and the 60 strongest cells/ })).toBeInTheDocument();
+    // The map draws once it has measured its width, a render after its card: wait for it too.
+    expect(await screen.findByRole("img", { name: /^Side view of the model's wall faces \(x along the flow, z up\), with 4 defects found and repaired and 1 defect left, and the 60 strongest cells/ })).toBeInTheDocument();
     expect(screen.getByText("found and repaired (4)")).toBeInTheDocument();
     expect(screen.getByText("left after the repair (1)")).toBeInTheDocument();
     expect(screen.getByText("Made-up map for the tests.")).toBeInTheDocument();
