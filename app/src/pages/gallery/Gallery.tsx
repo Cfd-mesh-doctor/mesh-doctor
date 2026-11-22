@@ -35,7 +35,7 @@ export function Gallery() {
               <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
                 Made by <code className="text-foreground">{s.tool}</code>. {s.text}
                 {s.id === "dashboard" && (
-                  <> See the <a href={DOCS.dashboard} target="_blank" rel="noreferrer" className={link}>dashboard tour</a>.</>
+                  <> See the <Link to="/dashboard-tour" className={link}>dashboard tour</Link>.</>
                 )}
               </p>
               <div className={cn("mt-4 grid grid-cols-1 gap-4", s.pictures.length > 1 && "md:grid-cols-2")}>

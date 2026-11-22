@@ -378,7 +378,7 @@ export function HowItWorks() {
             <Step s={dashboard} n={7}>
               <p>
                 <code>meshdoctor serve</code> shows four pages (see the{" "}
-                <Doc href={DOCS.dashboard}>dashboard tour</Doc>):
+                <Link to="/dashboard-tour" className={link}>dashboard tour</Link>):
               </p>
               <ul className={list}>
                 <li><code>/meshdoctor</code>: start repairs and A/B tests, view highlighted cells and results;</li>

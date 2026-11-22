@@ -131,7 +131,7 @@ test("every page runs under the site's Content-Security-Policy", async ({ page }
   });
   for (const path of [
     "/", "/connect", "/install", "/report", "/estimate", "/how-it-works", "/accuracy", "/gallery", "/docs", "/troubleshooting",
-    "/limits", "/safety", "/your-own-case", "/claude-code", "/demo", "/demo/cases", "/demo/jobs", "/demo/settings", "/demo/estimate", "/demo/repairs/ahmed35-medium-fix/report",
+    "/limits", "/safety", "/your-own-case", "/claude-code", "/dashboard-tour", "/demo", "/demo/cases", "/demo/jobs", "/demo/settings", "/demo/estimate", "/demo/repairs/ahmed35-medium-fix/report",
   ]) {
     await page.goto(path);
     await page.waitForLoadState("networkidle");

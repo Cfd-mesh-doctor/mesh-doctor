@@ -34,4 +34,22 @@ describe("reading the docs", () => {
       ],
     }]);
   });
+
+  it("reads pictures, sub-headings, and lists under a list item", () => {
+    const md = [
+      "## Two", "", "![A page](images/page.png)", "", "- top:", "  - one,", "    continued;", "  - two.", "- next",
+      "", "### Below it", "", "Text", "![After text](images/b.png)",
+    ].join("\n");
+    expect(markdownSections(md)).toEqual([{
+      id: "two",
+      title: "Two",
+      blocks: [
+        { picture: "images/page.png", alt: "A page" },
+        { list: [{ text: "top:", list: ["one, continued;", "two."] }, "next"] },
+        { heading: "Below it" },
+        { text: "Text" },
+        { picture: "images/b.png", alt: "After text" },
+      ],
+    }]);
+  });
 });

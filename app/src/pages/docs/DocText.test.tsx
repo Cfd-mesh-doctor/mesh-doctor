@@ -25,4 +25,15 @@ describe("text as the docs write it", () => {
     expect(screen.getByText("-copyZero")).toHaveClass("whitespace-nowrap");
     expect(screen.getByText(/^Run/)).toHaveTextContent("Run meshdoctor serve, then Try again (no -copyZero).");
   });
+
+  it("shows italics, but leaves a star in code or between spaces as it is", () => {
+    renderScreen(<p><DocText text="Switch between *before* and *after*: `processor*/0` and `postProcessing/*/0/*.dat`, 2 * 3 * 4." /></p>);
+    expect(screen.getByText("before").tagName).toBe("EM");
+    expect(screen.getByText("after").tagName).toBe("EM");
+    expect(screen.getByText("processor*/0").tagName).toBe("CODE");
+    expect(screen.getByText("postProcessing/*/0/*.dat").tagName).toBe("CODE");
+    expect(screen.getByText(/^Switch/)).toHaveTextContent(
+      "Switch between before and after: processor*/0 and postProcessing/*/0/*.dat, 2 * 3 * 4.",
+    );
+  });
 });

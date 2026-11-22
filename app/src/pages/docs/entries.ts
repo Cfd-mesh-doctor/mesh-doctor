@@ -22,6 +22,8 @@ export const ON_SITE: DocEntry[] = [
     about: "What the toolkit's scripts make for the worked Ahmed-body example, each picture with the script that made it." },
   { title: "Install", page: "/install",
     about: "Setting it up on your own computer: Linux, or WSL on Windows, with OpenFOAM 14 and Python. From the README." },
+  { title: "Dashboard tour", page: "/dashboard-tour", file: "dashboard.md",
+    about: "The engine's own dashboard (meshdoctor serve), page by page, with screenshots." },
   { title: "Your own case", page: "/your-own-case", file: "templates.md",
     about: "Copy the tested Ahmed-body case and change its geometry, domain and flow conditions to make your own." },
   { title: "Claude Code", page: "/claude-code", file: "claude.md",
@@ -40,8 +42,6 @@ export const ON_SITE: DocEntry[] = [
 
 /** Read on GitHub: the docs this site has no page for yet. Each title is the doc's own heading. */
 export const ON_GITHUB: DocEntry[] = [
-  { title: "Dashboard tour", file: "dashboard.md",
-    about: "The engine's own dashboard (meshdoctor serve), page by page, with screenshots." },
   { title: "Architecture", file: "architecture.md",
     about: "Where the code is, where it is going and why: the engine, its versioned results and API, and this site." },
 ];

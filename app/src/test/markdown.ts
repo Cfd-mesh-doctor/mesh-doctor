@@ -43,9 +43,9 @@ export function markdownOpening(md: string): DocBlock[] {
 
 /**
  * Lines of a doc as blocks: paragraphs (lines joined by spaces), lists (one entry per "- " item, with the item's
- * indented lines joined to it and a fenced code block indented under it kept with it) and fenced code blocks, with
- * the language the doc names. A paragraph ends a list, and so does a blank line unless the item's own indented lines
- * follow it.
+ * indented lines joined to it, and a fenced code block or a list of "  - " items indented under it kept with it),
+ * fenced code blocks with the language the doc names, pictures on a line of their own, and "### " headings. A
+ * paragraph ends a list, and so does a blank line unless the item's own indented lines follow it.
  */
 function markdownBlocks(lines: string[]): DocBlock[] {
   const blocks: DocBlock[] = [];
@@ -73,6 +73,14 @@ function markdownBlocks(lines: string[]): DocBlock[] {
       }
       continue;
     }
+    const picture = /^!\[([^\]]*)\]\(([^)\s]+)\)\s*$/.exec(line);
+    const heading = /^### (.+)$/.exec(line)?.[1];
+    if (picture || heading) {
+      flush();
+      list = undefined;
+      blocks.push(picture ? { picture: picture[2] ?? "", alt: picture[1] ?? "" } : { heading: heading ?? "" });
+      continue;
+    }
     const item = /^- (.+)$/.exec(line)?.[1];
     if (item) {
       flush();
@@ -83,9 +91,22 @@ function markdownBlocks(lines: string[]): DocBlock[] {
       }
       continue;
     }
+    const sub = /^ {2,}- (.+)$/.exec(line)?.[1];
+    if (sub && list && typeof last === "string") {
+      list[list.length - 1] = { text: last, list: [sub] };
+      continue;
+    }
+    if (sub && typeof last === "object" && "list" in last) {
+      last.list.push(sub);
+      continue;
+    }
     const more = /^ {2,}(\S.*)$/.exec(line)?.[1];
     if (more && list && typeof last === "string") {
       list[list.length - 1] = `${last} ${more.trim()}`;
+      continue;
+    }
+    if (more && typeof last === "object" && "list" in last) {
+      last.list[last.list.length - 1] += ` ${more.trim()}`;
       continue;
     }
     if (line.trim()) {

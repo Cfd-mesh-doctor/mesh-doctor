@@ -9,7 +9,6 @@ export const DOCS = {
   readme: `${REPO_URL}#readme`,
   quickstart: `${REPO_URL}#quickstart`,
   howItWorks: `${REPO_URL}/blob/main/docs/how-it-works.md`,
-  dashboard: `${REPO_URL}/blob/main/docs/dashboard.md`,
   validation: `${REPO_URL}/blob/main/docs/validation.md`,
   gallery: `${REPO_URL}/blob/main/docs/gallery.md`,
   firstRun: `${REPO_URL}#first-run-the-motorbike-tutorial`,

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// A doc's text, as the pages that show a whole doc lay it out (Limits, Safety model, Your own case): headings with
-// GitHub's anchors, paragraphs and lists with the doc's own `code`, **bold** and links (DocText), and code blocks.
+// A doc's text, as the pages that show a whole doc lay it out (Limits, Safety model, Your own case, Claude Code,
+// Dashboard tour): headings with GitHub's anchors, paragraphs and lists with the doc's own `code`, **bold** and links
+// (DocText), code blocks, and pictures.
 import { CopyCommand } from "@/components/shared/CopyCommand";
-import type { DocBlock, DocSection } from "@/lib/docSections";
+import { githubAnchor, type DocBlock, type DocItem, type DocPictures, type DocSection } from "@/lib/docSections";
 import { cn } from "@/lib/utils";
 import { DocText } from "./DocText";
 
@@ -16,31 +17,66 @@ function DocCode({ code, lang, className }: { code: string; lang?: string; class
   );
 }
 
-/** Paragraphs, lists and code blocks, in the doc's order. */
-function DocBlocks({ blocks }: { blocks: DocBlock[] }) {
+/** A picture as the gallery shows one: its own size or the column's width, whichever is smaller, opening full size
+ *  when clicked, with the doc's alt text under it. */
+function DocPicture({ src, alt, width, height }: { src: string; alt: string; width: number; height: number }) {
+  return (
+    <figure className="py-1">
+      <a href={src} target="_blank" rel="noreferrer" className="block w-fit max-w-full overflow-hidden rounded-xl border border-border bg-surface shadow-card">
+        <img src={src} alt={alt} width={width} height={height} loading="lazy" decoding="async" className="block h-auto max-w-full" />
+      </a>
+      <figcaption aria-hidden className="mt-2 text-[13px] text-muted-foreground">{alt}</figcaption>
+    </figure>
+  );
+}
+
+/** A list item, with the code block or the list the doc writes under it. */
+function DocListItem({ item }: { item: DocItem }) {
+  if (typeof item === "string") return <li><DocText text={item} /></li>;
+  if ("code" in item) return <li><DocText text={item.text} /><DocCode code={item.code} className="mt-2" /></li>;
+  return (
+    <li>
+      <DocText text={item.text} />
+      <ul className="mt-1.5 list-[circle] space-y-1 pl-5 marker:text-muted-foreground">
+        {item.list.map((sub) => <li key={sub}><DocText text={sub} /></li>)}
+      </ul>
+    </li>
+  );
+}
+
+/** Paragraphs, lists, code blocks, sub-headings and pictures, in the doc's order. */
+function DocBlocks({ blocks, pictures }: { blocks: DocBlock[]; pictures: DocPictures }) {
   return blocks.map((b, i) => {
     if ("code" in b) return <DocCode key={i} code={b.code} lang={b.lang} />;
     if ("text" in b) return <p key={i}><DocText text={b.text} /></p>;
+    if ("heading" in b) {
+      return (
+        <h3 key={i} id={githubAnchor(b.heading)} className="scroll-mt-20 pt-3 text-base font-semibold tracking-tight">
+          <DocText text={b.heading} />
+        </h3>
+      );
+    }
+    if ("picture" in b) {
+      const p = pictures[b.picture];
+      return p ? <DocPicture key={i} alt={b.alt} {...p} /> : null;
+    }
     return (
       <ul key={i} className="list-disc space-y-2 pl-5 marker:text-muted-foreground">
-        {b.list.map((item) => (typeof item === "string" ? (
-          <li key={item}><DocText text={item} /></li>
-        ) : (
-          <li key={item.text}><DocText text={item.text} /><DocCode code={item.code} className="mt-2" /></li>
-        )))}
+        {b.list.map((item) => <DocListItem key={typeof item === "string" ? item : item.text} item={item} />)}
       </ul>
     );
   });
 }
 
-export function DocSectionsView({ sections }: { sections: DocSection[] }) {
+/** The doc's sections; `pictures` holds the built files for the pictures the doc shows. */
+export function DocSectionsView({ sections, pictures = {} }: { sections: DocSection[]; pictures?: DocPictures }) {
   return (
     <div className="max-w-3xl space-y-10">
       {sections.map((s) => (
         <section key={s.id} id={s.id} aria-labelledby={`${s.id}-title`} className="scroll-mt-20">
-          <h2 id={`${s.id}-title`} className="text-lg font-semibold tracking-tight">{s.title}</h2>
+          <h2 id={`${s.id}-title`} className="text-lg font-semibold tracking-tight"><DocText text={s.title} /></h2>
           <div className="mt-3 space-y-3 text-[15px] leading-relaxed">
-            <DocBlocks blocks={s.blocks} />
+            <DocBlocks blocks={s.blocks} pictures={pictures} />
           </div>
         </section>
       ))}

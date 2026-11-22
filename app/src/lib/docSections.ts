@@ -2,14 +2,24 @@
 // Docs written as sections of paragraphs and lists, which pages copy exactly as the doc writes them (docTable.ts does
 // the same for tables). A test compares each copy with its doc (src/test/markdown.ts), so a page can't fall behind.
 
-/** A list item: its text, with the code block the doc writes under it when it has one. */
-export type DocItem = string | { text: string; code: string };
+/** A list item: its text, with the code block or the list the doc writes under it when it has one. */
+export type DocItem = string | { text: string; code: string } | { text: string; list: string[] };
 
-/** A paragraph (its lines joined by spaces), a list, or a fenced code block with the language the doc names. */
-export type DocBlock = { text: string } | { list: DocItem[] } | { code: string; lang?: string };
+/** A paragraph (its lines joined by spaces), a list, a fenced code block with the language the doc names, a picture
+ *  (its file as the doc writes it, relative to docs/, and its alt text) or a "### " heading inside a section. */
+export type DocBlock =
+  | { text: string }
+  | { list: DocItem[] }
+  | { code: string; lang?: string }
+  | { picture: string; alt: string }
+  | { heading: string };
 
 /** One "## " section of a doc. */
 export type DocSection = { id: string; title: string; blocks: DocBlock[] };
+
+/** The pictures a page shows for its doc, by the path the doc writes ("images/run.png"): the built file and its size
+ *  in pixels, so the page doesn't jump while they load. */
+export type DocPictures = Record<string, { src: string; width: number; height: number }>;
 
 /** The anchor GitHub gives a heading, so a link to a section works on the site and on GitHub alike. */
 export function githubAnchor(title: string): string {

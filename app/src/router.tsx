@@ -2,7 +2,7 @@
 // The screens. /app talks to the paired engine; /demo shows the same screens with recorded data;
 // /report opens a report file in the browser; /estimate sizes a case; /how-it-works explains each step;
 // /accuracy compares the chain with a wind tunnel; /gallery shows the pictures the toolkit's scripts make;
-// /install gives the README's set-up steps; /troubleshooting the known problems, with a search; /limits where it
+// /install gives the README's set-up steps; /dashboard-tour the engine's own dashboard; /troubleshooting the known problems, with a search; /limits where it
 // stops; /safety its safety model; /docs lists all the documentation.
 // Everything but the home page loads when first opened, so the home page stays small.
 import { createBrowserRouter, type RouteObject } from "react-router";
@@ -48,6 +48,10 @@ export const routes: RouteObject[] = [
       { path: "/install", lazy: async () => ({ Component: (await import("@/pages/install/Install")).Install }) },
       { path: "/your-own-case", lazy: async () => ({ Component: (await import("@/pages/own-case/OwnCase")).OwnCase }) },
       { path: "/claude-code", lazy: async () => ({ Component: (await import("@/pages/claude/ClaudeCode")).ClaudeCode }) },
+      {
+        path: "/dashboard-tour",
+        lazy: async () => ({ Component: (await import("@/pages/dashboard/DashboardTour")).DashboardTour }),
+      },
       {
         path: "/troubleshooting",
         lazy: async () => ({ Component: (await import("@/pages/troubleshooting/Troubleshooting")).Troubleshooting }),
