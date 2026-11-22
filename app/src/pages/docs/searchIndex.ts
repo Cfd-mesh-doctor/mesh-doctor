@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Searching all the docs at once: an entry for each section of the pages that show a doc's sections, and for each
-// group of Troubleshooting's problems, from the texts those pages show, found by the words typed. How it works,
-// Accuracy check, Gallery and Install are written as pages of their own rather than from a doc's sections, so they
-// (and the two tools) are found by what the Docs page says about them. It is kept apart from the pages, so the Docs
-// page's search (DocSearch.tsx) loads it only when it is used.
+// Searching all the docs at once: an entry for each section of the pages that show a doc's sections, for each of the
+// Gallery's sections and for each group of Troubleshooting's problems, from the texts those pages show, found by the
+// words typed. How it works, Accuracy check and Install are written as pages of their own rather than from a doc's
+// sections, so they (and the two tools) are found by what the Docs page says about them. It is kept apart from the
+// pages, so the Docs page's search (DocSearch.tsx) loads it only when it is used.
 import { plainText, type DocBlock, type DocItem, type DocSection } from "@/lib/docSections";
 import { DESIGN } from "@/pages/architecture/design";
 import { GUIDE as CLAUDE } from "@/pages/claude/guide";
 import { TOUR } from "@/pages/dashboard/tour";
+import { GALLERY, type GallerySection } from "@/pages/gallery/pictures";
 import { LIMITS } from "@/pages/limits/sections";
 import { GUIDE as OWN_CASE } from "@/pages/own-case/guide";
 import { SAFETY } from "@/pages/safety/rules";
@@ -53,8 +54,15 @@ function blockText(b: DocBlock): string {
 const sections = (page: string, list: DocSection[]): SearchEntry[] =>
   list.map((s) => ({ page, pageTitle: titleOf(page), id: s.id, title: s.title, text: tidy(s.blocks.map(blockText).join(" ")) }));
 
+/** A Gallery section as the page reads it: what made its pictures and what they show, then their captions. */
+const gallery = (s: GallerySection): SearchEntry => {
+  const said = [`Made by ${s.tool}. ${s.text}`, s.see ? `See the ${s.see.label}.` : "", ...s.pictures.map((p) => `${p.alt}.`)];
+  return { page: "/gallery", pageTitle: titleOf("/gallery"), id: s.id, title: s.title, text: tidy(said.join(" ")) };
+};
+
 /** The sections, in the Docs page's order, so a tie between two sections goes to the page listed first. */
 const SECTIONS: SearchEntry[] = [
+  ...GALLERY.map(gallery),
   ...sections("/dashboard-tour", TOUR),
   ...sections("/your-own-case", OWN_CASE),
   ...sections("/claude-code", CLAUDE),

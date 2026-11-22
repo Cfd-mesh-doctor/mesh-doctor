@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The gallery's sections and pictures, as docs/gallery.md lists them. The pictures are docs/images itself (the data
-// guard allows pictures nowhere else); pictures.test.ts keeps the captions and sections equal to the doc's.
+// guard allows pictures nowhere else); pictures.test.ts keeps the sections, their links and the captions equal to the doc's.
 import forces from "../../../../docs/images/ahmed_forces_total.png";
 import qRear from "../../../../docs/images/ahmed_Q20000_rear34.png";
 import qSide from "../../../../docs/images/ahmed_Q70000_side.png";
@@ -26,6 +26,8 @@ export interface GallerySection {
   /** what made the pictures */
   tool: string;
   text: string;
+  /** the page of this site for the doc the section links to, and what the link says */
+  see?: { page: string; label: string };
   pictures: Picture[];
 }
 
@@ -70,6 +72,7 @@ export const GALLERY: GallerySection[] = [
     title: "Dashboard",
     tool: "meshdoctor serve",
     text: "Live progress of a running case, Mesh Doctor repairs and the repair map.",
+    see: { page: "/dashboard-tour", label: "dashboard tour" },
     pictures: [{ file: "meshdoctor.png", src: dashboard, alt: "Mesh Doctor page", width: 1400, height: 520 }],
   },
 ];

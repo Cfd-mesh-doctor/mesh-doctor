@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { describe, expect, it } from "vitest";
 import { DESIGN } from "@/pages/architecture/design";
+import { GALLERY } from "@/pages/gallery/pictures";
 import { GROUPS } from "@/pages/troubleshooting/problems";
 import { ON_SITE } from "./entries";
 import { SEARCHED, SEARCH_INDEX, hitTarget, searchDocs } from "./searchIndex";
@@ -13,9 +14,11 @@ describe("searching the docs", () => {
     for (const e of SEARCH_INDEX) expect(pages, e.page).toContain(e.page);
     expect(at("/architecture").map((e) => e.id)).toEqual(DESIGN.map((s) => s.id));
     expect(at("/troubleshooting").map((e) => e.id)).toEqual(GROUPS.map((g) => g.id));
+    expect(at("/gallery").map((e) => e.id)).toEqual(GALLERY.map((s) => s.id));
     expect(new Set(SEARCH_INDEX.map((e) => `${e.page}#${e.id}`)).size).toBe(SEARCH_INDEX.length);
     expect(new Set(SEARCH_INDEX.filter((e) => e.id).map((e) => e.page))).toEqual(new Set([
-      "/limits", "/safety", "/your-own-case", "/claude-code", "/dashboard-tour", "/architecture", "/troubleshooting",
+      "/gallery", "/limits", "/safety", "/your-own-case", "/claude-code", "/dashboard-tour", "/architecture",
+      "/troubleshooting",
     ]));
     // Every other page the Docs page lists is in it once, by what the Docs page says about it.
     for (const d of ON_SITE) expect(SEARCH_INDEX.some((e) => e.page === d.page), d.title).toBe(true);
@@ -27,6 +30,13 @@ describe("searching the docs", () => {
     const install = searchDocs("WSL OpenFOAM Python").find((h) => h.page === "/install");
     expect(install).toMatchObject({ id: "", title: "Install" });
     expect(install && hitTarget(install, "WSL")).toEqual({ pathname: "/install", search: "", hash: "" });
+  });
+
+  it("finds a Gallery section by what its pictures show, and opens it at its heading", () => {
+    const cuts = searchDocs("centreline speed").find((h) => h.page === "/gallery");
+    expect(cuts).toMatchObject({ pageTitle: "Gallery", id: "cuts", title: "Cut planes" });
+    expect(cuts && hitTarget(cuts, "centreline")).toEqual({ pathname: "/gallery", search: "", hash: "#cuts" });
+    expect(searchDocs("vortex_views").map((h) => `${h.page}#${h.id}`)).toContain("/gallery#vortices");
   });
 
   it("finds the sections holding every word typed, whatever their case", () => {
@@ -94,7 +104,7 @@ describe("searching the docs", () => {
 
   it("names the pages it looks in in the Docs page's order", () => {
     expect(SEARCHED).toEqual(ON_SITE.map((d) => d.title).filter((t) => SEARCH_INDEX.some((e) => e.pageTitle === t && e.id)));
-    expect(SEARCHED).toHaveLength(7);
+    expect(SEARCHED).toHaveLength(8);
   });
 
   it("opens a section at its heading, and a Troubleshooting group at its problems that hold all the words", () => {

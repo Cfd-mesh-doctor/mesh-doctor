@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { SEARCH_INDEX } from "@/pages/docs/searchIndex";
 import { renderScreen } from "@/test/render";
 import { Gallery } from "./Gallery";
 
@@ -25,5 +26,19 @@ describe("Gallery", () => {
     }
     const main = within(screen.getByRole("main"));
     expect(main.getByRole("link", { name: "Accuracy check" })).toHaveAttribute("href", "/accuracy");
+  });
+
+  it("is found by the Docs page's search by the words each section shows, at its heading", () => {
+    renderScreen(<Gallery />, { path: "/gallery" });
+    const found = SEARCH_INDEX.filter((e) => e.page === "/gallery");
+    expect(found.map((e) => e.title)).toEqual(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent));
+    for (const e of found) {
+      const section = screen.getByRole("region", { name: e.title });
+      expect(section).toHaveAttribute("id", e.id);
+      for (const el of section.querySelectorAll("p, figcaption")) {
+        expect(e.text, e.id).toContain(el.textContent?.replace(/\s+/g, " ").trim());
+      }
+    }
+    expect(found.find((e) => e.id === "dashboard")?.text).toContain("See the dashboard tour.");
   });
 });

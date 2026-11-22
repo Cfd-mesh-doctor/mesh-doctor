@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { docHref } from "@/pages/docs/entries";
 import { readDoc } from "@/test/markdown";
 import { GALLERY } from "./pictures";
 
@@ -19,6 +20,15 @@ describe("the gallery", () => {
   it("has the doc's pictures and captions, in order", () => {
     const pictures = [...doc.matchAll(/^!\[(.+?)\]\(images\/(.+?)\)$/gm)].map((m) => ({ alt: m[1], file: m[2] }));
     expect(GALLERY.flatMap((s) => s.pictures.map(({ alt, file }) => ({ alt, file })))).toEqual(pictures);
+  });
+
+  it("links where the doc's section does, to this site's page for the doc it names", () => {
+    const sections = doc.split(/^## /m).slice(1).filter((b) => /^.+?: `.+?`$/.test(b.split(/\r?\n/)[0] ?? ""));
+    expect(sections).toHaveLength(GALLERY.length);
+    expect(GALLERY.map((s) => s.see?.page)).toEqual(sections.map((b) => {
+      const target = /\]\(([^)\s]+\.md)\)/.exec(b)?.[1];
+      return target && docHref(target);
+    }));
   });
 
   it("gives each picture its real size, so the page does not jump while they load", () => {

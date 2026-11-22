@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The gallery: what the toolkit's scripts make, all from the public Ahmed-body example (docs/gallery.md). The
-// sections and pictures come from pictures.ts, which a test keeps equal to the doc and its images.
+// sections and pictures come from pictures.ts, which a test keeps equal to the doc and its images; the Docs page's
+// search reads them there too.
 import { Target } from "lucide-react";
 import { Link } from "react-router";
 import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
@@ -35,9 +36,7 @@ export function Gallery() {
               <h2 id={`${s.id}-title`} className="text-xl font-semibold tracking-tight">{s.title}</h2>
               <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
                 Made by <code className="text-foreground">{s.tool}</code>. {s.text}
-                {s.id === "dashboard" && (
-                  <> See the <Link to="/dashboard-tour" className={link}>dashboard tour</Link>.</>
-                )}
+                {s.see && <> See the <Link to={s.see.page} className={link}>{s.see.label}</Link>.</>}
               </p>
               <div className={cn("mt-4 grid grid-cols-1 gap-4", s.pictures.length > 1 && "md:grid-cols-2")}>
                 {s.pictures.map((p) => (
