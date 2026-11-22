@@ -20,7 +20,12 @@ export default defineConfig({
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   define: { "import.meta.env.VITE_APP_VERSION": JSON.stringify(pkg.version) },
   build: { target: "es2022", sourcemap: false, assetsInlineLimit: 0 },
-  server: { port: 5173, strictPort: true },
+  // The gallery shows docs/images itself, outside app/ (the data guard allows pictures nowhere else).
+  server: {
+    port: 5173,
+    strictPort: true,
+    fs: { allow: [fileURLToPath(new URL(".", import.meta.url)), fileURLToPath(new URL("../docs/images", import.meta.url))] },
+  },
   preview: { port: 4173, strictPort: true, headers: siteHeaders },
   test: {
     environment: "jsdom",

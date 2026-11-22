@@ -161,6 +161,9 @@ export function Landing() {
             <Link to="/accuracy" className="inline-flex items-center gap-1.5 underline-offset-4 hover:underline">
               How close it gets to a wind tunnel <ArrowRight className="size-4" aria-hidden />
             </Link>
+            <Link to="/gallery" className="inline-flex items-center gap-1.5 underline-offset-4 hover:underline">
+              The pictures it makes <ArrowRight className="size-4" aria-hidden />
+            </Link>
           </div>
         </Section>
 

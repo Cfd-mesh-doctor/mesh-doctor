@@ -11,6 +11,7 @@ export const DOCS = {
   limits: `${REPO_URL}/blob/main/docs/limits.md`,
   dashboard: `${REPO_URL}/blob/main/docs/dashboard.md`,
   validation: `${REPO_URL}/blob/main/docs/validation.md`,
+  gallery: `${REPO_URL}/blob/main/docs/gallery.md`,
   troubleshooting: `${REPO_URL}/blob/main/docs/troubleshooting.md`,
   example: `${REPO_URL}/blob/main/examples/ahmed-body/README.md`,
   license: `${REPO_URL}/blob/main/LICENSE`,

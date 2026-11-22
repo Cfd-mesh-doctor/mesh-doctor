@@ -121,7 +121,8 @@ test("every page runs under the site's Content-Security-Policy", async ({ page }
     });
   });
   for (const path of [
-    "/", "/connect", "/report", "/estimate", "/how-it-works", "/accuracy", "/demo", "/demo/cases", "/demo/jobs", "/demo/settings",
+    "/", "/connect", "/report", "/estimate", "/how-it-works", "/accuracy", "/gallery", "/demo", "/demo/cases", "/demo/jobs",
+    "/demo/settings",
   ]) {
     await page.goto(path);
     await page.waitForLoadState("networkidle");
