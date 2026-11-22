@@ -73,6 +73,11 @@ function ownEngine(failing: string[] = [], runs: unknown[] | null = []) {
   return { ...renderScreen(<Overview />, { path: "/app", transport }), asked };
 }
 const COPY_REPAIR = "Copy “meshdoctor full <case> <name>”";
+/** What the command's blanks stand for, said wherever the command is (<name> could be read as your own name). */
+const BLANKS = "(putting a case's name in place of <case>, and a name for the repaired copy in place of <name>)";
+/** The innermost elements that say what the blanks stand for. */
+const saysBlanks = (el: Element | null): boolean => (el?.textContent ?? "").includes(BLANKS);
+const blanksSaid = () => screen.queryAllByText((_, el) => saysBlanks(el) && !Array.from(el!.children).some(saysBlanks));
 
 describe("the Overview before anything has run", () => {
   it("says how to start: the jobs card opens the engine's own dashboard, the repair runs card gives the command", async () => {
@@ -93,6 +98,9 @@ describe("the Overview before anything has run", () => {
     // No runs: the tile says so, rather than "0 improved, none worse".
     expect(screen.getByText("None yet")).toBeInTheDocument();
     expect(screen.queryByText(/improved/)).toBeNull();
+    // The empty list says what goes in the command's blanks, next to it.
+    expect(blanksSaid()).toHaveLength(1);
+    expect(blanksSaid()[0]).toHaveTextContent(/^Repair a copy of one of your cases with this in WSL \(putting/);
     // No jobs at all: the Active jobs tile says so too, rather than "0 jobs on record".
     expect(within(screen.getByText("Active jobs").closest("section")!).getByText("No jobs yet")).toBeInTheDocument();
     expect(screen.queryByText(/on record/)).toBeNull();
@@ -147,7 +155,8 @@ describe("the Overview before anything has run", () => {
     expect(screen.queryByRole("link", { name: "Where the engine looks" })).toBeNull();
     expect(screen.getAllByRole("button", { name: COPY_REPAIR })).toHaveLength(1);
     // The demo has no engine of its own: the card names the dashboard without linking it.
-    expect(screen.getByText(/^From the engine's dashboard, or with this command in WSL: /)).toBeInTheDocument();
+    expect(screen.getByText((_, el) => el?.tagName === "P" && (el.textContent ?? "").startsWith(
+      `From the engine's dashboard, or with this command in WSL ${BLANKS}: the run shows up here`))).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "the engine's dashboard" })).toBeNull();
   });
 });
@@ -163,6 +172,9 @@ describe("the Overview once something has run", () => {
     expect(dashboard).toHaveAttribute("target", "_blank");
     expect(dashboard).toHaveAttribute("rel", "noreferrer");
     expect(screen.getAllByRole("button", { name: COPY_REPAIR })).toHaveLength(1);
+    // The card says what goes in the command's blanks.
+    expect(blanksSaid()).toHaveLength(1);
+    expect(card).toContainElement(blanksSaid()[0]!);
     // With a run, the tile counts the verdicts, even when none is in yet.
     expect(screen.getByText("0 improved, none worse")).toBeInTheDocument();
     expect(screen.queryByText("None yet")).toBeNull();

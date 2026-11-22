@@ -21,6 +21,13 @@ import { useTitle } from "@/lib/useTitle";
 
 /** Repairs a copy of a case, in WSL; the app can't start repairs itself yet. */
 const REPAIR_COMMAND = "meshdoctor full <case> <name>";
+/** What the command's two blanks stand for: `<name>` could be read as your own name. */
+const BLANKS = (
+  <>
+    (putting a case's name in place of <code className="font-mono text-[12px]">&lt;case&gt;</code>, and a name for
+    the repaired copy in place of <code className="font-mono text-[12px]">&lt;name&gt;</code>)
+  </>
+);
 
 export function Overview() {
   useTitle("Overview");
@@ -187,8 +194,8 @@ export function Overview() {
             <EmptyState icon={Wrench} title="No repair runs yet"
               action={<CopyCommand command={REPAIR_COMMAND} className="max-w-full text-left" />}>
               Repair a copy of one of{" "}
-              <Link to={to("/cases")} className="font-medium text-primary underline-offset-4 hover:underline">your cases</Link>,
-              with this in WSL or from the engine's dashboard: the run shows here when it finishes.
+              <Link to={to("/cases")} className="font-medium text-primary underline-offset-4 hover:underline">your cases</Link>{" "}
+              with this in WSL {BLANKS}, or from the engine's dashboard: the run shows here when it finishes.
             </EmptyState>
           ) : (
             <ul className="divide-y divide-border border-t border-border">
@@ -233,8 +240,8 @@ export function Overview() {
                 dashboard stays linked once the empty lists that first offer it have gone. */}
             <CardTitle>Start a repair</CardTitle>
             <CardDescription>
-              From <DashboardLink />, or with this command in WSL: the run shows up here when it finishes. It works on a
-              copy, so your case is never changed. Starting repairs from this app comes next.
+              From <DashboardLink />, or with this command in WSL {BLANKS}: the run shows up here when it finishes. It
+              works on a copy, so your case is never changed. Starting repairs from this app comes next.
             </CardDescription>
           </div>
           <CopyCommand command={REPAIR_COMMAND} className="sm:w-80" />
