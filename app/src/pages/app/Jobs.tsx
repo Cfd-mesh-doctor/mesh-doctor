@@ -67,12 +67,38 @@ function ProgressCell({ job }: { job: Job }) {
   return <span className="text-xs text-muted-foreground">Finished {formatRelative(job.finished)}</span>;
 }
 
-function CancelDialog({ job, onClose }: { job: Job | null; onClose: () => void }) {
+function CancelDialog({ job, onClose, nameOf }: {
+  job: Job | null;
+  onClose: () => void;
+  /** The job's name in the table, if it shows there. */
+  nameOf: (id: string) => HTMLElement | undefined;
+}) {
   const cancel = useCancelJob();
   const { mode } = useEngine();
+  // What had the focus when the confirmation opened, the job it asks about, and whether that job was cancelled: all
+  // still known while it closes.
+  const opener = useRef<HTMLElement | null>(null);
+  const shown = useRef<string | null>(null);
+  const cancelled = useRef(false);
   return (
     <Dialog open={job !== null} onOpenChange={(o) => { if (!o) { cancel.reset(); onClose(); } }}>
-      <DialogContent>
+      <DialogContent
+        onOpenAutoFocus={() => {
+          const active = document.activeElement;
+          opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
+          shown.current = job?.id ?? null;
+          cancelled.current = false;
+        }}
+        onCloseAutoFocus={(e) => {
+          // Radix hands the focus back only to a Dialog.Trigger. It goes back to the row's Cancel button that asked,
+          // or to the job's name when the job was cancelled (its Cancel button is about to go) or when the
+          // confirmation replaced the job's details.
+          e.preventDefault();
+          const el = opener.current;
+          const back = !cancelled.current && el?.isConnected ? el : shown.current ? nameOf(shown.current) : undefined;
+          back?.focus();
+        }}
+      >
         <DialogTitle>Cancel {job?.name}?</DialogTitle>
         <DialogDescription>
           This stops the {job ? (JOB_KIND_LABEL[job.kind] ?? job.kind).toLowerCase() : "job"} and every process it started. What it
@@ -85,7 +111,12 @@ function CancelDialog({ job, onClose }: { job: Job | null; onClose: () => void }
           <Button
             variant="danger"
             disabled={cancel.isPending || !job}
-            onClick={() => job && cancel.mutate(job.id, { onSuccess: onClose })}
+            onClick={() => job && cancel.mutate(job.id, {
+              onSuccess: () => {
+                cancelled.current = true;
+                onClose();
+              },
+            })}
           >
             <OctagonX />
             {cancel.isPending ? "Cancelling…" : "Cancel job"}
@@ -344,7 +375,7 @@ export function Jobs() {
           setCancelId(j.id);
         }}
       />
-      <CancelDialog job={cancelling} onClose={() => setCancelId(null)} />
+      <CancelDialog job={cancelling} nameOf={(id) => names.current.get(id)} onClose={() => setCancelId(null)} />
     </>
   );
 }

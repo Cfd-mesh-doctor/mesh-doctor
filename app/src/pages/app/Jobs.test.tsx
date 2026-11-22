@@ -97,7 +97,7 @@ describe("the Jobs screen", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "ahmed25-fine-strict" })).toHaveFocus());
   });
 
-  it("leaves the focus in the cancel confirmation that replaces an active job's details", async () => {
+  it("leaves the focus in the cancel confirmation that replaces an active job's details, then hands it to the job's name", async () => {
     open(`${path}?job=20261121-130610-abtest-ahmed25-medium-fix-13c2`); // the demo's running job
     const details = await screen.findByRole("dialog", { name: "ahmed25-medium-fix" });
     await userEvent.click(within(details).getByRole("button", { name: /Cancel job/ }));
@@ -106,6 +106,36 @@ describe("the Jobs screen", () => {
     await waitFor(() => expect(keep).toHaveFocus());
     await new Promise((r) => setTimeout(r, 50)); // the details hand the focus back a moment after they close
     expect(keep).toHaveFocus();
+
+    await userEvent.click(keep); // the details' Cancel job that asked has gone with them
+    await waitFor(() => {
+      const running = rows().find((r) => r.textContent?.includes("Running"));
+      expect(within(running!).getByRole("button", { name: "ahmed25-medium-fix" })).toHaveFocus();
+    });
+  });
+
+  it("hands the focus back to the row's Cancel button when its confirmation is dismissed", async () => {
+    open(path);
+    await screen.findAllByRole("button", { name: "ahmed25-medium-fix" });
+    const running = rows().find((r) => r.textContent?.includes("Running"))!;
+    const ask = within(running).getByRole("button", { name: "Cancel" });
+    await userEvent.click(ask);
+    const confirm = await screen.findByRole("dialog", { name: "Cancel ahmed25-medium-fix?" });
+    await userEvent.click(within(confirm).getByRole("button", { name: "Keep running" }));
+    await waitFor(() => expect(ask).toHaveFocus());
+  });
+
+  it("hands the focus to the job's name once the job is cancelled, as its Cancel button has gone", async () => {
+    open(path);
+    await screen.findAllByRole("button", { name: "ahmed25-medium-fix" });
+    const running = rows().find((r) => r.textContent?.includes("Running"))!;
+    const name = within(running).getByRole("button", { name: "ahmed25-medium-fix" });
+    await userEvent.click(within(running).getByRole("button", { name: "Cancel" }));
+    const confirm = await screen.findByRole("dialog", { name: "Cancel ahmed25-medium-fix?" });
+    await userEvent.click(within(confirm).getByRole("button", { name: /Cancel job/ }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(name).toHaveFocus());
+    expect(within(running).queryByRole("button", { name: "Cancel" })).toBeNull(); // the button that asked has gone
   });
 
   it("shows every job when the address names a filter it doesn't know", async () => {

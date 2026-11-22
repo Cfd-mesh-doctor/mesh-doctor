@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This browser's pairing, the theme, and what is running on each side.
 import { ExternalLink, Monitor, Moon, PlugZap, RefreshCw, Sun, Unplug } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { Field, PageHeader } from "@/components/shared/page";
@@ -27,6 +27,8 @@ function EngineCard() {
   const conn = useConnection();
   const navigate = useNavigate();
   const [confirm, setConfirm] = useState(false);
+  // The button that asks: "Keep it" hands the focus back to it, as Radix does only for a Dialog.Trigger.
+  const forgetButton = useRef<HTMLButtonElement>(null);
 
   if (mode === "demo" || !pairing) {
     return (
@@ -71,12 +73,17 @@ function EngineCard() {
         <Button variant="secondary" size="sm" asChild>
           <Link to="/connect"><PlugZap /> Pair again</Link>
         </Button>
-        <Button variant="danger-ghost" size="sm" className="ml-auto" onClick={() => setConfirm(true)}>
+        <Button ref={forgetButton} variant="danger-ghost" size="sm" className="ml-auto" onClick={() => setConfirm(true)}>
           <Unplug /> Forget this engine
         </Button>
       </CardFooter>
       <Dialog open={confirm} onOpenChange={setConfirm}>
-        <DialogContent>
+        <DialogContent
+          onCloseAutoFocus={(e) => {
+            e.preventDefault();
+            forgetButton.current?.focus(); // gone once the engine is forgotten, as the app goes to Connect
+          }}
+        >
           <DialogTitle>Forget this engine?</DialogTitle>
           <DialogDescription>
             This browser deletes its pairing key and stops talking to {pairing.engine}. The engine, its cases and its

@@ -134,6 +134,25 @@ test("live jobs can be cancelled on a real (mocked) engine", async ({ page }) =>
   await row.getByRole("button", { name: "Cancel" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Cancel job" }).click();
   await expect(row).toContainText("Cancelled");
+  // The row's Cancel button has gone with the cancel: the focus is on the job's name, not lost to the page.
+  await expect(row.getByRole("button", { name: "wing-fix", exact: true })).toBeFocused();
+});
+
+test("Settings: keeping the engine hands the focus back to Forget this engine", async ({ page }) => {
+  await mockEngine(page);
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  await page.goto("/app/settings");
+  const forget = page.getByRole("button", { name: "Forget this engine" });
+  await forget.focus();
+  await page.keyboard.press("Enter");
+  const ask = page.getByRole("dialog", { name: "Forget this engine?" });
+  await expect(ask.getByRole("button", { name: "Keep it" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(ask).toBeHidden();
+  await expect(forget).toBeFocused();
+  await expect(page).toHaveURL(/\/app\/settings$/); // still paired
 });
 
 test("the app without a pairing goes to Connect", async ({ page }) => {

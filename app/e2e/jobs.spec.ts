@@ -58,6 +58,18 @@ test("an active job's details open on Close: Enter twice opens and closes them, 
   await expect(name).toBeFocused(); // back where it was
 });
 
+test("dismissing the cancel confirmation hands the focus back to the row's Cancel button", async ({ page }) => {
+  await page.goto("/demo/jobs?show=active");
+  const ask = page.getByRole("button", { name: "Cancel", exact: true });
+  await ask.focus();
+  await page.keyboard.press("Enter");
+  const confirm = page.getByRole("dialog", { name: "Cancel ahmed25-medium-fix?" });
+  await expect(confirm.getByRole("button", { name: "Keep running" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(confirm).toBeHidden();
+  await expect(ask).toBeFocused();
+});
+
 test("a job's details wrap a long path at its hyphens or slashes, not inside a word", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/demo/jobs?job=20261121-130610-abtest-ahmed25-medium-fix-13c2"); // the running A/B test
