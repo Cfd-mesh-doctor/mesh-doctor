@@ -38,22 +38,35 @@ export function NotFoundPage() {
   );
 }
 
+/**
+ * A page whose code didn't load because the site was updated: a tab opened before the update still asks for the old
+ * build's files, and the host, which has only the new ones, answers with the site's own page instead.
+ */
+function isOldBuild(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err ?? "");
+  // How Chrome and Edge, Firefox and Safari word a failed import, and Vite's words when a page's styles don't load.
+  return /dynamically imported module|Importing a module script failed|Unable to preload CSS/i.test(message);
+}
+
 /** Shown if a screen itself breaks: a plain message and a way out, never a blank page. */
 export function RouteError() {
   const err = useRouteError();
-  useTitle("Something went wrong");
+  const oldBuild = isOldBuild(err);
+  useTitle(oldBuild ? "Updated" : "Something went wrong");
   const notFound = isRouteErrorResponse(err) && err.status === 404;
-  // The page hides the error, so put it in the browser console for bug reports.
+  // The page hides the error, so put it in the browser console for bug reports (an update isn't a bug).
   useEffect(() => {
-    if (!notFound) console.error("Mesh Doctor page error:", err);
-  }, [err, notFound]);
+    if (!notFound && !oldBuild) console.error("Mesh Doctor page error:", err);
+  }, [err, notFound, oldBuild]);
   if (notFound) return <NotFoundPage />;
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center px-4 text-center">
       <Logo />
-      <h1 className="mt-8 text-xl font-semibold">Something went wrong on this page</h1>
+      <h1 className="mt-8 text-xl font-semibold">{oldBuild ? "Mesh Doctor has been updated" : "Something went wrong on this page"}</h1>
       <p className="mt-2 max-w-md text-sm text-muted-foreground">
-        Reloading usually fixes it. If it keeps happening, please report it on GitHub with what you clicked.
+        {oldBuild
+          ? "This tab was opened before the update, so this page can't load. Reload to get the new version."
+          : "Reloading usually fixes it. If it keeps happening, please report it on GitHub with what you clicked."}
       </p>
       <div className="mt-6 flex gap-2">
         <Button onClick={() => window.location.reload()}>Reload</Button>
