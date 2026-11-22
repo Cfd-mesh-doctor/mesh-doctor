@@ -3,6 +3,7 @@
 // if the report has one, rings where defects were found and repaired, dots where some were left. Pointing at
 // a mark (or tapping it) shows what it is. Redrawn when the card's width or the colour theme changes.
 import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { flushSync } from "react-dom";
 import {
   HEAT_HOVER, decodeDensity, defectRadius, defectText, frame, heatStyle, heatText, mapLabel, nearestMark,
   type HeatLayer, type MapSummary, type MapView, type Mark,
@@ -30,17 +31,49 @@ function maskFor(v: MapView): HTMLCanvasElement | null {
   return mask;
 }
 
+/** While a page is printed, the map is drawn in the light colours, which read on white paper (as the page is). */
+let printing = false;
+
+/** An element with the light colours (index.css's .light-colors), to read them from while printing. */
+function lightColors(): Element {
+  let el = document.getElementById("md-light-colors");
+  if (!el) {
+    el = Object.assign(document.createElement("div"), { id: "md-light-colors", className: "light-colors", hidden: true });
+    document.body.append(el);
+  }
+  return el;
+}
+
 /** A colour token of the page (they are oklch() values, which canvases read too). */
 const token = (name: string, fallback: string) =>
-  getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+  getComputedStyle(printing ? lightColors() : document.documentElement).getPropertyValue(name).trim() || fallback;
 
-/** Changes whenever the light or dark theme is switched (the class on <html>). */
+/**
+ * Changes whenever the light or dark theme is switched (the class on <html>), and when printing starts or ends. The
+ * browser takes its picture of the page right after "beforeprint", so the map is redrawn at once (flushSync).
+ */
 function useThemeChange() {
   const [n, setN] = useState(0);
   useEffect(() => {
+    const redraw = (now: boolean) => {
+      printing = now;
+      flushSync(() => setN((k) => k + 1));
+    };
+    const before = () => redraw(true);
+    const after = () => redraw(false);
+    const print = window.matchMedia?.("print");
+    const change = (e: MediaQueryListEvent) => redraw(e.matches);
     const mo = new MutationObserver(() => setN((k) => k + 1));
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    return () => mo.disconnect();
+    window.addEventListener("beforeprint", before);
+    window.addEventListener("afterprint", after);
+    print?.addEventListener("change", change);
+    return () => {
+      mo.disconnect();
+      window.removeEventListener("beforeprint", before);
+      window.removeEventListener("afterprint", after);
+      print?.removeEventListener("change", change);
+    };
   }, []);
   return n;
 }

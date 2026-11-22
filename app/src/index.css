@@ -6,7 +6,8 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* Design tokens. Colours are OKLCH so light and dark keep the same hue and contrast steps. */
-:root {
+/* The light colours, also under .light-colors: the repair map reads them there to draw itself for a printed page. */
+:root, .light-colors {
   --background: oklch(0.985 0.003 240);
   --foreground: oklch(0.22 0.02 255);
   --surface: oklch(1 0 0);
