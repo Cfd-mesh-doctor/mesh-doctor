@@ -77,7 +77,13 @@ export function Overview() {
           tone={active.length ? "primary" : undefined}
           loading={jobs.isPending}
           value={jobs.data ? active.length : "–"}
-          hint={jobs.data ? `${jobItems.length} jobs on record` : undefined}
+          hint={!jobs.data ? undefined : active.length ? (
+            // While jobs run, the hint links to them (the Jobs screen keeps its filter in its address). The count of
+            // jobs on record gives way: both don't fit on the hint's one line in a tile a quarter of the page wide.
+            <Link to={to("/jobs?show=active")} className="font-medium text-primary hover:underline">
+              {active.length === 1 ? "Show the running job" : "Show the running jobs"}
+            </Link>
+          ) : `${jobItems.length} jobs on record`}
         />
       </div>
 
