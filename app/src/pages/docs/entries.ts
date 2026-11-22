@@ -26,6 +26,8 @@ export const ON_SITE: DocEntry[] = [
     about: "Problems people actually hit, with the fix. Search it for the message you see." },
   { title: "Limits", page: "/limits", file: "limits.md",
     about: "What Mesh Doctor is not, the versions it runs on, and where the repair, the A/B test, the map and the dashboard stop." },
+  { title: "Safety model", page: "/safety", file: "safety.md",
+    about: "Why it can't damage a case you care about, and why its dashboard isn't a way into your computer." },
   { title: "Report viewer", page: "/report",
     about: "Open a report to see what a repair changed in the mesh and whether it helped the solver. Never uploaded." },
   { title: "Size estimator", page: "/estimate",
@@ -34,8 +36,6 @@ export const ON_SITE: DocEntry[] = [
 
 /** Read on GitHub: the docs this site has no page for yet. Each title is the doc's own heading. */
 export const ON_GITHUB: DocEntry[] = [
-  { title: "Safety model", file: "safety.md",
-    about: "Why it can't damage a case you care about, and why its dashboard isn't a way into your computer." },
   { title: "Starting your own case from the Ahmed example", file: "templates.md",
     about: "Copy the tested Ahmed-body case and change its geometry, domain and flow conditions to make your own." },
   { title: "Dashboard tour", file: "dashboard.md",

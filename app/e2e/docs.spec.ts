@@ -23,6 +23,7 @@ test("the docs page: from the header, each of the site's pages opens, the rest a
   for (const [name, heading] of [
     ["How it works", "How Mesh Doctor works"], ["Accuracy check", "Accuracy check"], ["Gallery", "Gallery"],
     ["Install", "Install"], ["Troubleshooting", "Troubleshooting"], ["Limits", "Limits"],
+    ["Safety model", "Safety model"],
     ["Report viewer", "Report viewer"], ["Size estimator", "Size estimator"],
   ] as const) {
     await page.getByRole("region", { name: "On this site" }).getByRole("link", { name }).click();

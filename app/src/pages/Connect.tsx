@@ -19,7 +19,6 @@ import { maskKey, parsePairingHash, parsePairingLink, type ParsedLink } from "@/
 import { browserCantReachLocal, pageIsLocal } from "@/engine/permission";
 import type { EngineInfo } from "@/engine/types";
 import { formatRelative } from "@/lib/format";
-import { DOCS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
 
 type Phase = { kind: "idle" } | { kind: "testing" } | { kind: "ok"; info: EngineInfo } | { kind: "error"; error: unknown };
@@ -268,7 +267,7 @@ export function Connect() {
                 </div>
               </div>
             ))}
-            <a href={DOCS.safety} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[13px] font-medium text-primary hover:underline">
+            <a href="/safety" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[13px] font-medium text-primary hover:underline">
               The full safety model <ArrowRight className="size-3.5" />
             </a>
           </aside>

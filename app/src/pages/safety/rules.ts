@@ -1,0 +1,95 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// The text of docs/safety.md: its opening paragraph, then each section's paragraphs and list items exactly as the
+// doc writes them. rules.test.ts compares them with the doc, so the page can't fall behind it.
+import type { DocSection } from "@/lib/docSections";
+
+export const INTRO = "Mesh Doctor is built so that it cannot damage a case you care about, and so that its dashboard is not a way into your machine. Each rule below is enforced in code, and most are covered by the tests in `tests/`.";
+
+export const SAFETY: DocSection[] = [
+  {
+    id: "your-cases-are-only-read",
+    title: "Your cases are only read",
+    blocks: [
+      {
+        list: [
+          "**Every job works on a copy** in the workspace (`<workspace>/<name>`). The source case is opened read-only.",
+          "**The utility refuses to touch an original.** `foamMeshDoctor -fix` exits unless the case holds a `.meshDoctorCopy` marker, which only Mesh Doctor's own copy step writes.",
+          "**Proof afterwards.** Before each job, Mesh Doctor takes a SHA-256 fingerprint of the source case's mesh and settings, and checks it again at the end. The result is in `result.json` (`sourceCheck`) and `ab_result.json`. If the source ever changed, the dashboard says so and the command exits with code **3**.",
+          "**Plain names only.** Run names must be letters, digits, `_`, `.` and `-` (at most 80 characters, not starting with `.`), so no name can reach outside the workspace. Mesh Doctor only deletes and re-makes folders inside the workspace.",
+          "**Keep the workspace outside your cases.** By default it is `<cases>/meshdoctor`, a separate folder.",
+        ],
+      },
+    ],
+  },
+  {
+    id: "the-mesh-can-only-get-better",
+    title: "The mesh can only get better",
+    blocks: [
+      {
+        list: [
+          "A point move is accepted only if the worst face around it gets no worse and no cell is turned inside out (see [how it works](how-it-works.md)). Corners, sharp edges and patch junctions never move, so the geometry stays the same.",
+          "The final `checkMesh` is compared with the first one. Any number that got worse is listed under `regressions` in the verdict, on the command line and on the page.",
+          "The face-collapse step is rolled back if `checkMesh` shows any regression.",
+          "The experimental tools have their own rules, listed in [limits](limits.md).",
+        ],
+      },
+    ],
+  },
+  {
+    id: "the-dashboard-answers-only-you",
+    title: "The dashboard answers only you",
+    blocks: [
+      {
+        list: [
+          "It listens on **127.0.0.1 only**, so other computers on the network cannot reach it. On Windows, WSL forwards the port to Windows' own localhost only. Remote use goes through an SSH tunnel.",
+          "It **checks the Host and Origin headers** of every request, so a web page on another site that you happen to open cannot read it or start jobs. This blocks cross-site requests and DNS-rebinding attacks.",
+          "**A token for every launch.** Starting or stopping a job needs a random token that the server creates at start-up and puts only in its own pages. Requests without it are refused.",
+          "**The web app needs its address and a key.** The web app is a static site that runs in your browser and talks to the engine on this computer directly; your cases and results never go to the site's host. The engine answers it only when the request comes from an address in the `app_origins` setting **and** carries the pairing key, on every request, reads included (there the key takes the launch token's place). `meshdoctor pair` keeps the key in `~/.config/meshdoctor/app.key`, readable by you only, and prints the pairing link. The link carries the key after `#`, the part of a link a browser never sends to the site, but it is still a password: don't post it or show it in a screenshot. `meshdoctor pair --new` makes a new key, which unpairs every browser.",
+          "**The site can reach only itself and this computer.** Its Content-Security-Policy allows connections to its own address and to `localhost` / `127.0.0.1` only, it loads no outside scripts or fonts, and it has no accounts or analytics. It keeps two things in your browser: the pairing and the colour theme.",
+          "**Fixed pages only.** It serves its four pages and a JSON API, never arbitrary files. The API reads only inside the workspace and the cases folder, by plain names.",
+          "**No shell injection.** Jobs are started with fixed command templates; the only user-supplied parts are plain names and numbers.",
+          "**One big job at a time.** A new repair or A/B test is refused while an OpenFOAM solver or mesher is running.",
+          "**Memory check.** A job that would not fit in free memory is refused before it starts (`--no-ram-check` overrides it on the command line).",
+          "`serve --container` (all interfaces) refuses to run outside a Docker or Podman container. The image itself publishes the port on 127.0.0.1 only when started as the README shows.",
+          "Native Windows Python refuses to run anything. Run it in WSL.",
+        ],
+      },
+      { text: "**Shared machines:** any user logged in to the same computer can connect to a 127.0.0.1 port. On a cluster login node or a shared lab PC, they could open your dashboard. There, use the command line (results land in your workspace, which is private), or run `serve` only on your own computer." },
+    ],
+  },
+  {
+    id: "your-results-are-private",
+    title: "Your results are private",
+    blocks: [
+      {
+        list: [
+          "The workspace is created readable by you only (mode 700). If an existing workspace is open to others, `serve` and `meshdoctor check` warn you; fix it with `chmod 700 <workspace>`.",
+          "The Docker image runs as a normal user, mounts your cases read-only, and writes only to `/work`.",
+          "The Slurm templates bind the source case read-only into the container, and require `MESHDOCTOR_WORKSPACE` to be set.",
+        ],
+      },
+    ],
+  },
+  {
+    id: "keeping-data-out-of-this-repository",
+    title: "Keeping data out of this repository",
+    blocks: [
+      { text: "The repository must never hold simulation data, CAD, spreadsheets, personal paths or team names. `tools/data_guard.py` checks for them:" },
+      {
+        list: [
+          "the `pre-commit` hook checks every staged file;",
+          "the `pre-push` hook checks the whole history;",
+          "CI checks both on every push, with the private word list supplied as a repository secret.",
+        ],
+      },
+      { text: "The only example case is OpenFOAM's own motorBike tutorial, and the documentation's screenshots come from it." },
+    ],
+  },
+  {
+    id: "reporting-a-problem",
+    title: "Reporting a problem",
+    blocks: [
+      { text: "If you find a way around one of these rules, tell the maintainers privately (not in a public issue), with the steps to reproduce it." },
+    ],
+  },
+];

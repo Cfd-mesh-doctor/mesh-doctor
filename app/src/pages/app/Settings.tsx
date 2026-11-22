@@ -15,7 +15,7 @@ import { useEngine, usePairing } from "@/engine/context";
 import { useEngineInfo } from "@/engine/hooks";
 import { maskKey } from "@/engine/pairing";
 import { formatDateTime } from "@/lib/format";
-import { APP_VERSION, DOCS, REPO_URL } from "@/lib/site";
+import { APP_VERSION, REPO_URL } from "@/lib/site";
 import { useTheme, type Theme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { useTitle } from "@/lib/useTitle";
@@ -162,7 +162,7 @@ function AboutCard() {
       <CardFooter className="flex-wrap gap-x-5">
         {[
           ["Source code", REPO_URL],
-          ["Safety model", DOCS.safety],
+          ["Safety model", "/safety"],
           ["Troubleshooting", "/troubleshooting"],
         ].map(([label, href]) => (
           <a key={href} href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">

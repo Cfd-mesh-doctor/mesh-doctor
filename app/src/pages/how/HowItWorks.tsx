@@ -239,7 +239,7 @@ export function HowItWorks() {
                 <li>the largest point move;</li>
                 <li>
                   a checksum of the source case taken before and after (see the{" "}
-                  <Doc href={DOCS.safety}>safety model</Doc>).
+                  <Link to="/safety" className={link}>safety model</Link>).
                 </li>
               </ul>
             </Step>

@@ -114,7 +114,7 @@ export function PublicFooter() {
           <Link to="/how-it-works" className={navLink}>How it works</Link>
           <Link to="/accuracy" className={navLink}>Accuracy check</Link>
           <Link to="/gallery" className={navLink}>Gallery</Link>
-          <a href={DOCS.safety} {...ext}>Safety model</a>
+          <Link to="/safety" className={navLink}>Safety model</Link>
           <Link to="/limits" className={navLink}>Limits</Link>
           <a href={DOCS.example} {...ext}>Worked example</a>
           <a href={DOCS.license} {...ext}>Licence</a>

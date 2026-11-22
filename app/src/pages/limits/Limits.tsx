@@ -4,7 +4,7 @@
 import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
 import { PageHeader } from "@/components/shared/page";
 import { useTitle } from "@/lib/useTitle";
-import { DocText } from "@/pages/docs/DocText";
+import { DocSectionsView } from "@/pages/docs/DocSections";
 import { LIMITS } from "./sections";
 
 export function Limits() {
@@ -17,22 +17,7 @@ export function Limits() {
           title="Limits"
           description="What Mesh Doctor is not, the versions it runs on, and where each part of it stops. Worth reading before you trust a result."
         />
-        <div className="max-w-3xl space-y-10">
-          {LIMITS.map((s) => (
-            <section key={s.id} id={s.id} aria-labelledby={`${s.id}-title`} className="scroll-mt-20">
-              <h2 id={`${s.id}-title`} className="text-lg font-semibold tracking-tight">{s.title}</h2>
-              <div className="mt-3 space-y-3 text-[15px] leading-relaxed">
-                {s.blocks.map((b, i) => ("list" in b ? (
-                  <ul key={i} className="list-disc space-y-2 pl-5 marker:text-muted-foreground">
-                    {b.list.map((item) => <li key={item}><DocText text={item} /></li>)}
-                  </ul>
-                ) : (
-                  <p key={i}><DocText text={b.text} /></p>
-                )))}
-              </div>
-            </section>
-          ))}
-        </div>
+        <DocSectionsView sections={LIMITS} />
       </main>
       <PublicFooter />
     </div>
