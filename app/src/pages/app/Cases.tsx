@@ -108,7 +108,10 @@ export function Cases() {
         </div>
         {cases.isPending ? (
           <TableSkeleton rows={5} cols={4} />
-        ) : rows.length === 0 && !cases.isError ? (
+        ) : rows.length === 0 && cases.isError ? (
+          // A list that didn't load isn't empty: the message above says why, and the filter has nothing to match.
+          <EmptyState icon={FolderOpen} title="The cases didn't load" />
+        ) : rows.length === 0 ? (
           <EmptyState icon={FolderOpen} title="No cases found">
             <p>
               The engine lists folders with a mesh (constant/polyMesh) in its cases folder, by default $FOAM_RUN. To use

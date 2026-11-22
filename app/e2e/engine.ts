@@ -18,10 +18,11 @@ export interface MockEngine {
   cases: string[];
 }
 
-/** `repairs`: the repair runs it lists (none by default). `noJobs`: it lists no jobs (two by default). */
+/** `repairs`: the repair runs it lists (none by default). `noJobs`: it lists no jobs (two by default). `broken`: the
+ * lists it fails to give, with an error of its own (as when something goes wrong in the engine). */
 export async function mockEngine(
   page: Page,
-  opts: { down?: boolean; wrongKey?: boolean; repairs?: unknown[]; noJobs?: boolean } = {},
+  opts: { down?: boolean; wrongKey?: boolean; repairs?: unknown[]; noJobs?: boolean; broken?: string[] } = {},
 ): Promise<MockEngine> {
   const state: MockEngine = { requests: [], cases: ["wing", "ahmed-25-coarse", "motorBike"] };
   const jobs = opts.noJobs ? [] : [
@@ -45,6 +46,9 @@ export async function mockEngine(
       return json(403, { error: { code: "forbidden", message: "forbidden: missing or wrong pairing key (pair again: meshdoctor pair)" } });
     }
     const path = new URL(req.url()).pathname.replace(/^\/api\/v1/, "") || "/";
+    if (opts.broken?.includes(path)) {
+      return json(500, { error: { code: "internal", message: "internal error; details are in the server window" } });
+    }
     if (path === "/") return json(200, { apiVersion: "1.0", version: "0.1.0", schemas: { repair: "1.0", job: "1.0" }, jobKinds: ["repair"] });
     if (path === "/cases") return json(200, { items: state.cases });
     if (path === "/jobs") return json(200, { items: jobs });

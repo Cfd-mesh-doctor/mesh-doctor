@@ -3,6 +3,8 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { demoTransport } from "@/demo/transport";
+import type { Transport } from "@/engine/client";
+import { EngineError } from "@/engine/errors";
 import { renderScreen } from "@/test/render";
 import { Cases } from "./Cases";
 
@@ -39,5 +41,36 @@ describe("the Cases screen", () => {
     await user.keyboard("/");
     expect(box).toHaveFocus();
     expect(box).toHaveValue("");
+  });
+});
+
+/** Opens the Cases screen of your own engine, whose cases folder has nothing in it, or whose cases don't load. */
+function ownEngine(casesLoad: boolean, at = "/app/cases") {
+  const transport: Transport = {
+    kind: "engine",
+    scope: "test",
+    request: async <T,>(_method: string, path: string) => {
+      const route = path.split("?")[0];
+      if (route === "/repairs" || (route === "/cases" && casesLoad)) return { items: [] } as T;
+      throw new EngineError("internal", "internal error; details are in the server window", 500);
+    },
+  };
+  return renderScreen(<Cases />, { path: "/app/cases", at, transport });
+}
+
+describe("the Cases screen of your own engine", () => {
+  it("with no cases, says where the engine looks and how to point it at another folder", async () => {
+    ownEngine(true);
+    expect(await screen.findByRole("heading", { name: "No cases found" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy “MESHDOCTOR_CASES=~/cases meshdoctor serve”" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("whose cases didn't load says so under the message that says why, not that nothing matches the filter", async () => {
+    ownEngine(false, "/app/cases?q=wing");
+    expect(await screen.findByRole("heading", { name: "The cases didn't load" })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("The engine hit an error");
+    expect(screen.queryByRole("heading", { name: "No case matches" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "No cases found" })).toBeNull();
   });
 });

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { screen } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { DEMO_ANSWERS, demoTransport } from "@/demo/transport";
 import type { Transport } from "@/engine/client";
@@ -47,18 +48,20 @@ describe("the Overview's recent jobs", () => {
  * to answer. */
 function ownEngine(failing: string[] = []) {
   savePairing({ engine: "http://localhost:8765", key: "TestKey_0123456789abcdefghijklmnopqrstuvwxy", paired: "2026-11-22T12:00:00Z" });
+  const asked: string[] = [];
   const transport: Transport = {
     kind: "engine",
     scope: "test",
     request: async <T,>(_method: string, path: string) => {
       const route = path.split("?")[0]!;
+      asked.push(route);
       if (failing.includes(route)) throw new EngineError("unreachable", "nothing answered");
       if (route === "/") return { apiVersion: "1.0", version: "0.1.0", jobKinds: ["repair"] } as T;
       if (route === "/jobs" || route === "/repairs" || route === "/cases") return { items: [] } as T;
       throw new EngineError("not-found", `no route ${route}`, 404);
     },
   };
-  return renderScreen(<Overview />, { path: "/app", transport });
+  return { ...renderScreen(<Overview />, { path: "/app", transport }), asked };
 }
 const COPY_REPAIR = "Copy “meshdoctor full <case> <name>”";
 
@@ -73,6 +76,7 @@ describe("the Overview before anything has run", () => {
     // The command is on the page once: in the empty list, where the card at the bottom of the page gives way to it.
     expect(screen.getAllByRole("button", { name: COPY_REPAIR })).toHaveLength(1);
     expect(screen.queryByText("Starting repairs from the app comes next")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull(); // everything loaded
   });
 
   it("doesn't call a list that didn't load empty, or offer first steps for it", async () => {
@@ -84,6 +88,19 @@ describe("the Overview before anything has run", () => {
     // The command stays in its card at the bottom of the page.
     expect(screen.getByText("Starting repairs from the app comes next")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: COPY_REPAIR })).toHaveLength(1);
+  });
+
+  it("says why at the top when only a list didn't load, and Try again asks again for that list alone", async () => {
+    const { asked } = ownEngine(["/jobs"]);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("The engine isn't answering");
+    expect(await screen.findByRole("heading", { name: "The jobs didn't load" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "No repair runs yet" })).toBeInTheDocument(); // that one loaded
+    const count = (route: string) => asked.filter((r) => r === route).length;
+    const [jobs, repairs] = [count("/jobs"), count("/repairs")];
+    await userEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(count("/jobs")).toBe(jobs + 1));
+    expect(count("/repairs")).toBe(repairs);
   });
 
   it("keeps the command in its card at the bottom once there are repair runs", async () => {

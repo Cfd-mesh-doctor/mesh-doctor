@@ -39,6 +39,10 @@ export function Overview() {
   const engineLabel = mode === "demo" ? "Recorded demo" : pairing?.engine.replace(/^http:\/\//, "");
   // The engine has answered that it has no repair runs yet (not: the list didn't load).
   const noRuns = repairs.isSuccess && repairItems.length === 0;
+  // What didn't load, and why, at the top: the engine's own answer first, else the first list that failed. Try again
+  // asks again for each one that failed.
+  const queries = [info, cases, jobs, repairs];
+  const failed = queries.find((q) => q.isError);
 
   return (
     <>
@@ -51,7 +55,16 @@ export function Overview() {
           </>
         }
       />
-      {info.isError && <ErrorPanel className="mb-6" error={info.error} onRetry={() => info.refetch()} retrying={info.isFetching} />}
+      {failed && (
+        <ErrorPanel
+          className="mb-6"
+          error={failed.error}
+          onRetry={() => {
+            for (const q of queries) if (q.isError) void q.refetch();
+          }}
+          retrying={queries.some((q) => q.isError && q.isFetching)}
+        />
+      )}
 
       <div data-tour="tiles" className="grid grid-cols-1 gap-4 rounded-xl sm:grid-cols-2 xl:grid-cols-4">
         <StatTile

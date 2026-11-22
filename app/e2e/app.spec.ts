@@ -228,6 +228,20 @@ test("before anything has run, the Overview and Jobs say how to start: the engin
   expect(engine.requests.some((r) => new URL(r.url()).pathname === "/meshdoctor")).toBe(false);
 });
 
+test("a list the engine fails to give says it didn't load, with the reason above it, on the Overview and on Cases", async ({ page }) => {
+  await mockEngine(page, { broken: ["/cases"] });
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  const main = page.getByRole("main");
+  await expect(main.getByRole("alert")).toContainText("The engine hit an error"); // the engine itself answered
+  await expect(main.getByRole("row", { name: /wing-fix/ })).toBeVisible(); // and the lists that loaded show
+  await page.getByRole("complementary").getByRole("link", { name: "Cases", exact: true }).click();
+  await expect(main.getByRole("heading", { name: "The cases didn't load" })).toBeVisible();
+  await expect(main.getByRole("alert")).toContainText("The engine hit an error");
+  await expect(main.getByRole("heading", { name: "No cases found" })).toHaveCount(0);
+});
+
 test("the site talks to nothing but itself and the engine", async ({ page }) => {
   await mockEngine(page);
   const seen = new Set<string>();
