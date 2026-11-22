@@ -58,6 +58,31 @@ test("an active job's details open on Close: Enter twice opens and closes them, 
   await expect(name).toBeFocused(); // back where it was
 });
 
+test("a job's details wrap a long path at its hyphens or slashes, not inside a word", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/demo/jobs?job=20261121-130610-abtest-ahmed25-medium-fix-13c2"); // the running A/B test
+  const details = page.getByRole("dialog", { name: "ahmed25-medium-fix" });
+  let wrapped = 0;
+  for (const label of [/^Log$/, /^Result$/]) {
+    const value = details.locator("dt", { hasText: label }).locator("xpath=following-sibling::dd");
+    // The text before each line break: where a character's top is lower than the one before it.
+    const breaks = await value.evaluate((dd) => {
+      const text = dd.firstChild as Text;
+      const range = document.createRange();
+      const tops: number[] = [];
+      for (let i = 0; i < text.length; i++) {
+        range.setStart(text, i);
+        range.setEnd(text, i + 1);
+        tops.push(range.getBoundingClientRect().top);
+      }
+      return tops.flatMap((top, i) => (top > (tops[i - 1] ?? Infinity) + 1 ? [text.data.slice(0, i)] : []));
+    });
+    for (const before of breaks) expect(before, `the ${label.source} breaks inside a word`).toMatch(/[-/]$/);
+    wrapped += breaks.length;
+  }
+  expect(wrapped, "neither path wraps, so this tests nothing").toBeGreaterThan(0);
+});
+
 test("the sidebar says how many jobs are active, not a bare number", async ({ page }) => {
   await page.goto("/demo");
   const main = page.getByRole("navigation", { name: "Main" });

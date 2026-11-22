@@ -137,7 +137,7 @@ function DetailsDialog({ job, onClose, onCancel, nameOf }: {
               <DialogTitle>{job.name}</DialogTitle>
               <JobStateBadge state={job.state} />
             </div>
-            <DialogDescription className="font-mono text-xs break-all">{job.id}</DialogDescription>
+            <DialogDescription className="font-mono text-xs wrap-anywhere">{job.id}</DialogDescription>
             {isActive(job.state) && <div className="mt-5"><ProgressCell job={job} /></div>}
             {job.state === "failed" && job.error && (
               <div className="mt-5 rounded-lg border border-danger/25 bg-danger-soft/60 p-3 text-sm">{job.error}</div>
