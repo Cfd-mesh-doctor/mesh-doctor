@@ -37,10 +37,11 @@ describe("a page that doesn't exist", () => {
   });
 
   it("guesses nothing on an app screen, whose sidebar lists the screens", async () => {
-    openUnknown("/demo/instal", true);
+    const { container } = openUnknown("/demo/instal", true);
     expect(await screen.findByRole("heading", { level: 1, name: "This page doesn't exist" })).toBeInTheDocument();
     await guessed();
     expect(screen.queryByText(/Did you mean/)).toBeNull();
+    expect(container.querySelector("[aria-live]")).toBeNull(); // nor an empty live region waiting for a guess
     expect(screen.getByRole("link", { name: "Back to the start" })).toHaveAttribute("href", "/demo");
   });
 });
