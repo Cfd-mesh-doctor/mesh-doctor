@@ -17,7 +17,7 @@ function Opener({ parts }: { parts: string[] }) {
     <>
       {parts.map((p) => <div key={p} data-tour={p} />)}
       <button type="button" onClick={() => setOpen(true)}>Take the tour</button>
-      <AppTour open={open} onClose={() => setOpen(false)} />
+      <AppTour open={open} onClose={() => setOpen(false)} steps={TOUR_STEPS} />
     </>
   );
 }

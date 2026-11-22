@@ -5,10 +5,12 @@ import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useMatches } from "react-router";
 import { Logo } from "@/components/brand/Logo";
 import { AppTour } from "@/components/shared/AppTour";
-import { TOUR_SEEN } from "@/components/shared/tourSteps";
+import { TOUR_SEEN, TOUR_STEPS, engineTourSteps } from "@/components/shared/tourSteps";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/dialog";
 import { useAppPath, useEngine } from "@/engine/context";
+import { useRepairs } from "@/engine/hooks";
+import { latestFinished } from "@/engine/verdict";
 import { REPO_URL } from "@/lib/site";
 import { canStore, readItem, writeItem } from "@/lib/storage";
 import { ConnectionPill } from "./ConnectionPill";
@@ -56,17 +58,21 @@ export function AppLayout() {
   const title = usePageTitle();
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
-  // The app tour, opened from the demo's banner or the sidebar. Only the demo has one for now: its steps end on the
-  // demo's own report. The demo's front page also opens it by itself the first time, once per browser; a link straight
-  // to another screen (a report someone shared) opens that screen alone, and a browser that can't keep the note that
-  // the tour has been open doesn't get it by itself, or it would open on every visit.
+  // The app tour, opened from the sidebar (and the demo's banner). The demo's front page also opens it by itself the
+  // first time, once per browser; a link straight to another screen (a report someone shared) opens that screen alone,
+  // and a browser that can't keep the note that the tour has been open doesn't get it by itself, or it would open on
+  // every visit.
   const [tour, setTour] = useState(
     () => mode === "demo" && pathname.replace(/\/+$/, "") === to() && readItem(TOUR_SEEN) === null && canStore(),
   );
   useEffect(() => {
     if (tour) writeItem(TOUR_SEEN, "1");
   }, [tour]);
-  const onTour = mode === "demo" ? () => setTour(true) : undefined;
+  // The demo's tour ends on a recorded report; your own app's on your latest finished repair's, asked of the engine
+  // while the tour is open.
+  const repairs = useRepairs(tour && mode === "engine");
+  const steps = mode === "demo" ? TOUR_STEPS : engineTourSteps(latestFinished(repairs.data?.items));
+  const onTour = () => setTour(true);
   return (
     <div className="flex min-h-dvh">
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-border bg-sidebar lg:block print:hidden">
@@ -78,9 +84,9 @@ export function AppLayout() {
           <Sidebar onNavigate={() => setOpen(false)} onTour={onTour} />
         </SheetContent>
       </Sheet>
-      {onTour && <AppTour open={tour} onClose={() => setTour(false)} />}
+      <AppTour open={tour} onClose={() => setTour(false)} steps={steps} />
       <div className="flex min-w-0 flex-1 flex-col">
-        {mode === "demo" && <DemoNotice onTour={() => setTour(true)} />}
+        {mode === "demo" && <DemoNotice onTour={onTour} />}
         <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur sm:px-6 print:hidden">
           <Button variant="ghost" size="icon-sm" className="lg:hidden" aria-label="Open navigation" onClick={() => setOpen(true)}>
             <MenuIcon />

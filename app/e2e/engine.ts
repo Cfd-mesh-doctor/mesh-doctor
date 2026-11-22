@@ -18,7 +18,11 @@ export interface MockEngine {
   cases: string[];
 }
 
-export async function mockEngine(page: Page, opts: { down?: boolean; wrongKey?: boolean } = {}): Promise<MockEngine> {
+/** `repairs`: the repair runs it lists (none by default). */
+export async function mockEngine(
+  page: Page,
+  opts: { down?: boolean; wrongKey?: boolean; repairs?: unknown[] } = {},
+): Promise<MockEngine> {
   const state: MockEngine = { requests: [], cases: ["wing", "ahmed-25-coarse", "motorBike"] };
   const jobs = [
     job("20261121-130610-repair-wing-fix-13c2", "wing-fix", "running", { progress: { step: "fixing", fraction: 0.62 } }),
@@ -44,7 +48,7 @@ export async function mockEngine(page: Page, opts: { down?: boolean; wrongKey?: 
     if (path === "/") return json(200, { apiVersion: "1.0", version: "0.1.0", schemas: { repair: "1.0", job: "1.0" }, jobKinds: ["repair"] });
     if (path === "/cases") return json(200, { items: state.cases });
     if (path === "/jobs") return json(200, { items: jobs });
-    if (path === "/repairs") return json(200, { items: [] });
+    if (path === "/repairs") return json(200, { items: opts.repairs ?? [] });
     const cancel = /^\/jobs\/([^/]+)\/cancel$/.exec(path);
     if (cancel && req.method() === "POST") {
       const j = jobs.find((x) => x.id === cancel[1]);

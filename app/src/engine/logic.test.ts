@@ -4,8 +4,8 @@ import { elapsed, formatCells, formatDuration, formatPercent, formatRelative, to
 import { EngineError, explain } from "./errors";
 import { ACTIVE_POLL_MS, IDLE_POLL_MS, jobsPollInterval } from "./hooks";
 import { browserCantReachLocal } from "./permission";
-import type { Job, JobList } from "./types";
-import { caseName, improvedCleanly, madeWorse, runStep, runUpdated, verdictText } from "./verdict";
+import type { Job, JobList, RepairSummary } from "./types";
+import { caseName, improvedCleanly, latestFinished, madeWorse, runStep, runUpdated, verdictText } from "./verdict";
 
 const job = (state: Job["state"]): Job => ({
   schemaVersion: "1.0", id: `20261121-120000-repair-x-${state.slice(0, 4).padEnd(4, "0")}`, kind: "repair",
@@ -105,5 +105,21 @@ describe("formats", () => {
     // repairs give the worker's local time without a zone; it must parse everywhere, Safari included
     expect(toMillis("2026-11-21 13:01:32")).toBe(new Date(2026, 10, 21, 13, 1, 32).getTime());
     expect(toMillis("")).toBeNaN();
+  });
+});
+
+describe("the latest finished repair run", () => {
+  const run = (name: string, finished: string | null): RepairSummary =>
+    ({ name, finished, nCells: null, profile: null, source: null, status: {}, verdict: null });
+
+  it("is the one that finished last by the worker's clock, whatever the list's order", () => {
+    expect(latestFinished([run("a", "2026-11-20 23:59:59"), run("b", "2026-11-21 00:00:00"), run("c", "2026-11-09 12:00:00")])).toBe("b");
+    expect(latestFinished([run("b", "2026-11-21 00:00:00"), run("a", "2026-11-20 23:59:59")])).toBe("b");
+  });
+
+  it("is none before a run has finished", () => {
+    expect(latestFinished([run("running", null)])).toBeNull();
+    expect(latestFinished([])).toBeNull();
+    expect(latestFinished()).toBeNull();
   });
 });

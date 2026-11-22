@@ -2,18 +2,20 @@
 // The app tour's steps, in plain words: where things are and what each screen tells you. No imports, so the browser
 // tests (e2e/) can load it too.
 
-/** Kept in this browser once the demo's tour has been open, so the demo opens it by itself only the first time. */
+/** Kept in this browser once a tour has been open (the demo's or your own app's), so the demo opens its tour by itself
+ * only the first time. */
 export const TOUR_SEEN = "md-tour-seen";
 
 export interface TourStep {
   title: string;
   text: string;
-  /** The screen the step opens, under the app's own address (/demo); a step without one stays where it is. */
+  /** The screen the step opens, under the app's own address (/demo or /app); a step without one stays where it is. */
   page?: string;
   /** The part of that screen the step rings: the element with this `data-tour`. */
   spot?: string;
 }
 
+/** The demo's tour. */
 export const TOUR_STEPS: readonly TourStep[] = [
   {
     title: "Welcome to Mesh Doctor",
@@ -45,3 +47,24 @@ export const TOUR_STEPS: readonly TourStep[] = [
     spot: "verdict",
   },
 ];
+
+/** Your own app's tour: its own welcome, and a report step that opens the report of `report`, your latest finished
+ * repair, or stays on Jobs, where reports open, before one has finished. */
+export function engineTourSteps(report: string | null): readonly TourStep[] {
+  const [, overview, cases, jobs, reports] = TOUR_STEPS as readonly [TourStep, TourStep, TourStep, TourStep, TourStep];
+  return [
+    {
+      title: "Welcome to Mesh Doctor",
+      text: "This browser is paired with the Mesh Doctor engine on your computer, so these screens show your own cases, repair runs and jobs, read from the engine. Your meshes stay on your computer. The tour opens each screen in turn and takes about a minute.",
+    },
+    overview,
+    cases,
+    jobs,
+    report === null
+      ? {
+          title: reports.title,
+          text: "No repair has finished yet. When one has, Report on the Jobs screen opens its report: the verdict first, then the checkMesh numbers before and after the repair, and where the mesh was repaired.",
+        }
+      : { ...reports, page: `/repairs/${encodeURIComponent(report)}/report` },
+  ];
+}

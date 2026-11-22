@@ -55,11 +55,13 @@ export function useJobs() {
   });
 }
 
-export function useRepairs() {
+/** The repair runs. With `enabled` false they aren't asked for (what's cached still shows): for a part of the app that
+ * needs them only now and then, as the tour does. */
+export function useRepairs(enabled = true) {
   const { transport } = useEngine();
   return useQuery({
     queryKey: [transport?.scope, "repairs"],
-    queryFn: transport ? ({ signal }) => api.repairs(transport, signal) : skipToken,
+    queryFn: transport && enabled ? ({ signal }) => api.repairs(transport, signal) : skipToken,
     refetchInterval: IDLE_POLL_MS,
   });
 }

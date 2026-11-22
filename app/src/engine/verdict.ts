@@ -56,3 +56,11 @@ export function runUpdated(r: RepairSummary): string | null {
   const time = (r.status as { time?: unknown } | undefined)?.time;
   return typeof time === "string" && time ? time : null;
 }
+
+/** The name of the run that finished last (the worker's times, yyyy-mm-dd hh:mm:ss, sort as text), or null before one
+ * has. */
+export function latestFinished(runs: readonly RepairSummary[] = []): string | null {
+  let last: RepairSummary | null = null;
+  for (const r of runs) if (r.finished && (last === null || r.finished > last.finished!)) last = r;
+  return last?.name ?? null;
+}

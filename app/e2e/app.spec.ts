@@ -103,6 +103,28 @@ test.describe("in a browser new to the demo", () => {
   });
 });
 
+test("your own app has the tour too: its own welcome, and it ends on your latest finished repair's report", async ({ page }) => {
+  await mockEngine(page, {
+    repairs: [{ name: "old-fix", finished: "2026-11-21 12:05:00", nCells: 1000, profile: "medium", source: "wing", status: {}, verdict: null }],
+  });
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  const open = page.getByRole("complementary").getByRole("button", { name: "Take the tour" });
+  await open.click();
+  await expect(page.getByRole("dialog", { name: "Welcome to Mesh Doctor" }))
+    .toContainText("This browser is paired with the Mesh Doctor engine on your computer");
+  const screens = [/\/app$/, /\/app\/cases$/, /\/app\/jobs$/, /\/app\/repairs\/old-fix\/report$/];
+  for (let i = 2; i <= 5; i++) {
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog")).toContainText(`Step ${i} of 5`);
+    await expect(page).toHaveURL(screens[i - 2]!);
+  }
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(open).toBeFocused();
+});
+
 test("the body font starts loading with the page, and is fetched once", async ({ page, request }) => {
   const html = await (await request.get("/")).text();
   const link = html.match(/<link [^>]*rel="preload"[^>]*>/)?.[0] ?? "";
