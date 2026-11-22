@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { testReport } from "@/report/testReport";
 import { renderScreen } from "@/test/render";
 import { Report } from "./Report";
@@ -38,6 +38,25 @@ describe("Report viewer", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /open another report/i }));
     expect(screen.getByRole("heading", { name: "Report viewer" })).toBeInTheDocument();
+  });
+
+  it("shows the repair map when the report has one", async () => {
+    // jsdom has no canvas: the card, its controls and its description are what can be checked here
+    // (the drawing itself is checked in a real browser, e2e/report.spec.ts).
+    const noCanvas = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => null);
+    renderScreen(<Report />, { path: "/report" });
+    await userEvent.upload(screen.getByLabelText("Choose a report file"), file(testReport({ map: true })));
+    expect(await screen.findByText("Where the mesh was repaired")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /^Side view of the model's wall faces \(x along the flow, z up\), with 4 defects found and repaired and 1 defect left, and the 60 strongest cells/ })).toBeInTheDocument();
+    expect(screen.getByText("found and repaired (4)")).toBeInTheDocument();
+    expect(screen.getByText("left after the repair (1)")).toBeInTheDocument();
+    expect(screen.getByText("Made-up map for the tests.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: "Top" }));
+    expect(screen.getByRole("img", { name: /^Top view of the model's wall faces \(x along the flow, y across\)/ })).toBeInTheDocument();
+    await userEvent.click(within(screen.getByRole("radiogroup", { name: "Heat layer" })).getByRole("radio", { name: "None" }));
+    expect(screen.getByRole("img", { name: /^Top view/ })).not.toHaveAccessibleName(/heat layer/);
+    expect(screen.queryByText(/cells whose residual swung most/)).not.toBeInTheDocument();
+    noCanvas.mockRestore();
   });
 
   it("explains a file that isn't a report, and stays ready for another", async () => {

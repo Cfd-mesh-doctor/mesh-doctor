@@ -21,8 +21,9 @@ test("on a phone nothing scrolls sideways, and the menu works", async ({ page })
 });
 
 test("on a small phone an open report fits the screen", async ({ page }) => {
-  // Six A/B fields with long numbers, as a real k-omega run has: the table once widened the page.
-  const report = testReport() as { documents: { abtest: Record<string, Record<string, unknown>> } };
+  // Six A/B fields with long numbers, as a real k-omega run has: the table once widened the page. With a
+  // repair map, whose canvas has to fit too.
+  const report = testReport({ map: true }) as { documents: { abtest: Record<string, Record<string, unknown>> } };
   const ab = report.documents.abtest;
   for (const f of ["Uy", "Uz", "k", "omega"]) {
     (ab.residualRatioFixedOverBase as Record<string, number>)[f] = 1.0042;
@@ -35,6 +36,7 @@ test("on a small phone an open report fits the screen", async ({ page }) => {
     name: "ahmed25-fine-fix.mdreport.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(report)),
   });
   await expect(page.getByRole("heading", { name: "ahmed25-fine-fix" })).toBeVisible();
+  await expect(page.getByRole("img", { name: /^Side view of the model's wall faces/ })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow, "the open report is wider than a 360 px screen").toBeLessThanOrEqual(1);
 });

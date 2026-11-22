@@ -18,8 +18,10 @@ import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
 import { formatDateTime, formatInt, formatNumber } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
+import { HEAT, viewHeading, type MapSummary, type MapViewName } from "@/report/map";
 import { ReportError, fileBytes, readReport } from "@/report/read";
 import { judgeTone, measureLabel, ratioChange, summarize, type Change, type ReportSummary } from "@/report/summary";
+import { RepairMap } from "./RepairMap";
 
 type State =
   | { kind: "empty" }
@@ -252,7 +254,14 @@ function ReportView({ summary: s, from, onClose }: { summary: ReportSummary; fro
         </Card>
       </Section>
 
-      <div className="mt-4 grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+      {s.map && (
+        <Section title="Where the mesh was repaired">
+          <MapCard map={s.map} />
+        </Section>
+      )}
+
+      {/* Two columns only when there is an A/B test to sit beside checkMesh. */}
+      <div className={cn("mt-4 grid grid-cols-1 items-start gap-4", s.ab && "lg:grid-cols-2")}>
         <Section title="checkMesh, before and after the repair">
           <CheckMeshCard rows={s.checkMesh} />
         </Section>
@@ -389,6 +398,63 @@ function LegendLine({ dashed, className, children }: { dashed?: boolean; classNa
       </svg>
       {children}
     </span>
+  );
+}
+
+function MapKey({ mark, children }: { mark: ReactNode; children: ReactNode }) {
+  return <span className="inline-flex items-center gap-1.5">{mark}{children}</span>;
+}
+
+function MapCard({ map }: { map: MapSummary }) {
+  const [viewName, setViewName] = useState<MapViewName>(map.views[0]!.name);
+  const view = map.views.find((v) => v.name === viewName) ?? map.views[0]!;
+  // The last heat layer first, as the engine's own map page does; "none" hides them.
+  const [layerKey, setLayerKey] = useState(String(map.layers.length - 1));
+  const layer = map.layers[Number(layerKey)] ?? null;
+  const n = (k: number) => formatInt(k);
+  return (
+    <Card className="mt-4">
+      <CardHeader className="flex-wrap">
+        <div className="min-w-0">
+          <CardTitle>Where the mesh was repaired</CardTitle>
+          <CardDescription>
+            Every wall face of the model, seen from the {view.name === "side" ? "side" : "top"} ({viewHeading(view)});
+            darker grey is a finer mesh. Point at a mark for details.
+          </CardDescription>
+        </div>
+        <div className="flex max-w-full flex-wrap gap-2">
+          {map.views.length > 1 && (
+            <Segmented label="View" value={view.name} onChange={setViewName}
+              options={map.views.map((v) => ({ value: v.name, label: v.name === "side" ? "Side" : "Top" }))} />
+          )}
+          {map.layers.length > 0 && (
+            <Segmented label="Heat layer" value={layerKey} onChange={setLayerKey}
+              options={[...map.layers.map((l, i) => ({ value: String(i), label: l.label })), { value: "-1", label: "None" }]} />
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <MapKey mark={<span className="size-2.5 rounded-full border-[1.5px] border-chart-3" aria-hidden />}>
+            found and repaired ({n(map.before.length)})
+          </MapKey>
+          <MapKey mark={<span className="size-2.5 rounded-full bg-info" aria-hidden />}>
+            left after the repair ({n(map.after.length)})
+          </MapKey>
+          {layer && (
+            <MapKey mark={
+              <span className="flex gap-px" aria-hidden>
+                {HEAT.map((c) => <span key={c} className="size-2 rounded-full" style={{ background: c }} />)}
+              </span>
+            }>
+              cells whose residual swung most (weak to strong)
+            </MapKey>
+          )}
+        </div>
+        <RepairMap map={map} view={view} layer={layer} />
+        {map.notes.length > 0 && <p className="mt-3 text-xs text-muted-foreground">{map.notes.join(" ")}</p>}
+      </CardContent>
+    </Card>
   );
 }
 

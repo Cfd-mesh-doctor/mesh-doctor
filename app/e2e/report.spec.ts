@@ -81,3 +81,28 @@ test("the home page links to the report viewer", async ({ page }) => {
   await expect(page).toHaveURL(/\/#privacy$/);
   await expect(page.getByRole("heading", { name: "Your meshes never leave your computer" })).toBeInViewport();
 });
+
+test("the repair map draws the model and says what each mark is", async ({ page }) => {
+  await page.goto("/report");
+  await pick(page, "ahmed25-fine-fix.mdreport.json", Buffer.from(JSON.stringify(testReport({ map: true }))));
+  const map = page.getByRole("img", { name: /^Side view of the model's wall faces/ });
+  await expect(map).toBeVisible();
+  // Drawn: the made-up model fills about 45 % of the side view.
+  const inked = await map.evaluate((el) => {
+    const cv = el as HTMLCanvasElement;
+    const d = cv.getContext("2d")!.getImageData(0, 0, cv.width, cv.height).data;
+    let n = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i]! > 20) n++;
+    return n / (cv.width * cv.height);
+  });
+  expect(inked).toBeGreaterThan(0.3);
+  // The defect left after the repair sits at x -0.3, z 0.05; the side view spans (-0.72, -0.06) to (0.57, 0.45).
+  const box = (await map.boundingBox())!;
+  const w = Math.min(box.width, box.height / (0.51 / 1.29)), ox = (box.width - w) / 2;
+  await map.hover({ position: { x: ox + ((-0.3 + 0.72) / 1.29) * w, y: (1 - (0.05 + 0.06) / 0.51) * box.height } });
+  await expect(page.getByText("Defect left after the repair")).toBeVisible();
+  await expect(page.getByText("1 face: skewed")).toBeVisible();
+  await page.getByRole("radio", { name: "Top" }).click();
+  await expect(page.getByRole("img", { name: /^Top view of the model's wall faces/ })).toBeVisible();
+  await expect(page.getByText("Defect left after the repair")).toHaveCount(0);
+});

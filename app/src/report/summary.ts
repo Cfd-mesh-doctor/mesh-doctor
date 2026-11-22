@@ -1,15 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // What a report says, worked out from its documents. A report file can come from anywhere, so every
 // value is checked before it is used: a missing or odd field gives "–", never a broken page.
+import { mapSummary, type MapSummary } from "./map";
 import type { Report } from "./read";
-
-type Obj = Record<string, unknown>;
-
-export const obj = (x: unknown): Obj => (typeof x === "object" && x !== null && !Array.isArray(x) ? (x as Obj) : {});
-export const arr = (x: unknown): unknown[] => (Array.isArray(x) ? x : []);
-export const num = (x: unknown): number | null => (typeof x === "number" && Number.isFinite(x) ? x : null);
-export const str = (x: unknown): string | null => (typeof x === "string" && x ? x : null);
-const strs = (x: unknown): string[] => arr(x).filter((s): s is string => typeof s === "string");
+import { arr, num, obj, str, strs, type Obj } from "./values";
 
 /** checkMesh's numbers, in the order the engine's pages show them. */
 const CHECKMESH: [string, string][] = [
@@ -106,6 +100,8 @@ export interface ReportSummary {
     history: { fields: string[]; original: HistoryRun | null; repaired: HistoryRun | null };
   } | null;
   judge: JudgeSummary | null;
+  /** the repair map, when the report holds one (meshdoctor map <name> before meshdoctor report) */
+  map: MapSummary | null;
   sentence: string;
   about: {
     created: string | null;
@@ -277,6 +273,7 @@ export function summarize(report: Report): ReportSummary {
     sourceUnchanged: typeof check === "boolean" ? check : null,
     checkMesh: checkMeshRows(rep, improved, regressions),
     judge: judgeSummary(d.abtest),
+    map: mapSummary(d.map),
     sentence: sentence(base),
     about: {
       created: str(report.created),
