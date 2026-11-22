@@ -83,7 +83,7 @@ test("the docs search loads its texts only when used, opens the section found, a
   await results.getByRole("link", { name: "OpenFOAM runs" }).click();
   await expect(page).toHaveURL(/\/troubleshooting\?q=patchField#openfoam-runs$/);
   await expect(page.getByRole("searchbox")).toHaveValue("patchField");
-  await expect(page.getByText(/^1 of \d+ problems matches\.$/)).toBeVisible();
+  await expect(page.getByText(/^1 of \d+ problems matches\. Enter goes to it\.$/)).toBeVisible();
 });
 
 test("the docs search from the keyboard: “/”, a word and Enter open the first match", async ({ page }) => {

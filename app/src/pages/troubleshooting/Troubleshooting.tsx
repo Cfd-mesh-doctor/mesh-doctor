@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Troubleshooting: the problems of docs/troubleshooting.md (problems.ts, kept equal to the doc by a test), with a
 // search box, as the doc says to search it for the message you see. What's typed stays in the address (?q=), so a
-// link can open the page at one problem.
+// link can open the page at one problem. Enter in the box goes to the first problem that matches.
 import { useSearchParams } from "react-router";
 import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
 import { PageContents } from "@/components/shared/PageContents";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { ADDRESS_FIELD } from "@/lib/addressField";
+import { focusOnce } from "@/lib/focusOnce";
 import { useTitle } from "@/lib/useTitle";
 import { aboutPage } from "@/pages/docs/entries";
 import { DocSource } from "@/pages/docs/DocSource";
@@ -21,6 +22,16 @@ import { matches } from "./search";
 const TOTAL = GROUPS.reduce((n, g) => n + g.table.rows.length, 0);
 /** The three columns from tablet width up; on a phone each problem reads top to bottom. */
 const COLUMNS = "md:grid-cols-[minmax(0,5fr)_minmax(0,5fr)_minmax(0,6fr)] md:gap-6";
+
+/** Takes the reader to the first problem of a group: the group's heading in sight below the page's header, and the
+ *  focus on the problem, so a screen reader reads it and a phone puts its keyboard away. */
+function goToFirst(group: string) {
+  const section = document.getElementById(group);
+  const problem = section?.querySelector("li");
+  if (!section || !problem) return;
+  focusOnce(problem, { preventScroll: true });
+  section.scrollIntoView({ block: "start" });
+}
 
 export function Troubleshooting() {
   useTitle("Troubleshooting", aboutPage("/troubleshooting"));
@@ -45,6 +56,13 @@ export function Troubleshooting() {
             className="mt-1.5"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              // not while an input method is still composing a word: its Enter only finishes the word
+              const first = shown[0];
+              if (e.key !== "Enter" || e.nativeEvent.isComposing || !query.trim() || !first) return;
+              e.preventDefault();
+              goToFirst(first.id);
+            }}
             placeholder="For example: Cannot find patchField entry"
             autoComplete="off"
             spellCheck={false}
@@ -52,9 +70,11 @@ export function Troubleshooting() {
           <p aria-live="polite" className="mt-2 text-[13px] text-muted-foreground">
             {!query.trim()
               ? `${TOTAL} problems, in ${GROUPS.length} groups.`
-              : found
-                ? `${found} of ${TOTAL} problems ${found === 1 ? "matches" : "match"}.`
-                : "No problem matches."}
+              : found === 1
+                ? `1 of ${TOTAL} problems matches. Enter goes to it.`
+                : found
+                  ? `${found} of ${TOTAL} problems match. Enter goes to the first.`
+                  : "No problem matches."}
           </p>
         </div>
         {found === 0 && (
@@ -88,7 +108,8 @@ export function Troubleshooting() {
                       </div>
                       <ul className="divide-y divide-border">
                         {g.rows.map(([seen = "", why = "", fix = ""]) => (
-                          <li key={seen} className={`grid gap-1 px-4 py-3 text-sm ${COLUMNS}`}>
+                          // The focus ring inside its edge when Enter brings the focus here: the card clips the rest.
+                          <li key={seen} className={`grid gap-1 px-4 py-3 text-sm focus-visible:-outline-offset-2 ${COLUMNS}`}>
                             <p className="font-medium"><span className="sr-only">{g.table.head[0]}: </span><DocText text={seen} /></p>
                             <p className="text-muted-foreground">
                               <span className="font-medium text-foreground md:sr-only">{g.table.head[1]}: </span><DocText text={why} />

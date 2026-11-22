@@ -44,9 +44,37 @@ describe("Troubleshooting", () => {
     const { router } = renderScreen(<Troubleshooting />, { path: "/troubleshooting" });
     await userEvent.type(screen.getByRole("searchbox", { name: "Search for the message you see" }), "patchField");
     expect(problems()).toHaveLength(1);
-    expect(screen.getByText("1 of 36 problems matches.")).toBeInTheDocument();
+    expect(screen.getByText("1 of 36 problems matches. Enter goes to it.")).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["OpenFOAM runs"]);
     expect(router.state.location.search).toBe("?q=patchField");
+  });
+
+  it("goes to the first problem that matches on Enter: its group in sight, the focus on the problem", async () => {
+    const scrolled: Element[] = []; // jsdom has no scrolling: note what would have scrolled into view
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      configurable: true,
+      value(this: Element) { scrolled.push(this); },
+    });
+    try {
+      const user = userEvent.setup();
+      renderScreen(<Troubleshooting />, { path: "/troubleshooting" });
+      const box = screen.getByRole("searchbox", { name: "Search for the message you see" });
+      await user.click(box);
+      await user.keyboard("{Enter}"); // nothing typed: nothing to go to
+      expect(box).toHaveFocus();
+
+      await user.type(box, "meshdoctor serve");
+      expect(screen.getByText(/^\d+ of 36 problems match\. Enter goes to the first\.$/)).toBeInTheDocument();
+      await user.keyboard("{Enter}");
+      const group = screen.getAllByRole("region")[0]!;
+      const first = within(group).getAllByRole("listitem")[0]!;
+      expect(first).toHaveFocus();
+      expect(scrolled).toEqual([group]);
+      await user.tab(); // it takes the focus only until it loses it
+      expect(first).not.toHaveAttribute("tabindex");
+    } finally {
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
   });
 
   it("opens at the problems a link names, and offers them all back when nothing matches", async () => {
