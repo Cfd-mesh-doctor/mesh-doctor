@@ -18,7 +18,7 @@ import type { RepairSummary } from "@/engine/types";
 import { caseName } from "@/engine/verdict";
 import { cellsField } from "@/estimate/estimate";
 import { ADDRESS_FIELD } from "@/lib/addressField";
-import { formatCells, formatDateTime, formatRelative } from "@/lib/format";
+import { formatCells, formatCount, formatDateTime, formatRelative } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
 
@@ -103,7 +103,7 @@ export function Cases() {
             spellCheck={false}
           />
           <span className="text-[13px] text-muted-foreground tabular-nums">
-            {cases.data ? `${shown.length} of ${rows.length} cases` : ""}
+            {cases.data ? `${shown.length} of ${formatCount(rows.length, "case")}` : ""}
           </span>
         </div>
         {cases.isPending ? (

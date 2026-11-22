@@ -199,6 +199,7 @@ test("pairing: the key leaves the address bar, then the app connects", async ({ 
   await expect(page.getByText("Mesh Doctor v0.1.0 answered")).toBeVisible();
   await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
   await expect(page.getByText("Source cases")).toBeVisible();
+  await expect(page.getByText("API 1.0 · 1 job kind", { exact: true })).toBeVisible(); // one kind of job: not "1 job kinds"
   await expect(page.getByRole("link", { name: /Connected/ })).toBeVisible();
   const apiCalls = engine.requests.filter((r) => r.method() !== "OPTIONS");
   expect(apiCalls.length).toBeGreaterThan(0);

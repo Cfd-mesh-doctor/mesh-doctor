@@ -34,6 +34,14 @@ describe("the Overview's active-jobs tile", () => {
     expect(await screen.findByText("8 jobs on record")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /^Show the active/ })).toBeNull();
   });
+
+  it("says “1 job on record” for one", async () => {
+    const answers = noneRunning();
+    const list = answers["/jobs"] as JobList;
+    list.items = list.items.slice(0, 1);
+    open(answers);
+    expect(await screen.findByText("1 job on record")).toBeInTheDocument();
+  });
 });
 
 describe("the Overview's recent jobs", () => {
@@ -77,6 +85,7 @@ describe("the Overview before anything has run", () => {
     expect(screen.getAllByRole("button", { name: COPY_REPAIR })).toHaveLength(1);
     expect(screen.queryByText("Starting repairs from the app comes next")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull(); // everything loaded
+    expect(screen.getByText("API 1.0 · 1 job kind")).toBeInTheDocument(); // one kind of job: not "1 job kinds"
   });
 
   it("doesn't call a list that didn't load empty, or offer first steps for it", async () => {

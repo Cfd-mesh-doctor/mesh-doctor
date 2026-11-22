@@ -15,7 +15,7 @@ import { useAppPath, useEngine, usePairing } from "@/engine/context";
 import { useCases, useEngineInfo, useJobs, useRepairs } from "@/engine/hooks";
 import { JOB_KIND_LABEL, isActive } from "@/engine/types";
 import { caseName, improvedCleanly, madeWorse, runStep, runUpdated } from "@/engine/verdict";
-import { formatCells, formatRelative } from "@/lib/format";
+import { formatCells, formatCount, formatRelative } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
 
 /** Repairs a copy of a case, in WSL; the app can't start repairs itself yet. */
@@ -73,7 +73,7 @@ export function Overview() {
           tone="primary"
           loading={info.isPending}
           value={info.data ? `v${info.data.version ?? "?"}` : "–"}
-          hint={info.data ? `API ${info.data.apiVersion} · ${info.data.jobKinds?.length ?? 0} job kinds` : "Not connected"}
+          hint={info.data ? `API ${info.data.apiVersion} · ${formatCount(info.data.jobKinds?.length ?? 0, "job kind")}` : "Not connected"}
         />
         <StatTile
           label="Source cases"
@@ -103,7 +103,7 @@ export function Overview() {
             <Link to={to("/jobs?show=active")} className="font-medium text-primary hover:underline">
               {active.length === 1 ? "Show the active job" : "Show the active jobs"}
             </Link>
-          ) : `${jobItems.length} jobs on record`}
+          ) : `${formatCount(jobItems.length, "job")} on record`}
         />
       </div>
 

@@ -27,6 +27,12 @@ export function formatNumber(x: number | null | undefined, digits = 4): string {
   return a >= 1000 ? nfAll.format(r) : String(r);
 }
 
+/** A count with its noun, which is singular for one: "1 job", "3 jobs", "1 job kind". The plural is the noun with an
+ *  s unless given. */
+export function formatCount(n: number, one: string, many = `${one}s`): string {
+  return `${nf.format(n)} ${n === 1 ? one : many}`;
+}
+
 /** 1 234 567 cells → "1.23 M"; small counts stay whole. */
 export function formatCells(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "–";

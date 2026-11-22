@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { describe, expect, it } from "vitest";
-import { elapsed, formatCells, formatDuration, formatPercent, formatRelative, toMillis } from "@/lib/format";
+import { elapsed, formatCells, formatCount, formatDuration, formatPercent, formatRelative, toMillis } from "@/lib/format";
 import { EngineError, explain } from "./errors";
 import { ACTIVE_POLL_MS, IDLE_POLL_MS, jobsPollInterval } from "./hooks";
 import { browserCantReachLocal } from "./permission";
@@ -94,6 +94,15 @@ describe("formats", () => {
     expect(formatCells(31_100_000)).toBe("31.1 M");
     expect(formatPercent(0.4)).toBe("40 %");
     expect(formatPercent(1.7)).toBe("100 %");
+  });
+
+  it("says a count with its noun, singular for one", () => {
+    expect(formatCount(1, "job")).toBe("1 job");
+    expect(formatCount(0, "job")).toBe("0 jobs");
+    expect(formatCount(2, "job kind")).toBe("2 job kinds");
+    expect(formatCount(1, "job kind")).toBe("1 job kind");
+    expect(formatCount(1234, "case")).toBe("1,234 cases");
+    expect(formatCount(3, "match", "matches")).toBe("3 matches");
   });
 
   it("measures time between ISO stamps", () => {

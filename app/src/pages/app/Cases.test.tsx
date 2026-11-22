@@ -44,14 +44,15 @@ describe("the Cases screen", () => {
   });
 });
 
-/** Opens the Cases screen of your own engine, whose cases folder has nothing in it, or whose cases don't load. */
-function ownEngine(casesLoad: boolean, at = "/app/cases") {
+/** Opens the Cases screen of your own engine with these cases, or whose cases don't load (null). */
+function ownEngine(cases: string[] | null, at = "/app/cases") {
   const transport: Transport = {
     kind: "engine",
     scope: "test",
     request: async <T,>(_method: string, path: string) => {
       const route = path.split("?")[0];
-      if (route === "/repairs" || (route === "/cases" && casesLoad)) return { items: [] } as T;
+      if (route === "/repairs") return { items: [] } as T;
+      if (route === "/cases" && cases) return { items: cases } as T;
       throw new EngineError("internal", "internal error; details are in the server window", 500);
     },
   };
@@ -60,17 +61,24 @@ function ownEngine(casesLoad: boolean, at = "/app/cases") {
 
 describe("the Cases screen of your own engine", () => {
   it("with no cases, says where the engine looks and how to point it at another folder", async () => {
-    ownEngine(true);
+    ownEngine([]);
     expect(await screen.findByRole("heading", { name: "No cases found" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy “MESHDOCTOR_CASES=~/cases meshdoctor serve”" })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("whose cases didn't load says so under the message that says why, not that nothing matches the filter", async () => {
-    ownEngine(false, "/app/cases?q=wing");
+    ownEngine(null, "/app/cases?q=wing");
     expect(await screen.findByRole("heading", { name: "The cases didn't load" })).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("The engine hit an error");
     expect(screen.queryByRole("heading", { name: "No case matches" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "No cases found" })).toBeNull();
+  });
+
+  it("counts one case as “1 of 1 case”, and none shown of it as “0 of 1 case”", async () => {
+    ownEngine(["wing"]);
+    expect(await screen.findByText("1 of 1 case")).toBeInTheDocument();
+    await userEvent.type(screen.getByRole("searchbox", { name: "Filter cases" }), "pitz");
+    expect(screen.getByText("0 of 1 case")).toBeInTheDocument();
   });
 });
