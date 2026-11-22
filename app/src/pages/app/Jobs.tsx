@@ -31,13 +31,14 @@ function reportPath(job: Job): string | null {
   return job.state === "done" ? `/repairs/${encodeURIComponent(job.name)}/report` : null;
 }
 
-/** The table's link to a finished job's report (named like the Overview's), or nothing. */
+/** The table's link to a finished job's report (named like the Overview's), or nothing. Left out on phones, where
+ * the row opens the details and they have the report too, so the table keeps to the screen. */
 function ReportLink({ job }: { job: Job }) {
   const to = useAppPath();
   const path = reportPath(job);
   if (!path) return null;
   return (
-    <Button variant="ghost" size="sm" asChild>
+    <Button variant="ghost" size="sm" className="hidden sm:inline-flex" asChild>
       <Link to={to(path)} aria-label={`Report of ${job.name}`}>Report</Link>
     </Button>
   );
@@ -262,14 +263,14 @@ export function Jobs() {
                   <TD className="text-right" onClick={(e) => e.stopPropagation()}>
                     {isActive(j.state) ? (
                       <Button variant="danger-ghost" size="sm" onClick={() => setCancelId(j.id)}>Cancel</Button>
+                    ) : reportPath(j) ? (
+                      // A finished job offers its report; its details open from its name or row, as on phones.
+                      <ReportLink job={j} />
                     ) : (
-                      <div className="flex justify-end gap-1">
-                        <ReportLink job={j} />
-                        {/* On phones the whole row opens the details, so the button is left out. */}
-                        <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={() => setDetailsId(j.id)}>
-                          Details
-                        </Button>
-                      </div>
+                      // On phones the whole row opens the details, so the button is left out.
+                      <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={() => setDetailsId(j.id)}>
+                        Details
+                      </Button>
                     )}
                   </TD>
                 </TR>
