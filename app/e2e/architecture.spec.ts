@@ -40,3 +40,28 @@ test("architecture: the On this page list goes to a section, stays in view besid
   await page.evaluate(() => window.scrollTo(0, 0));
   await expect(nav.locator("[aria-current]")).toHaveCount(0);
 });
+
+test("architecture: a heading's button copies its section's address, and shows when pointed at or reached by keyboard", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/architecture");
+  const heading = page.getByRole("heading", { level: 2, name: "Jobs" });
+  const button = heading.locator("xpath=following-sibling::button[1]");
+  const opacity = () => button.evaluate((b) => getComputedStyle(b).opacity);
+  await heading.scrollIntoViewIfNeeded();
+  await page.mouse.move(0, 0);
+  await expect.poll(opacity).toBe("0");
+  await heading.hover();
+  await expect.poll(opacity).toBe("1");
+  await expect(button).toHaveAccessibleName("Copy a link to “Jobs”");
+  await button.click();
+  await expect(button).toHaveAccessibleName("Copied");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("http://localhost:4173/architecture#jobs");
+
+  // From the heading, Tab reaches the button next, and it shows while it has the focus.
+  await heading.click();
+  await page.mouse.move(0, 0);
+  await page.keyboard.press("Tab");
+  await expect(button).toBeFocused();
+  await expect.poll(opacity).toBe("1");
+});
+

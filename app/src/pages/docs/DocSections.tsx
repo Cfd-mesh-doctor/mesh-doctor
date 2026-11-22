@@ -11,6 +11,7 @@ import type { DocTable } from "@/lib/docTable";
 import { cn } from "@/lib/utils";
 import { DocSource } from "./DocSource";
 import { DocText } from "./DocText";
+import { HeadingLink } from "./HeadingLink";
 
 /** A table as the doc writes it, its first column the row's name; it scrolls sideways on its own when too wide. */
 function DocTableBlock({ table }: { table: DocTable }) {
@@ -77,10 +78,12 @@ function DocBlocks({ blocks, pictures }: { blocks: DocBlock[]; pictures: DocPict
     if ("text" in b) return <p key={i}><DocText text={b.text} /></p>;
     if ("table" in b) return <DocTableBlock key={i} table={b.table} />;
     if ("heading" in b) {
+      const id = githubAnchor(b.heading);
       return (
-        <h3 key={i} id={githubAnchor(b.heading)} className="scroll-mt-20 pt-3 text-base font-semibold tracking-tight">
-          <DocText text={b.heading} />
-        </h3>
+        <div key={i} className="group flex items-start gap-1.5 pt-3">
+          <h3 id={id} className="scroll-mt-20 text-base font-semibold tracking-tight"><DocText text={b.heading} /></h3>
+          <HeadingLink id={id} title={b.heading} />
+        </div>
       );
     }
     if ("picture" in b) {
@@ -112,7 +115,10 @@ export function DocSectionsView({ sections, pictures = {}, source }: {
       <div className="space-y-10">
         {sections.map((s) => (
           <section key={s.id} id={s.id} aria-labelledby={`${s.id}-title`} className="scroll-mt-20">
-            <h2 id={`${s.id}-title`} className="text-lg font-semibold tracking-tight"><DocText text={s.title} /></h2>
+            <div className="group flex items-start gap-1.5">
+              <h2 id={`${s.id}-title`} className="text-lg font-semibold tracking-tight"><DocText text={s.title} /></h2>
+              <HeadingLink id={s.id} title={s.title} />
+            </div>
             <div className="mt-3 space-y-3 text-[15px] leading-relaxed">
               <DocBlocks blocks={s.blocks} pictures={pictures} />
             </div>

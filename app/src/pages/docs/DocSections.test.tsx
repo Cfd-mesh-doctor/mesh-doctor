@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
+import { githubAnchor } from "@/lib/docSections";
 import { DESIGN } from "@/pages/architecture/design";
 import { TOUR } from "@/pages/dashboard/tour";
 import { renderScreen } from "@/test/render";
@@ -37,5 +39,24 @@ describe("a page that shows a doc", () => {
     expect(last.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(line.parentElement).toBe(last.parentElement?.parentElement);
     expect(contents()?.contains(line)).toBe(false);
+  });
+
+  it("puts a button by each heading and sub-heading that copies the address of its section", async () => {
+    const user = userEvent.setup(); // its clipboard stands in for the browser's
+    renderScreen(<DocSectionsView sections={TOUR} />, { path: "/dashboard-tour" });
+    const sub = "Solver A/B test (same page, below the result)";
+    expect(screen.getAllByRole("button", { name: /^Copy a link to/ })).toHaveLength(TOUR.length + 1);
+
+    // Beside the heading, not in it: the heading, and the section it names, keep their own names.
+    expect(screen.getByRole("heading", { level: 2, name: "Mesh Doctor: /meshdoctor" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Mesh Doctor: /meshdoctor" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Copy a link to “Mesh Doctor: /meshdoctor”" }));
+    expect(await navigator.clipboard.readText()).toBe(`${window.location.origin}/dashboard-tour#${TOUR[0]?.id}`);
+    expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: `Copy a link to “${sub}”` }));
+    expect(await navigator.clipboard.readText()).toBe(`${window.location.origin}/dashboard-tour#${githubAnchor(sub)}`);
+    expect(document.getElementById(githubAnchor(sub))?.tagName).toBe("H3");
   });
 });

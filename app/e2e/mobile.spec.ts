@@ -101,3 +101,10 @@ test("on a phone the public pages have a menu", async ({ page }) => {
   await expect(page).toHaveURL(/\/#privacy$/);
   await expect(page.getByRole("heading", { name: "Your meshes never leave your computer" })).toBeInViewport();
 });
+
+test("on a phone the doc headings' copy-link buttons always show, as a touch screen can't point at a heading", async ({ page }) => {
+  await page.goto("/architecture");
+  const button = page.getByRole("button", { name: "Copy a link to “Jobs”" });
+  await button.scrollIntoViewIfNeeded();
+  await expect.poll(() => button.evaluate((b) => getComputedStyle(b).opacity)).toBe("1");
+});

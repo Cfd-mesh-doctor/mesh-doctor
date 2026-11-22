@@ -140,3 +140,12 @@
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
 }
+
+/* The copy-link button by a doc heading (HeadingLink): with a mouse it shows while the heading is pointed at, or the
+   button has the focus or has just copied; on a touch screen, which can't point, it always shows. */
+@media (hover: hover) and (pointer: fine) {
+  .heading-link { opacity: 0; }
+  .group:hover .heading-link,
+  .heading-link:focus-visible,
+  .heading-link[aria-label="Copied"] { opacity: 1; }
+}
