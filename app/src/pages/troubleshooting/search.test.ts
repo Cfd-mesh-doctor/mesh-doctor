@@ -28,6 +28,12 @@ describe("finding a problem", () => {
     expect(found("“The engine isn’t answering”")).toEqual(["\"The engine isn't answering\""]);
   });
 
+  it("finds a web app error, and only it, by the title its error panel links with", () => {
+    const quoted = GROUPS.find((g) => g.id === "web-app")!.table.rows.map((r) => r[0] ?? "").filter((s) => /^".+"$/.test(s));
+    expect(quoted).toHaveLength(4);
+    for (const seen of quoted) expect(found(seen.slice(1, -1))).toEqual([seen]);
+  });
+
   it("finds nothing for words no problem has", () => {
     expect(found("quantum flux capacitor")).toEqual([]);
   });

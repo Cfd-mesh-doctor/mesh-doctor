@@ -77,12 +77,19 @@ test("the site talks to nothing but itself and the engine", async ({ page }) => 
   expect([...seen].sort()).toEqual([ENGINE, "http://localhost:4173"].sort());
 });
 
-test("an engine that isn't running gets a plain explanation", async ({ page }) => {
+test("an engine that isn't running gets a plain explanation, and a link to that one problem in Troubleshooting", async ({ page }) => {
   await mockEngine(page, { down: true });
   await page.goto(pairingLink());
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.getByText("The engine isn't answering")).toBeVisible();
   await expect(page.getByText("meshdoctor serve")).toBeVisible();
+  const [tab] = await Promise.all([page.waitForEvent("popup"), page.getByRole("link", { name: "How to fix this" }).click()]);
+  await expect(tab).toHaveURL(/\/troubleshooting\?q=The\+engine\+isn%27t\+answering$/);
+  await expect(tab.getByRole("searchbox", { name: "Search for the message you see" })).toHaveValue("The engine isn't answering");
+  await expect(tab.getByRole("main").getByRole("listitem")).toHaveCount(1);
+  await expect(tab.getByRole("main").getByText(/app_origins/).first()).toBeVisible();
+  await expect(page).toHaveURL(/\/connect$/); // the pairing page stays, with its error, for Try again
+  await expect(page.getByText("The engine isn't answering")).toBeVisible();
 });
 
 test("a replaced pairing key says to pair again", async ({ page }) => {
@@ -90,6 +97,8 @@ test("a replaced pairing key says to pair again", async ({ page }) => {
   await page.goto(pairingLink());
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.getByText("This browser needs pairing again")).toBeVisible();
+  await expect(page.getByRole("link", { name: "How to fix this" }))
+    .toHaveAttribute("href", "/troubleshooting?q=This+browser+needs+pairing+again");
 });
 
 test("live jobs can be cancelled on a real (mocked) engine", async ({ page }) => {

@@ -55,6 +55,11 @@ export interface Explained {
   hint: string;
   /** A command that fixes it, shown with a copy button. */
   command?: string;
+  /**
+   * docs/troubleshooting.md has this problem under this title (its Web app group quotes it), so the Troubleshooting
+   * page, searched for the title, opens at it; the error panel links there. A test keeps the two lists equal.
+   */
+  troubleshooting?: true;
 }
 
 /** What went wrong and what to do, in plain words. */
@@ -65,6 +70,7 @@ export function explain(err: unknown, origin = globalThis.location?.origin ?? ""
       title: "This browser needs pairing again",
       hint: "The engine has a different pairing key, or none was sent. Run this in WSL and open the link it prints:",
       command: "meshdoctor pair --open",
+      troubleshooting: true,
     };
   }
   switch (e.code) {
@@ -75,6 +81,7 @@ export function explain(err: unknown, origin = globalThis.location?.origin ?? ""
           "Start Mesh Doctor on this computer and try again. If it is running already, it may use another port, " +
           `or not allow this site (${origin || "this address"}) in its app_origins setting.`,
         command: "meshdoctor serve",
+        troubleshooting: true,
       };
     case "permission-denied":
       return {
@@ -82,11 +89,17 @@ export function explain(err: unknown, origin = globalThis.location?.origin ?? ""
         hint:
           "This site needs permission to reach apps on your device. Click the icon at the left of the address bar, " +
           "open Site settings, allow “Apps on device” (Local network access), then try again.",
+        troubleshooting: true,
       };
     case "timeout":
       return { title: "The engine took too long to answer", hint: "It may be busy starting up. Try again in a moment." };
     case "incompatible":
-      return { title: "This engine version doesn't match the app", hint: e.message, command: "git pull" };
+      return {
+        title: "This engine version doesn't match the app",
+        hint: e.message,
+        command: "git pull",
+        troubleshooting: true,
+      };
     case "busy":
       return { title: "Another OpenFOAM job is running", hint: "Wait for it to finish, or cancel it on the Jobs page." };
     case "not-enough-memory":

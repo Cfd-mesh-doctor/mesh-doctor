@@ -1,11 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The Troubleshooting page states the doc's problems and fixes: they must match the doc they come from.
 import { describe, expect, it } from "vitest";
+import { EngineError, explain, type ErrorCode } from "@/engine/errors";
 import { column } from "@/lib/docTable";
-import { markdownTables, readDoc, readRepo } from "@/test/markdown";
+import { markdownTables, readDoc } from "@/test/markdown";
 import { GROUPS } from "./problems";
 
 const DOC = readDoc("troubleshooting.md");
+
+/** Every code the app explains, once each: one missing or unknown fails the typecheck. */
+const CODES: Record<ErrorCode, true> = {
+  "bad-request": true, busy: true, exists: true, finished: true, forbidden: true, internal: true,
+  "method-not-allowed": true, "not-enough-memory": true, "not-found": true, "not-ready": true, "schema-version": true,
+  "too-large": true, unavailable: true, unsupported: true, "unsupported-media-type": true,
+  unreachable: true, "permission-denied": true, timeout: true, "bad-response": true, incompatible: true, aborted: true,
+};
 
 describe("the Troubleshooting page's problems", () => {
   it("are the tables of docs/troubleshooting.md, cell for cell, under its headings", () => {
@@ -18,11 +27,15 @@ describe("the Troubleshooting page's problems", () => {
     expect(GROUPS.map((g) => g.id)).toEqual(GROUPS.map((g) => github(g.title)));
   });
 
-  it("quote the web app's messages as the app words them, so searching for what's on screen finds them", () => {
+  it("quote the web app's messages as the app words them: the errors whose panel links here, and no others", () => {
     const web = GROUPS.find((g) => g.id === "web-app");
     const quoted = column(web!.table, "You see").flatMap((seen) => /^"(.+)"$/.exec(seen)?.slice(1) ?? []);
     expect(quoted).toHaveLength(4);
-    const errors = readRepo("app/src/engine/errors.ts");
-    for (const message of quoted) expect(errors, message).toContain(`title: "${message}"`);
+    const errors = [
+      ...Object.keys(CODES).map((code) => new EngineError(code as ErrorCode, "what the engine said")),
+      new EngineError("forbidden", "forbidden: missing or wrong pairing key (pair again: meshdoctor pair)", 403),
+    ];
+    const linked = errors.map((e) => explain(e)).filter((x) => x.troubleshooting).map((x) => x.title);
+    expect(linked.sort()).toEqual(quoted.sort());
   });
 });
