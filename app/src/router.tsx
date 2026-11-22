@@ -17,6 +17,11 @@ function screens(home: string): RouteObject[] {
     { path: "cases", handle: h("Cases"), lazy: async () => ({ Component: (await import("@/pages/app/Cases")).Cases }) },
     { path: "jobs", handle: h("Jobs"), lazy: async () => ({ Component: (await import("@/pages/app/Jobs")).Jobs }) },
     { path: "settings", handle: h("Settings"), lazy: async () => ({ Component: (await import("@/pages/app/Settings")).Settings }) },
+    {
+      path: "repairs/:name/report",
+      handle: h("Report"),
+      lazy: async () => ({ Component: (await import("@/pages/app/RepairReport")).RepairReport }),
+    },
     { path: "*", handle: h("Not found"), element: <NotFound home={home} /> },
   ];
 }

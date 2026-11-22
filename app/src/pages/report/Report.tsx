@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { HEAT, viewHeading, type MapSummary, type MapViewName } from "@/report/map";
 import { ReportError, checkReport, fileBytes, readReport } from "@/report/read";
 import { judgeTone, measureLabel, ratioChange, summarize, type Change, type ReportSummary } from "@/report/summary";
+import { SAMPLES } from "@/report/samples";
 import { RepairMap } from "./RepairMap";
 
 type State =
@@ -31,14 +32,6 @@ type State =
   | { kind: "open"; summary: ReportSummary; from: string };
 
 const ACCEPT = ".json,.gz,.html,.htm,application/json,application/gzip,text/html";
-
-/** Real reports made from the public Ahmed-body example (examples/ahmed-body); each loads only when picked. */
-const SAMPLES = [
-  { name: "ahmed25-medium-fix", label: "25° slant, with an A/B test",
-    load: () => import("@/report/samples/ahmed25-medium-fix.mdreport.json") },
-  { name: "ahmed35-medium-fix", label: "35° slant, with a repair map",
-    load: () => import("@/report/samples/ahmed35-medium-fix.mdreport.json") },
-] as const;
 
 const changeText = (c: Change) => (c === "better" ? "text-success font-medium" : c === "worse" ? "text-danger font-medium" : "");
 
@@ -121,7 +114,11 @@ export function Report() {
       <PublicHeader />
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-6">
         {state.kind === "open" ? (
-          <ReportView summary={state.summary} from={state.from} onClose={() => setState({ kind: "empty" })} />
+          <ReportView
+            summary={state.summary}
+            from={state.from}
+            action={<Button variant="secondary" onClick={() => setState({ kind: "empty" })}><FolderOpen /> Open another report</Button>}
+          />
         ) : (
           <>
             <PageHeader
@@ -232,7 +229,8 @@ class Section extends Component<{ title: string; children: ReactNode }, { error:
   }
 }
 
-function ReportView({ summary: s, from, onClose }: { summary: ReportSummary; from: string; onClose: () => void }) {
+/** An open report. The app shows a repair's report from the engine with it too (pages/app/RepairReport). */
+export function ReportView({ summary: s, from, action }: { summary: ReportSummary; from: string; action: ReactNode }) {
   const sub = [
     s.caseName && `mesh ${s.caseName}`,
     s.cells != null && `${formatInt(s.cells)} cells`,
@@ -250,7 +248,7 @@ function ReportView({ summary: s, from, onClose }: { summary: ReportSummary; fro
           <h1 className="mt-1 text-2xl font-semibold tracking-tight break-words">{s.name}</h1>
           <p className="mt-1 text-sm break-words text-muted-foreground">{sub.join(" · ")}</p>
         </div>
-        <Button variant="secondary" onClick={onClose}><FolderOpen /> Open another report</Button>
+        {action}
       </div>
 
       {/* grid-cols-1, not the default: a wide table then scrolls inside its card instead of widening the page */}

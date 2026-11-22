@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The engine at a glance: what it is, its cases, its repair runs and what is running now.
+// The engine at a glance: what it is, its cases, its repair runs (each finished one opens its report) and what is
+// running now.
 import { ArrowRight, Cpu, FolderOpen, ListChecks, Terminal, Wrench } from "lucide-react";
 import { Link } from "react-router";
 import { CopyCommand } from "@/components/shared/CopyCommand";
@@ -156,6 +157,12 @@ export function Overview() {
                     </div>
                   </div>
                   <VerdictBadge verdict={r.verdict} pending={runStep(r)} />
+                  {r.verdict && (
+                    <Link to={to(`/repairs/${encodeURIComponent(r.name)}/report`)} aria-label={`Report of ${r.name}`}
+                      className="shrink-0 text-[13px] font-medium text-primary hover:underline">
+                      Report
+                    </Link>
+                  )}
                 </li>
               ))}
             </ul>

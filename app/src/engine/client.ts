@@ -5,6 +5,7 @@ import { EngineError, isEngineCode } from "./errors";
 import { localAccessState } from "./permission";
 import type { CaseList, EngineInfo, Job, JobList, RepairList } from "./types";
 import { API_MAJOR } from "./types";
+import type { Report } from "@/report/read";
 
 export type Method = "GET" | "POST";
 
@@ -98,4 +99,6 @@ export const api = {
     t.request<Job>("GET", `/jobs/${encodeURIComponent(id)}`, undefined, signal),
   cancelJob: (t: Transport, id: string) => t.request<Job>("POST", `/jobs/${encodeURIComponent(id)}/cancel`),
   repairs: (t: Transport, signal?: AbortSignal) => t.request<RepairList>("GET", "/repairs", undefined, signal),
+  report: (t: Transport, name: string, signal?: AbortSignal) =>
+    t.request<Report>("GET", `/repairs/${encodeURIComponent(name)}/report`, undefined, signal),
 };
