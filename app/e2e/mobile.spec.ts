@@ -1,7 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { expect, test } from "@playwright/test";
 import { testReport } from "../src/report/testReport";
+import { mockEngine, pairingLink } from "./engine";
 import { lineBreaks } from "./text";
+
+test.describe("in a browser that hasn't seen the tour", () => {
+  test.use({ storageState: { cookies: [], origins: [] } }); // the other tests start with the tour seen
+
+  test("on a phone your app's note offering the tour says it stays in the menu, where the sidebar is", async ({ page }) => {
+    await mockEngine(page);
+    await page.goto(pairingLink());
+    await page.getByRole("button", { name: "Connect", exact: true }).click();
+    await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+    const note = page.getByRole("note", { name: "Tour" });
+    await expect(note).toContainText("It stays in the menu for later.", { useInnerText: true });
+    await expect(note).not.toContainText("sidebar", { useInnerText: true });
+  });
+});
 
 test("on a phone nothing scrolls sideways, and the menu works", async ({ page }) => {
   test.slow(); // every page at three widths: more than the default 30 s

@@ -65,7 +65,8 @@ function TourOffer({ onTour, onDecline }: { onTour: () => void; onDecline: () =>
         <Compass className="mt-0.5 size-4 shrink-0 text-primary" />
         <span>
           <strong className="font-semibold">New to Mesh Doctor?</strong> A one-minute tour shows where things are and
-          what each screen tells you. It stays in the sidebar for later.
+          what each screen tells you. It stays in the <span className="hidden lg:inline">sidebar</span>
+          <span className="lg:hidden">menu</span> for later.
         </span>
       </p>
       <div className="flex shrink-0 gap-2">

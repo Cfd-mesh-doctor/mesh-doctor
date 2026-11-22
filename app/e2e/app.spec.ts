@@ -92,6 +92,7 @@ test.describe("in a browser that hasn't seen the tour", () => {
     await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
     const note = page.getByRole("note", { name: "Tour" });
     await expect(note).toContainText("New to Mesh Doctor?");
+    await expect(note).toContainText("It stays in the sidebar for later.", { useInnerText: true }); // the menu on a phone
     await expect(page.getByRole("dialog")).toHaveCount(0); // a note, not the tour itself
     await note.getByRole("button", { name: "No thanks" }).click();
     await expect(note).toHaveCount(0);
