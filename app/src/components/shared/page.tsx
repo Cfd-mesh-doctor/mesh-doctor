@@ -69,12 +69,15 @@ export function TableSkeleton({ rows = 4, cols = 4 }: { rows?: number; cols?: nu
   );
 }
 
-/** A label above a value, for detail lists. */
+/**
+ * A label above a value, for detail lists. A mono value (a path, an address, a key) wraps rather than being cut
+ * off, as its end is often the part that tells it apart.
+ */
 export function Field({ label, children, mono }: { label: string; children: ReactNode; mono?: boolean }) {
   return (
     <div className="min-w-0">
       <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
-      <dd className={cn("mt-0.5 truncate text-sm", mono && "font-mono text-[13px]")}>{children}</dd>
+      <dd className={cn("mt-0.5 text-sm", mono ? "font-mono text-[13px] break-all" : "truncate")}>{children}</dd>
     </div>
   );
 }

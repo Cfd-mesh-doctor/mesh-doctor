@@ -30,6 +30,17 @@ test("a job's details stay open through a reload, and closing them keeps the fil
   await expect(page).toHaveURL(/\/demo\/jobs\?show=cancelled$/);
 });
 
+test("a job's details show its whole log and result paths, wrapping rather than cutting them off", async ({ page }) => {
+  await page.goto("/demo/jobs");
+  await page.getByRole("button", { name: "ahmed25-fine-strict" }).click();
+  const details = page.getByRole("dialog", { name: "ahmed25-fine-strict" });
+  for (const label of [/^Log$/, /^Result$/]) {
+    const value = details.locator("dt", { hasText: label }).locator("xpath=following-sibling::dd");
+    await expect(value).toHaveText(/^ahmed25-fine-strict\S+$/);
+    expect(await value.evaluate((dd) => dd.scrollWidth <= dd.clientWidth), `the ${label.source} is cut off`).toBe(true);
+  }
+});
+
 test("the Overview's recent jobs open their details on the Jobs screen", async ({ page }) => {
   await page.goto("/demo");
   await page.getByRole("link", { name: "ahmed25-fine-strict" }).click();
