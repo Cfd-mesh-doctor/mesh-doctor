@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { DOCS, REPO_URL } from "@/lib/site";
+import { DOCS } from "@/lib/site";
 import { renderScreen } from "@/test/render";
 import { Docs } from "./Docs";
 import { ON_GITHUB, ON_SITE } from "./entries";
@@ -21,9 +21,8 @@ describe("Docs", () => {
     const links = github.getAllByRole("link");
     expect(links.map((a) => a.textContent)).toEqual(["README", ...ON_GITHUB.map((d) => d.title)]);
     expect(github.getByRole("link", { name: "README" })).toHaveAttribute("href", DOCS.readme);
-    expect(github.getByRole("link", { name: "Architecture" }))
-      .toHaveAttribute("href", `${REPO_URL}/blob/main/docs/architecture.md`);
-    expect(github.getByText(/Where the code is, where it is going/)).toBeInTheDocument();
+    expect(ON_GITHUB).toEqual([]);
+    expect(here.getByText(/Where the code is, where it is going/)).toBeInTheDocument();
     for (const a of links) expect(a).toHaveAttribute("target", "_blank");
   });
 });

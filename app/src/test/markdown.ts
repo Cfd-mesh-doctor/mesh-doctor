@@ -44,9 +44,9 @@ export function markdownOpening(md: string): DocBlock[] {
 /**
  * Lines of a doc as blocks: paragraphs (lines joined by spaces), lists (one entry per "- " item, or per "1. " item in a
  * numbered list, with the item's indented lines joined to it, and a fenced code block or a list of "  - " items
- * indented under it kept with it), fenced code blocks with the language the doc names, pictures on a line of their
- * own, and "### " headings. A paragraph ends a list, and so does a blank line unless the item's own indented lines
- * follow it.
+ * indented under it kept with it, and the indented paragraph after that list), fenced code blocks with the language
+ * the doc names, tables, pictures on a line of their own, and "### " headings. A paragraph ends a list, and so does a
+ * blank line unless the item's own indented lines follow it.
  */
 function markdownBlocks(lines: string[]): DocBlock[] {
   const blocks: DocBlock[] = [];
@@ -60,6 +60,17 @@ function markdownBlocks(lines: string[]): DocBlock[] {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? "";
     const last = list?.at(-1);
+    const afterBlank = i > 0 && !(lines[i - 1] ?? "").trim();
+    if (line.startsWith("|")) {
+      flush();
+      list = undefined;
+      const rows: string[] = [];
+      for (; i < lines.length && (lines[i] ?? "").startsWith("|"); i++) rows.push(lines[i] ?? "");
+      i--;
+      const [head = "", , ...body] = rows;
+      blocks.push({ table: { head: cells(head), rows: body.map(cells) } });
+      continue;
+    }
     const fence = /^( *)```(\w*)\s*$/.exec(line);
     if (fence) {
       const indent = fence[1]?.length ?? 0;
@@ -111,7 +122,9 @@ function markdownBlocks(lines: string[]): DocBlock[] {
       continue;
     }
     if (more && typeof last === "object" && "list" in last) {
-      last.list[last.list.length - 1] += ` ${more.trim()}`;
+      // After a blank line it is the item's own paragraph, below its list; otherwise it carries on the last entry.
+      if (afterBlank || last.after !== undefined) last.after = [last.after, more.trim()].filter(Boolean).join(" ");
+      else last.list[last.list.length - 1] += ` ${more.trim()}`;
       continue;
     }
     if (line.trim()) {
@@ -127,11 +140,15 @@ function markdownBlocks(lines: string[]): DocBlock[] {
   return blocks;
 }
 
-/** Every table in a Markdown text, in order (these tables hold no escaped "|"). */
+/** The cells of a table row. "\|" puts a "|" in a cell, even in code (GitHub's way), so it doesn't split the cell. */
+function cells(line: string): string[] {
+  return line.trim().replace(/^\||\|$/g, "").split(/(?<!\\)\|/).map((c) => c.trim().replace(/\\\|/g, "|"));
+}
+
+/** Every table in a Markdown text, in order. */
 export function markdownTables(md: string): DocTable[] {
   const found: DocTable[] = [];
   let lines: string[] = [];
-  const cells = (line: string) => line.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
   const flush = () => {
     const [head, , ...rows] = lines;
     if (head) found.push({ head: cells(head), rows: rows.map(cells) });

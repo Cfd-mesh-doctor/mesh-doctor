@@ -15,15 +15,14 @@ test("the docs page: from the header, each of the site's pages opens, the rest a
   await expect(page).toHaveTitle("Docs · Mesh Doctor");
   await expect(page.getByRole("navigation", { name: "Footer" }).getByRole("link", { name: "Docs" })).toHaveAttribute("href", "/docs");
 
-  const github = page.getByRole("region", { name: "On GitHub" });
-  const architecture = github.getByRole("link", { name: "Architecture" });
-  await expect(architecture).toHaveAttribute("href", "https://github.com/Cfd-mesh-doctor/mesh-doctor/blob/main/docs/architecture.md");
-  await expect(architecture).toHaveAttribute("target", "_blank");
+  const readme = page.getByRole("region", { name: "On GitHub" }).getByRole("link", { name: "README" });
+  await expect(readme).toHaveAttribute("href", "https://github.com/Cfd-mesh-doctor/mesh-doctor#readme");
+  await expect(readme).toHaveAttribute("target", "_blank");
 
   for (const [name, heading] of [
     ["How it works", "How Mesh Doctor works"], ["Accuracy check", "Accuracy check"], ["Gallery", "Gallery"],
     ["Install", "Install"], ["Troubleshooting", "Troubleshooting"], ["Limits", "Limits"],
-    ["Safety model", "Safety model"],
+    ["Safety model", "Safety model"], ["Architecture", "Architecture"],
     ["Report viewer", "Report viewer"], ["Size estimator", "Size estimator"],
   ] as const) {
     await page.getByRole("region", { name: "On this site" }).getByRole("link", { name }).click();

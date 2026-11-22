@@ -34,7 +34,7 @@ export function Docs() {
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-6">
         <PageHeader
           title="Docs"
-          description="Everything written about Mesh Doctor: the pages of this site first, then the rest of the documentation, which is on GitHub for now."
+          description="Everything written about Mesh Doctor: each doc in the repository, as a page of this site."
         />
         <section aria-labelledby="on-site">
           <h2 id="on-site" className="text-lg font-semibold tracking-tight">On this site</h2>
@@ -51,6 +51,15 @@ export function Docs() {
         </section>
         <section aria-labelledby="on-github" className="mt-10">
           <h2 id="on-github" className="text-lg font-semibold tracking-tight">On GitHub</h2>
+          {ON_GITHUB.length === 0 && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Each page above follows a doc in the repository's <code className="font-mono text-[13px]">docs</code>{" "}
+              folder. The <a href={DOCS.readme} target="_blank" rel="noreferrer" className={link}>README</a> opens on
+              GitHub.
+            </p>
+          )}
+          {ON_GITHUB.length > 0 && (
+          <>
           <p className="mt-1 text-sm text-muted-foreground">
             These open on GitHub, in the repository's <code className="font-mono text-[13px]">docs</code> folder, as
             does the <a href={DOCS.readme} target="_blank" rel="noreferrer" className={link}>README</a>.
@@ -67,6 +76,8 @@ export function Docs() {
               </div>
             ))}
           </Card>
+          </>
+          )}
         </section>
       </main>
       <PublicFooter />

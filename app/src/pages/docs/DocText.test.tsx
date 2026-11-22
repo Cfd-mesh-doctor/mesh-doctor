@@ -8,11 +8,12 @@ import { docHref } from "./entries";
 
 describe("text as the docs write it", () => {
   it("links another doc to this site's page for it, or to GitHub while the site has none", () => {
-    renderScreen(<p><DocText text="See [the fixes](troubleshooting.md#web-app) and [the design](architecture.md)." /></p>);
+    // Every doc has a page now; a future one without a page opens on GitHub.
+    renderScreen(<p><DocText text="See [the fixes](troubleshooting.md#web-app) and [the plan](roadmap.md)." /></p>);
     expect(screen.getByRole("link", { name: "the fixes" })).toHaveAttribute("href", "/troubleshooting#web-app");
-    const design = screen.getByRole("link", { name: "the design" });
-    expect(design).toHaveAttribute("href", `${REPO_URL}/blob/main/docs/architecture.md`);
-    expect(design).toHaveAttribute("target", "_blank");
+    const plan = screen.getByRole("link", { name: "the plan" });
+    expect(plan).toHaveAttribute("href", `${REPO_URL}/blob/main/docs/roadmap.md`);
+    expect(plan).toHaveAttribute("target", "_blank");
     expect(docHref("https://openfoam.org")).toBe("https://openfoam.org");
   });
 
@@ -24,6 +25,12 @@ describe("text as the docs write it", () => {
     expect(screen.getByText("Try again").tagName).toBe("STRONG");
     expect(screen.getByText("-copyZero")).toHaveClass("whitespace-nowrap");
     expect(screen.getByText(/^Run/)).toHaveTextContent("Run meshdoctor serve, then Try again (no -copyZero).");
+  });
+
+  it("shows code written in double backticks, which may hold a backtick", () => {
+    renderScreen(<p><DocText text="A tag: ``MD.html`<b>${name}</b>` ``. Then `MD.render`." /></p>);
+    expect(screen.getByText("MD.html`<b>${name}</b>`").tagName).toBe("CODE");
+    expect(screen.getByText("MD.render").tagName).toBe("CODE");
   });
 
   it("shows italics, but leaves a star in code or between spaces as it is", () => {

@@ -34,17 +34,16 @@ export const ON_SITE: DocEntry[] = [
     about: "What Mesh Doctor is not, the versions it runs on, and where the repair, the A/B test, the map and the dashboard stop." },
   { title: "Safety model", page: "/safety", file: "safety.md",
     about: "Why it can't damage a case you care about, and why its dashboard isn't a way into your computer." },
+  { title: "Architecture", page: "/architecture", file: "architecture.md",
+    about: "Where the code is, where it is going and why: the engine, its versioned results and API, and this site." },
   { title: "Report viewer", page: "/report",
     about: "Open a report to see what a repair changed in the mesh and whether it helped the solver. Never uploaded." },
   { title: "Size estimator", page: "/estimate",
     about: "Whether a case fits in your computer's memory, how long it takes to solve and what a cloud machine would cost." },
 ];
 
-/** Read on GitHub: the docs this site has no page for yet. Each title is the doc's own heading. */
-export const ON_GITHUB: DocEntry[] = [
-  { title: "Architecture", file: "architecture.md",
-    about: "Where the code is, where it is going and why: the engine, its versioned results and API, and this site." },
-];
+/** Read on GitHub: the docs this site has no page for yet (none now). Each title is the doc's own heading. */
+export const ON_GITHUB: DocEntry[] = [];
 
 export const githubDoc = (file: string) => `${REPO_URL}/blob/main/docs/${file}`;
 

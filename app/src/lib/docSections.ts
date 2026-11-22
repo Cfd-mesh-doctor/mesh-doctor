@@ -2,16 +2,20 @@
 // Docs written as sections of paragraphs and lists, which pages copy exactly as the doc writes them (docTable.ts does
 // the same for tables). A test compares each copy with its doc (src/test/markdown.ts), so a page can't fall behind.
 
-/** A list item: its text, with the code block or the list the doc writes under it when it has one. */
-export type DocItem = string | { text: string; code: string } | { text: string; list: string[] };
+import type { DocTable } from "@/lib/docTable";
+
+/** A list item: its text, with the code block or the list the doc writes under it when it has one (and the paragraph
+ *  the doc writes after that list, still in the item). */
+export type DocItem = string | { text: string; code: string } | { text: string; list: string[]; after?: string };
 
 /** A paragraph (its lines joined by spaces), a list ("1. " items make it numbered), a fenced code block with the
- *  language the doc names, a picture (its file as the doc writes it, relative to docs/, and its alt text) or a "### "
- *  heading inside a section. */
+ *  language the doc names, a table, a picture (its file as the doc writes it, relative to docs/, and its alt text) or
+ *  a "### " heading inside a section. */
 export type DocBlock =
   | { text: string }
   | { list: DocItem[]; numbered?: boolean }
   | { code: string; lang?: string }
+  | { table: DocTable }
   | { picture: string; alt: string }
   | { heading: string };
 

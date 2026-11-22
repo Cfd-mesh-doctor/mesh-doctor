@@ -1,11 +1,33 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // A doc's text, as the pages that show a whole doc lay it out (Limits, Safety model, Your own case, Claude Code,
-// Dashboard tour): headings with GitHub's anchors, paragraphs and lists with the doc's own `code`, **bold** and links
-// (DocText), code blocks, and pictures.
+// Dashboard tour, Architecture): headings with GitHub's anchors, paragraphs, lists and tables with the doc's own
+// `code`, **bold** and links (DocText), code blocks, and pictures.
 import { CopyCommand } from "@/components/shared/CopyCommand";
+import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
 import { githubAnchor, type DocBlock, type DocItem, type DocPictures, type DocSection } from "@/lib/docSections";
+import type { DocTable } from "@/lib/docTable";
 import { cn } from "@/lib/utils";
 import { DocText } from "./DocText";
+
+/** A table as the doc writes it, its first column the row's name; it scrolls sideways on its own when too wide. */
+function DocTableBlock({ table }: { table: DocTable }) {
+  return (
+    <Table>
+      <THead>
+        <TR className="hover:bg-transparent">{table.head.map((h, i) => <TH key={i}><DocText text={h} /></TH>)}</TR>
+      </THead>
+      <TBody>
+        {table.rows.map((row, r) => (
+          <TR key={r}>
+            {row.map((cell, i) => (
+              <TD key={i} className={i === 0 ? "align-top font-medium" : "align-top"}><DocText text={cell} /></TD>
+            ))}
+          </TR>
+        ))}
+      </TBody>
+    </Table>
+  );
+}
 
 /** A fenced code block: a one-line shell command gets the site's copy box, anything else is shown as the doc has it. */
 function DocCode({ code, lang, className }: { code: string; lang?: string; className?: string }) {
@@ -40,6 +62,7 @@ function DocListItem({ item }: { item: DocItem }) {
       <ul className="mt-1.5 list-[circle] space-y-1 pl-5 marker:text-muted-foreground">
         {item.list.map((sub) => <li key={sub}><DocText text={sub} /></li>)}
       </ul>
+      {item.after && <p className="mt-2"><DocText text={item.after} /></p>}
     </li>
   );
 }
@@ -49,6 +72,7 @@ function DocBlocks({ blocks, pictures }: { blocks: DocBlock[]; pictures: DocPict
   return blocks.map((b, i) => {
     if ("code" in b) return <DocCode key={i} code={b.code} lang={b.lang} />;
     if ("text" in b) return <p key={i}><DocText text={b.text} /></p>;
+    if ("table" in b) return <DocTableBlock key={i} table={b.table} />;
     if ("heading" in b) {
       return (
         <h3 key={i} id={githubAnchor(b.heading)} className="scroll-mt-20 pt-3 text-base font-semibold tracking-tight">

@@ -30,7 +30,38 @@ export const GUIDE: DocSection[] = [
     "title": "Skills",
     "blocks": [
       {
-        "text": "| Skill | Use it for | |---|---| | `mesh-doctor` | repairing an OpenFOAM mesh, lowering max non-orthogonality, A/B solver tests, convergence verdicts | | `openfoam-wsl` | OpenFOAM 14 on WSL/Linux: snappyHexMesh for cars and wheels, RANS and DDES, restarts, memory, speed traps | | `simscale` | SimScale Community plan: geometry prep, snappy sizing, cloning a setup across variants, the API, downloads | | `paraview-post` | offscreen ParaView pictures (cuts, vortices, pressure spots) and convergence charts | | `cloud-solve-gcp` | solving a big case on a Google Cloud VM with no SSH, and getting the results back | | `cfd-results` | averaging windows, drift, comparing variants and meshes, coefficients, comparison workbooks |"
+        "table": {
+          "head": [
+            "Skill",
+            "Use it for"
+          ],
+          "rows": [
+            [
+              "`mesh-doctor`",
+              "repairing an OpenFOAM mesh, lowering max non-orthogonality, A/B solver tests, convergence verdicts"
+            ],
+            [
+              "`openfoam-wsl`",
+              "OpenFOAM 14 on WSL/Linux: snappyHexMesh for cars and wheels, RANS and DDES, restarts, memory, speed traps"
+            ],
+            [
+              "`simscale`",
+              "SimScale Community plan: geometry prep, snappy sizing, cloning a setup across variants, the API, downloads"
+            ],
+            [
+              "`paraview-post`",
+              "offscreen ParaView pictures (cuts, vortices, pressure spots) and convergence charts"
+            ],
+            [
+              "`cloud-solve-gcp`",
+              "solving a big case on a Google Cloud VM with no SSH, and getting the results back"
+            ],
+            [
+              "`cfd-results`",
+              "averaging windows, drift, comparing variants and meshes, coefficients, comparison workbooks"
+            ]
+          ]
+        }
       }
     ]
   },
@@ -42,7 +73,54 @@ export const GUIDE: DocSection[] = [
         "text": "Type these in Claude Code (arguments in brackets are optional). The `cfd-toolkit:` prefix can be left out when no other plugin has a command with the same name, so `/testrun` works as well as `/cfd-toolkit:testrun`."
       },
       {
-        "text": "| Command | What it does | |---|---| | `/cfd-toolkit:testrun [quick\\|full] [ranks]` | **start here**: checks the setup, then runs the Ahmed body from mesh to wind-tunnel comparison with live progress in the side panel (quick about 10 min, full about 45 min) | | `/cfd-toolkit:dashboard [case]` | starts the live dashboard and opens it in the side panel: whole-job progress, iteration and time left, forces, residuals, Mesh Doctor pages | | `/cfd-toolkit:run-status <case>` | iteration, speed, time left, force means and drift of a running or finished case, with a verdict | | `/cfd-toolkit:solve <case> [ranks] [iterations]` | sizes the run, starts it in the background and opens the dashboard | | `/cfd-toolkit:mesh-check <case> [name]` | checkMesh, Mesh Doctor repair on a copy, before/after table | | `/cfd-toolkit:pictures <case> [patches]` | charts, cut planes, vortices, pressure spots and a contact sheet | | `/cfd-toolkit:size <Mcells>` | fits in memory or not, local time, cloud cost, SimScale core hours | | `/cfd-toolkit:toolkit-check` | what is installed and what is missing for each skill | | `/cfd-toolkit:ahmed-demo [ranks] [iterations]` | the worked example from mesh to wind-tunnel comparison (about an hour on 6 cores) | | `/cfd-toolkit:cloud-status <gs://bucket>` | progress of a Google Cloud solve |"
+        "table": {
+          "head": [
+            "Command",
+            "What it does"
+          ],
+          "rows": [
+            [
+              "`/cfd-toolkit:testrun [quick|full] [ranks]`",
+              "**start here**: checks the setup, then runs the Ahmed body from mesh to wind-tunnel comparison with live progress in the side panel (quick about 10 min, full about 45 min)"
+            ],
+            [
+              "`/cfd-toolkit:dashboard [case]`",
+              "starts the live dashboard and opens it in the side panel: whole-job progress, iteration and time left, forces, residuals, Mesh Doctor pages"
+            ],
+            [
+              "`/cfd-toolkit:run-status <case>`",
+              "iteration, speed, time left, force means and drift of a running or finished case, with a verdict"
+            ],
+            [
+              "`/cfd-toolkit:solve <case> [ranks] [iterations]`",
+              "sizes the run, starts it in the background and opens the dashboard"
+            ],
+            [
+              "`/cfd-toolkit:mesh-check <case> [name]`",
+              "checkMesh, Mesh Doctor repair on a copy, before/after table"
+            ],
+            [
+              "`/cfd-toolkit:pictures <case> [patches]`",
+              "charts, cut planes, vortices, pressure spots and a contact sheet"
+            ],
+            [
+              "`/cfd-toolkit:size <Mcells>`",
+              "fits in memory or not, local time, cloud cost, SimScale core hours"
+            ],
+            [
+              "`/cfd-toolkit:toolkit-check`",
+              "what is installed and what is missing for each skill"
+            ],
+            [
+              "`/cfd-toolkit:ahmed-demo [ranks] [iterations]`",
+              "the worked example from mesh to wind-tunnel comparison (about an hour on 6 cores)"
+            ],
+            [
+              "`/cfd-toolkit:cloud-status <gs://bucket>`",
+              "progress of a Google Cloud solve"
+            ]
+          ]
+        }
       },
       {
         "text": "In the Claude desktop app the dashboard opens in the browser side panel and keeps refreshing while you work; in a terminal, Claude prints the link (`http://localhost:8765/`)."

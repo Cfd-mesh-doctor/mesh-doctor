@@ -35,6 +35,23 @@ describe("reading the docs", () => {
     }]);
   });
 
+  it("reads tables (an escaped pipe stays in its cell) and an item's paragraph after its own list", () => {
+    const md = [
+      "## Three", "", "Before:", "", "| Route | Old | Purpose |", "|---|---|---|", "| `GET /a?x=b\\|c` | | reads |", "",
+      "- top:", "  - one;", "  - two.", "", "  After the list.", "- next",
+    ].join("\n");
+    expect(markdownSections(md)).toEqual([{
+      id: "three",
+      title: "Three",
+      blocks: [
+        { text: "Before:" },
+        { table: { head: ["Route", "Old", "Purpose"], rows: [["`GET /a?x=b|c`", "", "reads"]] } },
+        { list: [{ text: "top:", list: ["one;", "two."], after: "After the list." }, "next"] },
+      ],
+    }]);
+    expect(markdownTables("| A |\n|---|\n| x \\| y |")).toEqual([{ head: ["A"], rows: [["x | y"]] }]);
+  });
+
   it("reads numbered lists, with their items' indented lines, apart from the lists next to them", () => {
     const md = ["## Steps", "", "1. first,", "   continued", "2. second", "- other", "", "Text", "3. third"].join("\n");
     expect(markdownSections(md)).toEqual([{

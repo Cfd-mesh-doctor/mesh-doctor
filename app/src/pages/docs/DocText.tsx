@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Text as the docs write it, for the pages that show a doc: `code`, **bold** (which may hold code), *italics* and
-// [links](file.md). A link to another doc opens this site's page for it when there is one, otherwise the doc on GitHub
-// (docHref).
+// Text as the docs write it, for the pages that show a doc: `code` (in double backticks when it holds a backtick),
+// **bold** (which may hold code), *italics* and [links](file.md). A link to another doc opens this site's page for it
+// when there is one, otherwise the doc on GitHub (docHref).
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { docHref } from "./entries";
 
 // Italics start at a "*" with a letter after it and never reach into code, so the star of a glob in code
 // (processor*, *.dat) or of "2 * 3" stays as it is.
-const TOKEN = /`([^`]+)`|\*\*([^*]+)\*\*|\*([^*`\s][^*`]*)\*|\[([^\]]+)\]\(([^)\s]+)\)/g;
+const TOKEN = /``(.+?)``|`([^`]+)`|\*\*([^*]+)\*\*|\*([^*`\s][^*`]*)\*|\[([^\]]+)\]\(([^)\s]+)\)/g;
 const link = "font-medium text-primary underline-offset-4 hover:underline";
 
 /** Short code stays on one line (a flag like -copyZero never splits at its hyphen); code longer than a narrow column
@@ -28,7 +28,8 @@ export function DocText({ text }: { text: string }) {
   const out: ReactNode[] = [];
   let at = 0;
   for (const m of text.matchAll(TOKEN)) {
-    const [whole, code, bold, italic, label, target] = m;
+    const [whole, doubled, single, bold, italic, label, target] = m;
+    const code = doubled?.trim() ?? single;
     if (m.index > at) out.push(text.slice(at, m.index));
     if (code != null) out.push(<Code key={m.index} text={code} />);
     else if (bold != null) out.push(<strong key={m.index} className="font-semibold"><DocText text={bold} /></strong>);

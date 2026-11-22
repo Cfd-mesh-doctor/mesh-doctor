@@ -12,6 +12,10 @@ test("claude code: from the Docs page, the plugin's install commands, and nothin
   await expect(page.getByRole("heading", { level: 1, name: "Using this repository with Claude Code" })).toBeVisible();
   await expect(page).toHaveTitle("Claude Code · Mesh Doctor");
   await expect(page.getByRole("main").locator("pre").first()).toContainText("/plugin marketplace add Cfd-mesh-doctor/mesh-doctor");
+  // The doc's tables are tables, not lines of "|" text.
+  await expect(page.getByRole("region", { name: "Skills", exact: true }).getByRole("row")).toHaveCount(7);
+  await expect(page.getByRole("region", { name: "Slash commands" })
+    .getByRole("cell", { name: "/cfd-toolkit:testrun [quick|full] [ranks]" })).toBeVisible();
   // "Start here" is two numbered steps, not one paragraph with the numbers in it.
   const steps = page.getByRole("region", { name: "Start here" }).locator("ol > li");
   await expect(steps).toHaveCount(2);
