@@ -113,7 +113,10 @@ export function Overview() {
             <Link to={to("/jobs?show=active")} className="font-medium text-primary hover:underline">
               {active.length === 1 ? "Show the active job" : "Show the active jobs"}
             </Link>
-          ) : `${formatCount(jobItems.length, "job")} on record`}
+          ) : jobItems.length ? `${formatCount(jobItems.length, "job")} on record` : (
+            // Not "0 jobs on record": as the list under it says, none has been started yet.
+            "No jobs yet"
+          )}
         />
       </div>
 

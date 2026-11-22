@@ -93,6 +93,9 @@ describe("the Overview before anything has run", () => {
     // No runs: the tile says so, rather than "0 improved, none worse".
     expect(screen.getByText("None yet")).toBeInTheDocument();
     expect(screen.queryByText(/improved/)).toBeNull();
+    // No jobs at all: the Active jobs tile says so too, rather than "0 jobs on record".
+    expect(within(screen.getByText("Active jobs").closest("section")!).getByText("No jobs yet")).toBeInTheDocument();
+    expect(screen.queryByText(/on record/)).toBeNull();
   });
 
   it("doesn't call a list that didn't load empty, or offer first steps for it", async () => {
