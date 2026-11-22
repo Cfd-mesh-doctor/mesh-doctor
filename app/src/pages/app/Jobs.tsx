@@ -312,10 +312,11 @@ export function Jobs() {
               <TR className="hover:bg-transparent">
                 {/* A column shows from the width where the card has room for it, so the table never scrolls its
                     Cancel and Report out of sight: Progress from sm, Duration from md, Started from xl (at lg the
-                    sidebar takes the room). At 640 and 1024 px the table was 25 and 37 px wider than its card. */}
+                    sidebar takes the room). At 640 and 1024 px the table was 25 and 37 px wider than its card.
+                    Progress takes a third of the table only from xl: below that, a job's name has its line first. */}
                 <TH>Run</TH>
                 <TH>State</TH>
-                <TH className="hidden w-[32%] sm:table-cell">Progress</TH>
+                <TH className="hidden sm:table-cell xl:w-[32%]">Progress</TH>
                 <TH className="hidden xl:table-cell">Started</TH>
                 {/* Not "Took": a running job's time is how long it has run so far. */}
                 <TH className="hidden md:table-cell">Duration</TH>

@@ -98,6 +98,20 @@ test("the Jobs table fits its card at every width, never scrolling its Cancel or
   }
 });
 
+test("a job's name keeps its line from 768 px up, as Progress takes a third of the table only from 1280", async ({ page }) => {
+  await page.goto("/demo/jobs");
+  const names = page.getByRole("table").locator("tbody td:first-child > button");
+  await expect(names).toHaveCount(8); // the demo's eight jobs
+  // At 768 and 1024 px Progress held a third of the table, more than its bar needs, and six names broke at a hyphen
+  // ("ahmed25-" / "medium-fix"). (At 640 the longest names still take two lines: the card is too narrow there.)
+  for (const width of [768, 900, 1023, 1024, 1100, 1279, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const name of await names.all()) {
+      expect(await lineBreaks(name), `${await name.textContent()} at ${width} px`).toEqual([]);
+    }
+  }
+});
+
 test("the sidebar says how many jobs are active, not a bare number", async ({ page }) => {
   await page.goto("/demo");
   const main = page.getByRole("navigation", { name: "Main" });
