@@ -5,11 +5,12 @@
 /** A list item: its text, with the code block or the list the doc writes under it when it has one. */
 export type DocItem = string | { text: string; code: string } | { text: string; list: string[] };
 
-/** A paragraph (its lines joined by spaces), a list, a fenced code block with the language the doc names, a picture
- *  (its file as the doc writes it, relative to docs/, and its alt text) or a "### " heading inside a section. */
+/** A paragraph (its lines joined by spaces), a list ("1. " items make it numbered), a fenced code block with the
+ *  language the doc names, a picture (its file as the doc writes it, relative to docs/, and its alt text) or a "### "
+ *  heading inside a section. */
 export type DocBlock =
   | { text: string }
-  | { list: DocItem[] }
+  | { list: DocItem[]; numbered?: boolean }
   | { code: string; lang?: string }
   | { picture: string; alt: string }
   | { heading: string };

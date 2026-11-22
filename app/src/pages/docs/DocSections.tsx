@@ -60,10 +60,11 @@ function DocBlocks({ blocks, pictures }: { blocks: DocBlock[]; pictures: DocPict
       const p = pictures[b.picture];
       return p ? <DocPicture key={i} alt={b.alt} {...p} /> : null;
     }
+    const List = b.numbered ? "ol" : "ul";
     return (
-      <ul key={i} className="list-disc space-y-2 pl-5 marker:text-muted-foreground">
+      <List key={i} className={cn("space-y-2 pl-5 marker:text-muted-foreground", b.numbered ? "list-decimal" : "list-disc")}>
         {b.list.map((item) => <DocListItem key={typeof item === "string" ? item : item.text} item={item} />)}
-      </ul>
+      </List>
     );
   });
 }

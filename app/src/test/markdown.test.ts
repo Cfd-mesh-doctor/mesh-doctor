@@ -35,6 +35,20 @@ describe("reading the docs", () => {
     }]);
   });
 
+  it("reads numbered lists, with their items' indented lines, apart from the lists next to them", () => {
+    const md = ["## Steps", "", "1. first,", "   continued", "2. second", "- other", "", "Text", "3. third"].join("\n");
+    expect(markdownSections(md)).toEqual([{
+      id: "steps",
+      title: "Steps",
+      blocks: [
+        { list: ["first, continued", "second"], numbered: true },
+        { list: ["other"] },
+        { text: "Text" },
+        { list: ["third"], numbered: true },
+      ],
+    }]);
+  });
+
   it("reads pictures, sub-headings, and lists under a list item", () => {
     const md = [
       "## Two", "", "![A page](images/page.png)", "", "- top:", "  - one,", "    continued;", "  - two.", "- next",

@@ -55,7 +55,7 @@ terminal, Claude prints the link (`http://localhost:8765/`).
 
 1. `/testrun` checks what is installed and runs the worked example (`examples/ahmed-body`) end to end, so you see
    every step work once on your machine. `/testrun full` runs it long enough to compare with the wind tunnel.
-3. How far to trust the numbers: `docs/validation.md`. Copy the example for your own model: `docs/templates.md`. When something breaks: `docs/troubleshooting.md`.
+2. How far to trust the numbers: `docs/validation.md`. Copy the example for your own model: `docs/templates.md`. When something breaks: `docs/troubleshooting.md`.
 
 Claude picks the right skill from what you ask ("fix this mesh", "make vortex pictures of this case", "set up the
 next SimScale variant"). You can also name one: "use the simscale skill".

@@ -42,15 +42,17 @@ export function markdownOpening(md: string): DocBlock[] {
 }
 
 /**
- * Lines of a doc as blocks: paragraphs (lines joined by spaces), lists (one entry per "- " item, with the item's
- * indented lines joined to it, and a fenced code block or a list of "  - " items indented under it kept with it),
- * fenced code blocks with the language the doc names, pictures on a line of their own, and "### " headings. A
- * paragraph ends a list, and so does a blank line unless the item's own indented lines follow it.
+ * Lines of a doc as blocks: paragraphs (lines joined by spaces), lists (one entry per "- " item, or per "1. " item in a
+ * numbered list, with the item's indented lines joined to it, and a fenced code block or a list of "  - " items
+ * indented under it kept with it), fenced code blocks with the language the doc names, pictures on a line of their
+ * own, and "### " headings. A paragraph ends a list, and so does a blank line unless the item's own indented lines
+ * follow it.
  */
 function markdownBlocks(lines: string[]): DocBlock[] {
   const blocks: DocBlock[] = [];
   let para: string[] = [];
   let list: DocItem[] | undefined;
+  let numbered = false;
   const flush = () => {
     if (para.length) blocks.push({ text: para.join(" ") });
     para = [];
@@ -82,12 +84,15 @@ function markdownBlocks(lines: string[]): DocBlock[] {
       continue;
     }
     const item = /^- (.+)$/.exec(line)?.[1];
-    if (item) {
+    const step = /^\d+\. (.+)$/.exec(line)?.[1];
+    if (item || step) {
       flush();
-      if (list) list.push(item);
+      const text = item ?? step ?? "";
+      if (list && numbered === (step !== undefined)) list.push(text);
       else {
-        list = [item];
-        blocks.push({ list });
+        list = [text];
+        numbered = step !== undefined;
+        blocks.push(numbered ? { list, numbered } : { list });
       }
       continue;
     }

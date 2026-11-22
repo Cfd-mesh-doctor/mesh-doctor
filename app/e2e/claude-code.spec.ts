@@ -12,5 +12,9 @@ test("claude code: from the Docs page, the plugin's install commands, and nothin
   await expect(page.getByRole("heading", { level: 1, name: "Using this repository with Claude Code" })).toBeVisible();
   await expect(page).toHaveTitle("Claude Code · Mesh Doctor");
   await expect(page.getByRole("main").locator("pre").first()).toContainText("/plugin marketplace add Cfd-mesh-doctor/mesh-doctor");
+  // "Start here" is two numbered steps, not one paragraph with the numbers in it.
+  const steps = page.getByRole("region", { name: "Start here" }).locator("ol > li");
+  await expect(steps).toHaveCount(2);
+  await expect(steps.first()).toHaveText(/^\/testrun checks what is installed/);
   expect(sent).toEqual([]);
 });
