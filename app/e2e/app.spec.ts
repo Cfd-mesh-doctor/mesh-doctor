@@ -217,6 +217,9 @@ test("the app without a pairing goes to Connect", async ({ page }) => {
 });
 
 test("every page runs under the site's Content-Security-Policy", async ({ page }) => {
+  // 22 pages, each waited on until it goes quiet: about 15 s alone, and up to 30 s, the default limit, beside the
+  // other tests on a busy PC.
+  test.slow();
   const res = await page.goto("/");
   expect(res?.headers()["content-security-policy"]).toContain("script-src 'self'");
   await page.addInitScript(() => {
