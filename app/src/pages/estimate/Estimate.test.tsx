@@ -46,4 +46,13 @@ describe("Size estimator", () => {
     expect(screen.getByText("about 24 min, $0.34")).toBeInTheDocument();
     expect(screen.getByText("0.9 core h")).toBeInTheDocument();
   });
+
+  it("copies a link to the estimate, with the fields that aren't the example's", async () => {
+    const user = userEvent.setup(); // its clipboard stands in for the browser's
+    renderScreen(<Estimate />, { path: "/estimate", at: "/estimate?iters=1000&cells=31.1" });
+    const button = screen.getByRole("button", { name: "Copy link" });
+    await user.click(button);
+    expect(await navigator.clipboard.readText()).toBe(`${window.location.origin}/estimate?cells=31.1`);
+    expect(button).toHaveAccessibleName("Copied");
+  });
 });

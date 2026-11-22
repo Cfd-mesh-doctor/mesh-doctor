@@ -63,4 +63,13 @@ describe("the size estimator in the app", () => {
     expect(await screen.findByText(/From the demo engine's computer: 25 GB of memory and 8 cores\./)).toBeInTheDocument();
     expect(screen.getByLabelText("Memory for OpenFOAM")).toHaveValue("25");
   });
+
+  it("copies a link anyone can open: the site's estimator, with this computer's memory and cores in it", async () => {
+    const user = userEvent.setup(); // its clipboard stands in for the browser's
+    renderScreen(<Estimator />, {
+      path, at: `${path}?cells=31.1`, transport: engine({ cpus: 16, cores: 8, memoryMb: 26_052, ramLimitMb: null }),
+    });
+    await user.click(await screen.findByRole("button", { name: "Copy link" }));
+    expect(await navigator.clipboard.readText()).toBe(`${window.location.origin}/estimate?cells=31.1&ram=25.4&cores=8`);
+  });
 });

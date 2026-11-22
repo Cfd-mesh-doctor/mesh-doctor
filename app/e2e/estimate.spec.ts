@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { expect, test } from "@playwright/test";
 
-test("the size estimator works in the page and keeps the estimate in the address", async ({ page }) => {
+test("the size estimator works in the page and keeps the estimate in the address", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const sent: string[] = [];
   const origins = new Set<string>();
   page.on("request", (r) => {
@@ -24,10 +25,15 @@ test("the size estimator works in the page and keeps the estimate in the address
   await expect(page.getByText("too big", { exact: true })).toHaveCount(4);
   await expect(page.getByText("about 19.0 h, $16")).toBeVisible();
 
-  // The link brings the same estimate back.
+  // The link brings the same estimate back, and Copy link copies it.
   await page.reload();
   await expect(page.getByLabel("Mesh size")).toHaveValue("31.1");
   await expect(page.getByText("about 19.0 h, $16")).toBeVisible();
+  const copy = page.getByRole("button", { name: /^(Copy link|Copied)$/ });
+  await expect(copy).toHaveAccessibleName("Copy link");
+  await copy.click();
+  await expect(copy).toHaveAccessibleName("Copied");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("http://localhost:4173/estimate?cells=31.1");
   expect([...origins]).toEqual(["http://localhost:4173"]);
   expect(sent).toEqual([]);
 });

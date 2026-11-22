@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The size estimator: will a case fit in memory, how long will the solve take, what would a cloud machine
 // cost? Rough answers from measured runs, worked out in the page (no engine needed, nothing is sent). The
-// fields live in the address, so an estimate can be bookmarked or shared as a link. The app's own estimator
-// (pages/app/Estimator.tsx) is the same form with the engine's memory and cores filled in.
-import { Cloud, Cpu, Laptop, MemoryStick, RotateCcw, TriangleAlert, type LucideIcon } from "lucide-react";
+// fields live in the address, so an estimate can be bookmarked or shared as a link (its Copy link button copies one).
+// The app's own estimator (pages/app/Estimator.tsx) is the same form with the engine's memory and cores filled in.
+import { Check, Cloud, Cpu, Laptop, Link2, MemoryStick, RotateCcw, TriangleAlert, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/misc";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
 import { ADDRESS_FIELD } from "@/lib/addressField";
 import { formatInt } from "@/lib/format";
+import { useCopy } from "@/lib/useCopy";
 import { useTitle } from "@/lib/useTitle";
 import { aboutPage } from "@/pages/docs/entries";
 import { cn } from "@/lib/utils";
@@ -75,6 +76,15 @@ export function EstimateForm({ defaults, about, reset }: { defaults: EstimateInp
       return next;
     }, ADDRESS_FIELD);
 
+  // A link to this estimate on the site's own estimator, which anyone can open, with or without an engine: each field
+  // whose value isn't the example's, in the form's order. The app's form thus spells out its computer's values.
+  const link = () => {
+    const q = new URLSearchParams();
+    for (const f of FIELDS) if (text(f) !== String(DEFAULTS[f.key])) q.set(f.param, text(f));
+    const search = q.toString();
+    return new URL(`/estimate${search ? `?${search}` : ""}`, window.location.origin).href;
+  };
+
   // grid-cols-1, not the default: a wide table then scrolls inside its card instead of widening the page
   return (
     <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[19rem_minmax(0,1fr)]">
@@ -112,12 +122,15 @@ export function EstimateForm({ defaults, about, reset }: { defaults: EstimateInp
               </div>
             );
           })}
-          {changed && (
-            <Button variant="secondary" size="sm"
-              onClick={() => setParams(new URLSearchParams(), { replace: true, preventScrollReset: true })}>
-              <RotateCcw /> {reset}
-            </Button>
-          )}
+          <div className="flex flex-wrap gap-2">
+            <CopyLink link={link} />
+            {changed && (
+              <Button variant="secondary" size="sm"
+                onClick={() => setParams(new URLSearchParams(), { replace: true, preventScrollReset: true })}>
+                <RotateCcw /> {reset}
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -129,6 +142,17 @@ export function EstimateForm({ defaults, about, reset }: { defaults: EstimateInp
         <Results input={input} result={result} />
       )}
     </div>
+  );
+}
+
+/** Copies `link()`, read on the click, so the link has the fields as they are then. It comes first, so it stays where
+ *  it is as the reset button comes and goes. */
+function CopyLink({ link }: { link: () => string }) {
+  const { copied, copy } = useCopy();
+  return (
+    <Button variant="secondary" size="sm" onClick={() => void copy(link())}>
+      {copied ? <Check className="text-success" /> : <Link2 />} {copied ? "Copied" : "Copy link"}
+    </Button>
   );
 }
 
