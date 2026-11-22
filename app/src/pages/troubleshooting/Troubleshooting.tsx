@@ -13,6 +13,7 @@ import { useTitle } from "@/lib/useTitle";
 import { aboutPage } from "@/pages/docs/entries";
 import { DocSource } from "@/pages/docs/DocSource";
 import { DocText } from "@/pages/docs/DocText";
+import { HeadingLink } from "@/pages/docs/HeadingLink";
 import { GROUPS } from "./problems";
 import { matches } from "./search";
 
@@ -76,7 +77,11 @@ export function Troubleshooting() {
               <div className="space-y-8">
                 {shown.map((g) => (
                   <section key={g.id} id={g.id} aria-labelledby={`${g.id}-title`} className="scroll-mt-20">
-                    <h2 id={`${g.id}-title`} className="text-lg font-semibold tracking-tight">{g.title}</h2>
+                    {/* The copy-link button keeps the search in the address it copies, so it shares this view. */}
+                    <div className="group flex items-start gap-1.5">
+                      <h2 id={`${g.id}-title`} className="text-lg font-semibold tracking-tight">{g.title}</h2>
+                      <HeadingLink id={g.id} title={g.title} />
+                    </div>
                     <Card className="mt-3 overflow-hidden">
                       <div aria-hidden className={`hidden border-b border-border px-4 py-2 text-xs font-medium text-muted-foreground md:grid ${COLUMNS}`}>
                         {g.table.head.map((h) => <span key={h}>{h}</span>)}

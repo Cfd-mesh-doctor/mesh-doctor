@@ -7,6 +7,16 @@ import { renderScreen } from "@/test/render";
 import { HowItWorks } from "./HowItWorks";
 
 describe("How it works", () => {
+  it("puts a button by each step's heading that copies the step's address", async () => {
+    const user = userEvent.setup(); // its clipboard stands in for the browser's
+    renderScreen(<HowItWorks />, { path: "/how-it-works" });
+    const steps = within(screen.getByRole("navigation", { name: "On this page" })).getAllByRole("link");
+    expect(screen.getAllByRole("button", { name: /^Copy a link to/ })).toHaveLength(steps.length);
+    await user.click(screen.getByRole("button", { name: "Copy a link to “Detect”" }));
+    expect(await navigator.clipboard.readText()).toBe(`${window.location.origin}/how-it-works#detect`);
+    expect(screen.getByRole("region", { name: /Detect/ })).toBe(document.getElementById("detect"));
+  });
+
   it("links each \"See one\" straight to its sample report", () => {
     renderScreen(<HowItWorks />, { path: "/how-it-works" });
     const names = SAMPLES.map((s) => s.name);

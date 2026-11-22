@@ -69,4 +69,14 @@ describe("Troubleshooting", () => {
     await userEvent.type(search, "quantum flux");
     expect(contents()).toBeNull();
   });
+
+  it("puts a button by each group's heading that copies its address, with the search", async () => {
+    const user = userEvent.setup(); // its clipboard stands in for the browser's
+    renderScreen(<Troubleshooting />, { path: "/troubleshooting", at: "/troubleshooting?q=patchField" });
+    const runs = GROUPS.find((g) => g.title === "OpenFOAM runs");
+    expect(screen.getAllByRole("button", { name: /^Copy a link to/ })).toHaveLength(1);
+    expect(screen.getByRole("heading", { level: 2, name: "OpenFOAM runs" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Copy a link to “OpenFOAM runs”" }));
+    expect(await navigator.clipboard.readText()).toBe(`${window.location.origin}/troubleshooting?q=patchField#${runs?.id}`);
+  });
 });

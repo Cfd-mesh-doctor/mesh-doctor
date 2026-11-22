@@ -16,6 +16,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { DOCS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
 import { aboutPage } from "@/pages/docs/entries";
+import { HeadingLink } from "@/pages/docs/HeadingLink";
 import { COMMANDS, PROFILES, VERDICTS } from "./tables";
 
 const SECTIONS = [
@@ -40,7 +41,7 @@ function Doc({ href, children }: { href: string; children: ReactNode }) {
 function Step({ s, n, children }: { s: Section; n: number; children: ReactNode }) {
   return (
     <section id={s.id} aria-labelledby={`${s.id}-title`} className="scroll-mt-20 border-t border-border pt-10">
-      <div className="flex items-center gap-3">
+      <div className="group flex items-center gap-3">
         <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary-soft text-primary">
           <s.icon className="size-[18px]" aria-hidden />
         </span>
@@ -48,6 +49,7 @@ function Step({ s, n, children }: { s: Section; n: number; children: ReactNode }
           <span className="mr-2 font-mono text-sm font-normal text-muted-foreground" aria-hidden>0{n}</span>
           {s.title}
         </h2>
+        <HeadingLink id={s.id} title={s.title} />
       </div>
       <div className="mt-4 space-y-4">{children}</div>
     </section>
