@@ -9,6 +9,7 @@ export type EngineInfo = Json<operations["info"]["responses"][200]>;
 export type CaseList = Json<operations["cases"]["responses"][200]>;
 export type JobList = Json<operations["list_jobs"]["responses"][200]>;
 export type RepairList = Json<operations["repairs"]["responses"][200]>;
+export type MachineInfo = Json<operations["machine"]["responses"][200]>;
 export type RepairSummary = RepairList["items"][number];
 export type Job = components["schemas"]["Job"];
 export type JobState = Job["state"];

@@ -48,21 +48,61 @@ def mesh_cells(case):
     return total or None
 
 
-def available_mb():
+def _meminfo():
+    """/proc/meminfo in MB; {} where there is none (not Linux) or it can't be read."""
+    mem = {}
     try:
-        mem = {}
         with open("/proc/meminfo") as f:
             for line in f:
                 k, v = line.split(":", 1)
                 mem[k] = int(v.split()[0]) // 1024
-        free = mem.get("MemAvailable", mem.get("MemFree"))
-    except (OSError, ValueError):
-        return None
+    except (OSError, ValueError, IndexError):
+        return {}
+    return mem
+
+
+def limit_mb():
+    """The ram_limit_mb setting (config.py), or None when it is unset or not a number."""
     limit = config.settings().get("ram_limit_mb")
     try:
-        return min(free, int(limit)) if limit else free
+        return int(limit) if limit else None
     except ValueError:
-        return free
+        return None
+
+
+def available_mb():
+    mem = _meminfo()
+    free = mem.get("MemAvailable", mem.get("MemFree"))
+    if free is None:
+        return None
+    limit = limit_mb()
+    return free if limit is None else min(free, limit)
+
+
+def physical_cores(cpuinfo):
+    """Physical cores in /proc/cpuinfo text: its distinct (physical id, core id) pairs, as lscpu counts them, so
+    the threads of one core count once.  None when it names no core ids (some ARM and virtual machines)."""
+    cores, cur = set(), {}
+    for line in cpuinfo.splitlines() + [""]:
+        if not line.strip():
+            if "core id" in cur:
+                cores.add((cur.get("physical id"), cur["core id"]))
+            cur = {}
+            continue
+        k, _, v = line.partition(":")
+        cur[k.strip()] = v.strip()
+    return len(cores) or None
+
+
+def machine():
+    """The computer as Linux sees it (inside WSL: what WSL was given), for the app's size estimator:
+    processors, physical cores, all the memory in MB, and the ram_limit_mb setting."""
+    try:
+        with open("/proc/cpuinfo") as f:
+            cores = physical_cores(f.read())
+    except OSError:
+        cores = None
+    return {"cpus": os.cpu_count(), "cores": cores, "memoryMb": _meminfo().get("MemTotal"), "ramLimitMb": limit_mb()}
 
 
 def check(case, kind):

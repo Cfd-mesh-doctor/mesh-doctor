@@ -223,6 +223,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/machine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The computer this engine runs on, as Linux sees it (inside WSL: what WSL was given): processors, cores and memory, for the app's size estimator */
+        get: operations["machine"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/maps": {
         parameters: {
             query?: never;
@@ -1347,6 +1364,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Judge"];
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    machine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description physical cores (/proc/cpuinfo), so the threads of one core count once; null when it doesn't say */
+                        cores: number | null;
+                        /** @description logical processors */
+                        cpus: number | null;
+                        /** @description all the memory Linux may use (MemTotal) */
+                        memoryMb: number | null;
+                        /** @description the ram_limit_mb setting: the most memory a job may use; null if none */
+                        ramLimitMb: number | null;
+                    };
                 };
             };
             /** @description Error (the code says which; see STATUS in api_v1.py) */

@@ -112,6 +112,7 @@ All routes live under `/api/v1` (`meshdoctor/api_v1.py`). The routes are a table
 | `GET /judge?case=&window=&avgFrom=&log=` | (CLI only) | convergence verdict for a case in the cases folder (judge schema); `log` picks the solver log, such as `log.pimple` |
 | `GET /live` | `/api/status` | the live (transient) case: forces, averaging window, time step, processes, memory |
 | `GET /variants` | `/api/md/variants` | solver-setting variants for an A/B second run |
+| `GET /machine` | | the computer the engine runs on, as Linux sees it (inside WSL, what WSL was given): processors, physical cores, memory and the RAM guard's `ram_limit_mb`; the app's size estimator fills in its memory and solver ranks from it (API 1.1) |
 | `POST /jobs` | `/api/md/start`, `abstart`, `abextend` | start a repair, A/B test or A/B extension (202 Accepted, the job document) |
 | `GET /jobs?state=&limit=`, `GET /jobs/{job}` | | jobs, newest first, with progress and links to their runs (job schema) |
 | `POST /jobs/{job}/cancel` | | stop a job and everything it started (`409 finished` if it already ended) |

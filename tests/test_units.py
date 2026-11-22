@@ -682,6 +682,48 @@ class ApiV1Test(unittest.TestCase):
         self.assertTrue(refs and all(k in self.schema.VERSIONS for k in refs), refs)
 
 
+class MachineTest(unittest.TestCase):
+    """GET /api/v1/machine: what the app's size estimator fills in (ramguard.machine)."""
+
+    def setUp(self):
+        import api_v1, ramguard
+        self.api, self.rg = api_v1, ramguard
+        self.saved = os.environ.get("MESHDOCTOR_RAM_LIMIT_MB")
+
+    def tearDown(self):
+        if self.saved is None:
+            os.environ.pop("MESHDOCTOR_RAM_LIMIT_MB", None)
+        else:
+            os.environ["MESHDOCTOR_RAM_LIMIT_MB"] = self.saved
+
+    def test_the_threads_of_one_core_count_once(self):
+        # two sockets of two cores, two threads per core: 8 processors, 4 cores
+        blocks = [f"processor\t: {i}\nphysical id\t: {i // 4}\ncore id\t\t: {i // 2 % 2}\n" for i in range(8)]
+        self.assertEqual(self.rg.physical_cores("\n".join(blocks)), 4)
+        # without physical ids (one socket), each core id once
+        self.assertEqual(self.rg.physical_cores("core id\t: 0\n\ncore id\t: 1\n\ncore id\t: 1\n"), 2)
+
+    def test_no_core_ids_is_unknown(self):
+        self.assertIsNone(self.rg.physical_cores("processor\t: 0\nBogoMIPS\t: 48.00\n\nprocessor\t: 1\n"))
+        self.assertIsNone(self.rg.physical_cores(""))
+
+    def test_the_route_reports_the_ram_limit_setting(self):
+        os.environ["MESHDOCTOR_RAM_LIMIT_MB"] = "20480"
+        status, doc, _ = self.api.handle("GET", "/api/v1/machine", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(set(doc), {"cpus", "cores", "memoryMb", "ramLimitMb"})
+        self.assertEqual(doc["ramLimitMb"], 20480)
+        self.assertGreaterEqual(doc["cpus"], 1)
+        os.environ["MESHDOCTOR_RAM_LIMIT_MB"] = "lots"
+        self.assertIsNone(self.rg.machine()["ramLimitMb"])
+        os.environ.pop("MESHDOCTOR_RAM_LIMIT_MB")
+        self.assertIsNone(self.rg.machine()["ramLimitMb"])
+
+    def test_the_route_is_in_the_openapi_document(self):
+        op = self.api.openapi()["paths"]["/machine"]["get"]
+        self.assertEqual(op["operationId"], "machine")
+
+
 class ReportTest(unittest.TestCase):
     """report.py: one portable file per run, worker paths removed, data intact."""
 

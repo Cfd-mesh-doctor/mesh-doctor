@@ -2,7 +2,7 @@
 // Navigation. Screens that later milestones add are listed already, marked "Soon", so the shape of the
 // whole app is visible from day one.
 import {
-  BookOpen, ChartLine, FlaskConical, FolderOpen, Image, LayoutDashboard, ListChecks, Play, Settings, Toolbox, Wrench,
+  BookOpen, Calculator, ChartLine, FlaskConical, FolderOpen, Image, LayoutDashboard, ListChecks, Play, Settings, Toolbox, Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { Link, NavLink } from "react-router";
@@ -26,6 +26,7 @@ const MAIN: Item[] = [
   { label: "Overview", icon: LayoutDashboard, path: "" },
   { label: "Cases", icon: FolderOpen, path: "/cases" },
   { label: "Jobs", icon: ListChecks, path: "/jobs" },
+  { label: "Size estimator", icon: Calculator, path: "/estimate" },
 ];
 
 const NEXT: Item[] = [

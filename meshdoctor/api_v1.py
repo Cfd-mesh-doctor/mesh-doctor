@@ -19,10 +19,11 @@ import json, math, os, re
 
 import jobs
 import md_api
+import ramguard
 import schema
 import version
 
-API_VERSION = "1.0"
+API_VERSION = "1.1"
 PREFIX = "/api/v1"
 MAX_BODY = 64 * 1024
 
@@ -414,6 +415,20 @@ def _job(job_id):
     if job is None:
         raise ApiError("not-found", "no job " + job_id)
     return job
+
+
+@route("GET", "/machine", "The computer this engine runs on, as Linux sees it (inside WSL: what WSL was given): "
+       "processors, cores and memory, for the app's size estimator",
+       ok={"type": "object", "required": ["cpus", "cores", "memoryMb", "ramLimitMb"], "properties": {
+           "cpus": {"type": ["integer", "null"], "description": "logical processors"},
+           "cores": {"type": ["integer", "null"],
+                     "description": "physical cores (/proc/cpuinfo), so the threads of one core count once; "
+                                    "null when it doesn't say"},
+           "memoryMb": {"type": ["integer", "null"], "description": "all the memory Linux may use (MemTotal)"},
+           "ramLimitMb": {"type": ["integer", "null"],
+                          "description": "the ram_limit_mb setting: the most memory a job may use; null if none"}}})
+def machine(p, q, b):
+    return ramguard.machine()
 
 
 @route("GET", "/jobs", "Jobs on this worker, newest first, with their progress",

@@ -3,13 +3,14 @@ import { expect, test } from "@playwright/test";
 import { testReport } from "../src/report/testReport";
 
 test("on a phone nothing scrolls sideways, and the menu works", async ({ page }) => {
+  test.slow(); // every page at three widths: more than the default 30 s
   // The device's own width (412 px), then a small phone: the Jobs filter once fit the first and not the second.
   // Then the smallest phones (320 px), where the home and pairing pages were once 18-20 px too wide.
   for (const width of [page.viewportSize()?.width ?? 412, 360, 320]) {
     await page.setViewportSize({ width, height: 800 });
     for (const path of [
       "/", "/connect", "/install", "/report", "/estimate?cells=31.1", "/how-it-works", "/accuracy", "/gallery", "/demo",
-      "/demo/jobs", "/demo/cases", "/demo/settings", "/demo/repairs/ahmed25-medium-fix/report",
+      "/demo/jobs", "/demo/cases", "/demo/settings", "/demo/estimate?cells=31.1", "/demo/repairs/ahmed25-medium-fix/report",
       "/demo/repairs/ahmed35-medium-fix/report",
     ]) {
       await page.goto(path);

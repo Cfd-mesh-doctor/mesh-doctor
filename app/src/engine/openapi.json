@@ -1669,7 +1669,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.0"
+    "version": "1.1"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -2489,6 +2489,70 @@
           }
         },
         "summary": "Is the live (transient) run converged?  The transient judge on the live case's transient log (log.ddes*, else log.foamRun*): force means, per-time-step convergence, Courant number"
+      }
+    },
+    "/machine": {
+      "get": {
+        "operationId": "machine",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "cores": {
+                      "description": "physical cores (/proc/cpuinfo), so the threads of one core count once; null when it doesn't say",
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "cpus": {
+                      "description": "logical processors",
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "memoryMb": {
+                      "description": "all the memory Linux may use (MemTotal)",
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "ramLimitMb": {
+                      "description": "the ram_limit_mb setting: the most memory a job may use; null if none",
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "cpus",
+                    "cores",
+                    "memoryMb",
+                    "ramLimitMb"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "The computer this engine runs on, as Linux sees it (inside WSL: what WSL was given): processors, cores and memory, for the app's size estimator"
       }
     },
     "/maps": {

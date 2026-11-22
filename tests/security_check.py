@@ -106,6 +106,7 @@ CHECKS = [
     ("v1 index works", "GET", "/api/v1", {}, 200, "apiVersion"),
     ("v1 OpenAPI document is served", "GET", "/api/v1/openapi.json", {}, 200, '"openapi": "3.1.0"'),
     ("v1 list works", "GET", "/api/v1/cases", {}, 200, '"items"'),
+    ("v1 machine works", "GET", "/api/v1/machine", {}, 200, '"memoryMb"'),
     ("v1 unknown host refused", "GET", "/api/v1/cases", {"Host": f"evil.example:{PORT}"}, 403, '"code": "forbidden"'),
     ("v1 cross-site read refused", "GET", "/api/v1/cases", {"Origin": "http://evil.example"}, 403, "cross-site"),
     ("v1 unknown route", "GET", "/api/v1/nowhere", {}, 404, '"code": "not-found"'),

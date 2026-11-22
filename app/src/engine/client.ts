@@ -3,7 +3,7 @@
 // the demo answers from recorded data. Screens only see a Transport, so both look the same to them.
 import { EngineError, isEngineCode } from "./errors";
 import { localAccessState } from "./permission";
-import type { CaseList, EngineInfo, Job, JobList, RepairList } from "./types";
+import type { CaseList, EngineInfo, Job, JobList, MachineInfo, RepairList } from "./types";
 import { API_MAJOR } from "./types";
 import type { Report } from "@/report/read";
 
@@ -101,4 +101,6 @@ export const api = {
   repairs: (t: Transport, signal?: AbortSignal) => t.request<RepairList>("GET", "/repairs", undefined, signal),
   report: (t: Transport, name: string, signal?: AbortSignal) =>
     t.request<Report>("GET", `/repairs/${encodeURIComponent(name)}/report`, undefined, signal),
+  /** The computer the engine runs on (API 1.1); an older engine answers not-found. */
+  machine: (t: Transport, signal?: AbortSignal) => t.request<MachineInfo>("GET", "/machine", undefined, signal),
 };

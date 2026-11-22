@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The size estimator: will a case fit in memory, how long will the solve take, what would a cloud machine
 // cost? Rough answers from measured runs, worked out in the page (no engine needed, nothing is sent). The
-// fields live in the address, so an estimate can be bookmarked or shared as a link.
+// fields live in the address, so an estimate can be bookmarked or shared as a link. The app's own estimator
+// (pages/app/Estimator.tsx) is the same form with the engine's memory and cores filled in.
 import { Cloud, Cpu, Laptop, MemoryStick, RotateCcw, TriangleAlert, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useSearchParams } from "react-router";
@@ -34,23 +35,6 @@ const range = (k: Field) => {
 
 export function Estimate() {
   useTitle("Size estimator");
-  const [params, setParams] = useSearchParams();
-  const text = (f: (typeof FIELDS)[number]) => params.get(f.param) ?? String(DEFAULTS[f.key]);
-  const values = FIELDS.map((f) => [f.key, parseField(f.key, text(f))] as const);
-  const input = values.every(([, v]) => v != null)
-    ? (Object.fromEntries(values) as unknown as EstimateInput)
-    : null;
-  const result = input ? estimate(input) : null;
-  const changed = FIELDS.some((f) => params.has(f.param));
-
-  const set = (f: (typeof FIELDS)[number], value: string) =>
-    setParams((prev) => {
-      const next = new URLSearchParams(prev);
-      if (value === String(DEFAULTS[f.key])) next.delete(f.param);
-      else next.set(f.param, value);
-      return next;
-    }, { replace: true, preventScrollReset: true });
-
   return (
     <div className="flex min-h-dvh flex-col">
       <PublicHeader />
@@ -62,61 +46,86 @@ export function Estimate() {
             "cost? Rough answers (±30\u00a0%) from measured runs, worked out in this page: nothing is sent anywhere."
           }
         />
-        {/* grid-cols-1, not the default: a wide table then scrolls inside its card instead of widening the page */}
-        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[19rem_minmax(0,1fr)]">
-          <Card>
-            <CardHeader>
-              <div>
-                <CardTitle>Your case</CardTitle>
-                <CardDescription>The address keeps these, so a link brings the estimate back.</CardDescription>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {FIELDS.map((f) => {
-                const bad = parseField(f.key, text(f)) == null;
-                const integer = LIMITS[f.key].integer;
-                return (
-                  <div key={f.key}>
-                    <label htmlFor={`est-${f.key}`} className="text-[13px] font-medium">{f.label}</label>
-                    <div className="mt-1.5 flex items-center gap-2">
-                      <Input
-                        id={`est-${f.key}`}
-                        value={text(f)}
-                        onChange={(e) => set(f, e.target.value)}
-                        inputMode={integer ? "numeric" : "decimal"}
-                        autoComplete="off"
-                        spellCheck={false}
-                        aria-invalid={bad || undefined}
-                        aria-describedby={`est-${f.key}-hint`}
-                        className={cn("w-28 tabular-nums", bad && "border-danger")}
-                      />
-                      <span className="text-sm text-muted-foreground">{f.unit}</span>
-                    </div>
-                    <p id={`est-${f.key}-hint`} className={cn("mt-1 text-xs", bad ? "text-danger" : "text-muted-foreground")}>
-                      {bad ? range(f.key) : f.hint}
-                    </p>
-                  </div>
-                );
-              })}
-              {changed && (
-                <Button variant="secondary" size="sm"
-                  onClick={() => setParams(new URLSearchParams(), { replace: true, preventScrollReset: true })}>
-                  <RotateCcw /> Back to the example
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-
-          {!input || !result ? (
-            <Card className="p-5 text-sm text-muted-foreground" role="status">
-              Fill in every field with a number in range to see the estimate.
-            </Card>
-          ) : (
-            <Results input={input} result={result} />
-          )}
-        </div>
+        <EstimateForm defaults={DEFAULTS} about="The address keeps these, so a link brings the estimate back."
+          reset="Back to the example" />
       </main>
       <PublicFooter />
+    </div>
+  );
+}
+
+/** The fields and the answers. A field missing from the address means its value in `defaults`. */
+export function EstimateForm({ defaults, about, reset }: { defaults: EstimateInput; about: ReactNode; reset: string }) {
+  const [params, setParams] = useSearchParams();
+  const text = (f: (typeof FIELDS)[number]) => params.get(f.param) ?? String(defaults[f.key]);
+  const values = FIELDS.map((f) => [f.key, parseField(f.key, text(f))] as const);
+  const input = values.every(([, v]) => v != null)
+    ? (Object.fromEntries(values) as unknown as EstimateInput)
+    : null;
+  const result = input ? estimate(input) : null;
+  const changed = FIELDS.some((f) => params.has(f.param));
+
+  const set = (f: (typeof FIELDS)[number], value: string) =>
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value === String(defaults[f.key])) next.delete(f.param);
+      else next.set(f.param, value);
+      return next;
+    }, { replace: true, preventScrollReset: true });
+
+  // grid-cols-1, not the default: a wide table then scrolls inside its card instead of widening the page
+  return (
+    <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[19rem_minmax(0,1fr)]">
+      <Card>
+        <CardHeader>
+          <div>
+            <CardTitle>Your case</CardTitle>
+            <CardDescription>{about}</CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {FIELDS.map((f) => {
+            const bad = parseField(f.key, text(f)) == null;
+            const integer = LIMITS[f.key].integer;
+            return (
+              <div key={f.key}>
+                <label htmlFor={`est-${f.key}`} className="text-[13px] font-medium">{f.label}</label>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <Input
+                    id={`est-${f.key}`}
+                    value={text(f)}
+                    onChange={(e) => set(f, e.target.value)}
+                    inputMode={integer ? "numeric" : "decimal"}
+                    autoComplete="off"
+                    spellCheck={false}
+                    aria-invalid={bad || undefined}
+                    aria-describedby={`est-${f.key}-hint`}
+                    className={cn("w-28 tabular-nums", bad && "border-danger")}
+                  />
+                  <span className="text-sm text-muted-foreground">{f.unit}</span>
+                </div>
+                <p id={`est-${f.key}-hint`} className={cn("mt-1 text-xs", bad ? "text-danger" : "text-muted-foreground")}>
+                  {bad ? range(f.key) : f.hint}
+                </p>
+              </div>
+            );
+          })}
+          {changed && (
+            <Button variant="secondary" size="sm"
+              onClick={() => setParams(new URLSearchParams(), { replace: true, preventScrollReset: true })}>
+              <RotateCcw /> {reset}
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      {!input || !result ? (
+        <Card className="p-5 text-sm text-muted-foreground" role="status">
+          Fill in every field with a number in range to see the estimate.
+        </Card>
+      ) : (
+        <Results input={input} result={result} />
+      )}
     </div>
   );
 }

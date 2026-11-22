@@ -3,12 +3,16 @@
 // "_about"), served without any engine. It can cancel its own jobs; it cannot start anything.
 import type { Method, Transport } from "@/engine/client";
 import { EngineError } from "@/engine/errors";
-import type { Job, JobList } from "@/engine/types";
+import type { Job, JobList, MachineInfo } from "@/engine/types";
 import { toMillis } from "@/lib/format";
 import { SAMPLES } from "@/report/samples";
 import recorded from "./fixtures.json";
 
 type Answers = Record<string, unknown>;
+
+/** The demo engine's computer, written by hand (the recording's engine predates GET /machine): a laptop that
+ *  gives WSL 25 GB and 8 cores. */
+export const DEMO_MACHINE: MachineInfo = { cpus: 8, cores: 8, memoryMb: 25_600, ramLimitMb: null };
 
 const DELAY_MS = 220;
 
@@ -59,7 +63,7 @@ export function moveTimes(doc: unknown, by: number): void {
 
 export function demoTransport(answers: Answers = (recorded as { answers: Answers }).answers, delayMs = DELAY_MS): Transport {
   // A private copy, so cancelling a demo job lasts until the page is reloaded and never touches the import.
-  const data: Answers = structuredClone(answers);
+  const data: Answers = { "/machine": DEMO_MACHINE, ...structuredClone(answers) };
   const by = shiftTimes(data);
   return {
     kind: "demo",

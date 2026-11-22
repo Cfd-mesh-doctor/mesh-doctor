@@ -16,6 +16,11 @@ function screens(home: string): RouteObject[] {
     { index: true, handle: h("Overview"), lazy: async () => ({ Component: (await import("@/pages/app/Overview")).Overview }) },
     { path: "cases", handle: h("Cases"), lazy: async () => ({ Component: (await import("@/pages/app/Cases")).Cases }) },
     { path: "jobs", handle: h("Jobs"), lazy: async () => ({ Component: (await import("@/pages/app/Jobs")).Jobs }) },
+    {
+      path: "estimate",
+      handle: h("Size estimator"),
+      lazy: async () => ({ Component: (await import("@/pages/app/Estimator")).Estimator }),
+    },
     { path: "settings", handle: h("Settings"), lazy: async () => ({ Component: (await import("@/pages/app/Settings")).Settings }) },
     {
       path: "repairs/:name/report",
