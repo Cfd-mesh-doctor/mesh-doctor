@@ -24,6 +24,8 @@ export const ON_SITE: DocEntry[] = [
     about: "Setting it up on your own computer: Linux, or WSL on Windows, with OpenFOAM 14 and Python. From the README." },
   { title: "Troubleshooting", page: "/troubleshooting", file: "troubleshooting.md",
     about: "Problems people actually hit, with the fix. Search it for the message you see." },
+  { title: "Limits", page: "/limits", file: "limits.md",
+    about: "What Mesh Doctor is not, the versions it runs on, and where the repair, the A/B test, the map and the dashboard stop." },
   { title: "Report viewer", page: "/report",
     about: "Open a report to see what a repair changed in the mesh and whether it helped the solver. Never uploaded." },
   { title: "Size estimator", page: "/estimate",
@@ -32,8 +34,6 @@ export const ON_SITE: DocEntry[] = [
 
 /** Read on GitHub: the docs this site has no page for yet. Each title is the doc's own heading. */
 export const ON_GITHUB: DocEntry[] = [
-  { title: "Limits", file: "limits.md",
-    about: "What Mesh Doctor is not, the versions it runs on, and where the repair, the A/B test, the map and the dashboard stop." },
   { title: "Safety model", file: "safety.md",
     about: "Why it can't damage a case you care about, and why its dashboard isn't a way into your computer." },
   { title: "Starting your own case from the Ahmed example", file: "templates.md",
@@ -47,3 +47,12 @@ export const ON_GITHUB: DocEntry[] = [
 ];
 
 export const githubDoc = (file: string) => `${REPO_URL}/blob/main/docs/${file}`;
+
+/** Where a doc's link to another doc ("safety.md", "safety.md#section") opens: this site's page for that doc when there
+ *  is one, otherwise the doc on GitHub. A web address stays as it is. */
+export function docHref(target: string): string {
+  if (/^https?:/.test(target)) return target;
+  const [file = "", section] = target.split("#");
+  const page = ON_SITE.find((d) => d.file === file)?.page;
+  return (page ?? githubDoc(file)) + (section ? `#${section}` : "");
+}

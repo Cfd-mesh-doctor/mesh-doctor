@@ -17,7 +17,7 @@ describe("the Docs page's list", () => {
       expect(d.page, d.title).toBeUndefined();
       expect(readDoc(d.file ?? "").match(/^# (.+)$/m)?.[1], d.file).toBe(d.title);
     }
-    expect(githubDoc("limits.md")).toBe(`${REPO_URL}/blob/main/docs/limits.md`);
+    expect(githubDoc("architecture.md")).toBe(`${REPO_URL}/blob/main/docs/architecture.md`);
   });
 
   it("points each of the site's own entries at one of its pages", () => {

@@ -3,6 +3,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { githubAnchor, type DocSection } from "@/lib/docSections";
 import type { DocTable } from "@/lib/docTable";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -20,6 +21,45 @@ export function docNames(): string[] {
 /** A file of the repository, e.g. readRepo("README.md"). */
 export function readRepo(path: string): string {
   return readFileSync(resolve(ROOT, path), "utf8");
+}
+
+/**
+ * A doc's "## " sections, each with its paragraphs (lines joined by spaces) and lists (one string per "- " item), in
+ * order. Text before the first section (the "# " title) is left out; a blank line or a paragraph ends a list.
+ */
+export function markdownSections(md: string): DocSection[] {
+  const sections: DocSection[] = [];
+  let para: string[] = [];
+  let inList = false;
+  const flush = () => {
+    if (para.length) sections.at(-1)?.blocks.push({ text: para.join(" ") });
+    para = [];
+  };
+  for (const line of md.split(/\r?\n/)) {
+    const heading = /^## (.+)$/.exec(line)?.[1];
+    if (heading) {
+      flush();
+      inList = false;
+      sections.push({ id: githubAnchor(heading), title: heading, blocks: [] });
+      continue;
+    }
+    const blocks = sections.at(-1)?.blocks;
+    if (!blocks) continue;
+    const item = /^- (.+)$/.exec(line)?.[1];
+    const last = blocks.at(-1);
+    if (item) {
+      flush();
+      if (inList && last && "list" in last) last.list.push(item);
+      else blocks.push({ list: [item] });
+      inList = true;
+    } else {
+      if (line.trim()) para.push(line.trim());
+      else flush();
+      inList = false;
+    }
+  }
+  flush();
+  return sections;
 }
 
 /** Every table in a Markdown text, in order (these tables hold no escaped "|"). */

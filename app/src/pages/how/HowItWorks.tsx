@@ -223,7 +223,7 @@ export function HowItWorks() {
                 those, <code>fix</code> collapses just those faces with OpenFOAM's <code>collapseEdges</code>, smooths
                 with one more pass, and keeps the result only if <code>checkMesh</code> shows no regression; otherwise
                 it puts the mesh back. That step changes the topology (a few faces and points fewer), so the A/B test
-                can't be used on such a copy. See the <Doc href={DOCS.limits}>limits</Doc>.
+                can't be used on such a copy. See the <Link to="/limits" className={link}>limits</Link>.
               </Note>
               <p><code>full</code> does the whole repair on a copy:</p>
               <Pipeline />

@@ -2,7 +2,6 @@
 // Troubleshooting: the problems of docs/troubleshooting.md (problems.ts, kept equal to the doc by a test), with a
 // search box, as the doc says to search it for the message you see. What's typed stays in the address (?q=), so a
 // link can open the page at one problem.
-import { Fragment } from "react";
 import { useSearchParams } from "react-router";
 import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
 import { PageHeader } from "@/components/shared/page";
@@ -10,26 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/misc";
 import { useTitle } from "@/lib/useTitle";
+import { DocText } from "@/pages/docs/DocText";
 import { GROUPS } from "./problems";
 import { matches } from "./search";
 
 const TOTAL = GROUPS.reduce((n, g) => n + g.table.rows.length, 0);
 /** The three columns from tablet width up; on a phone each problem reads top to bottom. */
 const COLUMNS = "md:grid-cols-[minmax(0,5fr)_minmax(0,5fr)_minmax(0,6fr)] md:gap-6";
-
-/** A cell as the doc writes it: `code` in backticks, **bold**. Short code stays on one line (a flag like -copyZero
- *  never splits at its hyphen); code longer than a narrow column may break anywhere, so a phone never scrolls sideways. */
-function Md({ text }: { text: string }) {
-  return (
-    <>
-      {text.split("`").map((part, i) => (i % 2 ? (
-        <code key={i} className={part.length <= 24 ? "whitespace-nowrap" : "[overflow-wrap:anywhere]"}>{part}</code>
-      ) : (
-        <Fragment key={i}>{part.split("**").map((p, j) => (j % 2 ? <strong key={j} className="font-semibold">{p}</strong> : p))}</Fragment>
-      )))}
-    </>
-  );
-}
 
 export function Troubleshooting() {
   useTitle("Troubleshooting");
@@ -84,11 +70,11 @@ export function Troubleshooting() {
                 <ul className="divide-y divide-border">
                   {g.rows.map(([seen = "", why = "", fix = ""]) => (
                     <li key={seen} className={`grid gap-1 px-4 py-3 text-sm ${COLUMNS}`}>
-                      <p className="font-medium"><span className="sr-only">{g.table.head[0]}: </span><Md text={seen} /></p>
+                      <p className="font-medium"><span className="sr-only">{g.table.head[0]}: </span><DocText text={seen} /></p>
                       <p className="text-muted-foreground">
-                        <span className="font-medium text-foreground md:sr-only">{g.table.head[1]}: </span><Md text={why} />
+                        <span className="font-medium text-foreground md:sr-only">{g.table.head[1]}: </span><DocText text={why} />
                       </p>
-                      <p><span className="font-medium md:sr-only">{g.table.head[2]}: </span><Md text={fix} /></p>
+                      <p><span className="font-medium md:sr-only">{g.table.head[2]}: </span><DocText text={fix} /></p>
                     </li>
                   ))}
                 </ul>

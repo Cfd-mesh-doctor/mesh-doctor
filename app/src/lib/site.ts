@@ -8,7 +8,6 @@ export const DOCS = {
   quickstart: `${REPO_URL}#quickstart`,
   howItWorks: `${REPO_URL}/blob/main/docs/how-it-works.md`,
   safety: `${REPO_URL}/blob/main/docs/safety.md`,
-  limits: `${REPO_URL}/blob/main/docs/limits.md`,
   dashboard: `${REPO_URL}/blob/main/docs/dashboard.md`,
   validation: `${REPO_URL}/blob/main/docs/validation.md`,
   gallery: `${REPO_URL}/blob/main/docs/gallery.md`,
