@@ -72,16 +72,17 @@ export function Overview() {
           hint={repairs.data ? `${improved} improved, ${worse ? `${worse} made worse` : "none worse"}` : undefined}
         />
         <StatTile
-          label="Jobs running"
+          label="Active jobs"
           icon={ListChecks}
           tone={active.length ? "primary" : undefined}
           loading={jobs.isPending}
           value={jobs.data ? active.length : "–"}
           hint={!jobs.data ? undefined : active.length ? (
-            // While jobs run, the hint links to them (the Jobs screen keeps its filter in its address). The count of
-            // jobs on record gives way: both don't fit on the hint's one line in a tile a quarter of the page wide.
+            // While jobs are active (running, or waiting their turn: one big job runs at a time), the hint links to
+            // them, as the Jobs screen keeps its filter in its address. The count of jobs on record gives way: both
+            // don't fit on the hint's one line in a tile a quarter of the page wide.
             <Link to={to("/jobs?show=active")} className="font-medium text-primary hover:underline">
-              {active.length === 1 ? "Show the running job" : "Show the running jobs"}
+              {active.length === 1 ? "Show the active job" : "Show the active jobs"}
             </Link>
           ) : `${jobItems.length} jobs on record`}
         />

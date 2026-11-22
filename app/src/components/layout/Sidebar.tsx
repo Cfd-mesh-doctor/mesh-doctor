@@ -38,7 +38,7 @@ const NEXT: Item[] = [
   { label: "Local tools", icon: Toolbox, soon: "Zone repair, full-car pipeline, workbooks" },
 ];
 
-function NavItem({ item, onNavigate, running }: { item: Item; onNavigate?: () => void; running?: number }) {
+function NavItem({ item, onNavigate, active }: { item: Item; onNavigate?: () => void; active?: number }) {
   const to = useAppPath();
   const Icon = item.icon;
   const base = "group flex h-9 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors";
@@ -64,13 +64,14 @@ function NavItem({ item, onNavigate, running }: { item: Item; onNavigate?: () =>
         <>
           <Icon className={cn("size-4 shrink-0", on && "text-primary")} />
           <span className="flex-1 truncate">{item.label}</span>
-          {running ? (
+          {active ? (
             <>
               <span aria-hidden className="rounded-full bg-primary-soft px-1.5 text-[11px] font-semibold text-primary tabular-nums">
-                {running}
+                {active}
               </span>
-              {/* Said as "Jobs (1 running)", not as a bare "Jobs 1". */}
-              <span className="sr-only"> ({running} running)</span>
+              {/* Said as "Jobs (1 active)", not as a bare "Jobs 1": running or waiting their turn, as the Jobs
+                  screen's Active filter counts them. */}
+              <span className="sr-only"> ({active} active)</span>
             </>
           ) : null}
         </>
@@ -95,7 +96,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-3" aria-label="Main">
         <div className="space-y-0.5">
           {MAIN.map((i) => (
-            <NavItem key={i.label} item={i} onNavigate={onNavigate} running={i.path === "/jobs" ? active : undefined} />
+            <NavItem key={i.label} item={i} onNavigate={onNavigate} active={i.path === "/jobs" ? active : undefined} />
           ))}
         </div>
         <div>

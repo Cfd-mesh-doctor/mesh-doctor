@@ -41,10 +41,10 @@ test("a job's details show its whole log and result paths, wrapping rather than 
   }
 });
 
-test("the sidebar says how many jobs run, not a bare number", async ({ page }) => {
+test("the sidebar says how many jobs are active, not a bare number", async ({ page }) => {
   await page.goto("/demo");
   const main = page.getByRole("navigation", { name: "Main" });
-  await expect(main.getByRole("link", { name: "Jobs (1 running)", exact: true })).toBeVisible();
+  await expect(main.getByRole("link", { name: "Jobs (1 active)", exact: true })).toBeVisible();
 });
 
 test("the Overview's recent jobs open their details on the Jobs screen", async ({ page }) => {
@@ -54,9 +54,9 @@ test("the Overview's recent jobs open their details on the Jobs screen", async (
   await expect(page.getByRole("dialog", { name: "ahmed25-fine-strict" })).toBeVisible();
 });
 
-test("the Overview's running-jobs tile links to the running jobs", async ({ page }) => {
+test("the Overview's active-jobs tile links to the active jobs", async ({ page }) => {
   await page.goto("/demo");
-  await page.getByRole("link", { name: "Show the running job" }).click();
+  await page.getByRole("link", { name: "Show the active job" }).click();
   await expect(page).toHaveURL(/\/demo\/jobs\?show=active$/);
   await expect(page.getByRole("radiogroup", { name: "Show jobs" }).getByRole("radio", { name: /^Active/ })).toBeChecked();
   await expect(page.getByRole("table").getByRole("row")).toHaveCount(2); // the head and the demo's running job

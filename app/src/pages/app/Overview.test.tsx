@@ -16,17 +16,19 @@ function noneRunning() {
   return answers;
 }
 
-describe("the Overview's running-jobs tile", () => {
-  it("links the running job while one runs", async () => {
+describe("the Overview's active-jobs tile", () => {
+  it("links the active job while one runs", async () => {
     open();
-    expect(await screen.findByRole("link", { name: "Show the running job" })).toHaveAttribute("href", "/demo/jobs?show=active");
+    expect(await screen.findByRole("heading", { name: "Overview" })).toBeInTheDocument();
+    expect(await screen.findByText("Active jobs")).toBeInTheDocument(); // running or waiting: not "Jobs running"
+    expect(await screen.findByRole("link", { name: "Show the active job" })).toHaveAttribute("href", "/demo/jobs?show=active");
     expect(screen.queryByText(/jobs on record/)).toBeNull(); // the link has the hint's one line to itself
   });
 
   it("counts the jobs on record while none runs", async () => {
     open(noneRunning());
     expect(await screen.findByText("8 jobs on record")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /^Show the running/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Show the active/ })).toBeNull();
   });
 });
 
