@@ -99,7 +99,7 @@ All routes live under `/api/v1` (`meshdoctor/api_v1.py`). The routes are a table
 |---|---|---|
 | `GET /` | | API version, result-file versions, job kinds |
 | `GET /openapi.json`, `GET /schemas/{kind}` | | the API description and the result schemas |
-| `GET /cases` | `/api/md/sources` | source cases the worker may read |
+| `GET /cases` | `/api/md/sources` | source cases the worker may read, with each one's cell count from its mesh's owner header (null when the header doesn't say; API 1.2) |
 | `GET /repairs`, `GET /repairs/{name}` | `/api/md/results`, `/api/md/result` | repair runs, and a finished run's result (repair schema) |
 | `GET /repairs/{name}/clusters/{id}?tag=before\|after\|report` | `/api/md/cluster` | geometry of one defect cluster |
 | `GET /repairs/{name}/log` | `/api/md/log` | the repair sweeps from the log |

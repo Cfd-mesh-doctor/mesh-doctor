@@ -469,7 +469,10 @@ class ApiV1Test(unittest.TestCase):
         self.assertIn(text, doc["error"]["message"])
 
     def test_reads(self):
-        self.assertEqual(self.get("/cases")[:2], (200, {"items": ["c1"]}))
+        self.assertEqual(self.get("/cases")[:2], (200, {"items": ["c1"], "cells": {"c1": None}}))   # empty owner
+        with open(os.path.join(self.src, "constant", "polyMesh", "owner"), "w") as f:
+            f.write("FoamFile\n{\n    note \"nPoints:1200 nCells:1000 nFaces:3400 nInternalFaces:2600\";\n}\n")
+        self.assertEqual(self.get("/cases")[1]["cells"], {"c1": 1000})
         st, doc, _ = self.get("/repairs/r1")
         self.assertEqual((st, doc["source"]), (200, self.src))
         self.assertEqual(self.get("/repairs")[1]["items"][0]["name"], "r1")

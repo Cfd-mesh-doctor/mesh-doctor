@@ -23,7 +23,7 @@ import ramguard
 import schema
 import version
 
-API_VERSION = "1.1"
+API_VERSION = "1.2"
 PREFIX = "/api/v1"
 MAX_BODY = 64 * 1024
 
@@ -131,10 +131,15 @@ def result_schema(p, q, b):
     return schema.schema(p["kind"])
 
 
-@route("GET", "/cases", "Source cases this worker may read (only ever read, never changed)",
-       ok=_items({"type": "string"}))
+@route("GET", "/cases", "Source cases this worker may read (only ever read, never changed), with their sizes",
+       ok={"type": "object", "required": ["items", "cells"], "properties": {
+           "items": {"type": "array", "items": {"type": "string"}},
+           "cells": {"type": "object", "additionalProperties": {"type": ["integer", "null"]},
+                     "description": "each case's cell count, from its mesh's owner header (summed over processors "
+                                    "for a decomposed case); null when the header doesn't say (API 1.2)"}}})
 def cases(p, q, b):
-    return {"items": md_api.sources()}
+    names = md_api.sources()
+    return {"items": names, "cells": {n: ramguard.mesh_cells(os.path.join(md_api.run_dir(), n)) for n in names}}
 
 
 @route("GET", "/repairs", "Repair runs in the workspace, with their status and verdict",

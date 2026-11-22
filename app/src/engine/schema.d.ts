@@ -93,7 +93,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Source cases this worker may read (only ever read, never changed) */
+        /** Source cases this worker may read (only ever read, never changed), with their sizes */
         get: operations["cases"];
         put?: never;
         post?: never;
@@ -1050,6 +1050,10 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** @description each case's cell count, from its mesh's owner header (summed over processors for a decomposed case); null when the header doesn't say (API 1.2) */
+                        cells: {
+                            [key: string]: number | null;
+                        };
                         items: string[];
                     };
                 };

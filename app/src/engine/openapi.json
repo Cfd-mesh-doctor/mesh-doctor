@@ -1669,7 +1669,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.1"
+    "version": "1.2"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -1948,6 +1948,16 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "cells": {
+                      "additionalProperties": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "description": "each case's cell count, from its mesh's owner header (summed over processors for a decomposed case); null when the header doesn't say (API 1.2)",
+                      "type": "object"
+                    },
                     "items": {
                       "items": {
                         "type": "string"
@@ -1956,7 +1966,8 @@
                     }
                   },
                   "required": [
-                    "items"
+                    "items",
+                    "cells"
                   ],
                   "type": "object"
                 }
@@ -1975,7 +1986,7 @@
             "description": "Error (the code says which; see STATUS in api_v1.py)"
           }
         },
-        "summary": "Source cases this worker may read (only ever read, never changed)"
+        "summary": "Source cases this worker may read (only ever read, never changed), with their sizes"
       }
     },
     "/jobs": {
