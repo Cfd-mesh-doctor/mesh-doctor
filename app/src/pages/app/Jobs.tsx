@@ -346,7 +346,12 @@ export function Jobs() {
                     {/* A queued job hasn't started: its creation time isn't its start. */}
                     {j.started ? formatRelative(j.started) : "–"}
                   </TD>
-                  <TD className="hidden text-[13px] whitespace-nowrap tabular-nums sm:table-cell">{duration(j)}</TD>
+                  <TD className="hidden text-[13px] tabular-nums sm:table-cell">
+                    {/* A running job hasn't finished: its time is so far, as its details' "Running for" says.
+                        "so far" may take a line of its own, so the column needs no more room than a time. */}
+                    <span className="whitespace-nowrap">{duration(j)}</span>
+                    {j.state === "running" && <> <span className="whitespace-nowrap">so far</span></>}
+                  </TD>
                   <TD className="text-right" onClick={(e) => e.stopPropagation()}>
                     {isActive(j.state) ? (
                       <Button variant="danger-ghost" size="sm" onClick={() => setCancelId(j.id)}>Cancel</Button>

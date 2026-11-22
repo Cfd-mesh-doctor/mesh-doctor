@@ -138,6 +138,14 @@ describe("the Jobs screen", () => {
     expect(within(running).queryByRole("button", { name: "Cancel" })).toBeNull(); // the button that asked has gone
   });
 
+  it("says a running job's time is so far, as it hasn't finished", async () => {
+    open(path);
+    await screen.findAllByRole("button", { name: "ahmed25-medium-fix" });
+    const running = rows().find((r) => r.textContent?.includes("Running"))!;
+    expect(running.textContent).toMatch(/\d s so far/);
+    for (const row of rows().filter((r) => r !== running)) expect(row.textContent).not.toMatch(/so far/);
+  });
+
   it("shows every job when the address names a filter it doesn't know", async () => {
     open(`${path}?show=nonsense`);
     expect(await screen.findAllByRole("button", { name: "ahmed25-medium-fix" })).toHaveLength(2);
