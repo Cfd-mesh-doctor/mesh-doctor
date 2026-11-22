@@ -5,7 +5,6 @@ import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
 import { PageHeader } from "@/components/shared/page";
 import { useTitle } from "@/lib/useTitle";
 import { DocSectionsView } from "@/pages/docs/DocSections";
-import { DocSource } from "@/pages/docs/DocSource";
 import { DocText } from "@/pages/docs/DocText";
 import { INTRO, SAFETY } from "./rules";
 
@@ -16,8 +15,7 @@ export function Safety() {
       <PublicHeader />
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-6">
         <PageHeader title="Safety model" description={<DocText text={INTRO} />} />
-        <DocSectionsView sections={SAFETY} />
-        <DocSource file="safety.md" />
+        <DocSectionsView sections={SAFETY} source="safety.md" />
       </main>
       <PublicFooter />
     </div>

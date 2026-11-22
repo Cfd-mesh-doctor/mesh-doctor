@@ -5,7 +5,6 @@ import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
 import { PageHeader } from "@/components/shared/page";
 import { useTitle } from "@/lib/useTitle";
 import { DocSectionsView } from "@/pages/docs/DocSections";
-import { DocSource } from "@/pages/docs/DocSource";
 import { LIMITS } from "./sections";
 
 export function Limits() {
@@ -18,8 +17,7 @@ export function Limits() {
           title="Limits"
           description="What Mesh Doctor is not, the versions it runs on, and where each part of it stops. Worth reading before you trust a result."
         />
-        <DocSectionsView sections={LIMITS} />
-        <DocSource file="limits.md" />
+        <DocSectionsView sections={LIMITS} source="limits.md" />
       </main>
       <PublicFooter />
     </div>

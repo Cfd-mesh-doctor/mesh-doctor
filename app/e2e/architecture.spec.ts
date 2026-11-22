@@ -23,3 +23,13 @@ test("architecture: from the Docs page, the doc's tables, numbered steps and cod
     .toHaveAttribute("href", "https://github.com/Cfd-mesh-doctor/mesh-doctor/blob/main/docs/architecture.md");
   expect(sent).toEqual([]);
 });
+
+test("architecture: the On this page list goes to a section and stays in view beside the doc", async ({ page }) => {
+  await page.goto("/architecture");
+  const nav = page.getByRole("navigation", { name: "On this page" });
+  await expect(nav.getByRole("link")).toHaveCount(10);
+  await nav.getByRole("link", { name: "Order of work" }).click();
+  await expect(page).toHaveURL(/\/architecture#order-of-work$/);
+  await expect(page.getByRole("heading", { level: 2, name: "Order of work" })).toBeInViewport();
+  await expect(nav).toBeInViewport();
+});

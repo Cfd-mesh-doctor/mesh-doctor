@@ -1,0 +1,41 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+import { screen, within } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import { DESIGN } from "@/pages/architecture/design";
+import { TOUR } from "@/pages/dashboard/tour";
+import { renderScreen } from "@/test/render";
+import { CONTENTS_FROM, DocSectionsView } from "./DocSections";
+
+const contents = () => screen.queryByRole("navigation", { name: "On this page" });
+
+describe("a page that shows a doc", () => {
+  it("lists a long doc's sections, each a link to its heading", () => {
+    renderScreen(<DocSectionsView sections={DESIGN} />, { path: "/architecture" });
+    const links = within(contents() as HTMLElement).getAllByRole("link");
+    expect(links.map((l) => l.textContent)).toEqual(DESIGN.map((s) => s.title));
+    expect(links.map((l) => l.getAttribute("href"))).toEqual(DESIGN.map((s) => `/architecture#${s.id}`));
+    for (const s of DESIGN) expect(document.getElementById(s.id)).toBe(screen.getByRole("region", { name: s.title }));
+  });
+
+  it("shows a heading's code as code in the list, not its backticks", () => {
+    renderScreen(<DocSectionsView sections={TOUR} />, { path: "/dashboard-tour" });
+    const first = within(contents() as HTMLElement).getAllByRole("link")[0] as HTMLElement;
+    expect(first).toHaveTextContent("Mesh Doctor: /meshdoctor");
+    expect(within(first).getByText("/meshdoctor").tagName).toBe("CODE");
+  });
+
+  it(`lists nothing for a doc of fewer than ${CONTENTS_FROM} sections`, () => {
+    renderScreen(<DocSectionsView sections={DESIGN.slice(0, CONTENTS_FROM - 1)} />, { path: "/architecture" });
+    expect(contents()).toBeNull();
+    expect(screen.getAllByRole("region")).toHaveLength(CONTENTS_FROM - 1);
+  });
+
+  it("ends with the line saying which doc it follows, under the doc's last section and not in the list", () => {
+    renderScreen(<DocSectionsView sections={DESIGN} source="architecture.md" />, { path: "/architecture" });
+    const line = screen.getByText(/^This page follows/);
+    const last = screen.getByRole("region", { name: DESIGN[DESIGN.length - 1]?.title });
+    expect(last.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(line.parentElement).toBe(last.parentElement?.parentElement);
+    expect(contents()?.contains(line)).toBe(false);
+  });
+});

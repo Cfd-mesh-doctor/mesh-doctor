@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // A doc's text, as the pages that show a whole doc lay it out (Limits, Safety model, Your own case, Claude Code,
 // Dashboard tour, Architecture): headings with GitHub's anchors, paragraphs, lists and tables with the doc's own
-// `code`, **bold** and links (DocText), code blocks, and pictures.
+// `code`, **bold** and links (DocText), code blocks, and pictures; an "On this page" list for a long doc, and the line
+// saying which doc the page follows.
+import { Link } from "react-router";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
 import { githubAnchor, type DocBlock, type DocItem, type DocPictures, type DocSection } from "@/lib/docSections";
 import type { DocTable } from "@/lib/docTable";
 import { cn } from "@/lib/utils";
+import { DocSource } from "./DocSource";
 import { DocText } from "./DocText";
 
 /** A table as the doc writes it, its first column the row's name; it scrolls sideways on its own when too wide. */
@@ -93,18 +96,58 @@ function DocBlocks({ blocks, pictures }: { blocks: DocBlock[]; pictures: DocPict
   });
 }
 
-/** The doc's sections; `pictures` holds the built files for the pictures the doc shows. */
-export function DocSectionsView({ sections, pictures = {} }: { sections: DocSection[]; pictures?: DocPictures }) {
+/** From this many sections a doc gets an "On this page" list, as How it works has (each doc page now has 5 to 10). */
+export const CONTENTS_FROM = 4;
+
+/** The doc's sections, each a link to its heading, as How it works lists its steps. */
+function DocContents({ sections }: { sections: DocSection[] }) {
   return (
-    <div className="max-w-3xl space-y-10">
-      {sections.map((s) => (
-        <section key={s.id} id={s.id} aria-labelledby={`${s.id}-title`} className="scroll-mt-20">
-          <h2 id={`${s.id}-title`} className="text-lg font-semibold tracking-tight"><DocText text={s.title} /></h2>
-          <div className="mt-3 space-y-3 text-[15px] leading-relaxed">
-            <DocBlocks blocks={s.blocks} pictures={pictures} />
-          </div>
-        </section>
-      ))}
+    <nav aria-label="On this page">
+      <p className="px-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">On this page</p>
+      <ul className="mt-2 grid gap-0.5 text-sm sm:grid-cols-2 lg:grid-cols-1">
+        {sections.map((s) => (
+          <li key={s.id}>
+            <Link to={`#${s.id}`} className="block rounded-md px-2 py-1.5 text-muted-foreground hover:bg-surface-2 hover:text-foreground">
+              <DocText text={s.title} />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+
+/** The doc's sections, then the line saying which doc they follow (`source`, its file in docs/); `pictures` holds the
+ *  built files for the pictures the doc shows. A long doc gets its "On this page" list beside it on a wide screen,
+ *  staying in view, and above it on a phone; the list isn't printed. */
+export function DocSectionsView({ sections, pictures = {}, source }: {
+  sections: DocSection[];
+  pictures?: DocPictures;
+  source?: string;
+}) {
+  const doc = (
+    <div className="max-w-3xl min-w-0">
+      <div className="space-y-10">
+        {sections.map((s) => (
+          <section key={s.id} id={s.id} aria-labelledby={`${s.id}-title`} className="scroll-mt-20">
+            <h2 id={`${s.id}-title`} className="text-lg font-semibold tracking-tight"><DocText text={s.title} /></h2>
+            <div className="mt-3 space-y-3 text-[15px] leading-relaxed">
+              <DocBlocks blocks={s.blocks} pictures={pictures} />
+            </div>
+          </section>
+        ))}
+      </div>
+      {source && <DocSource file={source} />}
+    </div>
+  );
+  if (sections.length < CONTENTS_FROM) return doc;
+  // grid-cols-1, not the default: a wide table then scrolls inside the doc's column instead of widening the page
+  return (
+    <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-12">
+      <aside className="rounded-xl border border-border bg-surface p-3 shadow-card lg:sticky lg:top-24 lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none print:hidden">
+        <DocContents sections={sections} />
+      </aside>
+      {doc}
     </div>
   );
 }
