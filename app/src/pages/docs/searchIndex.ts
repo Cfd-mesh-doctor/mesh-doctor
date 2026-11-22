@@ -2,7 +2,8 @@
 // Searching all the docs at once: an entry for each section of the pages that show a doc's sections, and for each
 // group of Troubleshooting's problems, from the texts those pages show, found by the words typed. How it works,
 // Accuracy check, Gallery and Install are written as pages of their own rather than from a doc's sections, so they
-// aren't in it yet. It is kept apart from the pages, so a search box can load it only when it is used.
+// aren't in it yet. It is kept apart from the pages, so the Docs page's search (DocSearch.tsx) loads it only when
+// it is used.
 import { plainText, type DocBlock, type DocItem, type DocSection } from "@/lib/docSections";
 import { DESIGN } from "@/pages/architecture/design";
 import { GUIDE as CLAUDE } from "@/pages/claude/guide";
@@ -11,7 +12,7 @@ import { LIMITS } from "@/pages/limits/sections";
 import { GUIDE as OWN_CASE } from "@/pages/own-case/guide";
 import { SAFETY } from "@/pages/safety/rules";
 import { GROUPS } from "@/pages/troubleshooting/problems";
-import { plain } from "@/pages/troubleshooting/search";
+import { holdsMessage, matches, plain } from "@/pages/troubleshooting/search";
 import { ON_SITE } from "./entries";
 
 /** A section to find: its page and the page's name on the Docs page, its anchor, its title as the doc writes it (so
@@ -52,27 +53,49 @@ function blockText(b: DocBlock): string {
 const sections = (page: string, list: DocSection[]): SearchEntry[] =>
   list.map((s) => ({ page, pageTitle: titleOf(page), id: s.id, title: s.title, text: tidy(s.blocks.map(blockText).join(" ")) }));
 
+/** In the Docs page's order, so a tie between two sections goes to the page listed first. */
 export const SEARCH_INDEX: SearchEntry[] = [
-  ...sections("/limits", LIMITS),
-  ...sections("/safety", SAFETY),
+  ...sections("/dashboard-tour", TOUR),
   ...sections("/your-own-case", OWN_CASE),
   ...sections("/claude-code", CLAUDE),
-  ...sections("/dashboard-tour", TOUR),
-  ...sections("/architecture", DESIGN),
   ...GROUPS.map((g) => ({
     page: "/troubleshooting",
     pageTitle: titleOf("/troubleshooting"),
     id: g.id,
     title: g.title,
-    text: tidy([g.table.head, ...g.table.rows].flat().map(plainText).join(" ")),
+    text: tidy(g.table.rows.flat().map(plainText).join(" ")),
   })),
+  ...sections("/limits", LIMITS),
+  ...sections("/safety", SAFETY),
+  ...sections("/architecture", DESIGN),
 ];
 
-/** Each entry's title, and its title and text, as searched: lower case, no quotes, straight apostrophes. */
-const FIND = SEARCH_INDEX.map((entry) => {
-  const title = plain(plainText(entry.title));
-  return { entry, title, all: `${title} ${plain(entry.text)}` };
-});
+/** The names of the pages searched, in the Docs page's order. */
+export const SEARCHED = [...new Set(SEARCH_INDEX.map((e) => e.pageTitle))];
+
+/** The words of a query, as they are looked for. */
+export const queryWords = (query: string) => plain(query).split(" ").filter(Boolean);
+
+const isWordChar = (c: string | undefined) => c !== undefined && /[\p{L}\p{N}]/u.test(c);
+
+/** Where the text holds the word at the start of one of its own words ("pair" in "pairing", not in "repair"); a word
+ *  that begins with a mark, such as "-->", anywhere. */
+function places(text: string, word: string): number[] {
+  const found: number[] = [];
+  for (let i = text.indexOf(word); i !== -1; i = text.indexOf(word, i + 1)) {
+    if (!isWordChar(word[0]) || !isWordChar(text[i - 1])) found.push(i);
+  }
+  return found;
+}
+
+/** Each entry as searched: its title and text in lower case, without quotes, with straight apostrophes; and for a
+ *  Troubleshooting group, its problems, whose messages a line pasted from a log may hold. */
+const FIND = SEARCH_INDEX.map((entry) => ({
+  entry,
+  title: plain(plainText(entry.title)),
+  text: plain(entry.text),
+  rows: entry.page === "/troubleshooting" ? (GROUPS.find((g) => g.id === entry.id)?.table.rows ?? []) : [],
+}));
 
 const BEFORE = 60; // characters of the text shown before the word
 const LENGTH = 160; // characters shown in all
@@ -84,7 +107,7 @@ function snippet(text: string, words: string[]): string {
   let at = 0;
   let size = 0;
   for (const w of words) {
-    const i = lower.indexOf(w);
+    const i = places(lower, w)[0] ?? -1;
     if (i >= 0 && (size === 0 || i < at)) [at, size] = [i, w.length];
   }
   let start = Math.max(0, at - BEFORE);
@@ -95,20 +118,36 @@ function snippet(text: string, words: string[]): string {
   let end = Math.min(text.length, start + LENGTH);
   const space = text.lastIndexOf(" ", end);
   if (end < text.length && space >= at + size) end = space;
-  return `${start > 0 ? "…" : ""}${text.slice(start, end)}${end < text.length ? "…" : ""}`;
+  const cut = end < text.length;
+  const piece = text.slice(start, end);
+  return `${start > 0 ? "…" : ""}${cut ? piece.replace(/[.,;:]+$/, "") : piece}${cut ? "…" : ""}`; // not "place).…"
 }
 
-/** The sections that hold every word of the query (case, Markdown, quotes and curly apostrophes aside): those whose
- *  title holds them all first, then those where the words appear most; at most `limit`. */
+/** The sections that hold every word of the query where one of their own words starts (case, Markdown, quotes and
+ *  curly apostrophes aside), and the Troubleshooting groups with a problem whose message the query holds (a line
+ *  pasted from a log, with more around it than the doc quotes). Those groups come first, then the sections whose
+ *  title holds all the words, then those where the words appear most; at most `limit`. */
 export function searchDocs(query: string, limit = 8): SearchHit[] {
-  const words = plain(query).split(" ").filter(Boolean);
+  const words = queryWords(query);
   if (!words.length) return [];
-  const found: { entry: SearchEntry; inTitle: boolean; count: number }[] = [];
-  for (const { entry, title, all } of FIND) {
-    if (!words.every((w) => all.includes(w))) continue;
-    const count = words.reduce((n, w) => n + all.split(w).length - 1, 0);
-    found.push({ entry, inTitle: words.every((w) => title.includes(w)), count });
+  const found: { entry: SearchEntry; pasted: boolean; inTitle: boolean; count: number }[] = [];
+  for (const { entry, title, text, rows } of FIND) {
+    const inTitle = words.map((w) => places(title, w).length);
+    const counts = words.map((w, i) => (inTitle[i] ?? 0) + places(text, w).length);
+    const pasted = rows.some((row) => holdsMessage(row, query));
+    if (!pasted && !counts.every(Boolean)) continue;
+    found.push({ entry, pasted, inTitle: inTitle.every(Boolean), count: counts.reduce((a, b) => a + b, 0) });
   }
-  found.sort((a, b) => Number(b.inTitle) - Number(a.inTitle) || b.count - a.count);
+  found.sort((a, b) =>
+    Number(b.pasted) - Number(a.pasted) || Number(b.inTitle) - Number(a.inTitle) || b.count - a.count);
   return found.slice(0, limit).map(({ entry }) => ({ ...entry, snippet: snippet(entry.text, words) }));
+}
+
+/** Where a section found opens: at its heading. A Troubleshooting group opens searched for the same words too when
+ *  one of its problems matches them there, so its page shows just those problems. */
+export function hitTarget(hit: SearchEntry, query: string): { pathname: string; search: string; hash: string } {
+  const q = query.trim();
+  const group = hit.page === "/troubleshooting" ? GROUPS.find((g) => g.id === hit.id) : undefined;
+  const search = group?.table.rows.some((row) => matches(row, q)) ? `?${new URLSearchParams({ q })}` : "";
+  return { pathname: hit.page, search, hash: `#${hit.id}` };
 }

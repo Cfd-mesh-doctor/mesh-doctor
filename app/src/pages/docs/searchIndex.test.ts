@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { DESIGN } from "@/pages/architecture/design";
 import { GROUPS } from "@/pages/troubleshooting/problems";
 import { ON_SITE } from "./entries";
-import { SEARCH_INDEX, searchDocs } from "./searchIndex";
+import { SEARCHED, SEARCH_INDEX, hitTarget, searchDocs } from "./searchIndex";
 
 const at = (page: string) => SEARCH_INDEX.filter((e) => e.page === page);
 
@@ -29,6 +29,22 @@ describe("searching the docs", () => {
     }
     expect(searchDocs("sigterm quantumflux")).toEqual([]);
     expect(searchDocs("   ")).toEqual([]);
+  });
+
+  it("finds a word where one of the doc's own words starts: “pair” finds “pairing”, not “repair”", () => {
+    const starts = /(^|[^\p{L}\p{N}])pair/iu;
+    const expected = SEARCH_INDEX.filter((e) => starts.test(`${e.title} ${e.text}`)).map((e) => `${e.page}#${e.id}`);
+    expect(expected.length).toBeGreaterThan(0);
+    expect(searchDocs("PAIR", 100).map((h) => `${h.page}#${h.id}`).sort()).toEqual(expected.sort());
+    expect(SEARCH_INDEX.some((e) => /repair/i.test(e.text) && !starts.test(`${e.title} ${e.text}`))).toBe(true);
+    expect(searchDocs("orthogonality").map((h) => h.id)).toContain("what-mesh-doctor-is-not"); // in "non-orthogonality"
+  });
+
+  it("finds the Troubleshooting group whose problem quotes a line pasted from a log, first, and opens it there", () => {
+    const line = "--> FOAM FATAL ERROR: Cannot find patchField entry for procBoundary0to1 (file: processor0/0/U)";
+    const [first] = searchDocs(line);
+    expect(first).toMatchObject({ page: "/troubleshooting", id: "openfoam-runs" });
+    expect(first && hitTarget(first, line).search).toBe(`?${new URLSearchParams({ q: line })}`);
   });
 
   it("puts the sections whose title holds the words first", () => {
@@ -57,11 +73,29 @@ describe("searching the docs", () => {
       expect(start, h.snippet).toBeGreaterThanOrEqual(0);
       expect(h.snippet.startsWith("…"), h.snippet).toBe(start > 0);
       if (start > 0) expect(h.text[start - 1], h.snippet).toBe(" ");
-      if (start + body.length < h.text.length) expect(h.text[start + body.length], h.snippet).toBe(" ");
+      if (start + body.length < h.text.length) expect(h.text[start + body.length], h.snippet).toMatch(/^[ .,;:]$/);
+      expect(h.snippet, "no stop before the …").not.toMatch(/[.,;:]…$/);
     }
   });
 
   it("returns at most the number asked for", () => {
     expect(searchDocs("the", 3)).toHaveLength(3);
+  });
+
+  it("names the pages it looks in in the Docs page's order", () => {
+    expect(SEARCHED).toEqual(ON_SITE.map((d) => d.title).filter((t) => SEARCH_INDEX.some((e) => e.pageTitle === t)));
+    expect(SEARCHED).toHaveLength(7);
+  });
+
+  it("opens a section at its heading, and a Troubleshooting group at its problems that hold all the words", () => {
+    const find = (q: string, id: string) => searchDocs(q, 100).find((h) => h.id === id);
+    const jobs = find("SIGKILL", "jobs");
+    expect(jobs && hitTarget(jobs, "SIGKILL")).toEqual({ pathname: "/architecture", search: "", hash: "#jobs" });
+    const one = find("patchField", "openfoam-runs");
+    expect(one && hitTarget(one, " patchField ")).toEqual({ pathname: "/troubleshooting", search: "?q=patchField", hash: "#openfoam-runs" });
+    // Both words are in the group, but no one problem holds both: the group opens with all its problems.
+    const apart = "patchField nNonOrthogonalCorrectors";
+    const both = find(apart, "openfoam-runs");
+    expect(both && hitTarget(both, apart)).toEqual({ pathname: "/troubleshooting", search: "", hash: "#openfoam-runs" });
   });
 });

@@ -41,3 +41,35 @@ test("the app's Documentation link opens the Docs page in a new tab, leaving the
   await expect(docs.getByRole("heading", { level: 1, name: "Docs" })).toBeVisible();
   await expect(page).toHaveURL(/\/demo\/jobs$/);
 });
+
+test("the docs search loads its texts only when used, opens the section found, and coming back keeps the search", async ({ page }) => {
+  const texts: string[] = [];
+  page.on("request", (r) => { if (/searchIndex/.test(r.url())) texts.push(r.url()); });
+  await page.goto("/docs");
+  await page.locator("h1").first().waitFor();
+  await page.waitForLoadState("networkidle");
+  expect(texts).toEqual([]);
+
+  const box = page.getByRole("searchbox", { name: "Search all the docs" });
+  await box.fill("SIGKILL");
+  await expect(page).toHaveURL(/\/docs\?q=SIGKILL$/);
+  const results = page.getByRole("region", { name: "Search results" });
+  const jobs = results.getByRole("link", { name: "Jobs" });
+  await expect(jobs).toBeVisible();
+  expect(texts).toHaveLength(1);
+  await expect(results.locator("mark").first()).toHaveText("SIGKILL");
+
+  await jobs.click();
+  await expect(page).toHaveURL(/\/architecture#jobs$/);
+  await expect(page.getByRole("heading", { level: 2, name: "Jobs" })).toBeInViewport();
+  await page.goBack();
+  await expect(box).toHaveValue("SIGKILL");
+  await expect(jobs).toBeVisible();
+
+  // A Troubleshooting group opens searched for the same words, at the problems that hold them.
+  await box.fill("patchField");
+  await results.getByRole("link", { name: "OpenFOAM runs" }).click();
+  await expect(page).toHaveURL(/\/troubleshooting\?q=patchField#openfoam-runs$/);
+  await expect(page.getByRole("searchbox")).toHaveValue("patchField");
+  await expect(page.getByText(/^1 of \d+ problems matches\.$/)).toBeVisible();
+});

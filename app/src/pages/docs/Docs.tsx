@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The Docs page: the one place for the documentation. What this site shows as its own pages, then the docs it
-// doesn't show yet, on GitHub (entries.ts, kept equal to the repository's docs/ folder by a test).
+// The Docs page: the one place for the documentation. A search of the doc pages at once (DocSearch.tsx), what this
+// site shows as its own pages, then the docs it doesn't show yet, on GitHub (entries.ts, kept equal to the
+// repository's docs/ folder by a test).
 import { ArrowUpRight } from "lucide-react";
 import { Link } from "react-router";
 import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
@@ -8,6 +9,7 @@ import { PageHeader } from "@/components/shared/page";
 import { Card } from "@/components/ui/card";
 import { DOCS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
+import { DocSearch } from "./DocSearch";
 import { ON_GITHUB, ON_SITE, githubDoc } from "./entries";
 
 const link = "font-medium text-primary underline-offset-4 hover:underline";
@@ -36,7 +38,8 @@ export function Docs() {
           title="Docs"
           description="Everything written about Mesh Doctor: each doc in the repository, as a page of this site."
         />
-        <section aria-labelledby="on-site">
+        <DocSearch />
+        <section aria-labelledby="on-site" className="mt-10">
           <h2 id="on-site" className="text-lg font-semibold tracking-tight">On this site</h2>
           <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {ON_SITE.map((d) => (

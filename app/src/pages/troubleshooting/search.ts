@@ -27,5 +27,11 @@ export function matches(row: string[], query: string): boolean {
   const q = plain(query);
   if (!q) return true;
   const text = plain(row.join(" "));
-  return q.split(" ").every((word) => text.includes(word)) || messages(row[0] ?? "").some((m) => q.includes(m));
+  return q.split(" ").every((word) => text.includes(word)) || holdsMessage(row, query);
+}
+
+/** Whether the text holds a message the problem's "You see" quotes: a whole line pasted from a log, say. */
+export function holdsMessage(row: string[], query: string): boolean {
+  const q = plain(query);
+  return messages(row[0] ?? "").some((m) => q.includes(m));
 }
