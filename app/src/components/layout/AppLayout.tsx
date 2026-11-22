@@ -26,8 +26,7 @@ function usePageTitle(): string | undefined {
   return undefined;
 }
 
-function DemoNotice() {
-  const [tour, setTour] = useState(false);
+function DemoNotice({ onTour }: { onTour: () => void }) {
   return (
     <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-info/20 bg-info-soft px-4 py-2 text-[13px] text-info">
       <span className="inline-flex items-center gap-2">
@@ -37,7 +36,7 @@ function DemoNotice() {
       {/* A minute's walk through the app in plain words: the first thing a newcomer to the demo can do. */}
       <button
         type="button"
-        onClick={() => setTour(true)}
+        onClick={onTour}
         className="inline-flex items-center gap-1 font-semibold underline-offset-4 hover:underline"
       >
         <Compass className="size-3.5" /> Take the tour
@@ -45,7 +44,6 @@ function DemoNotice() {
       <Link to="/connect" className="inline-flex items-center gap-1 font-semibold underline-offset-4 hover:underline">
         Connect your own engine <ArrowRight className="size-3.5" />
       </Link>
-      <AppTour open={tour} onClose={() => setTour(false)} />
     </div>
   );
 }
@@ -55,19 +53,24 @@ export function AppLayout() {
   const to = useAppPath();
   const title = usePageTitle();
   const [open, setOpen] = useState(false);
+  // The app tour, opened from the demo's banner or the sidebar. Only the demo has one for now: its steps end on the
+  // demo's own report.
+  const [tour, setTour] = useState(false);
+  const onTour = mode === "demo" ? () => setTour(true) : undefined;
   return (
     <div className="flex min-h-dvh">
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-border bg-sidebar lg:block print:hidden">
-        <Sidebar />
+        <Sidebar onTour={onTour} />
       </aside>
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent>
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <Sidebar onNavigate={() => setOpen(false)} />
+          <Sidebar onNavigate={() => setOpen(false)} onTour={onTour} />
         </SheetContent>
       </Sheet>
+      {onTour && <AppTour open={tour} onClose={() => setTour(false)} />}
       <div className="flex min-w-0 flex-1 flex-col">
-        {mode === "demo" && <DemoNotice />}
+        {mode === "demo" && <DemoNotice onTour={() => setTour(true)} />}
         <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur sm:px-6 print:hidden">
           <Button variant="ghost" size="icon-sm" className="lg:hidden" aria-label="Open navigation" onClick={() => setOpen(true)}>
             <MenuIcon />

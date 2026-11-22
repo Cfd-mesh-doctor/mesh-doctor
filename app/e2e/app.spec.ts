@@ -44,7 +44,7 @@ test("a newcomer's main button leads to the three steps, which say how often eac
 
 test("the demo's tour walks through the app's screens in five steps from the keyboard, then hands the focus back", async ({ page }) => {
   await page.goto("/demo/jobs");
-  const open = page.getByRole("button", { name: "Take the tour" });
+  const open = page.getByRole("complementary").getByRole("button", { name: "Take the tour" }); // in the sidebar
   await open.click();
   const tour = page.getByRole("dialog", { name: "Welcome to Mesh Doctor" });
   await expect(tour).toContainText("Step 1 of 5");
@@ -77,6 +77,9 @@ test("the demo's tour walks through the app's screens in five steps from the key
   await expect(page.getByRole("dialog")).toBeHidden();
   await expect(page.locator("[data-tour-spot]")).toHaveCount(0);
   await expect(open).toBeFocused();
+  // The demo's banner opens it too, from the start.
+  await page.getByText(/^Demo: recorded from/).locator("..").getByRole("button", { name: "Take the tour" }).click();
+  await expect(page.getByRole("dialog", { name: "Welcome to Mesh Doctor" })).toBeVisible();
 });
 
 test("the body font starts loading with the page, and is fetched once", async ({ page, request }) => {

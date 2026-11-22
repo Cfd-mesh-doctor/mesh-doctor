@@ -2,7 +2,8 @@
 // Navigation. Screens that later milestones add are listed already, marked "Soon", so the shape of the
 // whole app is visible from day one.
 import {
-  BookOpen, Calculator, ChartLine, FlaskConical, FolderOpen, Image, LayoutDashboard, ListChecks, Play, Settings, Toolbox, Wrench,
+  BookOpen, Calculator, ChartLine, Compass, FlaskConical, FolderOpen, Image, LayoutDashboard, ListChecks, Play, Settings, Toolbox,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { Link, NavLink } from "react-router";
@@ -80,7 +81,8 @@ function NavItem({ item, onNavigate, active }: { item: Item; onNavigate?: () => 
   );
 }
 
-export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+/** `onTour` opens the app tour: the sidebar offers it when the app has one to give. */
+export function Sidebar({ onNavigate, onTour }: { onNavigate?: () => void; onTour?: () => void }) {
   const to = useAppPath();
   const { mode } = useEngine();
   const jobs = useJobs();
@@ -118,6 +120,21 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           <BookOpen className="size-4 shrink-0" />
           Documentation
         </a>
+        {onTour && (
+          // Always at hand, as the banner's link is gone once the page scrolls. From the phone's menu, the menu
+          // closes as the tour opens.
+          <button
+            type="button"
+            onClick={() => {
+              onNavigate?.();
+              onTour();
+            }}
+            className="flex h-9 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
+          >
+            <Compass className="size-4 shrink-0" />
+            Take the tour
+          </button>
+        )}
         <div className="mt-2 flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground">
           <Dot tone={conn.tone} />
           <span className="truncate" title={conn.detail}>{conn.label}</span>

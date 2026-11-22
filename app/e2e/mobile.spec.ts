@@ -134,6 +134,14 @@ test("on a phone the doc headings' copy-link buttons always show, as a touch scr
   await expect.poll(() => button.evaluate((b) => getComputedStyle(b).opacity)).toBe("1");
 });
 
+test("on a phone the menu's Take the tour closes the menu and opens the tour", async ({ page }) => {
+  await page.goto("/demo/cases");
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  await page.getByRole("dialog", { name: "Navigation" }).getByRole("button", { name: "Take the tour" }).click();
+  await expect(page.getByRole("dialog", { name: "Welcome to Mesh Doctor" })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(1); // the menu has gone
+});
+
 test("on a phone the tour brings the part it means into view, clear of the top bar and above the tour", async ({ page }) => {
   await page.goto("/demo");
   await page.getByRole("button", { name: "Take the tour" }).click();
