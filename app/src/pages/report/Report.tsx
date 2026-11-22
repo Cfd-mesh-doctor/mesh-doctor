@@ -473,10 +473,11 @@ function MapCard({ map }: { map: MapSummary }) {
           <CardTitle>Where the mesh was repaired</CardTitle>
           <CardDescription>
             Every wall face of the model, seen from the {view.name === "side" ? "side" : "top"} ({viewHeading(view)});
-            darker grey is a finer mesh. Point at a mark for details.
+            darker grey is a finer mesh.<span className="print:hidden"> Point at a mark for details.</span>
           </CardDescription>
         </div>
-        <div className="flex max-w-full flex-wrap gap-2">
+        {/* The switches do nothing on paper: printed, the caption names the view and the key names the heat layer. */}
+        <div className="flex max-w-full flex-wrap gap-2 print:hidden">
           {map.views.length > 1 && (
             <Segmented label="View" value={view.name} onChange={setViewName}
               options={map.views.map((v) => ({ value: v.name, label: v.name === "side" ? "Side" : "Top" }))} />
@@ -502,6 +503,7 @@ function MapCard({ map }: { map: MapSummary }) {
               </span>
             }>
               cells whose residual swung most (weak to strong)
+              <span className="hidden print:inline">, heat layer {layer.label}</span>
             </MapKey>
           )}
         </div>

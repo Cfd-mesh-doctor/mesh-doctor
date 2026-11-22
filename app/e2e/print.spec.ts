@@ -88,3 +88,16 @@ test("on paper the repair map shrinks to fit the page, keeping its proportions",
   expect(printed.width).toBeLessThanOrEqual(500);
   expect(printed.shape).toBeCloseTo(printed.drawn, 1);
 });
+
+test("on paper the repair map's card leaves out its view switch and pointer hint", async ({ page }) => {
+  await page.goto("/report?sample=ahmed35-medium-fix");
+  const views = page.getByRole("radiogroup", { name: "View" });
+  const hint = page.getByText("Point at a mark for details.", { exact: true });
+  await expect(views).toBeVisible();
+  await expect(hint).toBeVisible();
+
+  await page.emulateMedia({ media: "print" });
+  await expect(views).toBeHidden();
+  await expect(hint).toBeHidden();
+  await expect(page.getByText(/Every wall face of the model, seen from the side/).first()).toBeVisible();
+});

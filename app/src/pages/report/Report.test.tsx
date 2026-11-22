@@ -53,6 +53,11 @@ describe("Report viewer", () => {
     expect(screen.getByText("found and repaired (4)")).toBeInTheDocument();
     expect(screen.getByText("left after the repair (1)")).toBeInTheDocument();
     expect(screen.getByText("Made-up map for the tests.")).toBeInTheDocument();
+    // Printed, the switches and the pointer hint are left out, and the key names the heat layer (no CSS here: the
+    // classes are what can be checked; e2e/print.spec.ts prints the card in a real browser).
+    expect(screen.getByRole("radiogroup", { name: "View" }).parentElement).toHaveClass("print:hidden");
+    expect(screen.getByText("Point at a mark for details.")).toHaveClass("print:hidden");
+    expect(screen.getByText(", heat layer Residual swing, last 50 iterations")).toHaveClass("hidden", "print:inline");
     await userEvent.click(screen.getByRole("radio", { name: "Top" }));
     expect(screen.getByRole("img", { name: /^Top view of the model's wall faces \(x along the flow, y across\)/ })).toBeInTheDocument();
     await userEvent.click(within(screen.getByRole("radiogroup", { name: "Heat layer" })).getByRole("radio", { name: "None" }));
