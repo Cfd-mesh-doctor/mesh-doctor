@@ -129,7 +129,7 @@ export function Overview() {
                       )}
                     </TD>
                     <TD className="hidden text-right text-[13px] whitespace-nowrap text-muted-foreground sm:table-cell">
-                      {formatRelative(j.started ?? j.created)}
+                      {j.started ? formatRelative(j.started) : "–"}
                     </TD>
                   </TR>
                 ))}

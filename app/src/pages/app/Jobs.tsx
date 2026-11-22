@@ -272,8 +272,9 @@ export function Jobs() {
                   </TD>
                   <TD><JobStateBadge state={j.state} /></TD>
                   <TD className="hidden sm:table-cell"><ProgressCell job={j} /></TD>
-                  <TD className="hidden text-[13px] whitespace-nowrap text-muted-foreground lg:table-cell" title={formatDateTime(j.started ?? j.created)}>
-                    {formatRelative(j.started ?? j.created)}
+                  <TD className="hidden text-[13px] whitespace-nowrap text-muted-foreground lg:table-cell" title={j.started ? formatDateTime(j.started) : undefined}>
+                    {/* A queued job hasn't started: its creation time isn't its start. */}
+                    {j.started ? formatRelative(j.started) : "–"}
                   </TD>
                   <TD className="hidden text-[13px] whitespace-nowrap tabular-nums sm:table-cell">{duration(j)}</TD>
                   <TD className="text-right" onClick={(e) => e.stopPropagation()}>

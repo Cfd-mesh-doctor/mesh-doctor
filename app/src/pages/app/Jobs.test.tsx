@@ -59,6 +59,18 @@ describe("the Jobs screen", () => {
     expect(await screen.findByRole("heading", { name: "No job is running or waiting" })).toBeInTheDocument();
   });
 
+  it("shows no start time for a queued job, which hasn't started", async () => {
+    const answers = structuredClone(DEMO_ANSWERS);
+    for (const job of (answers["/jobs"] as JobList).items) {
+      if (job.state === "running") Object.assign(job, { state: "queued", started: null, progress: null });
+    }
+    renderScreen(<Jobs />, { path, transport: demoTransport(answers, 0) });
+    await screen.findAllByRole("button", { name: "ahmed25-medium-fix" });
+    const queued = rows().find((r) => r.textContent?.includes("Queued"))!;
+    expect(queued).toBeDefined();
+    expect(within(queued).queryByText(/ago$|just now/)).toBeNull();
+  });
+
   it("shows every job when the address names a filter it doesn't know", async () => {
     open(`${path}?show=nonsense`);
     expect(await screen.findAllByRole("button", { name: "ahmed25-medium-fix" })).toHaveLength(2);
