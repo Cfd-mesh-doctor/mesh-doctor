@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // A repair's report straight from the engine (GET /repairs/{name}/report), shown as the report viewer shows a file.
-// Checked like an opened file first, so a wrong answer reads as an error, not as a broken page.
+// Checked like an opened file first, so a wrong answer reads as an error, not as a broken page. Save report keeps
+// it as the file `meshdoctor report` makes, to share: it opens in the report viewer without the app or the engine.
 import { skipToken, useQuery } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
 import { useMemo } from "react";
 import { Link, useParams } from "react-router";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
@@ -16,6 +17,7 @@ import { useTitle } from "@/lib/useTitle";
 import { ReportView } from "@/pages/report/Report";
 import { checkReport } from "@/report/read";
 import { RECORDED } from "@/report/samples";
+import { saveReport } from "@/report/save";
 import { summarize } from "@/report/summary";
 
 const link = "font-medium text-primary underline-offset-4 hover:underline";
@@ -37,7 +39,16 @@ export function RepairReport() {
     </Button>
   );
 
-  if (summary) return <ReportView summary={summary} from={mode === "demo" ? "the recorded demo" : "your engine"} action={back} />;
+  if (summary && report.data) {
+    const doc = report.data;
+    const actions = (
+      <div className="flex flex-wrap gap-2">
+        {back}
+        <Button onClick={() => saveReport(doc)}><Download />Save report</Button>
+      </div>
+    );
+    return <ReportView summary={summary} from={mode === "demo" ? "the recorded demo" : "your engine"} action={actions} />;
+  }
   return (
     <>
       <PageHeader title={name} description="Mesh Doctor report" actions={back} />

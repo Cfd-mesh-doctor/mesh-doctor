@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { demoTransport } from "@/demo/transport";
+import { checkReport } from "@/report/read";
+import { catchDownloads } from "@/test/downloads";
 import { renderScreen } from "@/test/render";
 import { Overview } from "./Overview";
 import { RepairReport } from "./RepairReport";
@@ -17,6 +20,19 @@ describe("a repair's report", () => {
     expect(await screen.findByRole("img", { name: /Initial residual of p per iteration/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute("href", "/demo");
     expect(document.title).toBe("Report of ahmed25-medium-fix · Mesh Doctor");
+  });
+
+  it("saves the report as the file meshdoctor report makes", async () => {
+    const downloads = catchDownloads();
+    try {
+      renderScreen(<RepairReport />, { path, at: "/demo/repairs/pitzdaily-fix/report", transport: demoTransport(undefined, 0) });
+      await userEvent.click(await screen.findByRole("button", { name: "Save report" }));
+      expect(downloads.saved.map((f) => f.name)).toEqual(["pitzdaily-fix.mdreport.json"]);
+      const doc = checkReport(JSON.parse(await downloads.saved[0]!.text()));
+      expect(doc.name).toBe("pitzdaily-fix");
+    } finally {
+      downloads.restore();
+    }
   });
 
   it("opens the recorded report of each finished repair in the demo", async () => {
