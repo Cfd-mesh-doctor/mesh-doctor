@@ -1,0 +1,467 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// The report viewer: open a report file (meshdoctor report <name>) and read what the repair changed and
+// whether it helped the solver. The file is read in this tab and never uploaded: the site's security
+// policy only lets the page talk to itself and to an engine on this computer.
+import {
+  Activity, Boxes, Check, FileJson, FileUp, FolderOpen, Move, ShieldCheck, TrendingDown, TrendingUp, TriangleAlert,
+} from "lucide-react";
+import { Component, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
+import { CopyCommand } from "@/components/shared/CopyCommand";
+import { PageHeader, StatTile } from "@/components/shared/page";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
+import { formatDateTime, formatInt, formatNumber } from "@/lib/format";
+import { useTitle } from "@/lib/useTitle";
+import { cn } from "@/lib/utils";
+import { ReportError, fileBytes, readReport } from "@/report/read";
+import { judgeTone, measureLabel, ratioChange, summarize, type Change, type ReportSummary } from "@/report/summary";
+
+type State =
+  | { kind: "empty" }
+  | { kind: "reading"; file: string }
+  | { kind: "error"; message: string }
+  | { kind: "open"; summary: ReportSummary; from: string };
+
+const ACCEPT = ".json,.gz,.html,.htm,application/json,application/gzip,text/html";
+
+const changeText = (c: Change) => (c === "better" ? "text-success font-medium" : c === "worse" ? "text-danger font-medium" : "");
+
+export function Report() {
+  const [state, setState] = useState<State>({ kind: "empty" });
+  const [over, setOver] = useState(false);
+  const latest = useRef(0);
+  useTitle(state.kind === "open" ? `Report ${state.summary.name}` : "Report viewer");
+
+  const open = useCallback(async (file: File) => {
+    const n = ++latest.current; // a second file picked while the first is read wins
+    setState({ kind: "reading", file: file.name });
+    let next: State;
+    try {
+      const { report, from } = await readReport(await fileBytes(file), file.name);
+      next = { kind: "open", summary: summarize(report), from };
+    } catch (e) {
+      if (!(e instanceof ReportError)) console.error("Mesh Doctor report viewer:", e);
+      next = {
+        kind: "error",
+        message: e instanceof ReportError ? e.message : "This file couldn't be opened. Is it a Mesh Doctor report?",
+      };
+    }
+    if (n !== latest.current) return;
+    setState(next);
+    if (window.scrollY > 0) window.scrollTo({ top: 0 });
+  }, []);
+
+  // A file dropped anywhere on the page opens, also over an open report.
+  useEffect(() => {
+    const hasFiles = (e: DragEvent) => Boolean(e.dataTransfer?.types.includes("Files"));
+    const onOver = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      setOver(true);
+    };
+    const onLeave = (e: DragEvent) => {
+      if (e.relatedTarget === null) setOver(false);
+    };
+    const onDrop = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      setOver(false);
+      const file = e.dataTransfer?.files[0];
+      if (file) void open(file);
+    };
+    document.addEventListener("dragenter", onOver);
+    document.addEventListener("dragover", onOver);
+    document.addEventListener("dragleave", onLeave);
+    document.addEventListener("drop", onDrop);
+    return () => {
+      document.removeEventListener("dragenter", onOver);
+      document.removeEventListener("dragover", onOver);
+      document.removeEventListener("dragleave", onLeave);
+      document.removeEventListener("drop", onDrop);
+    };
+  }, [open]);
+
+  return (
+    <div className="flex min-h-dvh flex-col">
+      <PublicHeader />
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-6">
+        {state.kind === "open" ? (
+          <ReportView summary={state.summary} from={state.from} onClose={() => setState({ kind: "empty" })} />
+        ) : (
+          <>
+            <PageHeader
+              title="Report viewer"
+              description="Open a Mesh Doctor report to see what a repair changed in the mesh, and whether it helped the solver."
+            />
+            <Card className={cn("border-2 border-dashed px-6 py-12 text-center transition-colors", over && "border-primary bg-primary-soft/40")}>
+              <div className="mx-auto grid size-12 place-items-center rounded-xl bg-primary-soft text-primary">
+                <FileUp className="size-6" aria-hidden />
+              </div>
+              <h2 className="mt-4 text-base font-semibold">Open a report</h2>
+              <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+                A <code>.mdreport.json</code>, <code>.json.gz</code> or exported <code>.html</code> file from{" "}
+                <code>meshdoctor report</code>. Drop it anywhere on this page, or pick it:
+              </p>
+              <div className="mt-5">
+                <Button asChild>
+                  <label className="cursor-pointer focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring">
+                    <FolderOpen /> Choose a report file
+                    <input
+                      type="file"
+                      accept={ACCEPT}
+                      className="sr-only"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = ""; // so the same file can be picked again
+                        if (file) void open(file);
+                      }}
+                    />
+                  </label>
+                </Button>
+              </div>
+              {state.kind === "reading" && (
+                <p className="mt-4 text-sm text-muted-foreground" role="status">Reading {state.file}…</p>
+              )}
+              {state.kind === "error" && (
+                <div role="alert" className="mx-auto mt-5 max-w-lg rounded-lg border border-danger/25 bg-danger-soft/60 p-3 text-left text-sm">
+                  {state.message}
+                </div>
+              )}
+            </Card>
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              <Card className="p-5">
+                <ShieldCheck className="size-5 text-primary" aria-hidden />
+                <h3 className="mt-3 text-sm font-semibold">Stays in this browser</h3>
+                <p className="mt-1 text-[13.5px] text-muted-foreground">
+                  The file is read right here and never uploaded. This site's security policy only lets the page talk to
+                  itself and to an engine on your own computer.
+                </p>
+              </Card>
+              <Card className="p-5">
+                <FileJson className="size-5 text-primary" aria-hidden />
+                <h3 className="mt-3 text-sm font-semibold">Make one</h3>
+                <p className="mt-1 text-[13.5px] text-muted-foreground">On the PC that ran the repair:</p>
+                <CopyCommand command="meshdoctor report <name>" className="mt-2" />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Add <code>--gzip</code> for a smaller file, or <code>--html</code> for one page to email.
+                </p>
+              </Card>
+              <Card className="p-5">
+                <TriangleAlert className="size-5 text-warning" aria-hidden />
+                <h3 className="mt-3 text-sm font-semibold">Share it like the case</h3>
+                <p className="mt-1 text-[13.5px] text-muted-foreground">
+                  Folder paths are replaced when the report is made, but it still holds the case's coordinates, patch
+                  and force-group names and its numbers.
+                </p>
+              </Card>
+            </div>
+          </>
+        )}
+      </main>
+      <PublicFooter />
+    </div>
+  );
+}
+
+/** One card of the report. A damaged part of the file costs that card, not the page. */
+class Section extends Component<{ title: string; children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <Card className="p-5 text-sm">
+        <p className="font-semibold">{this.props.title}</p>
+        <p className="mt-1 text-danger">This part of the report couldn't be shown: {this.state.error.message}</p>
+      </Card>
+    );
+  }
+}
+
+function ReportView({ summary: s, from, onClose }: { summary: ReportSummary; from: string; onClose: () => void }) {
+  const sub = [
+    s.caseName && `mesh ${s.caseName}`,
+    s.cells != null && `${formatInt(s.cells)} cells`,
+    s.profile && `${s.profile} profile`,
+    s.finished && `repaired ${formatDateTime(s.finished)}`,
+    `from ${from}`,
+  ].filter((x): x is string => typeof x === "string");
+  const ratio = s.ab?.meanRatio ?? null;
+  const r = ratioChange(ratio);
+  return (
+    <>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-[13px] font-medium text-primary">Mesh Doctor report</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight break-words">{s.name}</h1>
+          <p className="mt-1 text-sm break-words text-muted-foreground">{sub.join(" · ")}</p>
+        </div>
+        <Button variant="secondary" onClick={onClose}><FolderOpen /> Open another report</Button>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <StatTile label="checkMesh numbers improved" value={s.improved.length} hint={`${s.unchanged.length} unchanged`}
+          icon={TrendingUp} tone={s.improved.length ? "success" : undefined} />
+        <StatTile label="Numbers made worse" value={s.regressions.length}
+          hint={s.regressions.length ? s.regressions.map(measureLabel).join(", ") : "none"}
+          icon={TrendingDown} tone={s.regressions.length ? "danger" : "success"} />
+        <StatTile label="Problem clusters" value={`${formatInt(s.clustersBefore)} → ${formatInt(s.clustersAfter)}`}
+          hint="before → after the repair" icon={Boxes} tone={s.clustersAfter < s.clustersBefore ? "success" : undefined} />
+        <StatTile label="Largest point move" value={s.maxMoveMm == null ? "–" : `${formatNumber(s.maxMoveMm, 3)} mm`}
+          hint="inside the mesh; the CAD is untouched" icon={Move} />
+        {s.ab && (
+          <StatTile label="Residuals, repaired ÷ original" value={ratio == null ? "–" : `${ratio.toFixed(2)}×`}
+            hint="mean over the fields; below 1× is better" icon={Activity}
+            tone={r === "better" ? "success" : r === "worse" ? "danger" : undefined} />
+        )}
+        <StatTile label="Source case"
+          value={s.sourceUnchanged === true ? "Unchanged" : s.sourceUnchanged === false ? "Changed" : "–"}
+          hint="checked by its fingerprint" icon={ShieldCheck}
+          tone={s.sourceUnchanged === true ? "success" : s.sourceUnchanged === false ? "danger" : undefined} />
+      </div>
+
+      <Section title="Verdict">
+        <Card className="mt-4">
+          <CardHeader><CardTitle>Verdict</CardTitle></CardHeader>
+          <CardContent>
+            <p className="text-[15px] leading-relaxed">{s.sentence}</p>
+            {s.improved.length + s.regressions.length + s.unchanged.length > 0 && (
+              <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="checkMesh numbers">
+                {s.improved.map((k) => (
+                  <li key={`i-${k}`}><Badge tone="success"><Check aria-hidden /><span className="sr-only">Better:</span>{measureLabel(k)}</Badge></li>
+                ))}
+                {s.regressions.map((k) => (
+                  <li key={`r-${k}`}><Badge tone="danger"><TriangleAlert aria-hidden /><span className="sr-only">Worse:</span>{measureLabel(k)}</Badge></li>
+                ))}
+                {s.unchanged.map((k) => (
+                  <li key={`u-${k}`}><Badge><span className="sr-only">Unchanged:</span>{measureLabel(k)}</Badge></li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      </Section>
+
+      <div className="mt-4 grid items-start gap-4 lg:grid-cols-2">
+        <Section title="checkMesh, before and after the repair">
+          <CheckMeshCard rows={s.checkMesh} />
+        </Section>
+        {s.ab && (
+          <Section title="Did it help the solver?">
+            <AbCard ab={s.ab} />
+          </Section>
+        )}
+      </div>
+
+      {s.judge && (
+        <Section title="Is the repaired-mesh run converged?">
+          <JudgeCard judge={s.judge} />
+        </Section>
+      )}
+
+      <Section title="About this file">
+        <AboutCard about={s.about} />
+      </Section>
+    </>
+  );
+}
+
+function CheckMeshCard({ rows }: { rows: ReportSummary["checkMesh"] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>checkMesh, before and after the repair</CardTitle>
+          <CardDescription>Green is better after the repair, red is worse. Counts and maxima should go down, minima up.</CardDescription>
+        </div>
+      </CardHeader>
+      {rows.length === 0 ? (
+        <p className="px-5 pb-5 text-sm text-muted-foreground">This repair result has no checkMesh numbers.</p>
+      ) : (
+        <Table>
+          <THead>
+            <TR className="hover:bg-transparent">
+              <TH>Measure</TH>
+              <TH className="text-right">Before</TH>
+              <TH className="text-right">After</TH>
+            </TR>
+          </THead>
+          <TBody>
+            {rows.map((row) => (
+              <TR key={row.key}>
+                <TD>{row.label}</TD>
+                <TD className="text-right tabular-nums">{formatNumber(row.before)}</TD>
+                <TD className={cn("text-right tabular-nums", changeText(row.change))}>
+                  {formatNumber(row.after)}
+                  {row.change && <span className="sr-only"> ({row.change})</span>}
+                </TD>
+              </TR>
+            ))}
+          </TBody>
+        </Table>
+      )}
+    </Card>
+  );
+}
+
+function RatioBar({ ratio }: { ratio: number }) {
+  const w = Math.min(50, Math.abs(ratio - 1) * 100);
+  const c = ratioChange(ratio);
+  return (
+    <span className="relative ml-2 inline-block h-2 w-20 rounded-full bg-surface-2 align-middle ring-1 ring-border ring-inset sm:w-24" aria-hidden>
+      <span
+        className={cn("absolute inset-y-0 rounded-full", c === "better" ? "bg-success" : c === "worse" ? "bg-danger" : "bg-muted-foreground")}
+        style={{ left: `${ratio < 1 ? 50 - w : 50}%`, width: `${w}%` }}
+      />
+      <span className="absolute -inset-y-0.5 left-1/2 w-px bg-muted-foreground" />
+    </span>
+  );
+}
+
+function AbCard({ ab }: { ab: NonNullable<ReportSummary["ab"]> }) {
+  const spi = ab.secondsPerIteration;
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>Did it help the solver?</CardTitle>
+          <CardDescription>
+            {[...ab.meta, ab.finished && `finished ${formatDateTime(ab.finished)}`].filter(Boolean).join(" · ")}
+          </CardDescription>
+        </div>
+      </CardHeader>
+      {ab.rows.length === 0 ? (
+        <p className="px-5 pb-5 text-sm text-muted-foreground">The A/B test has no residuals to compare yet.</p>
+      ) : (
+        <Table>
+          <THead>
+            <TR className="hover:bg-transparent">
+              <TH>Field</TH>
+              <TH className="text-right">Original</TH>
+              <TH className="text-right">Repaired</TH>
+              <TH className="text-right">Repaired ÷ original</TH>
+            </TR>
+          </THead>
+          <TBody>
+            {ab.rows.map((row) => (
+              <TR key={row.field}>
+                <TD className="font-mono text-[13px]">{row.field}</TD>
+                <TD className="text-right tabular-nums">{formatNumber(row.original, 3)}</TD>
+                <TD className="text-right tabular-nums">{formatNumber(row.repaired, 3)}</TD>
+                <TD className={cn("text-right whitespace-nowrap tabular-nums", changeText(row.change))}>
+                  {row.ratio.toFixed(2)}×<RatioBar ratio={row.ratio} />
+                </TD>
+              </TR>
+            ))}
+          </TBody>
+        </Table>
+      )}
+      <p className="border-t border-border px-5 py-3 text-xs text-muted-foreground">
+        Mean initial residual over {ab.window ? `the last ${formatInt(ab.window)} iterations` : "the end of each run"}, with
+        the same case, settings and start on both meshes. Below 1× the repaired mesh converges further.
+        {spi && ` Time per iteration: ${spi.original.toFixed(2)} s original, ${spi.repaired.toFixed(2)} s repaired.`}
+      </p>
+    </Card>
+  );
+}
+
+function JudgeCard({ judge }: { judge: NonNullable<ReportSummary["judge"]> }) {
+  const over = judge.window == null ? null : `${formatInt(judge.window)} ${judge.transient ? "time steps" : "iterations"}`;
+  return (
+    <Card className="mt-4">
+      <CardHeader className="flex-wrap">
+        <div>
+          <CardTitle>Is the repaired-mesh run converged?</CardTitle>
+          <CardDescription>
+            {[over && `Judged over the last ${over}`, judge.flow && `flow along ${judge.flow}`, judge.up && `${judge.up} up`]
+              .filter(Boolean).join(", ")}
+          </CardDescription>
+        </div>
+        <Badge tone={judgeTone(judge.verdict)} className="whitespace-normal">{judge.verdict}</Badge>
+      </CardHeader>
+      {judge.averages.length > 0 && (
+        <Table>
+          <THead>
+            <TR className="hover:bg-transparent">
+              <TH>Average ({judge.group})</TH>
+              <TH className="text-right">Mean</TH>
+              <TH className="text-right">Uncertainty</TH>
+            </TR>
+          </THead>
+          <TBody>
+            {judge.averages.map((a) => (
+              <TR key={a.name}>
+                <TD className="font-mono text-[13px]">{a.name}</TD>
+                <TD className="text-right tabular-nums">{formatNumber(a.mean)}</TD>
+                <TD className="text-right tabular-nums">{a.u == null ? "–" : `± ${formatNumber(a.u, 2)}`}</TD>
+              </TR>
+            ))}
+          </TBody>
+        </Table>
+      )}
+      {judge.flags.length > 0 && (
+        <ul className="list-disc space-y-1 border-t border-border py-3 pr-5 pl-9 text-[13px] text-muted-foreground">
+          {judge.flags.map((f, i) => <li key={i}>{f}</li>)}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+function AboutCard({ about }: { about: ReportSummary["about"] }) {
+  const made = [
+    about.created && `Made ${formatDateTime(about.created)}`,
+    about.meshdoctor && `by Mesh Doctor ${about.meshdoctor}`,
+    about.openfoam && `with OpenFOAM ${about.openfoam}`,
+  ].filter(Boolean).join(" ");
+  const problems = about.documents.filter((d) => d.problem);
+  return (
+    <Card className="mt-4">
+      <CardHeader>
+        <div>
+          <CardTitle>About this file</CardTitle>
+          <CardDescription>
+            {made && `${made}. `}
+            {about.pathsReplaced != null && `${formatInt(about.pathsReplaced)} folder paths on the worker were replaced before it was written. `}
+            It still holds the case's coordinates, patch and force-group names and numbers: share it like the case itself.
+          </CardDescription>
+        </div>
+      </CardHeader>
+      {about.documents.length > 0 && (
+        <Table>
+          <THead>
+            <TR className="hover:bg-transparent">
+              <TH>Document</TH>
+              <TH>Version</TH>
+              <TH className="text-right">Size</TH>
+              <TH>sha256</TH>
+            </TR>
+          </THead>
+          <TBody>
+            {about.documents.map((d) => (
+              <TR key={d.key}>
+                <TD>{d.label}</TD>
+                <TD className="tabular-nums">{d.version}</TD>
+                <TD className="text-right tabular-nums">{d.bytes == null ? "–" : `${formatInt(d.bytes / 1000)} kB`}</TD>
+                <TD className="font-mono text-xs" title={d.sha256}>{d.sha256.slice(0, 12) || "–"}</TD>
+              </TR>
+            ))}
+          </TBody>
+        </Table>
+      )}
+      {problems.map((d) => (
+        <p key={d.key} className="flex gap-2 border-t border-border px-5 py-3 text-[13px] text-warning">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>The {d.label.toLowerCase()} doesn't match its schema: {d.problem}</span>
+        </p>
+      ))}
+    </Card>
+  );
+}

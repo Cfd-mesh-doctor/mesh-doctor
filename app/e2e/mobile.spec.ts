@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { expect, test } from "@playwright/test";
+import { testReport } from "../src/report/testReport";
 
 test("on a phone nothing scrolls sideways, and the menu works", async ({ page }) => {
   // The device's own width (412 px), then a small phone: the Jobs filter once fit the first and not the second.
   for (const width of [page.viewportSize()?.width ?? 412, 360]) {
     await page.setViewportSize({ width, height: 800 });
-    for (const path of ["/", "/connect", "/demo", "/demo/jobs", "/demo/cases", "/demo/settings"]) {
+    for (const path of ["/", "/connect", "/report", "/demo", "/demo/jobs", "/demo/cases", "/demo/settings"]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
@@ -17,6 +18,17 @@ test("on a phone nothing scrolls sideways, and the menu works", async ({ page })
   await page.getByRole("dialog").getByRole("link", { name: "Jobs" }).click();
   await expect(page).toHaveURL(/\/demo\/jobs$/);
   await expect(page.getByRole("dialog")).toBeHidden();
+});
+
+test("on a small phone an open report fits the screen", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto("/report");
+  await page.getByLabel("Choose a report file").setInputFiles({
+    name: "ahmed25-fine-fix.mdreport.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(testReport())),
+  });
+  await expect(page.getByRole("heading", { name: "ahmed25-fine-fix" })).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow, "the open report is wider than a 360 px screen").toBeLessThanOrEqual(1);
 });
 
 test("on a small phone, jobs show progress under the name and every filter can be reached", async ({ page }) => {

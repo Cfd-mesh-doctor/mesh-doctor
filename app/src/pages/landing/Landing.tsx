@@ -6,12 +6,11 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
-import { Logo } from "@/components/brand/Logo";
-import { ThemeMenu } from "@/components/layout/ThemeMenu";
+import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { Button } from "@/components/ui/button";
 import { usePairing } from "@/engine/context";
-import { DOCS, REPO_URL } from "@/lib/site";
+import { DOCS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
 import { HeroPreview } from "./HeroPreview";
 
@@ -84,26 +83,7 @@ export function Landing() {
   const appLink = pairing ? "/app" : "/connect";
   return (
     <div className="min-h-dvh">
-      <header className="sticky top-0 z-30 border-b border-border/70 bg-background/80 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-4 sm:px-6">
-          <Link to="/" className="rounded-md"><Logo /></Link>
-          <nav className="hidden items-center gap-5 text-sm text-muted-foreground md:flex" aria-label="Sections">
-            <a href="#how" className="hover:text-foreground">How it works</a>
-            <a href="#privacy" className="hover:text-foreground">Privacy</a>
-            <a href="#start" className="hover:text-foreground">Get started</a>
-            <a href={DOCS.readme} target="_blank" rel="noreferrer" className="hover:text-foreground">Docs</a>
-          </nav>
-          <div className="ml-auto flex items-center gap-1.5">
-            <ThemeMenu />
-            <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
-              <Link to="/demo">Demo</Link>
-            </Button>
-            <Button size="sm" asChild>
-              <Link to={appLink}>Open the app</Link>
-            </Button>
-          </div>
-        </div>
-      </header>
+      <PublicHeader />
 
       <main>
         <section className="relative overflow-hidden border-b border-border">
@@ -228,6 +208,9 @@ export function Landing() {
             On Windows, run <code>tools\setup_windows.ps1</code> instead of step 1. Full instructions, Docker and cluster
             set-ups are in the{" "}
             <a href={DOCS.quickstart} target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">quickstart</a>.
+            Got a report file from someone? Open it in the{" "}
+            <Link to="/report" className="font-medium text-primary hover:underline">report viewer</Link>: it needs no
+            install, and the file stays in your browser.
           </p>
         </Section>
 
@@ -246,26 +229,7 @@ export function Landing() {
         </section>
       </main>
 
-      <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 text-[13px] text-muted-foreground sm:px-6 md:flex-row md:items-start md:justify-between">
-          <div className="max-w-md space-y-3">
-            <Logo />
-            <p>
-              Free software under the GPL-3.0-or-later licence. This offering is not approved or endorsed by OpenCFD
-              Limited, producer and distributor of the OpenFOAM software and owner of the OPENFOAM® and OpenCFD® trade
-              marks.
-            </p>
-          </div>
-          <nav className="grid grid-cols-2 gap-x-10 gap-y-2" aria-label="Footer">
-            <a href={REPO_URL} target="_blank" rel="noreferrer" className="hover:text-foreground">Source code</a>
-            <a href={DOCS.howItWorks} target="_blank" rel="noreferrer" className="hover:text-foreground">How it works</a>
-            <a href={DOCS.safety} target="_blank" rel="noreferrer" className="hover:text-foreground">Safety model</a>
-            <a href={DOCS.limits} target="_blank" rel="noreferrer" className="hover:text-foreground">Limits</a>
-            <a href={DOCS.example} target="_blank" rel="noreferrer" className="hover:text-foreground">Worked example</a>
-            <a href={DOCS.license} target="_blank" rel="noreferrer" className="hover:text-foreground">Licence</a>
-          </nav>
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   );
 }

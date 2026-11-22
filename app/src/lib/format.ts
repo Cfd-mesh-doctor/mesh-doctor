@@ -14,6 +14,19 @@ export function formatInt(n: number | null | undefined): string {
   return n == null || !Number.isFinite(n) ? "–" : nf.format(Math.round(n));
 }
 
+const nfAll = new Intl.NumberFormat("en-US", { maximumFractionDigits: 20 });
+
+/** A measured value: 4 significant digits (0.00312, 71.34), whole numbers in full (1,234,567), and an
+ *  exponent when very small or big (2.150e-7). The same rules as the engine's own pages. */
+export function formatNumber(x: number | null | undefined, digits = 4): string {
+  if (x == null || !Number.isFinite(x)) return "–";
+  if (Number.isInteger(x)) return nf.format(x);
+  const a = Math.abs(x);
+  if (a < 1e-3 || a >= 1e6) return x.toExponential(digits - 1);
+  const r = Number(x.toPrecision(digits));
+  return a >= 1000 ? nfAll.format(r) : String(r);
+}
+
 /** 1 234 567 cells → "1.23 M"; small counts stay whole. */
 export function formatCells(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "–";

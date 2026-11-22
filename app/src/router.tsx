@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The screens. /app talks to the paired engine; /demo shows the same screens with recorded data.
-// Everything but the home page loads when first opened, so the home page stays small.
+// The screens. /app talks to the paired engine; /demo shows the same screens with recorded data;
+// /report opens a report file in the browser. Everything but the home page loads when first opened,
+// so the home page stays small.
 import { createBrowserRouter, type RouteObject } from "react-router";
 import type { RouteHandle } from "@/components/layout/AppLayout";
+import { RootLayout } from "@/components/layout/RootLayout";
 import { NotFound, NotFoundPage, RouteError } from "@/pages/NotFound";
 import { Landing } from "@/pages/landing/Landing";
 
@@ -19,11 +21,13 @@ function screens(home: string): RouteObject[] {
 
 export const routes: RouteObject[] = [
   {
+    element: <RootLayout />,
     errorElement: <RouteError />,
     hydrateFallbackElement: <div className="min-h-dvh" />,
     children: [
       { path: "/", element: <Landing /> },
       { path: "/connect", lazy: async () => ({ Component: (await import("@/pages/Connect")).Connect }) },
+      { path: "/report", lazy: async () => ({ Component: (await import("@/pages/report/Report")).Report }) },
       {
         path: "/app",
         lazy: async () => ({ Component: (await import("@/pages/app/shell")).EngineShell }),

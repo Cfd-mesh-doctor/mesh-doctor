@@ -10,6 +10,7 @@ no server of its own: the host (Vercel) only serves the built files, and no case
 | `/demo` | the app on answers recorded from public example cases; needs no engine |
 | `/connect` | pairing this browser with an engine |
 | `/app` | the app on your own engine |
+| `/report` | the report viewer: opens a `meshdoctor report` file (`.mdreport.json`, `.json.gz` or exported `.html`) in the browser; needs no engine, and the file is never uploaded |
 
 **Pairing:** `meshdoctor pair --open` opens `https://<site>/connect#key=…&engine=http://localhost:8765`. The key
 after `#` stays in the browser and goes only to the engine, in the `X-MD-Key` header of every request. The engine
@@ -48,6 +49,8 @@ CI runs all of these (`.github/workflows/ci.yml`, job `app`).
 - `src/engine/`: the API client, pairing, errors in plain words, and the data hooks.
 - `src/demo/`: the recorded answers behind `/demo` (`fixtures.json`, from the public Ahmed-body and pitzDaily
   cases only, times shifted and folders renamed).
+- `src/report/`: reading report files in the browser and working out what they say; `testReport.ts` is a small
+  made-up report for the tests.
 - `src/pages/`, `src/components/`: the screens and the design system.
 - `e2e/`: the Playwright tests.
 - `vercel.json`: security headers and routing; `vite preview` serves the same headers.
