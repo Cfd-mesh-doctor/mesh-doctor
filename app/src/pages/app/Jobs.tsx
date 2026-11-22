@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Every job on the engine: live progress while running, details, and cancelling (after a confirmation).
-import { ListChecks, OctagonX } from "lucide-react";
+// Every job on the engine: live progress while running, details, cancelling (after a confirmation), and the report
+// of a finished job's run.
+import { FileText, ListChecks, OctagonX } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Link } from "react-router";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { JobStateBadge } from "@/components/shared/badges";
 import { EmptyState, Field, PageHeader, TableSkeleton } from "@/components/shared/page";
@@ -11,7 +13,7 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogActions, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Progress, Segmented } from "@/components/ui/misc";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
-import { useEngine } from "@/engine/context";
+import { useAppPath, useEngine } from "@/engine/context";
 import { ACTIVE_POLL_MS, useCancelJob, useJobs } from "@/engine/hooks";
 import { JOB_KIND_LABEL, isActive, type Job, type JobState } from "@/engine/types";
 import { elapsed, formatDateTime, formatDuration, formatPercent, formatRelative } from "@/lib/format";
@@ -21,6 +23,24 @@ type Filter = "all" | "active" | "done" | "failed" | "cancelled";
 
 function matches(f: Filter, s: JobState): boolean {
   return f === "all" || (f === "active" ? isActive(s) : s === f);
+}
+
+/** Where a finished job's run has its report (GET /repairs/{name}/report), or null while it has none. A job is named
+ * after its run, and an A/B test is part of its run's report. */
+function reportPath(job: Job): string | null {
+  return job.state === "done" ? `/repairs/${encodeURIComponent(job.name)}/report` : null;
+}
+
+/** The table's link to a finished job's report (named like the Overview's), or nothing. */
+function ReportLink({ job }: { job: Job }) {
+  const to = useAppPath();
+  const path = reportPath(job);
+  if (!path) return null;
+  return (
+    <Button variant="ghost" size="sm" asChild>
+      <Link to={to(path)} aria-label={`Report of ${job.name}`}>Report</Link>
+    </Button>
+  );
 }
 
 function duration(j: Job): string {
@@ -76,6 +96,8 @@ function CancelDialog({ job, onClose }: { job: Job | null; onClose: () => void }
 
 function DetailsDialog({ job, onClose, onCancel }: { job: Job | null; onClose: () => void; onCancel: (j: Job) => void }) {
   const params = Object.entries(job?.params ?? {});
+  const to = useAppPath();
+  const report = job && reportPath(job);
   return (
     <Dialog open={job !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-2xl">
@@ -121,6 +143,11 @@ function DetailsDialog({ job, onClose, onCancel }: { job: Job | null; onClose: (
                 </Button>
               )}
               <Button variant="secondary" onClick={onClose}>Close</Button>
+              {report && (
+                <Button asChild>
+                  <Link to={to(report)}><FileText /> Open report</Link>
+                </Button>
+              )}
             </DialogActions>
           </>
         )}
@@ -236,10 +263,13 @@ export function Jobs() {
                     {isActive(j.state) ? (
                       <Button variant="danger-ghost" size="sm" onClick={() => setCancelId(j.id)}>Cancel</Button>
                     ) : (
-                      // On phones the whole row opens the details, so the button is left out.
-                      <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={() => setDetailsId(j.id)}>
-                        Details
-                      </Button>
+                      <div className="flex justify-end gap-1">
+                        <ReportLink job={j} />
+                        {/* On phones the whole row opens the details, so the button is left out. */}
+                        <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={() => setDetailsId(j.id)}>
+                          Details
+                        </Button>
+                      </div>
                     )}
                   </TD>
                 </TR>

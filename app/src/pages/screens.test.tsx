@@ -109,5 +109,19 @@ describe("Jobs", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("20261121-130031-repair-ahmed25-fine-fix-0fa7")).toBeInTheDocument();
     expect(within(dialog).getByText('"ahmed-25-fine"')).toBeInTheDocument();
+    expect(within(dialog).getByRole("link", { name: "Open report" }))
+      .toHaveAttribute("href", expect.stringMatching(/\/repairs\/ahmed25-fine-fix\/report$/));
+  });
+
+  it("links each finished job to its run's report, and no other job", async () => {
+    renderScreen(<Jobs />, { transport: demoTransport(data(), 0) });
+    await screen.findByText("ahmed25-fine-strict");
+    const links = screen.getAllByRole("link", { name: /^Report of / });
+    expect(links.map((l) => l.getAttribute("aria-label"))).toEqual(["Report of ahmed25-fine-fix"]);
+    expect(links[0]).toHaveAttribute("href", expect.stringMatching(/\/repairs\/ahmed25-fine-fix\/report$/));
+    // a failed job has no report to open
+    await userEvent.click(screen.getByRole("button", { name: "broken" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).queryByRole("link", { name: "Open report" })).not.toBeInTheDocument();
   });
 });

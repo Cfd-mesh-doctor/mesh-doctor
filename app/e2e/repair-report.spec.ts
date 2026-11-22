@@ -52,3 +52,18 @@ test("a repair's report saves as the file meshdoctor report makes, and the viewe
   expect([...origins]).toEqual(["http://localhost:4173"]);
   expect(sent).toEqual([]);
 });
+
+test("the demo's Jobs page opens a finished run's report, from its row or from its details", async ({ page }) => {
+  await page.goto("/demo/jobs");
+  // The cancelled repair has no report, so its row has no link.
+  await expect(page.getByRole("row", { name: /ahmed25-fine-strict/ }).getByRole("link")).toHaveCount(0);
+  await page.getByRole("row", { name: /pitzdaily-fix/ }).getByRole("link", { name: "Report of pitzdaily-fix" }).click();
+  await expect(page).toHaveURL(/\/demo\/repairs\/pitzdaily-fix\/report$/);
+  await expect(page.getByRole("heading", { level: 1, name: "pitzdaily-fix" })).toBeVisible();
+
+  await page.goBack();
+  await page.getByRole("button", { name: "ahmed35-medium-fix" }).click();
+  await page.getByRole("dialog").getByRole("link", { name: "Open report" }).click();
+  await expect(page).toHaveURL(/\/demo\/repairs\/ahmed35-medium-fix\/report$/);
+  await expect(page.getByRole("heading", { level: 1, name: "ahmed35-medium-fix" })).toBeVisible();
+});
