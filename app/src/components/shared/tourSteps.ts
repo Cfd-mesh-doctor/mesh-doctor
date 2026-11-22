@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The app tour's steps, in plain words: where things are and what each screen tells you.
+// The app tour's steps, in plain words: where things are and what each screen tells you. No imports, so the browser
+// tests (e2e/) can load it too.
+
+/** Kept in this browser once the demo's tour has been open, so the demo opens it by itself only the first time. */
+export const TOUR_SEEN = "md-tour-seen";
+
 export interface TourStep {
   title: string;
   text: string;

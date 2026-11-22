@@ -82,6 +82,27 @@ test("the demo's tour walks through the app's screens in five steps from the key
   await expect(page.getByRole("dialog", { name: "Welcome to Mesh Doctor" })).toBeVisible();
 });
 
+test.describe("in a browser new to the demo", () => {
+  test.use({ storageState: { cookies: [], origins: [] } }); // the other tests start with the tour seen
+
+  test("the demo's front page opens the tour by itself, once; a link straight to a report opens the report alone", async ({ page }) => {
+    await page.goto("/demo/repairs/ahmed35-medium-fix/report");
+    await expect(page.locator("h1")).toHaveText("ahmed35-medium-fix"); // by tag: an open tour hides the page from roles
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await page.goto("/");
+    await page.getByRole("link", { name: "Explore the demo" }).first().click();
+    await expect(page).toHaveURL(/\/demo$/);
+    const tour = page.getByRole("dialog", { name: "Welcome to Mesh Doctor" });
+    await expect(tour).toContainText("Step 1 of 5");
+    await expect(tour.getByRole("button", { name: "Next" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(tour).toBeHidden();
+    await page.reload();
+    await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+});
+
 test("the body font starts loading with the page, and is fetched once", async ({ page, request }) => {
   const html = await (await request.get("/")).text();
   const link = html.match(/<link [^>]*rel="preload"[^>]*>/)?.[0] ?? "";

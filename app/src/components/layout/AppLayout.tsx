@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The frame around every app screen: sidebar, top bar, and the demo notice when showing recorded data.
 import { ArrowRight, Compass, Info, Menu as MenuIcon } from "lucide-react";
-import { useState } from "react";
-import { Link, Outlet, useMatches } from "react-router";
+import { useEffect, useState } from "react";
+import { Link, Outlet, useLocation, useMatches } from "react-router";
 import { Logo } from "@/components/brand/Logo";
 import { AppTour } from "@/components/shared/AppTour";
+import { TOUR_SEEN } from "@/components/shared/tourSteps";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/dialog";
 import { useAppPath, useEngine } from "@/engine/context";
 import { REPO_URL } from "@/lib/site";
+import { canStore, readItem, writeItem } from "@/lib/storage";
 import { ConnectionPill } from "./ConnectionPill";
 import { Sidebar } from "./Sidebar";
 import { ThemeMenu } from "./ThemeMenu";
@@ -52,10 +54,18 @@ export function AppLayout() {
   const { mode } = useEngine();
   const to = useAppPath();
   const title = usePageTitle();
+  const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
   // The app tour, opened from the demo's banner or the sidebar. Only the demo has one for now: its steps end on the
-  // demo's own report.
-  const [tour, setTour] = useState(false);
+  // demo's own report. The demo's front page also opens it by itself the first time, once per browser; a link straight
+  // to another screen (a report someone shared) opens that screen alone, and a browser that can't keep the note that
+  // the tour has been open doesn't get it by itself, or it would open on every visit.
+  const [tour, setTour] = useState(
+    () => mode === "demo" && pathname.replace(/\/+$/, "") === to() && readItem(TOUR_SEEN) === null && canStore(),
+  );
+  useEffect(() => {
+    if (tour) writeItem(TOUR_SEEN, "1");
+  }, [tour]);
   const onTour = mode === "demo" ? () => setTour(true) : undefined;
   return (
     <div className="flex min-h-dvh">

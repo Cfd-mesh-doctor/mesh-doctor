@@ -25,3 +25,10 @@ export function removeItem(key: string): void {
     /* nothing stored, nothing to remove */
   }
 }
+
+/** Whether this browser keeps what the site stores: not with its site data blocked. */
+export function canStore(): boolean {
+  if (!writeItem("md-probe", "1")) return false;
+  removeItem("md-probe");
+  return true;
+}
