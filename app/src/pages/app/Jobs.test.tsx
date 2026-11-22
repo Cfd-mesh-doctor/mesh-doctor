@@ -2,7 +2,8 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { demoTransport } from "@/demo/transport";
+import { DEMO_ANSWERS, demoTransport } from "@/demo/transport";
+import type { JobList } from "@/engine/types";
 import { renderScreen } from "@/test/render";
 import { Jobs } from "./Jobs";
 
@@ -49,6 +50,13 @@ describe("the Jobs screen", () => {
     open(`${path}?job=no-such-job`);
     expect(await screen.findByRole("button", { name: "ahmed25-fine-strict" })).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("says plainly when no job is running or waiting, as after the Overview's link once the job is over", async () => {
+    const answers = structuredClone(DEMO_ANSWERS);
+    for (const job of (answers["/jobs"] as JobList).items) if (job.state === "running") job.state = "done";
+    renderScreen(<Jobs />, { path, at: `${path}?show=active`, transport: demoTransport(answers, 0) });
+    expect(await screen.findByRole("heading", { name: "No job is running or waiting" })).toBeInTheDocument();
   });
 
   it("shows every job when the address names a filter it doesn't know", async () => {

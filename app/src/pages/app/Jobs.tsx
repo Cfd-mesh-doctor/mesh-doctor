@@ -233,7 +233,9 @@ export function Jobs() {
         {jobs.isPending ? (
           <TableSkeleton rows={5} cols={4} />
         ) : shown.length === 0 ? (
-          <EmptyState icon={ListChecks} title={items.length ? "No jobs in this view" : "No jobs yet"}>
+          // The Overview links the active jobs: once they are over, this says so plainly.
+          <EmptyState icon={ListChecks}
+            title={!items.length ? "No jobs yet" : filter === "active" ? "No job is running or waiting" : "No jobs in this view"}>
             {items.length
               ? "Pick another filter to see the rest."
               : "Jobs are repairs and A/B tests started through the engine. They show here with live progress."}
