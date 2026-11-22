@@ -174,12 +174,14 @@ export function RepairMap({ map, view, layer }: { map: MapSummary; view: MapView
   const shown = tip && tip.drawing === drawing && geo ? tip : null;
   return (
     <div ref={box} className="relative w-full select-none">
+      {/* Printed, the page is laid out at the paper's width and nothing measures the map again, so it shrinks to fit
+          (keeping its proportions) rather than make the browser shrink the whole page around it. */}
       {geo && (
         <canvas
           ref={canvas}
           role="img"
           aria-label={mapLabel(map, view, layer)}
-          className="block touch-pan-y"
+          className="block touch-pan-y print:h-auto! print:max-w-full"
           style={{ width: width ?? undefined, height: geo.h }}
           onPointerMove={onPointer}
           onPointerDown={onPointer}

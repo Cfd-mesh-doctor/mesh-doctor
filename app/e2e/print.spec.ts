@@ -65,3 +65,26 @@ test("the repair map is redrawn in the light colours for printing, also from the
   await map.evaluate(() => window.dispatchEvent(new Event("afterprint")));
   await expect.poll(picture).not.toBe(light); // back to the screen's colours
 });
+
+test("on paper the repair map shrinks to fit the page, keeping its proportions", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/report?sample=ahmed35-medium-fix");
+  const map = page.getByRole("img", { name: /view of the model.s wall faces/ }).first(); // the repair map
+  await expect.poll(() => map.evaluate((c: HTMLCanvasElement) => c.width)).toBeGreaterThan(500);
+  // A printed page is laid out at the paper's width and nothing measures the map again: narrow its box and read its
+  // size at once, before the page's resize observer could redraw it, then put the box back.
+  const squeezed = () =>
+    map.evaluate((c: HTMLCanvasElement) => {
+      const box = c.parentElement!;
+      box.style.width = "500px";
+      const r = c.getBoundingClientRect();
+      box.style.width = "";
+      return { width: r.width, shape: r.width / r.height, drawn: c.width / c.height };
+    });
+  expect((await squeezed()).width).toBeGreaterThan(500); // on the screen it keeps the width it was drawn at
+
+  await page.emulateMedia({ media: "print" });
+  const printed = await squeezed();
+  expect(printed.width).toBeLessThanOrEqual(500);
+  expect(printed.shape).toBeCloseTo(printed.drawn, 1);
+});
