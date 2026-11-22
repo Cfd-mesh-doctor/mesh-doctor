@@ -205,6 +205,29 @@ test("pairing: the key leaves the address bar, then the app connects", async ({ 
   for (const r of apiCalls) expect(r.headers()["x-md-key"]).toBe(KEY);
 });
 
+test("before anything has run, the Overview and Jobs say how to start: the engine's dashboard, and the command to copy", async ({ page }) => {
+  const engine = await mockEngine(page, { noJobs: true });
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  const main = page.getByRole("main");
+  await expect(main.getByRole("heading", { name: "No repair runs yet" })).toBeVisible();
+  const copy = main.getByRole("button", { name: "Copy “meshdoctor full <case> <name>”" });
+  await expect(copy).toHaveCount(1); // the card at the bottom gives way to the empty list's own
+  await expect(copy).toBeVisible();
+  await expect(main.getByText("Starting repairs from the app comes next")).toHaveCount(0);
+  const dashboard = main.getByRole("link", { name: "Open the engine's dashboard" });
+  await expect(dashboard).toHaveAttribute("href", `${ENGINE}/meshdoctor`);
+  await expect(dashboard).toHaveAttribute("target", "_blank");
+  await main.getByRole("link", { name: "your cases" }).click();
+  await expect(page).toHaveURL(/\/app\/cases$/);
+  await page.getByRole("complementary").getByRole("link", { name: "Jobs", exact: true }).click();
+  await expect(main.getByRole("heading", { name: "No jobs yet" })).toBeVisible();
+  await expect(main.getByRole("link", { name: "Open the engine's dashboard" })).toHaveAttribute("href", `${ENGINE}/meshdoctor`);
+  // Only the engine's lists were asked for: a link to its dashboard sends nothing until it's opened.
+  expect(engine.requests.some((r) => new URL(r.url()).pathname === "/meshdoctor")).toBe(false);
+});
+
 test("the site talks to nothing but itself and the engine", async ({ page }) => {
   await mockEngine(page);
   const seen = new Set<string>();

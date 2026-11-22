@@ -6,6 +6,7 @@ import { useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { JobStateBadge } from "@/components/shared/badges";
+import { NoJobsYet } from "@/components/shared/NoJobsYet";
 import { EmptyState, Field, PageHeader, TableSkeleton } from "@/components/shared/page";
 import { Dot } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -298,13 +299,13 @@ export function Jobs() {
         </div>
         {jobs.isPending ? (
           <TableSkeleton rows={5} cols={4} />
+        ) : !items.length ? (
+          // A list that didn't load isn't empty: the message above says why, and no first steps are offered.
+          jobs.isError ? <EmptyState icon={ListChecks} title="The jobs didn't load" /> : <NoJobsYet />
         ) : shown.length === 0 ? (
           // The Overview links the active jobs: once they are over, this says so plainly.
-          <EmptyState icon={ListChecks}
-            title={!items.length ? "No jobs yet" : filter === "active" ? "No job is running or waiting" : "No jobs in this view"}>
-            {items.length
-              ? "Pick another filter to see the rest."
-              : "Jobs are repairs and A/B tests started through the engine. They show here with live progress."}
+          <EmptyState icon={ListChecks} title={filter === "active" ? "No job is running or waiting" : "No jobs in this view"}>
+            Pick another filter to see the rest.
           </EmptyState>
         ) : (
           <Table>

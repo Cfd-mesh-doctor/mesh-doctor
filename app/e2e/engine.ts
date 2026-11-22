@@ -18,13 +18,13 @@ export interface MockEngine {
   cases: string[];
 }
 
-/** `repairs`: the repair runs it lists (none by default). */
+/** `repairs`: the repair runs it lists (none by default). `noJobs`: it lists no jobs (two by default). */
 export async function mockEngine(
   page: Page,
-  opts: { down?: boolean; wrongKey?: boolean; repairs?: unknown[] } = {},
+  opts: { down?: boolean; wrongKey?: boolean; repairs?: unknown[]; noJobs?: boolean } = {},
 ): Promise<MockEngine> {
   const state: MockEngine = { requests: [], cases: ["wing", "ahmed-25-coarse", "motorBike"] };
-  const jobs = [
+  const jobs = opts.noJobs ? [] : [
     job("20261121-130610-repair-wing-fix-13c2", "wing-fix", "running", { progress: { step: "fixing", fraction: 0.62 } }),
     job("20261121-120000-repair-old-fix-0001", "old-fix", "done", { finished: new Date(Date.now() - 300_000).toISOString() }),
   ];

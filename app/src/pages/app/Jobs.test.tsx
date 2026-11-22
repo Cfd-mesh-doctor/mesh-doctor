@@ -3,6 +3,9 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { DEMO_ANSWERS, demoTransport } from "@/demo/transport";
+import type { Transport } from "@/engine/client";
+import { EngineError } from "@/engine/errors";
+import { savePairing } from "@/engine/pairing";
 import type { JobList } from "@/engine/types";
 import { renderScreen } from "@/test/render";
 import { Jobs } from "./Jobs";
@@ -57,6 +60,13 @@ describe("the Jobs screen", () => {
     for (const job of (answers["/jobs"] as JobList).items) if (job.state === "running") job.state = "done";
     renderScreen(<Jobs />, { path, at: `${path}?show=active`, transport: demoTransport(answers, 0) });
     expect(await screen.findByRole("heading", { name: "No job is running or waiting" })).toBeInTheDocument();
+  });
+
+  it("says to pick another filter when one has nothing in it (the demo has no failed job)", async () => {
+    open(`${path}?show=failed`);
+    expect(await screen.findByRole("heading", { name: "No jobs in this view" })).toBeInTheDocument();
+    expect(screen.getByText("Pick another filter to see the rest.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open the engine's dashboard" })).toBeNull();
   });
 
   it("shows no start time for a queued job, which hasn't started", async () => {
@@ -150,5 +160,39 @@ describe("the Jobs screen", () => {
     expect(await screen.findAllByRole("button", { name: "ahmed25-medium-fix" })).toHaveLength(2);
     expect(within(filter()).getByRole("radio", { checked: true })).toHaveTextContent(/^All/);
     expect(rows()).toHaveLength(8);
+  });
+});
+
+/** Opens the Jobs screen of your own engine, paired, before any job has run on it, or whose jobs don't load. */
+function ownEngine(jobsLoad = true) {
+  savePairing({ engine: "http://localhost:8765", key: "TestKey_0123456789abcdefghijklmnopqrstuvwxy", paired: "2026-11-22T12:00:00Z" });
+  const transport: Transport = {
+    kind: "engine",
+    scope: "test",
+    request: async <T,>(_method: string, route: string) => {
+      if (route.split("?")[0] === "/jobs" && jobsLoad) return { items: [] } as T;
+      throw new EngineError("unreachable", "nothing answered");
+    },
+  };
+  return renderScreen(<Jobs />, { path: "/app/jobs", transport });
+}
+
+describe("the Jobs screen before any job has run", () => {
+  it("says where jobs start, and opens the engine's own dashboard in a new tab", async () => {
+    ownEngine();
+    expect(await screen.findByRole("heading", { name: "No jobs yet" })).toBeInTheDocument();
+    expect(screen.getByText(/^Repairs and A\/B tests started from the engine's own dashboard show here/)).toBeInTheDocument();
+    const dashboard = screen.getByRole("link", { name: "Open the engine's dashboard" });
+    expect(dashboard).toHaveAttribute("href", "http://localhost:8765/meshdoctor");
+    expect(dashboard).toHaveAttribute("target", "_blank");
+    expect(dashboard).toHaveAttribute("rel", "noreferrer");
+  });
+
+  it("doesn't call a list that didn't load empty: the message above says why", async () => {
+    ownEngine(false);
+    expect(await screen.findByRole("heading", { name: "The jobs didn't load" })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "No jobs yet" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open the engine's dashboard" })).toBeNull();
   });
 });

@@ -5,6 +5,7 @@ import { ArrowRight, Cpu, FolderOpen, ListChecks, Terminal, Wrench } from "lucid
 import { Link } from "react-router";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
+import { NoJobsYet } from "@/components/shared/NoJobsYet";
 import { JobStateBadge, VerdictBadge } from "@/components/shared/badges";
 import { EmptyState, PageHeader, StatTile, TableSkeleton } from "@/components/shared/page";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -16,6 +17,9 @@ import { JOB_KIND_LABEL, isActive } from "@/engine/types";
 import { caseName, improvedCleanly, madeWorse, runStep, runUpdated } from "@/engine/verdict";
 import { formatCells, formatRelative } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
+
+/** Repairs a copy of a case, in WSL; the app can't start repairs itself yet. */
+const REPAIR_COMMAND = "meshdoctor full <case> <name>";
 
 export function Overview() {
   useTitle("Overview");
@@ -33,6 +37,8 @@ export function Overview() {
   const improved = repairItems.filter((r) => improvedCleanly(r.verdict)).length;
   const worse = repairItems.filter((r) => madeWorse(r.verdict)).length;
   const engineLabel = mode === "demo" ? "Recorded demo" : pairing?.engine.replace(/^http:\/\//, "");
+  // The engine has answered that it has no repair runs yet (not: the list didn't load).
+  const noRuns = repairs.isSuccess && repairItems.length === 0;
 
   return (
     <>
@@ -102,7 +108,8 @@ export function Overview() {
           {jobs.isPending ? (
             <TableSkeleton rows={4} cols={3} />
           ) : jobItems.length === 0 ? (
-            <EmptyState icon={ListChecks} title="No jobs yet">Jobs you start appear here with their progress.</EmptyState>
+            // A list that didn't load isn't empty: the message at the top says why, and no first steps are offered.
+            jobs.isError ? <EmptyState icon={ListChecks} title="The jobs didn't load" /> : <NoJobsYet />
           ) : (
             <Table>
               <THead>
@@ -147,8 +154,16 @@ export function Overview() {
           </CardHeader>
           {repairs.isPending ? (
             <TableSkeleton rows={4} cols={2} />
-          ) : repairItems.length === 0 ? (
-            <EmptyState icon={Wrench} title="No repair runs yet">Each repair works on a copy of a source case.</EmptyState>
+          ) : repairs.isError && repairItems.length === 0 ? (
+            <EmptyState icon={Wrench} title="The repair runs didn't load" />
+          ) : noRuns ? (
+            // The first step, where you look for your runs: the command card at the bottom of the page gives way to it.
+            <EmptyState icon={Wrench} title="No repair runs yet"
+              action={<CopyCommand command={REPAIR_COMMAND} className="max-w-full text-left" />}>
+              Repair a copy of one of{" "}
+              <Link to={to("/cases")} className="font-medium text-primary underline-offset-4 hover:underline">your cases</Link>,
+              with this in WSL or from the engine's dashboard: the run shows here when it finishes.
+            </EmptyState>
           ) : (
             <ul className="divide-y divide-border border-t border-border">
               {repairItems.slice(0, 6).map((r) => (
@@ -180,19 +195,21 @@ export function Overview() {
         </Card>
       </div>
 
-      <Card className="mt-6 flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
-        <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary-soft text-primary">
-          <Terminal className="size-5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold">Starting repairs from the app comes next</p>
-          <p className="mt-0.5 text-[13px] text-muted-foreground">
-            Until then, start one in WSL; the run shows up here when it finishes. It works on a copy, so your case is
-            never changed.
-          </p>
-        </div>
-        <CopyCommand command="meshdoctor full <case> <name>" className="sm:w-80" />
-      </Card>
+      {!noRuns && (
+        <Card className="mt-6 flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
+          <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary-soft text-primary">
+            <Terminal className="size-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">Starting repairs from the app comes next</p>
+            <p className="mt-0.5 text-[13px] text-muted-foreground">
+              Until then, start one in WSL; the run shows up here when it finishes. It works on a copy, so your case is
+              never changed.
+            </p>
+          </div>
+          <CopyCommand command={REPAIR_COMMAND} className="sm:w-80" />
+        </Card>
+      )}
     </>
   );
 }
