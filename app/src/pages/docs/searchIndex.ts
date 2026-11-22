@@ -140,6 +140,12 @@ function snippet(text: string, words: string[]): string {
     const space = text.indexOf(" ", start);
     if (space !== -1 && space < at) start = space + 1;
   }
+  // Nor on a stray mark ("….); ./Allwmake"): a first word without a letter or digit in it is left out.
+  while (start > 0) {
+    const space = text.indexOf(" ", start);
+    if (space === -1 || space >= at || /[\p{L}\p{N}]/u.test(text.slice(start, space))) break;
+    start = space + 1;
+  }
   let end = Math.min(text.length, start + LENGTH);
   const space = text.lastIndexOf(" ", end);
   if (end < text.length && space >= at + size) end = space;

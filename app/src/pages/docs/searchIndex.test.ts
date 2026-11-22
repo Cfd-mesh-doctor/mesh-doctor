@@ -106,7 +106,10 @@ describe("searching the docs", () => {
     const hit = searchDocs("SIGKILL").find((h) => h.id === "jobs");
     expect(hit?.snippet).toMatch(/SIGKILL/);
     expect(hit?.snippet.length).toBeLessThanOrEqual(162);
-    for (const h of searchDocs("engine", 50)) {
+    // Install's "(or pipx install .); ./Allwmake is still needed" is shown from "./Allwmake", not from ".);".
+    expect(searchDocs("docker").find((h) => h.id === "by-hand")?.snippet).toMatch(/^…\.\/Allwmake /);
+    for (const h of ["engine", "docker", "the"].flatMap((q) => searchDocs(q, 500))) {
+      expect(h.snippet, "no stray mark first").not.toMatch(/^…[^\p{L}\p{N}\s]+ /u);
       const body = h.snippet.replace(/^…/, "").replace(/…$/, "");
       const start = h.text.indexOf(body);
       expect(start, h.snippet).toBeGreaterThanOrEqual(0);
