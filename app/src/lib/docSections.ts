@@ -30,3 +30,6 @@ export type DocPictures = Record<string, { src: string; width: number; height: n
 export function githubAnchor(title: string): string {
   return title.toLowerCase().replace(/[^\w\s-]/g, "").replace(/\s/g, "-");
 }
+
+/** A doc's text without its Markdown, as the page reads: `code`, **bold** and [label](link) read as their words. */
+export const plainText = (text: string) => text.replace(/\[([^\]]+)\]\([^)\s]+\)/g, "$1").replace(/[`*]/g, "");

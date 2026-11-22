@@ -6,9 +6,7 @@
 import { Check, Link2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router";
-
-/** The heading's text without the doc's Markdown: `code`, **bold** and [label](link) read as their words. */
-export const plainText = (text: string) => text.replace(/\[([^\]]+)\]\([^)\s]+\)/g, "$1").replace(/[`*]/g, "");
+import { plainText } from "@/lib/docSections";
 
 export function HeadingLink({ id, title }: { id: string; title: string }) {
   const { pathname, search } = useLocation();
