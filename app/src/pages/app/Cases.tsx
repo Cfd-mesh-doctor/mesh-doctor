@@ -223,9 +223,11 @@ export function Cases() {
                   </TD>
                   <TD>
                     {/* The latest run is the latest finished one when there is one (unfinished runs sort last). On
-                        phones the link goes under the badge, so this column stays narrow and the names keep their room. */}
+                        phones the link goes under the badge, so this column stays narrow and the names keep their room.
+                        A run with no verdict says so in words, as on the Overview; a case never repaired keeps its
+                        dash. */}
                     <div className="flex flex-col items-start gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3">
-                      <VerdictBadge verdict={r.latest?.verdict} />
+                      <VerdictBadge verdict={r.latest?.verdict} empty={r.latest && "No verdict"} />
                       {r.latest?.verdict && <ReportLink run={r.latest.name} className="text-[13px]" />}
                     </div>
                   </TD>

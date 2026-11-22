@@ -268,6 +268,9 @@ test("the Cases screen gives each case its own repair command to copy, naming th
   // wing-fix is taken: a repair named so would replace it.
   const wing = main.getByRole("button", { name: "Copy repair command: meshdoctor full wing wing-fix-2" });
   await expect(main.getByRole("button", { name: "Copy repair command: meshdoctor full motorBike motorBike-fix" })).toBeVisible();
+  // wing's run has no verdict: it says so, in words (motorBike, never repaired, keeps its dash).
+  await expect(main.getByRole("row", { name: /^wing/ }).getByText("No verdict", { exact: true })).toBeVisible();
+  await expect(main.getByRole("row", { name: /^motorBike/ }).getByText("No verdict", { exact: true })).toHaveCount(0);
   // Pointing at it shows the command; clicking copies it.
   await wing.hover();
   await expect(page.getByRole("tooltip")).toHaveText("meshdoctor full wing wing-fix-2");

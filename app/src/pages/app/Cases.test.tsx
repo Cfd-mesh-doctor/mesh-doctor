@@ -155,6 +155,14 @@ describe("the Cases screen of your own engine", () => {
     expect(screen.queryByText(/didn't load/)).toBeNull();
   });
 
+  it("says “No verdict”, in words, for a latest run with none, where a case never repaired keeps its dash", async () => {
+    ownEngine(["wing", "cyl"], undefined, [run("wing-fix", "wing")]);
+    expect(await screen.findByText("No verdict")).toBeInTheDocument();
+    expect(within(caseRow("wing")).getAllByRole("cell")[2]).toHaveTextContent(/^No verdict$/);
+    expect(within(caseRow("wing")).queryByRole("link", { name: "Report of wing-fix" })).toBeNull(); // nothing to report
+    expect(within(caseRow("cyl")).getAllByRole("cell")[2]).toHaveTextContent(/^–$/);
+  });
+
   it("says how to repair a case: its command, or the engine's dashboard, linked in a new tab", async () => {
     ownEngine(["wing"]);
     expect(await screen.findByText(/To repair one, copy its repair command and run it in WSL, or start it from/))
