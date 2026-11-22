@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Pieces every screen uses: its header, number tiles, the empty state.
 import type { LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/misc";
 import { cn } from "@/lib/utils";
@@ -78,7 +78,21 @@ export function Field({ label, children, mono }: { label: string; children: Reac
   return (
     <div className="min-w-0">
       <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
-      <dd className={cn("mt-0.5 text-sm", mono ? "font-mono text-[13px] wrap-anywhere" : "truncate")}>{children}</dd>
+      <dd className={cn("mt-0.5 text-sm", mono ? "font-mono text-[13px] wrap-anywhere" : "truncate")}>
+        {mono && typeof children === "string" ? breakAfterSlashes(children) : children}
+      </dd>
     </div>
   );
+}
+
+/** A path with a break offered after each slash, as browsers don't break there on their own. A <wbr> adds no text,
+ *  so the path copies as it is. */
+function breakAfterSlashes(text: string): ReactNode {
+  const parts = text.split("/");
+  return parts.map((part, i) => (
+    <Fragment key={i}>
+      {part}
+      {i < parts.length - 1 && <>/<wbr /></>}
+    </Fragment>
+  ));
 }

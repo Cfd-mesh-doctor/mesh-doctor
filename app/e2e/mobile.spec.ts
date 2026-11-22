@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { expect, test } from "@playwright/test";
 import { testReport } from "../src/report/testReport";
+import { lineBreaks } from "./text";
 
 test("on a phone nothing scrolls sideways, and the menu works", async ({ page }) => {
   test.slow(); // every page at three widths: more than the default 30 s
@@ -69,6 +70,17 @@ test("on a small phone a job's details fit the screen, scrolling inside rather t
   expect(box.y + box.height, "the buttons are below the screen").toBeLessThanOrEqual(667);
   await details.getByRole("button", { name: "Close", exact: true }).first().click(); // scrolled to, inside the dialog
   await expect(details).toBeHidden();
+});
+
+test("on a small phone a job's result path breaks after its slash, not inside a name", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 }); // it broke as "fix_ab/ab_result." / "json" here
+  await page.goto("/demo/jobs?job=20261121-130610-abtest-ahmed25-medium-fix-13c2");
+  const details = page.getByRole("dialog", { name: "ahmed25-medium-fix" });
+  const result = details.locator("dt", { hasText: /^Result$/ }).locator("xpath=following-sibling::dd");
+  await expect(result).toHaveText("ahmed25-medium-fix_ab/ab_result.json"); // the offered breaks add no text
+  const breaks = await lineBreaks(result);
+  expect(breaks).toContain("ahmed25-medium-fix_ab/");
+  for (const before of breaks) expect(before, "the path breaks inside a name").toMatch(/[-/]$/);
 });
 
 test("on a small phone, a case's size and its estimate show under the name", async ({ page }) => {
