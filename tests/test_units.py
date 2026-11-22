@@ -409,7 +409,10 @@ class BoundaryParserTest(unittest.TestCase):
 """
 
     def test_names_with_any_characters_and_any_order(self):
-        sys.modules.setdefault("numpy", type(sys)("numpy"))      # mapdata imports numpy at the top
+        try:
+            import numpy  # noqa: F401  (a real one must not be shadowed for the tests after this one)
+        except ImportError:
+            sys.modules.setdefault("numpy", type(sys)("numpy"))  # mapdata imports numpy at the top
         import mapdata
         self.assertEqual(mapdata.patches(self.TEXT), [
             ("inlet", "patch", 10, 100), ("motorBike_frt-fairing:001%1", "wall", 42, 110),

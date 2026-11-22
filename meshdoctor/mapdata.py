@@ -148,6 +148,14 @@ def read_hot(case, n=3000):
     return [[round(x, 4) for x in r] for r in rows[:n]], summ
 
 
+def view_box(interest, model, pad=0.12):
+    """The part of the model the map shows: every point of interest (the defect clusters before the repair, the
+    strongest cells of each heat layer), padded by `pad` metres.  A run with no defect clusters and no heat layer
+    shows the whole model (its wall-face centres) instead."""
+    P = np.asarray(interest, dtype=float).reshape(-1, 3) if len(interest) else np.asarray(model, dtype=float)
+    return P.min(0) - pad, P.max(0) + pad
+
+
 def main(a):
     md = os.path.join(ROOT, a[0])
     res = schema.read(os.path.join(md, "meshDoctor", "result.json"), "repair")
@@ -163,12 +171,10 @@ def main(a):
     for label, case in hot:
         rows, summ = read_hot(os.path.join(ROOT, case))
         layers.append({"label": label, "case": case, "cells": rows, "summary": summ})
-    # view box: everything of interest, padded
-    pts_int = [c["centroid"] for c in res["clustersBefore"]] + [r[:3] for L in layers for r in L["cells"][:1500]]
-    P = np.array(pts_int)
-    lo, hi = P.min(0) - 0.12, P.max(0) + 0.12
     src = res["source"]
     pts, up, ground, glevel = surface(md)
+    interest = [c["centroid"] for c in res["clustersBefore"]] + [r[:3] for L in layers for r in L["cells"][:1500]]
+    lo, hi = view_box(interest, pts)
     lat = 3 - up          # x is always streamwise; the other horizontal axis is across
     lo[up] = min(lo[up], glevel - 0.01)
     sel = np.all((pts >= lo) & (pts <= hi), axis=1)
