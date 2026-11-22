@@ -7,10 +7,10 @@ import { useMemo } from "react";
 import { Link, useSearchParams } from "react-router";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
+import { SearchInput } from "@/components/shared/SearchInput";
 import { VerdictBadge } from "@/components/shared/badges";
 import { EmptyState, PageHeader, TableSkeleton } from "@/components/shared/page";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/misc";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
 import { useAppPath } from "@/engine/context";
 import { useCases, useRepairs } from "@/engine/hooks";
@@ -91,16 +91,17 @@ export function Cases() {
       {cases.isError && <ErrorPanel className="mb-6" error={cases.error} onRetry={() => cases.refetch()} retrying={cases.isFetching} />}
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
-          <div className="relative w-full max-w-xs">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Filter cases"
-              aria-label="Filter cases"
-              className="pl-9"
-            />
-          </div>
+          {/* The site's search box: "/" puts the cursor in it, as in the Docs and Troubleshooting searches. */}
+          <SearchInput
+            icon={Search}
+            className="w-full max-w-xs"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filter cases"
+            aria-label="Filter cases"
+            autoComplete="off"
+            spellCheck={false}
+          />
           <span className="text-[13px] text-muted-foreground tabular-nums">
             {cases.data ? `${shown.length} of ${rows.length} cases` : ""}
           </span>

@@ -16,7 +16,7 @@ describe("the Cases screen", () => {
   it("keeps what's typed in its filter box in the address, so a reload or a link keeps it", async () => {
     const { router } = open(`${path}?q=pitz`);
     expect(await screen.findByText("1 of 5 cases")).toBeInTheDocument();
-    const box = screen.getByRole("textbox", { name: "Filter cases" });
+    const box = screen.getByRole("searchbox", { name: "Filter cases" });
     expect(box).toHaveValue("pitz");
     expect(rows()).toHaveLength(1);
 
@@ -28,5 +28,16 @@ describe("the Cases screen", () => {
     expect(router.state.location.search).toBe("?q=ahmed-25");
     expect(screen.getByText("3 of 5 cases")).toBeInTheDocument();
     expect(rows()).toHaveLength(3);
+  });
+
+  it("puts the cursor in its filter box on “/”, as the site's search boxes do", async () => {
+    const user = userEvent.setup();
+    open(path);
+    expect(await screen.findByText("5 of 5 cases")).toBeInTheDocument();
+    const box = screen.getByRole("searchbox", { name: "Filter cases" });
+    expect(box).toHaveAttribute("aria-keyshortcuts", "/");
+    await user.keyboard("/");
+    expect(box).toHaveFocus();
+    expect(box).toHaveValue("");
   });
 });
