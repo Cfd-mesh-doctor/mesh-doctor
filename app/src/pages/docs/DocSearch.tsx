@@ -58,7 +58,7 @@ export function DocSearch() {
   const hits = ready ? ready.searchDocs(query, Number.POSITIVE_INFINITY) : [];
   const words = ready ? ready.queryWords(query) : [];
   const status = !asked ? ""
-    : ready ? (hits.length ? `${hits.length} ${hits.length === 1 ? "section matches" : "sections match"}.` : "No section matches.")
+    : ready ? (hits.length ? `${hits.length} ${hits.length === 1 ? "match" : "matches"}.` : "Nothing matches.")
       : failed ? "The search couldn't load. Reload the page to try again." : "Searching…";
 
   return (
@@ -100,7 +100,7 @@ export function DocSearch() {
       )}
       {ready && hits.length === 0 && (
         <Card className="mt-4 max-w-3xl p-6 text-sm">
-          <p className="font-medium">No section of the docs holds “{query.trim()}”.</p>
+          <p className="font-medium">Nothing in the docs holds “{query.trim()}”.</p>
           <p className="mt-1 text-muted-foreground">
             Try one distinctive word, such as a file or utility name. The search looks in the text of{" "}
             {listed(ready.SEARCHED)}, and in what this page says about the others.

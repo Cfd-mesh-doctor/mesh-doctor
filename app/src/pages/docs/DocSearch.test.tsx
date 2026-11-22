@@ -22,7 +22,7 @@ describe("the Docs page's search", () => {
     const item = jobs.closest("li") as HTMLElement;
     expect(item.firstElementChild).toHaveTextContent("Architecture");
     expect(within(item).getByText("SIGKILL").tagName).toBe("MARK");
-    expect(screen.getByText(/^\d+ sections? match(es)?\.$/)).toBeInTheDocument();
+    expect(screen.getByText(/^\d+ match(es)?\.$/)).toBeInTheDocument();
 
     // The page's own lists stay below.
     expect(screen.getByRole("region", { name: "On this site" })).toBeInTheDocument();
@@ -46,14 +46,14 @@ describe("the Docs page's search", () => {
     const user = userEvent.setup();
     renderScreen(<Docs />, { path: "/docs" });
     await user.type(box(), "quantumflux");
-    expect(await screen.findByText("No section of the docs holds “quantumflux”.")).toBeInTheDocument();
-    expect(screen.getByText("No section matches.")).toBeInTheDocument();
+    expect(await screen.findByText("Nothing in the docs holds “quantumflux”.")).toBeInTheDocument();
+    expect(screen.getByText("Nothing matches.")).toBeInTheDocument();
     expect(screen.getByText(new RegExp(
       `looks in the text of ${SEARCHED[0]}, .+ and ${SEARCHED.at(-1)}, and in what this page says about the others\\.$`,
     ))).toBeInTheDocument();
 
     await user.clear(box());
-    expect(screen.queryByText(/No section/)).toBeNull();
+    expect(screen.queryByText(/^Nothing/)).toBeNull();
     expect(screen.queryByRole("region", { name: "Search results" })).toBeNull();
   });
 });
