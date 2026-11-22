@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Every job on the engine: live progress while running, details, cancelling (after a confirmation), and the report
-// of a finished job's run.
+// of a finished job's run. The filter lives in the address (?show=failed), so a reload or a link keeps it.
 import { FileText, ListChecks, OctagonX } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { JobStateBadge } from "@/components/shared/badges";
 import { EmptyState, Field, PageHeader, TableSkeleton } from "@/components/shared/page";
@@ -19,7 +19,8 @@ import { JOB_KIND_LABEL, isActive, type Job, type JobState } from "@/engine/type
 import { elapsed, formatDateTime, formatDuration, formatPercent, formatRelative } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
 
-type Filter = "all" | "active" | "done" | "failed" | "cancelled";
+const FILTERS = ["all", "active", "done", "failed", "cancelled"] as const;
+type Filter = (typeof FILTERS)[number];
 
 function matches(f: Filter, s: JobState): boolean {
   return f === "all" || (f === "active" ? isActive(s) : s === f);
@@ -160,7 +161,16 @@ function DetailsDialog({ job, onClose, onCancel }: { job: Job | null; onClose: (
 export function Jobs() {
   useTitle("Jobs");
   const jobs = useJobs();
-  const [filter, setFilter] = useState<Filter>("all");
+  // The filter in the address: none, or a word the page doesn't know, shows every job.
+  const [params, setParams] = useSearchParams();
+  const filter: Filter = FILTERS.find((f) => f === params.get("show")) ?? "all";
+  const setFilter = (f: Filter) =>
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (f === "all") next.delete("show");
+      else next.set("show", f);
+      return next;
+    }, { replace: true, preventScrollReset: true });
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const [cancelId, setCancelId] = useState<string | null>(null);
 
