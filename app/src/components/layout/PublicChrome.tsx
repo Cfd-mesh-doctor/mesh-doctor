@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The header and footer of the public pages (home, report viewer, estimator). The app screens have their own sidebar.
+// The header and footer of the public pages (home, how it works, report viewer, estimator). The app screens have
+// their own sidebar.
 // Below tablet width the header's links move into a menu that slides in from the left, as the app's sidebar does.
 import { BookOpen, Calculator, CirclePlay, FileSearch, Menu as MenuIcon, Rocket, ShieldCheck, Workflow } from "lucide-react";
 import { useState } from "react";
@@ -25,7 +26,7 @@ function PhoneMenu({ onNavigate }: { onNavigate: () => void }) {
         <Link to="/" onClick={onNavigate} className="rounded-md"><Logo /></Link>
       </div>
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-3" aria-label="Site menu">
-        <Link to="/#how" onClick={onNavigate} className={menuItem}><Workflow aria-hidden />How it works</Link>
+        <NavLink to="/how-it-works" onClick={onNavigate} className={page}><Workflow aria-hidden />How it works</NavLink>
         <Link to="/#privacy" onClick={onNavigate} className={menuItem}><ShieldCheck aria-hidden />Privacy</Link>
         <Link to="/#start" onClick={onNavigate} className={menuItem}><Rocket aria-hidden />Get started</Link>
         <NavLink to="/report" onClick={onNavigate} className={page}><FileSearch aria-hidden />Report viewer</NavLink>
@@ -52,7 +53,9 @@ export function PublicHeader() {
           <Link to="/" className="rounded-md"><Logo className="whitespace-nowrap" /></Link>
         </div>
         <nav className="hidden items-center gap-5 text-sm text-muted-foreground md:flex" aria-label="Site">
-          <Link to="/#how" className={navLink}>How it works</Link>
+          <NavLink to="/how-it-works" className={({ isActive }) => cn(navLink, isActive && "font-medium text-foreground")}>
+            How it works
+          </NavLink>
           <Link to="/#privacy" className={navLink}>Privacy</Link>
           <Link to="/#start" className={navLink}>Get started</Link>
           <NavLink to="/report" className={({ isActive }) => cn(navLink, isActive && "font-medium text-foreground")}>
@@ -99,7 +102,7 @@ export function PublicFooter() {
         </div>
         <nav className="grid grid-cols-2 gap-x-10 gap-y-2" aria-label="Footer">
           <a href={REPO_URL} {...ext}>Source code</a>
-          <a href={DOCS.howItWorks} {...ext}>How it works</a>
+          <Link to="/how-it-works" className={navLink}>How it works</Link>
           <a href={DOCS.safety} {...ext}>Safety model</a>
           <a href={DOCS.limits} {...ext}>Limits</a>
           <a href={DOCS.example} {...ext}>Worked example</a>

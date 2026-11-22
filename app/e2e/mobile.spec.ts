@@ -7,7 +7,9 @@ test("on a phone nothing scrolls sideways, and the menu works", async ({ page })
   // Then the smallest phones (320 px), where the home and pairing pages were once 18-20 px too wide.
   for (const width of [page.viewportSize()?.width ?? 412, 360, 320]) {
     await page.setViewportSize({ width, height: 800 });
-    for (const path of ["/", "/connect", "/report", "/estimate?cells=31.1", "/demo", "/demo/jobs", "/demo/cases", "/demo/settings"]) {
+    for (const path of [
+      "/", "/connect", "/report", "/estimate?cells=31.1", "/how-it-works", "/demo", "/demo/jobs", "/demo/cases", "/demo/settings",
+    ]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

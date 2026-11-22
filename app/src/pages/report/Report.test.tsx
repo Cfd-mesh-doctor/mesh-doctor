@@ -31,8 +31,9 @@ describe("Report viewer", () => {
     expect(screen.getByText("lift still drifting slowly")).toBeInTheDocument();
     expect(screen.getByText(/7 folder paths on the worker were replaced/)).toBeInTheDocument();
 
-    // The residual chart starts on p and switches field.
-    expect(screen.getByRole("img", { name: /Initial residual of p per iteration/ })).toBeInTheDocument();
+    // The residual chart starts on p and switches field. It draws once it has measured its width, a render after
+    // the report itself: wait for it.
+    expect(await screen.findByRole("img", { name: /Initial residual of p per iteration/ })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("radio", { name: "Ux" }));
     expect(screen.getByRole("img", { name: /Initial residual of Ux per iteration/ })).toBeInTheDocument();
 
@@ -64,7 +65,7 @@ describe("Report viewer", () => {
     await userEvent.click(screen.getByRole("button", { name: /25° slant, with an A\/B test/ }));
     expect(await screen.findByRole("heading", { name: "ahmed25-medium-fix" })).toBeInTheDocument();
     expect(screen.getByText(/from the public Ahmed-body example \(a sample\)$/)).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: /Initial residual of p per iteration/ })).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: /Initial residual of p per iteration/ })).toBeInTheDocument();
   });
 
   it("explains a file that isn't a report, and stays ready for another", async () => {

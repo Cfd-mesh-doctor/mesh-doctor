@@ -13,6 +13,7 @@ describe("public header", () => {
     expect(menu.getAllByRole("link").map((a) => a.textContent)).toEqual([
       "Mesh Doctor", "How it works", "Privacy", "Get started", "Report viewer", "Size estimator", "Demo", "Docs",
     ]);
+    expect(menu.getByRole("link", { name: "How it works" })).toHaveAttribute("href", "/how-it-works");
     expect(menu.getByRole("link", { name: "Privacy" })).toHaveAttribute("href", "/#privacy");
     expect(menu.getByRole("link", { name: "Size estimator" })).toHaveAttribute("href", "/estimate");
     const here = menu.getByRole("link", { name: "Report viewer" });

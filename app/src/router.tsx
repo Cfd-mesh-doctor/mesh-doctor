@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The screens. /app talks to the paired engine; /demo shows the same screens with recorded data;
-// /report opens a report file in the browser; /estimate sizes a case. Everything but the home page loads
-// when first opened, so the home page stays small.
+// /report opens a report file in the browser; /estimate sizes a case; /how-it-works explains each step.
+// Everything but the home page loads when first opened, so the home page stays small.
 import { createBrowserRouter, type RouteObject } from "react-router";
 import type { RouteHandle } from "@/components/layout/AppLayout";
 import { RootLayout } from "@/components/layout/RootLayout";
@@ -29,6 +29,7 @@ export const routes: RouteObject[] = [
       { path: "/connect", lazy: async () => ({ Component: (await import("@/pages/Connect")).Connect }) },
       { path: "/report", lazy: async () => ({ Component: (await import("@/pages/report/Report")).Report }) },
       { path: "/estimate", lazy: async () => ({ Component: (await import("@/pages/estimate/Estimate")).Estimate }) },
+      { path: "/how-it-works", lazy: async () => ({ Component: (await import("@/pages/how/HowItWorks")).HowItWorks }) },
       {
         path: "/app",
         lazy: async () => ({ Component: (await import("@/pages/app/shell")).EngineShell }),

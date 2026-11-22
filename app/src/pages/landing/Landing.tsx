@@ -154,6 +154,9 @@ export function Landing() {
               </div>
             ))}
           </div>
+          <Link to="/how-it-works" className="mt-6 inline-flex items-center gap-1.5 text-sm font-medium text-primary underline-offset-4 hover:underline">
+            How each step works, and the command behind it <ArrowRight className="size-4" aria-hidden />
+          </Link>
         </Section>
 
         <div className="border-y border-border bg-surface-2/60">

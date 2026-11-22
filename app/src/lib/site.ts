@@ -9,6 +9,7 @@ export const DOCS = {
   howItWorks: `${REPO_URL}/blob/main/docs/how-it-works.md`,
   safety: `${REPO_URL}/blob/main/docs/safety.md`,
   limits: `${REPO_URL}/blob/main/docs/limits.md`,
+  dashboard: `${REPO_URL}/blob/main/docs/dashboard.md`,
   troubleshooting: `${REPO_URL}/blob/main/docs/troubleshooting.md`,
   example: `${REPO_URL}/blob/main/examples/ahmed-body/README.md`,
   license: `${REPO_URL}/blob/main/LICENSE`,
