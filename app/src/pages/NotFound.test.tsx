@@ -8,7 +8,7 @@ import { NotFound, NotFoundPage, RouteError } from "./NotFound";
 function openUnknown(address: string, inApp = false) {
   const router = createMemoryRouter([{ path: "*", element: inApp ? <NotFound home="/demo" /> : <NotFoundPage /> }],
     { initialEntries: [address] });
-  render(<RouterProvider router={router} />);
+  return render(<RouterProvider router={router} />);
 }
 
 /** Waits until the page has read its guess (it loads meantPage.ts once shown). */
@@ -22,15 +22,18 @@ describe("a page that doesn't exist", () => {
     openUnknown("/docs/validation.md");
     expect(await screen.findByRole("heading", { level: 1, name: "This page doesn't exist" })).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "Accuracy check" })).toHaveAttribute("href", "/accuracy");
-    expect(screen.getByText(/Did you mean/)).toHaveTextContent(/^Did you mean Accuracy check\?$/);
+    const guess = screen.getByText(/Did you mean/);
+    expect(guess).toHaveTextContent(/^Did you mean Accuracy check\?$/);
+    expect(guess).toHaveAttribute("aria-live", "polite"); // it comes a moment after the page, so it's said when it comes
     expect(screen.getByRole("link", { name: "Back to the start" })).toHaveAttribute("href", "/");
   });
 
   it("guesses nothing when no page is near the address", async () => {
-    openUnknown("/nowhere");
+    const { container } = openUnknown("/nowhere");
     expect(await screen.findByRole("heading", { level: 1, name: "This page doesn't exist" })).toBeInTheDocument();
     await guessed();
     expect(screen.queryByText(/Did you mean/)).toBeNull();
+    expect(container.querySelector("[aria-live='polite']")).toBeEmptyDOMElement();
   });
 
   it("guesses nothing on an app screen, whose sidebar lists the screens", async () => {

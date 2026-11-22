@@ -42,10 +42,16 @@ export function NotFound({ home = "/", suggest = false }: { home?: string; sugge
       }
     >
       Check the address, or go back to where you started.
-      {meant && (
-        <p className="mt-3">
-          Did you mean{" "}
-          <Link to={meant.page} className="font-medium text-primary underline-offset-4 hover:underline">{meant.title}</Link>?
+      {/* The guess comes a moment after the page, so it's in a live region that is there from the start: a screen
+          reader then says it when it comes. */}
+      {suggest && (
+        <p aria-live="polite" className={meant ? "mt-3" : undefined}>
+          {meant && (
+            <>
+              Did you mean{" "}
+              <Link to={meant.page} className="font-medium text-primary underline-offset-4 hover:underline">{meant.title}</Link>?
+            </>
+          )}
         </p>
       )}
     </EmptyState>
