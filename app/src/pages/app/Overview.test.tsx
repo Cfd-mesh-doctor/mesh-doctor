@@ -87,6 +87,9 @@ describe("the Overview before anything has run", () => {
     expect(screen.queryByText("Starting repairs from the app comes next")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull(); // everything loaded
     expect(screen.getByText("API 1.0 · 1 job kind")).toBeInTheDocument(); // one kind of job: not "1 job kinds"
+    // No cases found: the tile links the screen that says where the engine looks for them.
+    expect(screen.getByRole("link", { name: "Where the engine looks" })).toHaveAttribute("href", "/app/cases");
+    expect(screen.queryByText("Only ever read, never changed")).toBeNull();
   });
 
   it("doesn't call a list that didn't load empty, or offer first steps for it", async () => {
@@ -125,6 +128,8 @@ describe("the Overview before anything has run", () => {
     open();
     expect(await screen.findByText("Starting repairs from the app comes next")).toBeInTheDocument();
     expect((await screen.findAllByRole("link", { name: /^Report of / })).length).toBeGreaterThan(0);
+    expect(screen.getByText("Only ever read, never changed")).toBeInTheDocument(); // the demo has cases
+    expect(screen.queryByRole("link", { name: "Where the engine looks" })).toBeNull();
     expect(screen.getAllByRole("button", { name: COPY_REPAIR })).toHaveLength(1);
   });
 });

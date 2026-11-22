@@ -80,7 +80,11 @@ export function Overview() {
           icon={FolderOpen}
           loading={cases.isPending}
           value={cases.data?.items.length ?? "–"}
-          hint="Only ever read, never changed"
+          hint={cases.data?.items.length === 0 ? (
+            // None found is the first thing to fix: the hint links the Cases screen, which says where the engine looks
+            // and how to point it at another folder.
+            <Link to={to("/cases")} className="font-medium text-primary hover:underline">Where the engine looks</Link>
+          ) : "Only ever read, never changed"}
         />
         <StatTile
           label="Repair runs"
