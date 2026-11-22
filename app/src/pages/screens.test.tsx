@@ -143,9 +143,9 @@ describe("Cases", () => {
   it("links a case to the report of its latest finished repair, and a case never repaired to none", async () => {
     renderScreen(<Cases />, { transport: demoTransport(data(), 0) });
     const wing = (await screen.findByText("wing")).closest("tr") as HTMLElement;
-    // Twice in jsdom (no CSS): beside the verdict, and under the name for phones.
+    // Beside the verdict, or under it on phones: one link either way.
     const links = await within(wing).findAllByRole("link", { name: "Report of wing-new" });
-    expect(links).toHaveLength(2);
+    expect(links).toHaveLength(1);
     for (const link of links) expect(link).toHaveAttribute("href", expect.stringMatching(/\/repairs\/wing-new\/report$/));
     const bracket = screen.getByText("bracket").closest("tr") as HTMLElement;
     expect(within(bracket).queryByRole("link")).not.toBeInTheDocument();

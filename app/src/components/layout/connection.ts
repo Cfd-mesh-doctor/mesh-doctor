@@ -8,6 +8,8 @@ import { useEngineInfo } from "@/engine/hooks";
 export interface Connection {
   tone: BadgeTone;
   label: string;
+  /** a shorter label for the smallest phones, where the top bar has room for little else */
+  short?: string;
   detail: string;
   pulse?: boolean;
 }
@@ -17,7 +19,7 @@ export function useConnection(): Connection {
   const { pairing } = usePairing();
   const info = useEngineInfo();
   if (mode === "demo") {
-    return { tone: "info", label: "Demo data", detail: "Recorded from a real run of the public Ahmed-body example" };
+    return { tone: "info", label: "Demo data", short: "Demo", detail: "Recorded from a real run of the public Ahmed-body example" };
   }
   if (!pairing) return { tone: "neutral", label: "Not paired", detail: "Pair this browser with your engine" };
   if (info.isError) {

@@ -16,13 +16,19 @@ export function ConnectionPill({ className }: { className?: string }) {
       <Link
         to={mode === "demo" ? "/connect" : to("/settings")}
         className={cn(
-          "inline-flex h-8 items-center gap-2 rounded-full border border-border bg-surface px-3 text-[13px] font-medium " +
+          "inline-flex h-8 shrink-0 items-center gap-2 rounded-full border border-border bg-surface px-3 text-[13px] " +
+            "font-medium whitespace-nowrap " +
             "shadow-card transition-colors hover:bg-surface-2",
           className,
         )}
       >
         <Dot tone={c.tone} pulse={c.pulse && c.tone !== "success"} />
-        {c.label}
+        {c.short ? (
+          <>
+            <span className="min-[400px]:hidden">{c.short}</span>
+            <span className="hidden min-[400px]:inline">{c.label}</span>
+          </>
+        ) : c.label}
       </Link>
     </Tip>
   );

@@ -141,7 +141,6 @@ export function Cases() {
                             : r.runs.length
                               ? `${r.runs.length} ${r.runs.length === 1 ? "run" : "runs"} · ${formatRelative(r.latest?.finished)}`
                               : "Not repaired yet"}
-                          {r.latest?.verdict && <> · <ReportLink run={r.latest.name} /></>}
                         </div>
                         {/* The Cells column shows from md: below that, the size and its estimate go here. */}
                         {r.cells != null && (
@@ -157,11 +156,11 @@ export function Cases() {
                     {repairs.isPending ? "…" : r.runs.length || <span className="text-muted-foreground">none</span>}
                   </TD>
                   <TD>
-                    {/* The latest run is the latest finished one when there is one (unfinished runs sort last). */}
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    {/* The latest run is the latest finished one when there is one (unfinished runs sort last). On
+                        phones the link goes under the badge, so this column stays narrow and the names keep their room. */}
+                    <div className="flex flex-col items-start gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3">
                       <VerdictBadge verdict={r.latest?.verdict} />
-                      {/* On phones it goes under the name instead, so the case names keep their room. */}
-                      {r.latest?.verdict && <ReportLink run={r.latest.name} className="hidden text-[13px] sm:inline" />}
+                      {r.latest?.verdict && <ReportLink run={r.latest.name} className="text-[13px]" />}
                     </div>
                   </TD>
                   <TD className="hidden md:table-cell">

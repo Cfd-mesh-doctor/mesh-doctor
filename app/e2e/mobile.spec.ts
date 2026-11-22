@@ -69,6 +69,24 @@ test("on a small phone, a case's size and its estimate show under the name", asy
   await expect(page.getByLabel("Mesh size")).toHaveValue("0.012225");
 });
 
+test("on a phone the top bar and the case names each stay on one line", async ({ page }) => {
+  // Under 400 px the demo's pill says just "Demo", so "Mesh Doctor" keeps its line down to 320 px.
+  for (const [width, pill] of [[412, "Demo data"], [360, "Demo"], [320, "Demo"]] as const) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/demo/cases");
+    const header = page.locator("header").first();
+    await expect(header.getByRole("link", { name: pill, exact: true })).toBeVisible();
+    expect((await header.getByText("Mesh Doctor").boundingBox())?.height, `${width} px`).toBeLessThan(24);
+    // The Report link sits under the verdict, so the names keep their room. (At 320 px the widest verdict,
+    // "2 better, 1 worse", leaves too little and a long name breaks at a hyphen, as it always has there.)
+    const row = page.getByRole("row", { name: /ahmed-25-medium/ });
+    if (width >= 360) {
+      expect((await row.getByText("ahmed-25-medium", { exact: true }).boundingBox())?.height, `${width} px`).toBeLessThan(26);
+    }
+    await expect(row.getByRole("link", { name: "Report of ahmed25-medium-fix" })).toBeVisible();
+  }
+});
+
 test("on a phone the public pages have a menu", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto("/report");

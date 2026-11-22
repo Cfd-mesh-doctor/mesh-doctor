@@ -19,7 +19,7 @@ export function Logo({ className, tag }: { className?: string; tag?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
       <LogoMark />
-      <span className="text-[15px] font-semibold tracking-tight">Mesh Doctor</span>
+      <span className="text-[15px] font-semibold tracking-tight whitespace-nowrap">Mesh Doctor</span>
       {tag && (
         <span className="rounded-md border border-border px-1.5 py-px text-[11px] font-medium text-muted-foreground">
           {tag}
