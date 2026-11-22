@@ -80,7 +80,8 @@ function Arrow({ label }: { label: string }) {
 export function Landing() {
   useTitle();
   const { pairing } = usePairing();
-  const appLink = pairing ? "/app" : "/connect";
+  // A newcomer's first click goes to the three steps, in order: pairing first would need an engine already running.
+  const start = pairing ? { to: "/app", label: "Open the app" } : { to: "/#start", label: "Get started" };
   return (
     <div className="min-h-dvh">
       <PublicHeader />
@@ -105,7 +106,7 @@ export function Landing() {
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Button size="lg" asChild>
-                  <Link to={appLink}>{pairing ? "Open the app" : "Connect your engine"} <ArrowRight /></Link>
+                  <Link to={start.to}>{start.label} <ArrowRight /></Link>
                 </Button>
                 <Button size="lg" variant="secondary" asChild>
                   <Link to="/demo">Explore the demo</Link>
@@ -202,17 +203,23 @@ export function Landing() {
 
         <Section id="start" eyebrow="Get started" title="Running in three steps" lead="One script to install, one command to start, one link to pair this browser.">
           {/* grid-cols-1: on the smallest phones a long command scrolls inside its box instead of widening the page */}
+          {/* Each step says how often it's done and links to where it's done or shown. */}
           <ol className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             {[
-              ["Install", "From a clone of the repository, one script installs WSL, OpenFOAM 14 and Mesh Doctor, and checks the result.", "bash tools/setup_linux.sh"],
-              ["Start and pair", `Start the engine. It prints a pairing link for this site; open it in ${BROWSERS}.`, "meshdoctor serve"],
-              ["Repair and prove", "Repair a copy of your case, then test it with an A/B solver run. The results show up in the app.", "meshdoctor full <case> <name>"],
-            ].map(([title, text, cmd], i) => (
+              { title: "Install", when: "once", cmd: "bash tools/setup_linux.sh", link: { to: "/install", label: "The full install guide" },
+                text: "From a clone of the repository, one script installs WSL, OpenFOAM 14 and Mesh Doctor, and checks the result." },
+              { title: "Start and pair", when: "each time you work", cmd: "meshdoctor serve", link: { to: "/connect", label: "Pair this browser" },
+                text: `Start the engine. It prints a pairing link for this site; open it in ${BROWSERS}, once per browser.` },
+              { title: "Repair and prove", when: "for each case", cmd: "meshdoctor full <case> <name>",
+                link: { to: "/demo/repairs/ahmed25-medium-fix/report", label: "See a finished report in the demo" },
+                text: "Repair a copy of your case, then test it with an A/B solver run. The results show up in the app." },
+            ].map(({ title, when, cmd, link, text }, i) => (
               <li key={title} className="flex flex-col rounded-xl border border-border bg-surface p-5 shadow-card">
-                <span className="font-mono text-xs text-muted-foreground">Step {i + 1}</span>
+                <span className="font-mono text-xs text-muted-foreground">Step {i + 1} · {when}</span>
                 <p className="mt-2 font-semibold">{title}</p>
                 <p className="mt-1.5 flex-1 text-[13.5px] text-muted-foreground">{text}</p>
-                <CopyCommand command={cmd as string} className="mt-4" />
+                <Link to={link.to} className="mt-3 text-[13px] font-medium text-primary hover:underline">{link.label}</Link>
+                <CopyCommand command={cmd} className="mt-4" />
               </li>
             ))}
           </ol>

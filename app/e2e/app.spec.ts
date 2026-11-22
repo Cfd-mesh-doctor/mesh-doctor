@@ -24,6 +24,24 @@ test("the home page explains the app and links to the demo", async ({ page }) =>
   expect(errors).toEqual([]);
 });
 
+test("a newcomer's main button leads to the three steps, which say how often each is done and link onward", async ({ page }) => {
+  await page.goto("/");
+  // Not "Connect your engine": pairing first would need an engine that is already installed and running.
+  await page.getByRole("main").getByRole("link", { name: "Get started" }).click();
+  await expect(page).toHaveURL(/\/#start$/);
+  await expect(page.getByRole("heading", { name: "Running in three steps" })).toBeInViewport();
+  const steps = page.locator("#start ol > li");
+  await expect(steps).toHaveCount(3);
+  for (const [i, when] of ["once", "each time you work", "for each case"].entries()) {
+    await expect(steps.nth(i)).toContainText(`Step ${i + 1} · ${when}`);
+  }
+  await expect(steps.nth(0).getByRole("link", { name: "The full install guide" })).toHaveAttribute("href", "/install");
+  await expect(steps.nth(2).getByRole("link", { name: "See a finished report in the demo" }))
+    .toHaveAttribute("href", "/demo/repairs/ahmed25-medium-fix/report");
+  await steps.nth(1).getByRole("link", { name: "Pair this browser" }).click();
+  await expect(page).toHaveURL(/\/connect$/);
+});
+
 test("the body font starts loading with the page, and is fetched once", async ({ page, request }) => {
   const html = await (await request.get("/")).text();
   const link = html.match(/<link [^>]*rel="preload"[^>]*>/)?.[0] ?? "";
