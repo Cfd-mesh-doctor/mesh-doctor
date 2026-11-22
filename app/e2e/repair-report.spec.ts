@@ -67,3 +67,10 @@ test("the demo's Jobs page opens a finished run's report, from its row or from i
   await expect(page).toHaveURL(/\/demo\/repairs\/ahmed35-medium-fix\/report$/);
   await expect(page.getByRole("heading", { level: 1, name: "ahmed35-medium-fix" })).toBeVisible();
 });
+
+test("the demo's Cases page opens a case's latest report", async ({ page }) => {
+  await page.goto("/demo/cases");
+  await page.getByRole("row", { name: /pitzDaily/ }).getByRole("link", { name: "Report of pitzdaily-fix" }).click();
+  await expect(page).toHaveURL(/\/demo\/repairs\/pitzdaily-fix\/report$/);
+  await expect(page.getByRole("heading", { level: 1, name: "pitzdaily-fix" })).toBeVisible();
+});

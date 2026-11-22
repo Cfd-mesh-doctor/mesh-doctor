@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The source cases the engine may read, with what has been done to each so far.
+// The source cases the engine may read, with what has been done to each so far and the report of each one's latest
+// finished repair.
 import { FolderOpen, Search } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Link } from "react-router";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { VerdictBadge } from "@/components/shared/badges";
@@ -9,16 +11,29 @@ import { EmptyState, PageHeader, TableSkeleton } from "@/components/shared/page"
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/misc";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
+import { useAppPath } from "@/engine/context";
 import { useCases, useRepairs } from "@/engine/hooks";
 import type { RepairSummary } from "@/engine/types";
 import { caseName } from "@/engine/verdict";
 import { formatCells, formatDateTime, formatRelative } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
+import { cn } from "@/lib/utils";
 
 interface Row {
   name: string;
   runs: RepairSummary[];
   latest?: RepairSummary;
+}
+
+/** The report of a case's latest finished run, named like the Overview's link. */
+function ReportLink({ run, className }: { run: string; className?: string }) {
+  const to = useAppPath();
+  return (
+    <Link to={to(`/repairs/${encodeURIComponent(run)}/report`)} aria-label={`Report of ${run}`}
+      className={cn("font-medium text-primary hover:underline", className)}>
+      Report
+    </Link>
+  );
 }
 
 export function Cases() {
@@ -108,6 +123,7 @@ export function Cases() {
                             : r.runs.length
                               ? `${r.runs.length} ${r.runs.length === 1 ? "run" : "runs"} · ${formatRelative(r.latest?.finished)}`
                               : "Not repaired yet"}
+                          {r.latest?.verdict && <> · <ReportLink run={r.latest.name} /></>}
                         </div>
                       </div>
                     </div>
@@ -115,7 +131,14 @@ export function Cases() {
                   <TD className="hidden tabular-nums sm:table-cell">
                     {repairs.isPending ? "…" : r.runs.length || <span className="text-muted-foreground">none</span>}
                   </TD>
-                  <TD><VerdictBadge verdict={r.latest?.verdict} /></TD>
+                  <TD>
+                    {/* The latest run is the latest finished one when there is one (unfinished runs sort last). */}
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <VerdictBadge verdict={r.latest?.verdict} />
+                      {/* On phones it goes under the name instead, so the case names keep their room. */}
+                      {r.latest?.verdict && <ReportLink run={r.latest.name} className="hidden text-[13px] sm:inline" />}
+                    </div>
+                  </TD>
                   <TD className="hidden tabular-nums md:table-cell">{formatCells(r.latest?.nCells)}</TD>
                   <TD className="hidden text-right text-[13px] whitespace-nowrap text-muted-foreground sm:table-cell" title={formatDateTime(r.latest?.finished)}>
                     {r.latest?.finished ? formatRelative(r.latest.finished) : "–"}

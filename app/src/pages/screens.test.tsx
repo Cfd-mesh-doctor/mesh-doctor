@@ -7,6 +7,7 @@ import { loadPairing, savePairing } from "@/engine/pairing";
 import type { Job } from "@/engine/types";
 import { renderScreen } from "@/test/render";
 import { Connect } from "./Connect";
+import { Cases } from "./app/Cases";
 import { Jobs } from "./app/Jobs";
 
 const KEY = "TestKey_0123456789abcdefghijklmnopqrstuvwxy";
@@ -123,5 +124,30 @@ describe("Jobs", () => {
     await userEvent.click(screen.getByRole("button", { name: "broken" }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).queryByRole("link", { name: "Open report" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Cases", () => {
+  const verdict = { improved: ["maxSkewness"], regressions: [], unchanged: [] };
+  const data = () => ({
+    "/cases": { items: ["wing", "bracket"] },
+    "/repairs": {
+      items: [
+        { name: "wing-old", source: "~/cases/wing", finished: "2026-11-20T10:00:00Z", verdict },
+        { name: "wing-new", source: "~/cases/wing", finished: "2026-11-21T10:00:00Z", verdict },
+        { name: "wing-running", source: "~/cases/wing", finished: null, verdict: null },
+      ],
+    },
+  });
+
+  it("links a case to the report of its latest finished repair, and a case never repaired to none", async () => {
+    renderScreen(<Cases />, { transport: demoTransport(data(), 0) });
+    const wing = (await screen.findByText("wing")).closest("tr") as HTMLElement;
+    // Twice in jsdom (no CSS): beside the verdict, and under the name for phones.
+    const links = await within(wing).findAllByRole("link", { name: "Report of wing-new" });
+    expect(links).toHaveLength(2);
+    for (const link of links) expect(link).toHaveAttribute("href", expect.stringMatching(/\/repairs\/wing-new\/report$/));
+    const bracket = screen.getByText("bracket").closest("tr") as HTMLElement;
+    expect(within(bracket).queryByRole("link")).not.toBeInTheDocument();
   });
 });
