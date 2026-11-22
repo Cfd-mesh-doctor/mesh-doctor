@@ -24,6 +24,8 @@ export const ON_SITE: DocEntry[] = [
     about: "Setting it up on your own computer: Linux, or WSL on Windows, with OpenFOAM 14 and Python. From the README." },
   { title: "Your own case", page: "/your-own-case", file: "templates.md",
     about: "Copy the tested Ahmed-body case and change its geometry, domain and flow conditions to make your own." },
+  { title: "Claude Code", page: "/claude-code", file: "claude.md",
+    about: "The repository is also a Claude Code plugin, cfd-toolkit: how to install it, its skills and its slash commands." },
   { title: "Troubleshooting", page: "/troubleshooting", file: "troubleshooting.md",
     about: "Problems people actually hit, with the fix. Search it for the message you see." },
   { title: "Limits", page: "/limits", file: "limits.md",
@@ -42,8 +44,6 @@ export const ON_GITHUB: DocEntry[] = [
     about: "The engine's own dashboard (meshdoctor serve), page by page, with screenshots." },
   { title: "Architecture", file: "architecture.md",
     about: "Where the code is, where it is going and why: the engine, its versioned results and API, and this site." },
-  { title: "Using this repository with Claude Code", file: "claude.md",
-    about: "The repository is also a Claude Code plugin, cfd-toolkit: how to install it, its skills and its slash commands." },
 ];
 
 export const githubDoc = (file: string) => `${REPO_URL}/blob/main/docs/${file}`;

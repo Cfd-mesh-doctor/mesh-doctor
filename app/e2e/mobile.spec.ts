@@ -10,7 +10,7 @@ test("on a phone nothing scrolls sideways, and the menu works", async ({ page })
     await page.setViewportSize({ width, height: 800 });
     for (const path of [
       "/", "/connect", "/install", "/report", "/estimate?cells=31.1", "/how-it-works", "/accuracy", "/gallery", "/docs",
-      "/troubleshooting", "/limits", "/safety", "/your-own-case", "/demo", "/demo/jobs", "/demo/cases", "/demo/settings", "/demo/estimate?cells=31.1",
+      "/troubleshooting", "/limits", "/safety", "/your-own-case", "/claude-code", "/demo", "/demo/jobs", "/demo/cases", "/demo/settings", "/demo/estimate?cells=31.1",
       "/demo/repairs/ahmed25-medium-fix/report", "/demo/repairs/ahmed35-medium-fix/report",
     ]) {
       await page.goto(path);
