@@ -52,9 +52,9 @@ describe("the Overview's recent jobs", () => {
   });
 });
 
-/** Opens the Overview of your own engine, paired, before anything has run on it (or with these repair runs);
- * `failing` lists the lists it fails to answer. */
-function ownEngine(failing: string[] = [], runs: unknown[] = []) {
+/** Opens the Overview of your own engine, paired, before anything has run on it (or with these repair runs; null: the
+ * runs never come); `failing` lists the lists it fails to answer. */
+function ownEngine(failing: string[] = [], runs: unknown[] | null = []) {
   savePairing({ engine: "http://localhost:8765", key: "TestKey_0123456789abcdefghijklmnopqrstuvwxy", paired: "2026-11-22T12:00:00Z" });
   const asked: string[] = [];
   const transport: Transport = {
@@ -65,7 +65,7 @@ function ownEngine(failing: string[] = [], runs: unknown[] = []) {
       asked.push(route);
       if (failing.includes(route)) throw new EngineError("unreachable", "nothing answered");
       if (route === "/") return { apiVersion: "1.0", version: "0.1.0", jobKinds: ["repair"] } as T;
-      if (route === "/repairs") return { items: runs } as T;
+      if (route === "/repairs") return runs ? ({ items: runs } as T) : new Promise<T>(() => {});
       if (route === "/jobs" || route === "/cases") return { items: [] } as T;
       throw new EngineError("not-found", `no route ${route}`, 404);
     },
@@ -114,6 +114,15 @@ describe("the Overview before anything has run", () => {
     await userEvent.click(within(alert).getByRole("button", { name: "Try again" }));
     await waitFor(() => expect(count("/jobs")).toBe(jobs + 1));
     expect(count("/repairs")).toBe(repairs);
+  });
+
+  it("waits for the repair runs before showing the Start a repair card, so an engine with none doesn't flash it", async () => {
+    ownEngine([], null);
+    expect(await screen.findByRole("heading", { name: "No jobs yet" })).toBeInTheDocument(); // the jobs have loaded
+    expect(await screen.findByText("API 1.0 · 1 job kind")).toBeInTheDocument(); // and the engine's own answer
+    // While the runs load, neither the card nor the empty list's command shows: one of them will, once they're known.
+    expect(screen.queryByRole("heading", { name: "Start a repair" })).toBeNull();
+    expect(screen.queryAllByRole("button", { name: COPY_REPAIR })).toHaveLength(0);
   });
 
   it("says “No verdict”, in words, for a run with no verdict and no step under way", async () => {

@@ -213,7 +213,9 @@ export function Overview() {
         </Card>
       </div>
 
-      {!noRuns && (
+      {/* Once the runs are known, or didn't load: an engine with none has the command in its empty list instead, so
+          showing the card while they load would show it and then take it away again. */}
+      {!repairs.isPending && !noRuns && (
         <Card className="mt-6 flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
           <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary-soft text-primary">
             <Terminal className="size-5" />
