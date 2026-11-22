@@ -27,6 +27,20 @@ describe("the Docs page's search", () => {
     expect(screen.getByRole("region", { name: "On this site" })).toBeInTheDocument();
   });
 
+  it("puts the cursor in the box on “/”, and a “/” typed in it stays", async () => {
+    const user = userEvent.setup();
+    renderScreen(<Docs />, { path: "/docs" });
+    expect(box()).toHaveAttribute("aria-keyshortcuts", "/");
+    expect(within(screen.getByRole("search")).getByText("/").tagName).toBe("KBD");
+    expect(box()).not.toHaveFocus();
+    await user.keyboard("/");
+    expect(box()).toHaveFocus();
+    expect(box()).toHaveValue("");
+    await user.keyboard("a/b");
+    expect(box()).toHaveValue("a/b");
+    expect(within(screen.getByRole("search")).queryByText("/")).toBeNull();
+  });
+
   it("opens at the search the address holds; a Troubleshooting group opens at the problems that match", async () => {
     renderScreen(<Docs />, { path: "/docs", at: "/docs?q=patchField" });
     expect(box()).toHaveValue("patchField");
