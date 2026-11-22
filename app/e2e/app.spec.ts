@@ -24,6 +24,22 @@ test("the home page explains the app and links to the demo", async ({ page }) =>
   expect(errors).toEqual([]);
 });
 
+test("the body font starts loading with the page, and is fetched once", async ({ page, request }) => {
+  const html = await (await request.get("/")).text();
+  const link = html.match(/<link [^>]*rel="preload"[^>]*>/)?.[0] ?? "";
+  expect(link).toMatch(/ as="font"/);
+  expect(link).toMatch(/ type="font\/woff2"/);
+  expect(link).toMatch(/ crossorigin/); // fonts are fetched that way, so without it the browser fetches twice
+  const href = link.match(/ href="(\/assets\/inter-latin-wght-normal-[\w-]+\.woff2)"/)?.[1];
+  expect(href).toBeDefined();
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  expect(await page.evaluate(() => document.fonts.check('16px "Inter Variable"'))).toBe(true);
+  const fetched = await page.evaluate(() => performance.getEntriesByType("resource").map((e) => new URL(e.name).pathname));
+  expect(fetched.filter((p) => p === href)).toHaveLength(1);
+});
+
 test("the demo shows recorded jobs, and cancelling asks first", async ({ page }) => {
   const errors = watchErrors(page);
   await page.goto("/demo/jobs");

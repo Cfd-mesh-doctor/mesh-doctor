@@ -30,8 +30,29 @@ function linkPreviewPicture(): Plugin {
   };
 }
 
+/**
+ * Starts the body font (Inter's Latin letters) loading with the page, not once the first screen is drawn, so the text
+ * doesn't show in a fallback font first and then jump. The file's name has a hash, so it is looked up in the build;
+ * e2e/app.spec.ts checks that the styles use this copy rather than fetching the font again.
+ */
+function preloadBodyFont(): Plugin {
+  return {
+    name: "preload-body-font",
+    apply: "build",
+    transformIndexHtml: {
+      order: "post",
+      handler(_html, { bundle }) {
+        const font = Object.keys(bundle ?? {}).find((f) => /^assets\/inter-latin-wght-normal-[\w-]+\.woff2$/.test(f));
+        if (!font) throw new Error("preload-body-font: the build has no Inter Latin font to preload");
+        const attrs = { rel: "preload", href: `/${font}`, as: "font", type: "font/woff2", crossorigin: true };
+        return [{ tag: "link", attrs, injectTo: "head" }];
+      },
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), linkPreviewPicture()],
+  plugins: [react(), tailwindcss(), linkPreviewPicture(), preloadBodyFont()],
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   define: { "import.meta.env.VITE_APP_VERSION": JSON.stringify(pkg.version) },
   build: { target: "es2022", sourcemap: false, assetsInlineLimit: 0 },
