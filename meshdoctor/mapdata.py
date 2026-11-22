@@ -3,7 +3,7 @@
 # Copyright (C) 2026 The Mesh Doctor authors
 """Mesh Doctor map: where the mesh was repaired vs where the flow will not settle.
 
-    python3 mapdata.py <mdCase> [--hot "Label=<case dir>"]... [--note "text"]... [--bin 0.004]
+    python3 mapdata.py <mdCase> [--hot "Label=<case dir>"]... [--note "text"]... [--bin <metres>]
 
 <mdCase> is a Mesh Doctor run in the workspace (config.py); its result.json holds
 the defect clusters before/after repair, and its repaired copy gives the mesh.
@@ -17,9 +17,11 @@ Writes <mdCase>/meshDoctor/map.json for the dashboard page /meshmap:
     is found geometrically and excluded, and its normal is "up");
   - defect clusters before and after repair;
   - the top hotspot cells of each --hot layer.
+--bin is one picture pixel: by default 4 mm, or coarser when the view is so big
+that a picture would be more than 800 pixels across (a whole car).
 Read-only on every case it touches.
 """
-import base64, glob, json, os, re, sys
+import base64, glob, json, math, os, re, sys
 import numpy as np
 
 import config
@@ -156,10 +158,22 @@ def view_box(interest, model, pad=0.12):
     return P.min(0) - pad, P.max(0) + pad
 
 
+DEFAULT_BIN = 0.004   # metres per picture pixel, unless the view is too big for it
+MAX_PX = 800          # the most pixels across a picture when the bin is left to the map
+
+
+def auto_bin(lo, hi, least=DEFAULT_BIN, most_px=MAX_PX):
+    """The bin (metres per picture pixel) when --bin isn't given: 4 mm, or coarser when the view box is so big that
+    a picture would be more than `most_px` pixels across (a 5 m car at 4 mm: about 1,300).  Rounded up to 0.1 mm;
+    density() adds a pixel for the far edge, so the pictures stay within `most_px`."""
+    span = max(float(h) - float(l) for l, h in zip(lo, hi))
+    return max(least, math.ceil(span / (most_px - 1) * 1e4) / 1e4)
+
+
 def main(a):
     md = os.path.join(ROOT, a[0])
     res = schema.read(os.path.join(md, "meshDoctor", "result.json"), "repair")
-    step = float(a[a.index("--bin") + 1]) if "--bin" in a else 0.004
+    step = float(a[a.index("--bin") + 1]) if "--bin" in a else None
     hot = [x.split("=", 1) for i, x in enumerate(a) if i and a[i - 1] == "--hot"]
 
     def cl(lst):
@@ -177,6 +191,8 @@ def main(a):
     lo, hi = view_box(interest, pts)
     lat = 3 - up          # x is always streamwise; the other horizontal axis is across
     lo[up] = min(lo[up], glevel - 0.01)
+    if step is None:
+        step = auto_bin(lo, hi)
     sel = np.all((pts >= lo) & (pts <= hi), axis=1)
     pts = pts[sel]
     print("wall faces in view:", len(pts), "; up axis", "xyz"[up], "; ground patches", ground)
