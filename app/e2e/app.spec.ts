@@ -254,6 +254,28 @@ test("once something has run, the Overview's Start a repair card and the Jobs sc
   await expect(main.getByRole("link", { name: "the engine's dashboard" })).toHaveAttribute("href", `${ENGINE}/meshdoctor`);
 });
 
+test("the Cases screen gives each case its own repair command to copy, naming the copy with a name no run has", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await mockEngine(page, {
+    repairs: [{ name: "wing-fix", finished: "2026-11-21 12:05:00", nCells: 1000, profile: "openfoam", source: "wing", status: {}, verdict: null }],
+  });
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  await page.getByRole("complementary").getByRole("link", { name: "Cases", exact: true }).click();
+  const main = page.getByRole("main");
+  await expect(main.getByRole("link", { name: "the engine's dashboard" })).toHaveAttribute("href", `${ENGINE}/meshdoctor`);
+  // wing-fix is taken: a repair named so would replace it.
+  const wing = main.getByRole("button", { name: "Copy repair command: meshdoctor full wing wing-fix-2" });
+  await expect(main.getByRole("button", { name: "Copy repair command: meshdoctor full motorBike motorBike-fix" })).toBeVisible();
+  // Pointing at it shows the command; clicking copies it.
+  await wing.hover();
+  await expect(page.getByRole("tooltip")).toHaveText("meshdoctor full wing wing-fix-2");
+  await wing.click();
+  await expect(main.getByRole("button", { name: "Copied" })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("meshdoctor full wing wing-fix-2");
+});
+
 test("a list the engine fails to give says it didn't load, with the reason above it, on the Overview and on Cases", async ({ page }) => {
   await mockEngine(page, { broken: ["/cases"] });
   await page.goto(pairingLink());

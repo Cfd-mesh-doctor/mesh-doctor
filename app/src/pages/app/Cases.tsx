@@ -1,17 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The source cases the engine may read, with what has been done to each so far, the report of each one's latest
-// finished repair, and the size estimate for its mesh. What's typed in the filter box stays in the address (?q=), as
-// in the site's other search boxes, so a reload or a link keeps it.
-import { FolderOpen, Search } from "lucide-react";
+// finished repair, the size estimate for its mesh, and the command that repairs it. What's typed in the filter box
+// stays in the address (?q=), as in the site's other search boxes, so a reload or a link keeps it.
+import { Check, Copy, FolderOpen, Search } from "lucide-react";
 import { useMemo } from "react";
 import { Link, useSearchParams } from "react-router";
 import { CopyCommand } from "@/components/shared/CopyCommand";
+import { DashboardLink } from "@/components/shared/DashboardLink";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { VerdictBadge } from "@/components/shared/badges";
 import { EmptyState, PageHeader, TableSkeleton } from "@/components/shared/page";
 import { Card } from "@/components/ui/card";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
+import { Tip } from "@/components/ui/tooltip";
+import { repairCommand } from "@/engine/commands";
 import { useAppPath } from "@/engine/context";
 import { useCases, useRepairs } from "@/engine/hooks";
 import type { RepairSummary } from "@/engine/types";
@@ -19,6 +22,7 @@ import { caseName } from "@/engine/verdict";
 import { cellsField } from "@/estimate/estimate";
 import { ADDRESS_FIELD } from "@/lib/addressField";
 import { formatCells, formatCount, formatDateTime, formatRelative } from "@/lib/format";
+import { useCopy } from "@/lib/useCopy";
 import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +32,8 @@ interface Row {
   latest?: RepairSummary;
   /** the case's cell count: the engine's (API 1.2), else what its latest repair counted, else unknown */
   cells: number | null;
+  /** the command that repairs a copy of it; none until the runs are known, as the copy's name must be a new one */
+  command: string | null;
 }
 
 const LINK = "font-medium text-primary hover:underline";
@@ -54,6 +60,29 @@ function EstimateLink({ name, cells, className }: { name: string; cells: number 
   );
 }
 
+/** Copies the command that repairs a copy of a case, to run in WSL; pointing at it or focusing it shows the command
+ * (beside it: above it, it would hide the case's name). */
+function CopyRepairCommand({ command }: { command: string }) {
+  const { copied, copy } = useCopy();
+  return (
+    <Tip label={<code className="font-mono text-[12px]">{command}</code>} side="right">
+      <button
+        type="button"
+        onClick={() => void copy(command)}
+        aria-label={copied ? "Copied" : `Copy repair command: ${command}`}
+        className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-primary underline-offset-4 hover:underline"
+      >
+        {copied ? <Check className="size-3.5 shrink-0 text-success" aria-hidden /> : <Copy className="size-3.5 shrink-0" aria-hidden />}
+        {/* Both words take the same room, so the table doesn't shift while it says "Copied". */}
+        <span className="grid text-left">
+          <span className={cn("col-start-1 row-start-1", copied && "invisible")}>Copy repair command</span>
+          <span className={cn("col-start-1 row-start-1", !copied && "invisible")}>Copied</span>
+        </span>
+      </button>
+    </Tip>
+  );
+}
+
 export function Cases() {
   useTitle("Cases");
   const cases = useCases();
@@ -71,11 +100,13 @@ export function Cases() {
       list.push(r);
       bySource.set(name, list);
     }
+    // Every run's name, whichever case it copied: the workspace has one folder for each.
+    const names = (repairs.data?.items ?? []).map((r) => r.name);
     return (cases.data?.items ?? []).map((name) => {
       const runs = (bySource.get(name) ?? []).sort((a, b) => (b.finished ?? "").localeCompare(a.finished ?? ""));
       // An engine older than API 1.2 doesn't say a case's size: its repairs counted the same mesh.
       const cells = cases.data?.cells?.[name] ?? runs.find((r) => r.nCells != null)?.nCells ?? null;
-      return { name, runs, latest: runs[0], cells };
+      return { name, runs, latest: runs[0], cells, command: repairs.data ? repairCommand(name, names) : null };
     });
   }, [cases.data, repairs.data]);
 
@@ -86,7 +117,13 @@ export function Cases() {
     <>
       <PageHeader
         title="Cases"
-        description="OpenFOAM cases in the engine's cases folder. Mesh Doctor only ever reads them: every repair works on a copy."
+        description={
+          <>
+            OpenFOAM cases in the engine's cases folder. Mesh Doctor only ever reads them: every repair works on a copy.
+            To repair one, copy its repair command and run it in WSL, or start it from <DashboardLink />: the run shows
+            up here when it finishes.
+          </>
+        }
       />
       {cases.isError && <ErrorPanel className="mb-6" error={cases.error} onRetry={() => cases.refetch()} retrying={cases.isFetching} />}
       <Card data-tour="cases">
@@ -157,6 +194,7 @@ export function Cases() {
                             {cellsField(r.cells) && <> · <EstimateLink name={r.name} cells={r.cells} /></>}
                           </div>
                         )}
+                        {r.command && <CopyRepairCommand command={r.command} />}
                       </div>
                     </div>
                   </TD>
