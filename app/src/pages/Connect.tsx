@@ -240,9 +240,7 @@ export function Connect() {
         <div className="mt-6"><BrowserNotes /></div>
         <p className="mt-6 text-[13px] text-muted-foreground">
           No Mesh Doctor yet?{" "}
-          <a href={DOCS.quickstart} target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
-            Install it (Windows or Linux)
-          </a>
+          <Link to="/install" className="font-medium text-primary hover:underline">Install it (Windows or Linux)</Link>
           {" · "}
           <Link to="/demo" className="font-medium text-primary hover:underline">Explore the demo</Link>
         </p>

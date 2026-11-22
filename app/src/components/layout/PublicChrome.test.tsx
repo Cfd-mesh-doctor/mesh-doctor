@@ -11,7 +11,7 @@ describe("public header", () => {
     await userEvent.click(screen.getByRole("button", { name: "Open menu" }));
     const menu = within(screen.getByRole("dialog", { name: "Menu" }));
     expect(menu.getAllByRole("link").map((a) => a.textContent)).toEqual([
-      "Mesh Doctor", "How it works", "Accuracy check", "Gallery", "Privacy", "Get started", "Report viewer",
+      "Mesh Doctor", "How it works", "Accuracy check", "Gallery", "Privacy", "Get started", "Install", "Report viewer",
       "Size estimator", "Demo", "Docs",
     ]);
     expect(menu.getByRole("link", { name: "How it works" })).toHaveAttribute("href", "/how-it-works");

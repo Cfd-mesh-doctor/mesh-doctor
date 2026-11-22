@@ -10,7 +10,6 @@ import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { Button } from "@/components/ui/button";
 import { usePairing } from "@/engine/context";
-import { DOCS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
 import { HeroPreview } from "./HeroPreview";
 
@@ -218,8 +217,8 @@ export function Landing() {
           </ol>
           <p className="mt-6 text-[13px] text-muted-foreground">
             On Windows, run <code>tools\setup_windows.ps1</code> instead of step 1. Full instructions, Docker and cluster
-            set-ups are in the{" "}
-            <a href={DOCS.quickstart} target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">quickstart</a>.
+            set-ups are on the{" "}
+            <Link to="/install" className="font-medium text-primary hover:underline">install page</Link>.
             Got a report file from someone? Open it in the{" "}
             <Link to="/report" className="font-medium text-primary hover:underline">report viewer</Link>: it needs no
             install, and the file stays in your browser.

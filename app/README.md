@@ -11,6 +11,7 @@ no server of its own: the host (Vercel) only serves the built files, and no case
 | `/how-it-works` | how the repair and the checks work, step by step, from `docs/how-it-works.md` (its tables are kept equal to the doc's by a test) |
 | `/accuracy` | the accuracy check: the public Ahmed body against the wind tunnel, from `docs/validation.md` (its table and commands are kept equal to the doc's by a test) |
 | `/gallery` | the pictures the toolkit's scripts make for the public Ahmed body, from `docs/gallery.md` (its sections, captions and pictures are kept equal to the doc's by a test) |
+| `/install` | how to install the engine on Windows (WSL), Ubuntu or Docker, from the README's quickstart (its commands are kept equal to the README's by a test) |
 | `/connect` | pairing this browser with an engine |
 | `/app` | the app on your own engine |
 | `/estimate` | the size estimator: memory, solve time and cloud cost for a cell count, from measured runs (a browser port of `skills/cfd-results/scripts/size_estimate.py`); needs no engine, and the fields live in the address so an estimate can be shared |

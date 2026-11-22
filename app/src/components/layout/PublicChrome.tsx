@@ -3,7 +3,8 @@
 // their own sidebar.
 // Below tablet width the header's links move into a menu that slides in from the left, as the app's sidebar does.
 import {
-  BookOpen, Calculator, CirclePlay, FileSearch, Images, Menu as MenuIcon, Rocket, ShieldCheck, Target, Workflow,
+  BookOpen, Calculator, CirclePlay, Download, FileSearch, Images, Menu as MenuIcon, Rocket, ShieldCheck, Target,
+  Workflow,
 } from "lucide-react";
 import { useState } from "react";
 import { Link, NavLink } from "react-router";
@@ -33,6 +34,7 @@ function PhoneMenu({ onNavigate }: { onNavigate: () => void }) {
         <NavLink to="/gallery" onClick={onNavigate} className={page}><Images aria-hidden />Gallery</NavLink>
         <Link to="/#privacy" onClick={onNavigate} className={menuItem}><ShieldCheck aria-hidden />Privacy</Link>
         <Link to="/#start" onClick={onNavigate} className={menuItem}><Rocket aria-hidden />Get started</Link>
+        <NavLink to="/install" onClick={onNavigate} className={page}><Download aria-hidden />Install</NavLink>
         <NavLink to="/report" onClick={onNavigate} className={page}><FileSearch aria-hidden />Report viewer</NavLink>
         <NavLink to="/estimate" onClick={onNavigate} className={page}><Calculator aria-hidden />Size estimator</NavLink>
         <NavLink to="/demo" onClick={onNavigate} className={page}><CirclePlay aria-hidden />Demo</NavLink>
@@ -106,6 +108,7 @@ export function PublicFooter() {
         </div>
         <nav className="grid grid-cols-2 gap-x-10 gap-y-2" aria-label="Footer">
           <a href={REPO_URL} {...ext}>Source code</a>
+          <Link to="/install" className={navLink}>Install</Link>
           <Link to="/how-it-works" className={navLink}>How it works</Link>
           <Link to="/accuracy" className={navLink}>Accuracy check</Link>
           <Link to="/gallery" className={navLink}>Gallery</Link>

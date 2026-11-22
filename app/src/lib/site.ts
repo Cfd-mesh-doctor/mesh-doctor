@@ -12,6 +12,8 @@ export const DOCS = {
   dashboard: `${REPO_URL}/blob/main/docs/dashboard.md`,
   validation: `${REPO_URL}/blob/main/docs/validation.md`,
   gallery: `${REPO_URL}/blob/main/docs/gallery.md`,
+  firstRun: `${REPO_URL}#first-run-the-motorbike-tutorial`,
+  cluster: `${REPO_URL}#university-cluster-apptainer--slurm-single-node`,
   troubleshooting: `${REPO_URL}/blob/main/docs/troubleshooting.md`,
   example: `${REPO_URL}/blob/main/examples/ahmed-body/README.md`,
   license: `${REPO_URL}/blob/main/LICENSE`,
