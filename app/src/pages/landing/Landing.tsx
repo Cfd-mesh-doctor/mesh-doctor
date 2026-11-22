@@ -211,7 +211,7 @@ export function Landing() {
               { title: "Start and pair", when: "each time you work", cmd: "meshdoctor serve", link: { to: "/connect", label: "Pair this browser" },
                 text: `Start the engine. It prints a pairing link for this site; open it in ${BROWSERS}, once per browser.` },
               { title: "Repair and prove", when: "for each case", cmd: "meshdoctor full <case> <name>",
-                link: { to: "/demo/repairs/ahmed25-medium-fix/report", label: "See a finished report in the demo" },
+                link: { to: "/demo/repairs/ahmed35-medium-fix/report", label: "See a finished report in the demo" },
                 text: "Repair a copy of your case, then test it with an A/B solver run. The results show up in the app." },
             ].map(({ title, when, cmd, link, text }, i) => (
               <li key={title} className="flex flex-col rounded-xl border border-border bg-surface p-5 shadow-card">

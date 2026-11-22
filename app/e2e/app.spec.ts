@@ -37,7 +37,7 @@ test("a newcomer's main button leads to the three steps, which say how often eac
   }
   await expect(steps.nth(0).getByRole("link", { name: "The full install guide" })).toHaveAttribute("href", "/install");
   await expect(steps.nth(2).getByRole("link", { name: "See a finished report in the demo" }))
-    .toHaveAttribute("href", "/demo/repairs/ahmed25-medium-fix/report");
+    .toHaveAttribute("href", "/demo/repairs/ahmed35-medium-fix/report");
   await steps.nth(1).getByRole("link", { name: "Pair this browser" }).click();
   await expect(page).toHaveURL(/\/connect$/);
 });
@@ -50,7 +50,7 @@ test("the demo's tour walks through the app's screens in five steps from the key
   await expect(tour).toContainText("Step 1 of 5");
   await expect(tour.getByRole("button", { name: "Next" })).toBeFocused();
   // Each step opens the screen it describes, and the tour stands aside: the Overview's tiles show whole.
-  const screens = [/\/demo$/, /\/demo\/cases$/, /\/demo\/jobs$/, /\/demo\/repairs\/ahmed25-medium-fix\/report$/];
+  const screens = [/\/demo$/, /\/demo\/cases$/, /\/demo\/jobs$/, /\/demo\/repairs\/ahmed35-medium-fix\/report$/];
   for (let i = 2; i <= 5; i++) {
     await page.keyboard.press("Enter");
     await expect(page.getByRole("dialog")).toContainText(`Step ${i} of 5`);
@@ -63,6 +63,9 @@ test("the demo's tour walks through the app's screens in five steps from the key
     }
   }
   await expect(page.getByRole("dialog", { name: "Reports: did the repair help?" })).toBeVisible();
+  // ...the report of a repair that worked: one where nothing changed would show a newcomer nothing.
+  await expect(page.getByText("checkMesh numbers improved", { exact: true }).locator("xpath=../following-sibling::div[1]"))
+    .toHaveText(/^[1-9]\d*$/);
   await expect(page.getByRole("button", { name: "Done" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog")).toBeHidden();

@@ -55,7 +55,7 @@ describe("the app tour", () => {
     const at = () => router.state.location.pathname;
     await user.click(screen.getByRole("button", { name: "Take the tour" }));
     expect(at()).toBe("/demo/jobs"); // the welcome stays where the tour was opened
-    for (const page of ["/demo", "/demo/cases", "/demo/jobs", "/demo/repairs/ahmed25-medium-fix/report"]) {
+    for (const page of ["/demo", "/demo/cases", "/demo/jobs", "/demo/repairs/ahmed35-medium-fix/report"]) {
       await user.keyboard("{Enter}");
       await waitFor(() => expect(at()).toBe(page));
     }
