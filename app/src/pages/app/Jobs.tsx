@@ -161,17 +161,20 @@ function DetailsDialog({ job, onClose, onCancel }: { job: Job | null; onClose: (
 export function Jobs() {
   useTitle("Jobs");
   const jobs = useJobs();
-  // The filter in the address: none, or a word the page doesn't know, shows every job.
+  // The filter and the job whose details are open live in the address, so a reload or a link keeps them. No
+  // filter, or a word the page doesn't know, shows every job; a job that isn't on record opens nothing.
   const [params, setParams] = useSearchParams();
-  const filter: Filter = FILTERS.find((f) => f === params.get("show")) ?? "all";
-  const setFilter = (f: Filter) =>
+  const setParam = (key: "show" | "job", value: string | null) =>
     setParams((prev) => {
       const next = new URLSearchParams(prev);
-      if (f === "all") next.delete("show");
-      else next.set("show", f);
+      if (value === null) next.delete(key);
+      else next.set(key, value);
       return next;
     }, { replace: true, preventScrollReset: true });
-  const [detailsId, setDetailsId] = useState<string | null>(null);
+  const filter: Filter = FILTERS.find((f) => f === params.get("show")) ?? "all";
+  const setFilter = (f: Filter) => setParam("show", f === "all" ? null : f);
+  const detailsId = params.get("job");
+  const setDetailsId = (id: string | null) => setParam("job", id);
   const [cancelId, setCancelId] = useState<string | null>(null);
 
   const items = useMemo(() => jobs.data?.items ?? [], [jobs.data]);

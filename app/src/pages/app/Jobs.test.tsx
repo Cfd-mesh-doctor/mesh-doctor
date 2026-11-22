@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { demoTransport } from "@/demo/transport";
@@ -27,6 +27,26 @@ describe("the Jobs screen", () => {
     await userEvent.click(within(filter()).getByRole("radio", { name: /^All/ }));
     expect(router.state.location.search).toBe("");
     expect(rows()).toHaveLength(8);
+  });
+
+  it("keeps the open job's details in the address too, so a reload or a link opens them", async () => {
+    const strict = "20261121-130141-repair-ahmed25-fine-strict-0266"; // the demo's cancelled job
+    const { router } = open(`${path}?show=cancelled&job=${strict}`);
+    expect(await screen.findByRole("dialog", { name: "ahmed25-fine-strict" })).toBeInTheDocument();
+
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(router.state.location.search).toBe("?show=cancelled"); // closing keeps the filter
+
+    await userEvent.click(screen.getByRole("button", { name: "ahmed25-fine-strict" }));
+    expect(router.state.location.search).toBe(`?show=cancelled&job=${strict}`);
+    expect(screen.getByRole("dialog", { name: "ahmed25-fine-strict" })).toBeInTheDocument();
+  });
+
+  it("opens nothing when the address names a job that isn't on record", async () => {
+    open(`${path}?job=no-such-job`);
+    expect(await screen.findByRole("button", { name: "ahmed25-fine-strict" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("shows every job when the address names a filter it doesn't know", async () => {

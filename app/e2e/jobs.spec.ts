@@ -16,6 +16,20 @@ test("the Jobs screen keeps its filter in the address: a reload keeps it", async
   await expect(page.getByRole("button", { name: "ahmed25-fine-strict" })).toBeVisible();
 });
 
+test("a job's details stay open through a reload, and closing them keeps the filter", async ({ page }) => {
+  await page.goto("/demo/jobs?show=cancelled");
+  await page.getByRole("button", { name: "ahmed25-fine-strict" }).click();
+  const details = page.getByRole("dialog", { name: "ahmed25-fine-strict" });
+  await expect(details).toBeVisible();
+  await expect(page).toHaveURL(/\/demo\/jobs\?show=cancelled&job=[\w-]*ahmed25-fine-strict[\w-]*$/);
+
+  await page.reload();
+  await expect(details).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(details).toBeHidden();
+  await expect(page).toHaveURL(/\/demo\/jobs\?show=cancelled$/);
+});
+
 test("the Overview's running-jobs tile links to the running jobs", async ({ page }) => {
   await page.goto("/demo");
   await page.getByRole("link", { name: "Show the running job" }).click();
