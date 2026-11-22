@@ -180,18 +180,17 @@ export function Overview() {
           ) : (
             <ul className="divide-y divide-border border-t border-border">
               {repairItems.slice(0, 6).map((r) => (
-                <li key={r.name} className="flex items-center gap-3 px-5 py-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{r.name}</div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      {r.source ? (
-                        <>
-                          {caseName(r.source)}
-                          {r.nCells != null && ` · ${formatCells(r.nCells)} cells`}
-                        </>
-                      ) : (
-                        `${runStep(r) ?? "Starting"}${runUpdated(r) ? ` · ${formatRelative(runUpdated(r))}` : ""}`
-                      )}
+                <li key={r.name} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-3">
+                  {/* The whole name and case, wrapping rather than cut off (a long name breaks at its hyphens first).
+                      On phones the verdict and Report go under them, so the name has the card's width. */}
+                  <div className="min-w-0 basis-full sm:flex-1 sm:basis-0">
+                    <div className="text-sm font-medium wrap-anywhere">{r.name}</div>
+                    <div className="text-xs text-muted-foreground wrap-anywhere">
+                      {r.source ? caseName(r.source) : (runStep(r) ?? "Starting")}
+                      {/* The size or the time stays on one line with its dot. */}
+                      {r.source
+                        ? r.nCells != null && <>{" "}<span className="whitespace-nowrap">· {formatCells(r.nCells)} cells</span></>
+                        : runUpdated(r) && <>{" "}<span className="whitespace-nowrap">· {formatRelative(runUpdated(r))}</span></>}
                     </div>
                   </div>
                   <VerdictBadge verdict={r.verdict} pending={runStep(r)} />

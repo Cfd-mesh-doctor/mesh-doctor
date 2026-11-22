@@ -109,6 +109,50 @@ test("on a small phone, a case's size and its estimate show under the name", asy
   await expect(page.getByLabel("Mesh size")).toHaveValue("0.012225");
 });
 
+test("on a small phone the Overview's repair runs show their whole names and cases, the verdict under them", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto("/demo");
+  const runs = page.getByRole("main").getByRole("listitem");
+  await expect(runs).toHaveCount(6);
+  // Nothing in a run is cut off: no line of it is wider than its box (they were cut with "…").
+  const cut = () => runs.evaluateAll((items) =>
+    items.flatMap((li) => [...li.querySelectorAll("div")].filter((d) => d.scrollWidth > d.clientWidth + 1).map((d) => d.textContent)));
+  expect(await cut()).toEqual([]);
+  const run = runs.filter({ has: page.getByRole("link", { name: "Report of ahmed25-medium-fix" }) });
+  await expect(run).toContainText(/ahmed-25-medium · \d+ k cells/);
+  const box = async () => ({
+    name: (await run.getByText("ahmed25-medium-fix", { exact: true }).boundingBox())!,
+    report: (await run.getByRole("link", { name: "Report of ahmed25-medium-fix" }).boundingBox())!,
+  });
+  const phone = await box();
+  expect(phone.name.height, "the name has a line of its own").toBeLessThan(26);
+  expect(phone.report.y, "the verdict and Report go under the name").toBeGreaterThan(phone.name.y + phone.name.height);
+  // From 640 px they sit beside it again.
+  await page.setViewportSize({ width: 768, height: 800 });
+  const wide = await box();
+  expect(wide.report.y, "the Report sits beside the name").toBeLessThan(wide.name.y + wide.name.height);
+  // At 1280 px the card is narrowest, beside the recent jobs: still nothing cut off.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  expect(await cut()).toEqual([]);
+});
+
+test("on a small phone your own long repair-run name wraps at its hyphens, rather than being cut off", async ({ page }) => {
+  const name = "wing-endplate-v3-with-whiskers-strict-limits-fix"; // wider than a 360 px phone's card
+  await mockEngine(page, {
+    repairs: [{ name, finished: "2026-11-21 12:05:00", nCells: 1_250_000, profile: "medium", source: "wing-endplate-v3", status: {}, verdict: null }],
+  });
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  const text = page.getByRole("main").getByText(name, { exact: true });
+  await expect(text).toBeVisible();
+  expect(await text.evaluate((d) => d.scrollWidth - d.clientWidth), "the name is cut off").toBeLessThanOrEqual(1);
+  const breaks = await lineBreaks(text);
+  expect(breaks.length, "the name doesn't wrap").toBeGreaterThan(0);
+  for (const before of breaks) expect(before, "the name breaks inside a word").toMatch(/-$/);
+});
+
 test("on a phone the top bar and the case names each stay on one line", async ({ page }) => {
   // Under 400 px the demo's pill says just "Demo", so "Mesh Doctor" keeps its line down to 320 px.
   for (const [width, pill] of [[412, "Demo data"], [360, "Demo"], [320, "Demo"]] as const) {
