@@ -19,6 +19,7 @@ import { maskKey, parsePairingHash, parsePairingLink, type ParsedLink } from "@/
 import { browserCantReachLocal, pageIsLocal } from "@/engine/permission";
 import type { EngineInfo } from "@/engine/types";
 import { formatRelative } from "@/lib/format";
+import { BROWSERS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
 
 type Phase = { kind: "idle" } | { kind: "testing" } | { kind: "ok"; info: EngineInfo } | { kind: "error"; error: unknown };
@@ -79,7 +80,7 @@ function BrowserNotes() {
     return (
       <div className="flex gap-2.5 rounded-lg border border-warning/30 bg-warning-soft p-3 text-[13px]">
         <TriangleExclamationPoint className="mt-0.5 size-4 shrink-0 text-warning" />
-        <span>Safari doesn't let websites reach apps on your computer. Use Chrome, Edge or Firefox for Mesh Doctor.</span>
+        <span>Safari doesn't let websites reach apps on your computer. Use {BROWSERS} for Mesh Doctor.</span>
       </div>
     );
   }

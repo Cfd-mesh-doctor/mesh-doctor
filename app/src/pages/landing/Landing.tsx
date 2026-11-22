@@ -10,6 +10,7 @@ import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { Button } from "@/components/ui/button";
 import { usePairing } from "@/engine/context";
+import { BROWSERS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
 import { HeroPreview } from "./HeroPreview";
 
@@ -204,7 +205,7 @@ export function Landing() {
           <ol className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             {[
               ["Install", "From a clone of the repository, one script installs WSL, OpenFOAM 14 and Mesh Doctor, and checks the result.", "bash tools/setup_linux.sh"],
-              ["Start and pair", "Start the engine. It prints a pairing link for this site; open it in Chrome, Edge or Firefox.", "meshdoctor serve"],
+              ["Start and pair", `Start the engine. It prints a pairing link for this site; open it in ${BROWSERS}.`, "meshdoctor serve"],
               ["Repair and prove", "Repair a copy of your case, then test it with an A/B solver run. The results show up in the app.", "meshdoctor full <case> <name>"],
             ].map(([title, text, cmd], i) => (
               <li key={title} className="flex flex-col rounded-xl border border-border bg-surface p-5 shadow-card">

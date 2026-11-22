@@ -16,5 +16,11 @@ export const DOCS = {
   license: `${REPO_URL}/blob/main/LICENSE`,
 };
 
+/**
+ * The browsers known to reach the engine from this site: the pairing was checked in both. Safari can't reach this
+ * computer at all, and Firefox hasn't been tried yet. docs/troubleshooting.md names the same ones (a test checks).
+ */
+export const BROWSERS = "Chrome or Edge";
+
 /** Set at build time from package.json (vite.config.ts). */
 export const APP_VERSION: string = import.meta.env.VITE_APP_VERSION ?? "dev";

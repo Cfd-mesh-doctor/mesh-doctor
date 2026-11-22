@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { EngineError, explain, type ErrorCode } from "@/engine/errors";
 import { column } from "@/lib/docTable";
+import { BROWSERS } from "@/lib/site";
 import { markdownTables, readDoc } from "@/test/markdown";
 import { GROUPS } from "./problems";
 
@@ -37,5 +38,11 @@ describe("the Troubleshooting page's problems", () => {
     ];
     const linked = errors.map((e) => explain(e)).filter((x) => x.troubleshooting).map((x) => x.title);
     expect(linked.sort()).toEqual(quoted.sort());
+  });
+
+  it("send Safari users to the browsers the site names (the pairing page, the home page)", () => {
+    const web = GROUPS.find((g) => g.id === "web-app");
+    const safari = web!.table.rows.find((row) => row[0] === "Safari never connects");
+    expect(safari?.[2]).toBe(`use ${BROWSERS}`);
   });
 });

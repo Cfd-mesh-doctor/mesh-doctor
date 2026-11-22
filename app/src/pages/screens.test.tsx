@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { demoTransport } from "@/demo/transport";
 import { loadPairing, savePairing } from "@/engine/pairing";
 import type { Job } from "@/engine/types";
+import { BROWSERS } from "@/lib/site";
 import { renderScreen } from "@/test/render";
 import { Connect } from "./Connect";
 import { Cases } from "./app/Cases";
@@ -46,6 +47,16 @@ describe("Connect", () => {
     await userEvent.click(screen.getByRole("button", { name: /^connect$/i }));
     expect(await screen.findByText("The engine isn't answering")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
+  });
+
+  it("tells a Safari user which browsers can reach the engine", async () => {
+    const safari = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
+    const ua = vi.spyOn(navigator, "userAgent", "get").mockReturnValue(safari);
+    savePairing({ engine: "http://localhost:8768", key: KEY, paired: "" });
+    renderScreen(<Connect />, { path: "/connect" });
+    expect(await screen.findByText(`Safari doesn't let websites reach apps on your computer. Use ${BROWSERS} for Mesh Doctor.`))
+      .toBeInTheDocument();
+    ua.mockRestore();
   });
 
   it("asks before replacing a different pairing", async () => {
