@@ -151,6 +151,7 @@ test("on a small phone your own long repair-run name wraps at its hyphens, rathe
   const breaks = await lineBreaks(text);
   expect(breaks.length, "the name doesn't wrap").toBeGreaterThan(0);
   for (const before of breaks) expect(before, "the name breaks inside a word").toMatch(/-$/);
+  await expect(page.getByRole("main").getByText("No verdict", { exact: true })).toBeVisible(); // not a bare dash
 });
 
 test("on a phone the top bar and the case names each stay on one line", async ({ page }) => {

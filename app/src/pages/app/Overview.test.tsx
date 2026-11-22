@@ -52,9 +52,9 @@ describe("the Overview's recent jobs", () => {
   });
 });
 
-/** Opens the Overview of your own engine, paired, before anything has run on it; `failing` lists the lists it fails
- * to answer. */
-function ownEngine(failing: string[] = []) {
+/** Opens the Overview of your own engine, paired, before anything has run on it (or with these repair runs);
+ * `failing` lists the lists it fails to answer. */
+function ownEngine(failing: string[] = [], runs: unknown[] = []) {
   savePairing({ engine: "http://localhost:8765", key: "TestKey_0123456789abcdefghijklmnopqrstuvwxy", paired: "2026-11-22T12:00:00Z" });
   const asked: string[] = [];
   const transport: Transport = {
@@ -65,7 +65,8 @@ function ownEngine(failing: string[] = []) {
       asked.push(route);
       if (failing.includes(route)) throw new EngineError("unreachable", "nothing answered");
       if (route === "/") return { apiVersion: "1.0", version: "0.1.0", jobKinds: ["repair"] } as T;
-      if (route === "/jobs" || route === "/repairs" || route === "/cases") return { items: [] } as T;
+      if (route === "/repairs") return { items: runs } as T;
+      if (route === "/jobs" || route === "/cases") return { items: [] } as T;
       throw new EngineError("not-found", `no route ${route}`, 404);
     },
   };
@@ -110,6 +111,14 @@ describe("the Overview before anything has run", () => {
     await userEvent.click(within(alert).getByRole("button", { name: "Try again" }));
     await waitFor(() => expect(count("/jobs")).toBe(jobs + 1));
     expect(count("/repairs")).toBe(repairs);
+  });
+
+  it("says “No verdict”, in words, for a run with no verdict and no step under way", async () => {
+    ownEngine([], [{ name: "wing-fix", finished: "2026-11-21 12:05:00", nCells: 1000, profile: "medium", source: "wing", status: {}, verdict: null }]);
+    const run = (await screen.findByText("wing-fix")).closest("li")!;
+    expect(within(run).getByText("No verdict")).toBeInTheDocument();
+    expect(within(run).queryByText("–")).toBeNull(); // not a bare dash
+    expect(within(run).queryByRole("link", { name: "Report of wing-fix" })).toBeNull(); // nothing to report
   });
 
   it("keeps the command in its card at the bottom once there are repair runs", async () => {

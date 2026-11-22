@@ -193,7 +193,8 @@ export function Overview() {
                         : runUpdated(r) && <>{" "}<span className="whitespace-nowrap">· {formatRelative(runUpdated(r))}</span></>}
                     </div>
                   </div>
-                  <VerdictBadge verdict={r.verdict} pending={runStep(r)} />
+                  {/* A list's own badge: a run with no verdict says so, not with a dash. */}
+                  <VerdictBadge verdict={r.verdict} pending={runStep(r)} empty="No verdict" />
                   {r.verdict && (
                     <Link to={to(`/repairs/${encodeURIComponent(r.name)}/report`)} aria-label={`Report of ${r.name}`}
                       className="shrink-0 text-[13px] font-medium text-primary hover:underline">

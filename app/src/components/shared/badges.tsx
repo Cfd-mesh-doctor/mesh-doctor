@@ -27,15 +27,18 @@ export function JobStateBadge({ state }: { state: JobState }) {
 
 /**
  * The repair's verdict: how many checkMesh numbers got better or worse. Hover for which ones.
- * `pending` is the last step of a run with no verdict yet (still running, or stopped).
+ * `pending` is the last step of a run with no verdict yet (still running, or stopped). `empty` says, in words, that
+ * there is neither: without it, that shows as a dash, a table's empty cell.
  */
-export function VerdictBadge({ verdict, pending }: { verdict: Verdict | null | undefined; pending?: string | null }) {
+export function VerdictBadge({ verdict, pending, empty }: {
+  verdict: Verdict | null | undefined; pending?: string | null; empty?: string;
+}) {
   const v =
     verdictText(verdict) ??
     (pending
       ? { tone: "neutral" as const, label: "Not finished", detail: `No verdict yet. Last step: ${pending}.` }
       : null);
-  if (!v) return <span className="text-xs text-muted-foreground">–</span>;
+  if (!v) return empty ? <Badge tone="neutral">{empty}</Badge> : <span className="text-xs text-muted-foreground">–</span>;
   return (
     <Tip label={v.detail}>
       <span tabIndex={0} className="rounded-md">
