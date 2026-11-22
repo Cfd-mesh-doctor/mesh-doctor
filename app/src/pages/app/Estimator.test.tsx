@@ -71,5 +71,7 @@ describe("the size estimator in the app", () => {
     });
     await user.click(await screen.findByRole("button", { name: "Copy link" }));
     expect(await navigator.clipboard.readText()).toBe(`${window.location.origin}/estimate?cells=31.1&ram=25.4&cores=8`);
+    // The card says so, as the link isn't this screen's own address.
+    expect(screen.getByText(/Copy link gives a link to this estimate that anyone can open\.$/)).toBeInTheDocument();
   });
 });

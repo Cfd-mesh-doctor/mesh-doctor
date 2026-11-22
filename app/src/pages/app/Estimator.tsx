@@ -13,7 +13,8 @@ import { formatInt } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
 import { EstimateForm } from "@/pages/estimate/Estimate";
 
-const KEEPS = "The address keeps your changes.";
+// The copied link isn't this screen's address but the site's estimator's, with these values in it: say so.
+const KEEPS = "The address keeps your changes, and Copy link gives a link to this estimate that anyone can open.";
 
 export function Estimator() {
   useTitle("Size estimator");
