@@ -4,11 +4,12 @@
 import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
 import { PageHeader } from "@/components/shared/page";
 import { useTitle } from "@/lib/useTitle";
+import { aboutPage } from "@/pages/docs/entries";
 import { DocSectionsView } from "@/pages/docs/DocSections";
 import { LIMITS } from "./sections";
 
 export function Limits() {
-  useTitle("Limits");
+  useTitle("Limits", aboutPage("/limits"));
   return (
     <div className="flex min-h-dvh flex-col">
       <PublicHeader />

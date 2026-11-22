@@ -4,12 +4,13 @@
 import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
 import { PageHeader } from "@/components/shared/page";
 import { useTitle } from "@/lib/useTitle";
+import { aboutPage } from "@/pages/docs/entries";
 import { DocSectionsView } from "@/pages/docs/DocSections";
 import { DocText } from "@/pages/docs/DocText";
 import { DESIGN, INTRO, TITLE } from "./design";
 
 export function Architecture() {
-  useTitle("Architecture");
+  useTitle("Architecture", aboutPage("/architecture"));
   return (
     <div className="flex min-h-dvh flex-col">
       <PublicHeader />

@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/shared/page";
 import { Card } from "@/components/ui/card";
 import { DOCS, REPO_URL } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
+import { aboutPage } from "@/pages/docs/entries";
 import { DOCKER, LINUX, SETUP, WSL_INSTALL } from "./commands";
 
 const link = "font-medium text-primary underline-offset-4 hover:underline";
@@ -49,7 +50,7 @@ function Next({ icon: Icon, title, text, children }: { icon: LucideIcon; title: 
 }
 
 export function Install() {
-  useTitle("Install");
+  useTitle("Install", aboutPage("/install"));
   return (
     <div className="flex min-h-dvh flex-col">
       <PublicHeader />

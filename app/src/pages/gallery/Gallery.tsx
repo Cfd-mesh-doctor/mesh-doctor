@@ -9,13 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DOCS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
+import { aboutPage } from "@/pages/docs/entries";
 import { cn } from "@/lib/utils";
 import { GALLERY } from "./pictures";
 
 const link = "font-medium text-primary underline-offset-4 hover:underline";
 
 export function Gallery() {
-  useTitle("Gallery");
+  useTitle("Gallery", aboutPage("/gallery"));
   return (
     <div className="flex min-h-dvh flex-col">
       <PublicHeader />

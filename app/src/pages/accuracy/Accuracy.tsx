@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DOCS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
+import { aboutPage } from "@/pages/docs/entries";
 import { cn } from "@/lib/utils";
 import { CdChart } from "./CdChart";
 import { RESULTS, RUN, cases, readable } from "./results";
@@ -33,7 +34,7 @@ function Finding({ icon: Icon, tone, title, children }: {
 }
 
 export function Accuracy() {
-  useTitle("Accuracy check");
+  useTitle("Accuracy check", aboutPage("/accuracy"));
   const all = cases();
   const medium = all.find((c) => c.name.startsWith("Medium"));
   const steep = all.find((c) => c.miss);

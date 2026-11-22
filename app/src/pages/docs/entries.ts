@@ -47,6 +47,9 @@ export const ON_GITHUB: DocEntry[] = [];
 
 export const githubDoc = (file: string) => `${REPO_URL}/blob/main/docs/${file}`;
 
+/** What the Docs page says about the page at this address: the page's description for search results too. */
+export const aboutPage = (page: string) => ON_SITE.find((d) => d.page === page)?.about;
+
 /** Where a doc's link to another doc ("safety.md", "safety.md#section") opens: this site's page for that doc when there
  *  is one, otherwise the doc on GitHub. A web address stays as it is. */
 export function docHref(target: string): string {

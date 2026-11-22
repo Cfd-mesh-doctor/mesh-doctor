@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/misc";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
 import { formatInt } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
+import { aboutPage } from "@/pages/docs/entries";
 import { cn } from "@/lib/utils";
 import {
   CLOUD_VM, DEFAULTS, HEADROOM, LIMITS, SIMSCALE, coreHours, duration, estimate, gigabytes, money, parseField,
@@ -34,7 +35,7 @@ const range = (k: Field) => {
 };
 
 export function Estimate() {
-  useTitle("Size estimator");
+  useTitle("Size estimator", aboutPage("/estimate"));
   return (
     <div className="flex min-h-dvh flex-col">
       <PublicHeader />

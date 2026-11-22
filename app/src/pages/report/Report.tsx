@@ -21,6 +21,7 @@ import { Segmented } from "@/components/ui/misc";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
 import { formatDateTime, formatInt, formatNumber } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
+import { aboutPage } from "@/pages/docs/entries";
 import { cn } from "@/lib/utils";
 import { HEAT, viewHeading, type MapSummary, type MapViewName } from "@/report/map";
 import { ReportError, checkReport, fileBytes, readReport } from "@/report/read";
@@ -67,7 +68,7 @@ export function Report() {
         : "The sample couldn't be loaded. Check the connection and try again.",
     }
     : { kind: "reading", file: `the sample ${sampleName}` };
-  useTitle(view.kind === "open" ? `Report ${view.summary.name}` : "Report viewer");
+  useTitle(view.kind === "open" ? `Report ${view.summary.name}` : "Report viewer", aboutPage("/report"));
 
   const open = useCallback(async (file: File) => {
     const n = ++latest.current; // a second file picked while the first is read wins

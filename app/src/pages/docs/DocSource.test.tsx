@@ -1,20 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { render, screen } from "@testing-library/react";
-import type { ComponentType } from "react";
 import { describe, expect, it } from "vitest";
-import { routes } from "@/router";
 import { docNames } from "@/test/markdown";
+import { pageAt } from "@/test/pages";
 import { renderScreen } from "@/test/render";
 import { DocSource } from "./DocSource";
 import { ON_GITHUB, ON_SITE, githubDoc } from "./entries";
-
-/** The page the site opens at this address, loaded as its router loads it. */
-async function pageAt(path: string): Promise<ComponentType> {
-  const route = (routes[0]?.children ?? []).find((r) => r.path === path);
-  const lazy = route?.lazy as unknown as (() => Promise<{ Component: ComponentType }>) | undefined;
-  if (!lazy) throw new Error(`no page loads at ${path}`);
-  return (await lazy()).Component;
-}
 
 describe("the line saying which doc a page follows", () => {
   it("names the doc and links to it on GitHub, in a new tab", () => {

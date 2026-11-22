@@ -4,13 +4,14 @@
 import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
 import { PageHeader } from "@/components/shared/page";
 import { useTitle } from "@/lib/useTitle";
+import { aboutPage } from "@/pages/docs/entries";
 import { DocSectionsView } from "@/pages/docs/DocSections";
 import { DocText } from "@/pages/docs/DocText";
 import { PICTURES } from "./pictures";
 import { INTRO, TITLE, TOUR } from "./tour";
 
 export function DashboardTour() {
-  useTitle("Dashboard tour");
+  useTitle("Dashboard tour", aboutPage("/dashboard-tour"));
   return (
     <div className="flex min-h-dvh flex-col">
       <PublicHeader />

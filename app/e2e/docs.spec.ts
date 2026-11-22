@@ -9,6 +9,9 @@ test("the docs page: from the header, each of the site's pages opens, the rest a
     if (r.method() !== "GET") sent.push(`${r.method()} ${r.url()}`);
   });
   await page.goto("/");
+  const description = page.locator('meta[name="description"]');
+  const site = await description.getAttribute("content");
+  expect(site).toMatch(/^Mesh Doctor finds bad cells in OpenFOAM meshes/);
   await page.getByRole("navigation", { name: "Site" }).getByRole("link", { name: "Docs" }).click();
   await expect(page).toHaveURL(/\/docs$/);
   await expect(page.getByRole("heading", { level: 1, name: "Docs" })).toBeVisible();
@@ -25,11 +28,20 @@ test("the docs page: from the header, each of the site's pages opens, the rest a
     ["Safety model", "Safety model"], ["Architecture", "Architecture"],
     ["Report viewer", "Report viewer"], ["Size estimator", "Size estimator"],
   ] as const) {
-    await page.getByRole("region", { name: "On this site" }).getByRole("link", { name }).click();
+    // Each page describes itself to search engines as its card here does; the Docs page has its own description.
+    const card = page.getByRole("region", { name: "On this site" }).getByRole("listitem").filter({ has: page.getByRole("link", { name, exact: true }) });
+    const about = (await card.locator("p").textContent()) ?? "";
+    await card.getByRole("link", { name }).click();
     await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+    await expect(description).toHaveAttribute("content", about);
     await page.goBack();
     await expect(page.getByRole("heading", { level: 1, name: "Docs" })).toBeVisible();
+    await expect(description).toHaveAttribute("content", /^Everything written about Mesh Doctor/);
   }
+  // A page without a description of its own (the home page) has the site's again.
+  await page.getByRole("link", { name: "Mesh Doctor", exact: true }).first().click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(description).toHaveAttribute("content", site ?? "");
   expect([...origins]).toEqual(["http://localhost:4173"]);
   expect(sent).toEqual([]);
 });

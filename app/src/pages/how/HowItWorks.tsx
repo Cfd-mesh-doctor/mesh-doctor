@@ -15,6 +15,7 @@ import { DocTableView } from "@/components/shared/DocTable";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DOCS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
+import { aboutPage } from "@/pages/docs/entries";
 import { COMMANDS, PROFILES, VERDICTS } from "./tables";
 
 const SECTIONS = [
@@ -99,7 +100,7 @@ function Pipeline() {
 }
 
 export function HowItWorks() {
-  useTitle("How it works");
+  useTitle("How it works", aboutPage("/how-it-works"));
   const [detect, highlight, correct, abTest, judge, hotspots, dashboard] = SECTIONS;
   return (
     <div className="flex min-h-dvh flex-col">

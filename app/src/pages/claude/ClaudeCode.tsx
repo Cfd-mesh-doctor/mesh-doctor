@@ -4,12 +4,13 @@
 import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
 import { PageHeader } from "@/components/shared/page";
 import { useTitle } from "@/lib/useTitle";
+import { aboutPage } from "@/pages/docs/entries";
 import { DocSectionsView } from "@/pages/docs/DocSections";
 import { DocText } from "@/pages/docs/DocText";
 import { GUIDE, INTRO, TITLE } from "./guide";
 
 export function ClaudeCode() {
-  useTitle("Claude Code");
+  useTitle("Claude Code", aboutPage("/claude-code"));
   return (
     <div className="flex min-h-dvh flex-col">
       <PublicHeader />

@@ -28,16 +28,15 @@ function External({ title }: { title: string }) {
   );
 }
 
+const ABOUT = "Everything written about Mesh Doctor: each doc in the repository, as a page of this site.";
+
 export function Docs() {
-  useTitle("Docs");
+  useTitle("Docs", ABOUT);
   return (
     <div className="flex min-h-dvh flex-col">
       <PublicHeader />
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-6">
-        <PageHeader
-          title="Docs"
-          description="Everything written about Mesh Doctor: each doc in the repository, as a page of this site."
-        />
+        <PageHeader title="Docs" description={ABOUT} />
         <DocSearch />
         <section aria-labelledby="on-site" className="mt-10">
           <h2 id="on-site" className="text-lg font-semibold tracking-tight">On this site</h2>

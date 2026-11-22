@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/misc";
 import { useTitle } from "@/lib/useTitle";
+import { aboutPage } from "@/pages/docs/entries";
 import { DocSource } from "@/pages/docs/DocSource";
 import { DocText } from "@/pages/docs/DocText";
 import { GROUPS } from "./problems";
@@ -20,7 +21,7 @@ const TOTAL = GROUPS.reduce((n, g) => n + g.table.rows.length, 0);
 const COLUMNS = "md:grid-cols-[minmax(0,5fr)_minmax(0,5fr)_minmax(0,6fr)] md:gap-6";
 
 export function Troubleshooting() {
-  useTitle("Troubleshooting");
+  useTitle("Troubleshooting", aboutPage("/troubleshooting"));
   const [params, setParams] = useSearchParams();
   const query = params.get("q") ?? "";
   const setQuery = (q: string) => setParams(q ? { q } : {}, { replace: true, preventScrollReset: true });
