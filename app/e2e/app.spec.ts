@@ -42,16 +42,25 @@ test("a newcomer's main button leads to the three steps, which say how often eac
   await expect(page).toHaveURL(/\/connect$/);
 });
 
-test("the demo's tour walks through the app in five steps from the keyboard, then hands the focus back", async ({ page }) => {
-  await page.goto("/demo");
+test("the demo's tour walks through the app's screens in five steps from the keyboard, then hands the focus back", async ({ page }) => {
+  await page.goto("/demo/jobs");
   const open = page.getByRole("button", { name: "Take the tour" });
   await open.click();
   const tour = page.getByRole("dialog", { name: "Welcome to Mesh Doctor" });
   await expect(tour).toContainText("Step 1 of 5");
   await expect(tour.getByRole("button", { name: "Next" })).toBeFocused();
+  // Each step opens the screen it describes, and the tour stands aside: the Overview's tiles show whole.
+  const screens = [/\/demo$/, /\/demo\/cases$/, /\/demo\/jobs$/, /\/demo\/repairs\/ahmed25-medium-fix\/report$/];
   for (let i = 2; i <= 5; i++) {
     await page.keyboard.press("Enter");
     await expect(page.getByRole("dialog")).toContainText(`Step ${i} of 5`);
+    await expect(page).toHaveURL(screens[i - 2]!);
+    if (i === 2) {
+      const tiles = await page.getByText("Source cases", { exact: true })
+        .locator("xpath=ancestor::div[contains(@class, 'grid')][1]").boundingBox();
+      const box = await page.getByRole("dialog").boundingBox();
+      expect(tiles && box && (box.y >= tiles.y + tiles.height || box.x >= tiles.x + tiles.width)).toBe(true);
+    }
   }
   await expect(page.getByRole("dialog", { name: "Reports: did the repair help?" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Done" })).toBeFocused();

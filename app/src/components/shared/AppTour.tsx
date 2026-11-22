@@ -1,18 +1,28 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The app's short walkthrough: five steps in plain words on where things are and what each screen tells you, which
-// can be skipped at any step. It opens with the focus on Next, so Enter steps through it; each new step is read out,
-// as the focus stays put while the words change; and closing it hands the focus back to whatever opened it.
+// can be skipped at any step. Each step opens the screen it describes, and the tour stands aside so it shows. It opens
+// with the focus on Next, so Enter steps through it; each new step is read out, as the focus stays put while the
+// words change; and closing it hands the focus back to whatever opened it.
 import { useRef, useState } from "react";
+import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogActions, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { useAppPath } from "@/engine/context";
 import { TOUR_STEPS } from "./tourSteps";
 
 export function AppTour({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [step, setStep] = useState(0);
+  const navigate = useNavigate();
+  const to = useAppPath();
   const next = useRef<HTMLButtonElement>(null);
   const opener = useRef<HTMLElement | null>(null);
   const { title, text } = TOUR_STEPS[step]!;
   const last = step === TOUR_STEPS.length - 1;
+  const go = (i: number) => {
+    setStep(i);
+    const { page } = TOUR_STEPS[i]!;
+    if (page !== undefined) void navigate(to(page));
+  };
   const close = () => {
     setStep(0); // the next time, it starts from the beginning
     onClose();
@@ -20,6 +30,9 @@ export function AppTour({ open, onClose }: { open: boolean; onClose: () => void 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && close()}>
       <DialogContent
+        // At the foot of the screen (bottom right from 640 px), over a light shade: the screen it describes shows.
+        overlayClassName="bg-black/15 backdrop-blur-none"
+        className="top-auto bottom-4 translate-y-0 sm:right-6 sm:bottom-6 sm:left-auto sm:translate-x-0"
         onOpenAutoFocus={(e) => {
           // Radix hands the focus back only to a Dialog.Trigger, so the tour keeps what opened it and goes back there.
           const was = document.activeElement;
@@ -45,13 +58,13 @@ export function AppTour({ open, onClose }: { open: boolean; onClose: () => void 
               onClick={() => {
                 // Back goes away on the first step: the focus moves to Next first, so it isn't lost with it.
                 if (step === 1) next.current?.focus();
-                setStep(step - 1);
+                go(step - 1);
               }}
             >
               Back
             </Button>
           )}
-          <Button ref={next} onClick={() => (last ? close() : setStep(step + 1))}>{last ? "Done" : "Next"}</Button>
+          <Button ref={next} onClick={() => (last ? close() : go(step + 1))}>{last ? "Done" : "Next"}</Button>
         </DialogActions>
       </DialogContent>
     </Dialog>

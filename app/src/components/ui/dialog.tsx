@@ -8,10 +8,15 @@ export const Dialog = D.Root;
 export const DialogTrigger = D.Trigger;
 export const DialogClose = D.Close;
 
-export function DialogContent({ className, children, ...props }: ComponentProps<typeof D.Content>) {
+export function DialogContent({ className, overlayClassName, children, ...props }: ComponentProps<typeof D.Content> & {
+  /** For a dialog that shows the screen behind it: the app tour lightens the shade. */
+  overlayClassName?: string;
+}) {
   return (
     <D.Portal>
-      <D.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px] data-[state=open]:animate-fade-in" />
+      <D.Overlay
+        className={cn("fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px] data-[state=open]:animate-fade-in", overlayClassName)}
+      />
       <D.Content
         // A dialog never grows past the screen: a tall one (a job's details on a small phone) scrolls inside, rather
         // than losing its title above the screen and its buttons below it.
