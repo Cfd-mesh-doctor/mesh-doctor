@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { describe, expect, it } from "vitest";
 import { REPO_URL } from "@/lib/site";
-import { routes } from "@/router";
 import { docNames, readDoc } from "@/test/markdown";
+import { PAGES } from "@/test/pages";
 import { ON_GITHUB, ON_SITE, githubDoc } from "./entries";
 
 describe("the Docs page's list", () => {
@@ -21,7 +21,7 @@ describe("the Docs page's list", () => {
   });
 
   it("points each of the site's own entries at one of its pages", () => {
-    const pages = routes.flatMap((r) => r.children ?? []).map((r) => r.path);
+    const pages = PAGES.map((r) => r.path);
     for (const d of ON_SITE) expect(pages, d.title).toContain(d.page);
   });
 });

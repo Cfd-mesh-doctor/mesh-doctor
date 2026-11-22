@@ -2,7 +2,9 @@
 // The screens. /app talks to the engine that /connect pairs, and /demo shows the same screens with recorded data.
 // Besides the home page, the rest are /docs and the pages it lists: the report viewer, the size estimator and a page
 // for each doc, from pages/docs/entries.ts, whose test checks that each has a route here (so they aren't named here).
-// Everything but the home page loads when first opened, so the home page stays small.
+// Everything but the home page loads when first opened, so the home page stays small. The pages that ask the
+// engine, or the demo's recorded data, for things share one query cache (engine/QueryLayout.tsx), which loads
+// with the first of them.
 import { createBrowserRouter, type RouteObject } from "react-router";
 import type { RouteHandle } from "@/components/layout/AppLayout";
 import { RootLayout } from "@/components/layout/RootLayout";
@@ -37,8 +39,23 @@ export const routes: RouteObject[] = [
     hydrateFallbackElement: <div className="min-h-dvh" />,
     children: [
       { path: "/", element: <Landing /> },
-      { path: "/connect", lazy: async () => ({ Component: (await import("@/pages/Connect")).Connect }) },
-      { path: "/report", lazy: async () => ({ Component: (await import("@/pages/report/Report")).Report }) },
+      {
+        lazy: async () => ({ Component: (await import("@/engine/QueryLayout")).QueryLayout }),
+        children: [
+          { path: "/connect", lazy: async () => ({ Component: (await import("@/pages/Connect")).Connect }) },
+          { path: "/report", lazy: async () => ({ Component: (await import("@/pages/report/Report")).Report }) },
+          {
+            path: "/app",
+            lazy: async () => ({ Component: (await import("@/pages/app/shell")).EngineShell }),
+            children: screens("/app"),
+          },
+          {
+            path: "/demo",
+            lazy: async () => ({ Component: (await import("@/pages/app/shell")).DemoShell }),
+            children: screens("/demo"),
+          },
+        ],
+      },
       { path: "/estimate", lazy: async () => ({ Component: (await import("@/pages/estimate/Estimate")).Estimate }) },
       { path: "/how-it-works", lazy: async () => ({ Component: (await import("@/pages/how/HowItWorks")).HowItWorks }) },
       { path: "/accuracy", lazy: async () => ({ Component: (await import("@/pages/accuracy/Accuracy")).Accuracy }) },
@@ -61,16 +78,6 @@ export const routes: RouteObject[] = [
       { path: "/limits", lazy: async () => ({ Component: (await import("@/pages/limits/Limits")).Limits }) },
       { path: "/safety", lazy: async () => ({ Component: (await import("@/pages/safety/Safety")).Safety }) },
       { path: "/docs", lazy: async () => ({ Component: (await import("@/pages/docs/Docs")).Docs }) },
-      {
-        path: "/app",
-        lazy: async () => ({ Component: (await import("@/pages/app/shell")).EngineShell }),
-        children: screens("/app"),
-      },
-      {
-        path: "/demo",
-        lazy: async () => ({ Component: (await import("@/pages/app/shell")).DemoShell }),
-        children: screens("/demo"),
-      },
       { path: "*", element: <NotFoundPage /> },
     ],
   },

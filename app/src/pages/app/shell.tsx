@@ -2,7 +2,7 @@
 // The two ways into the app's screens, loaded only when one is opened.
 import { AppLayout } from "@/components/layout/AppLayout";
 import { RequirePairing } from "@/components/layout/RequirePairing";
-import { EngineScope } from "@/engine/EngineProvider";
+import { EngineScope } from "@/engine/EngineScope";
 
 /** /app: the engine this browser is paired with. */
 export function EngineShell() {
