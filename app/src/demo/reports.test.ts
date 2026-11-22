@@ -10,12 +10,17 @@ import { abTestFinished, demoTransport, replacedPaths } from "./transport";
 
 const TIME_KEYS = new Set(["created", "started", "finished", "updated", "time"]);
 
+/** The recording's computer was at UTC−6: its repairs finished at 18:58 UTC in the repairs list and at 12:58 in the
+ *  engine's own documents, which carry no zone. A recorded time with no zone is read there, wherever the test runs. */
+const RECORDED_AT = 6 * 3600_000;
+const when = (v: string) => (/^\d{4}-\d\d-\d\d \d/.test(v) ? Date.parse(`${v.replace(" ", "T")}Z`) + RECORDED_AT : toMillis(v));
+
 /** Every time in a document, by where it is. */
 function times(doc: unknown, at = ""): Map<string, number> {
   const found = new Map<string, number>();
   if (doc && typeof doc === "object") {
     for (const [k, v] of Object.entries(doc)) {
-      if (TIME_KEYS.has(k) && typeof v === "string" && Number.isFinite(toMillis(v))) found.set(`${at}/${k}`, toMillis(v));
+      if (TIME_KEYS.has(k) && typeof v === "string" && Number.isFinite(toMillis(v))) found.set(`${at}/${k}`, when(v));
       else for (const [p, t] of times(v, `${at}/${k}`)) found.set(p, t);
     }
   }
@@ -78,6 +83,33 @@ describe("the demo's reports", () => {
     await t.request("POST", `/jobs/${encodeURIComponent(test?.id ?? "")}/cancel`);
     expect(parts(await t.request<Report>("GET", "/repairs/ahmed25-medium-fix/report"))).toEqual([["repair"], ["repair"]]);
   });
+
+  /** Runs `fn` with the clock in time zone `tz`, as a visitor there would see it. */
+  async function inZone(tz: string, fn: () => Promise<void>) {
+    const was = process.env.TZ;
+    process.env.TZ = tz;
+    try {
+      await fn();
+    } finally {
+      if (was === undefined) delete process.env.TZ;
+      else process.env.TZ = was;
+    }
+  }
+
+  it.each(["UTC", "Asia/Tokyo", "America/Chicago"])("agree with the job list on the time, for a visitor in %s", (tz) =>
+    inZone(tz, async () => {
+      const t = demoTransport(undefined, 0);
+      const jobs = await t.request<JobList>("GET", "/jobs");
+      const repairs = await t.request<RepairList>("GET", "/repairs");
+      const report = await t.request<{ documents: { repair: { finished: string }; abtest: { started: string } } }>(
+        "GET", "/repairs/ahmed25-coarse-fix/report");
+      // the same moments in both, now written in UTC
+      const run = repairs.items.find((r) => r.name === "ahmed25-coarse-fix");
+      expect(report.documents.repair.finished).toMatch(/Z$/);
+      expect(toMillis(report.documents.repair.finished)).toBe(toMillis(run?.finished));
+      const ab = jobs.items.find((j) => j.kind === "abtest" && j.params.name === "ahmed25-coarse-fix");
+      expect(toMillis(report.documents.abtest.started)).toBe(toMillis(ab?.started));
+    }));
 
   it("count the paths the engine replaced, as it writes them", () => {
     expect(replacedPaths(medium.documents.repair)).toBe(2);

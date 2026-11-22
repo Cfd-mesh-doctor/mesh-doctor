@@ -46,14 +46,14 @@ function wait(ms: number, signal?: AbortSignal): Promise<void> {
 
 const TIME_KEYS = new Set(["created", "started", "finished", "updated", "time"]);
 
-function eachTime(doc: unknown, fn: (t: number) => number): void {
+function eachTime(doc: unknown, fn: (t: number, text: string) => number): void {
   if (Array.isArray(doc)) {
     doc.forEach((d) => eachTime(d, fn));
   } else if (doc && typeof doc === "object") {
     const o = doc as Record<string, unknown>;
     for (const [k, v] of Object.entries(o)) {
       if (TIME_KEYS.has(k) && typeof v === "string" && Number.isFinite(toMillis(v))) {
-        o[k] = new Date(fn(toMillis(v))).toISOString();
+        o[k] = new Date(fn(toMillis(v), v)).toISOString();
       } else {
         eachTime(v, fn);
       }
@@ -77,6 +77,30 @@ export function shiftTimes(data: Answers, now = Date.now()): number {
 /** Moves every time in a document by the same shift: a recorded report, so it agrees with the demo's answers. */
 export function moveTimes(doc: unknown, by: number): void {
   eachTime(doc, (t) => t + by);
+}
+
+/** A time the engine wrote in its own documents (result.json, ab_result.json): its computer's local time, no zone. */
+const ZONELESS = /^\d{4}-\d\d-\d\d[ T]\d\d:\d\d(?::\d\d(?:\.\d+)?)?$/;
+const asUtc = (text: string) => Date.parse(`${text.replace(" ", "T")}Z`);
+
+/**
+ * What to add to the engine's zone-less times, read as UTC, to get the real time: its computer's distance from UTC
+ * (+6 h for the recording, made at UTC−6). The API answers in UTC, so a page that read these times in the visitor's
+ * zone would put a recorded report hours away from the rest of the demo anywhere but the recording's zone. A run's
+ * finished time is in both the repairs list (UTC) and its report (local), so their difference gives it, rounded to
+ * 15 minutes as zones are. Null when either is missing.
+ */
+export function recordingToUtc(report: RecordedReport, finishedUtc: string | null | undefined): number | null {
+  const local = (report.documents?.repair as { finished?: unknown } | undefined)?.finished;
+  if (typeof local !== "string" || !ZONELESS.test(local) || !finishedUtc) return null;
+  const diff = toMillis(finishedUtc) - asUtc(local);
+  const q = 15 * 60_000;
+  return Number.isFinite(diff) ? Math.round(diff / q) * q : null;
+}
+
+/** Writes every zone-less time in a document as the UTC time it was, given `toUtc` from recordingToUtc. */
+export function zonelessToUtc(doc: unknown, toUtc: number): void {
+  eachTime(doc, (t, text) => (ZONELESS.test(text) ? asUtc(text) + toUtc : t));
 }
 
 /** The parts of a recorded report the demo changes. */
@@ -152,6 +176,10 @@ export function demoTransport(answers: Answers = DEMO_ANSWERS, delayMs = DELAY_M
         }
         const doc = structuredClone((await sample.load()).default) as RecordedReport;
         if (!abTestFinished(data["/jobs"] as JobList | undefined, name)) withoutDocument(doc, "abtest");
+        // The repairs list's times are already moved; the report's are not yet.
+        const run = (data["/repairs"] as RepairList | undefined)?.items.find((r) => r.name === name);
+        const toUtc = recordingToUtc(doc, run?.finished ? new Date(toMillis(run.finished) - by).toISOString() : null);
+        if (toUtc != null) zonelessToUtc(doc, toUtc);
         moveTimes(doc, by);
         // The engine builds a report when it's asked for one (meshdoctor report.build stamps the time), so it is new.
         doc.created = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
