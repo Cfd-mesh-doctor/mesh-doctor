@@ -3,7 +3,8 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { COPIED_FOR } from "@/lib/useCopy";
-import { CopyBlock, copyBlockLabel } from "./CopyBlock";
+import { CopyBlock } from "./CopyBlock";
+import { copyBlockLabel } from "./copyBlockLabel";
 
 const CODE = "meshdoctor serve\nmeshdoctor pair --open";
 

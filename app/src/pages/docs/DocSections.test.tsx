@@ -2,7 +2,7 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { copyBlockLabel } from "@/components/shared/CopyBlock";
+import { copyBlockLabel } from "@/components/shared/copyBlockLabel";
 import { githubAnchor } from "@/lib/docSections";
 import { DESIGN } from "@/pages/architecture/design";
 import { GUIDE as CLAUDE } from "@/pages/claude/guide";
