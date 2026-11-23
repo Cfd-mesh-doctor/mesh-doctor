@@ -13,7 +13,7 @@ tunnel, never a public address:
 The live case (the transient page) is --case, else the `live_case` setting
 (config.py).  The port is --port, else MESHDOCTOR_PORT, else 8765.
 """
-import argparse, http.server, json, os, re, sys, time, threading
+import argparse, errno, http.server, json, os, re, sys, time, threading
 
 import caseinfo
 import config
@@ -879,6 +879,14 @@ def main(argv=None):
     HOSTS = {f"{h}:{PORT}" for h in ("localhost", "127.0.0.1", "[::1]")}
     ORIGINS = {f"http://{h}" for h in HOSTS}
     CASE = a.case or a.case_pos or config.settings().get("live_case", "")
+    try:                                     # before the banner: no pairing link for an engine that never starts
+        httpd = http.server.ThreadingHTTPServer((bind, PORT), H)
+    except OSError as e:
+        if e.errno != errno.EADDRINUSE:
+            raise
+        sys.exit(f"port {PORT} is already in use: is {prog.name()} serve already running, in another terminal? "
+                 f"Use that one, or start this one on another port: {prog.name()} serve --port "
+                 f"{PORT + 1 if PORT < 65535 else PORT - 1}")
     warn = config.ensure_workspace()
     print(f"Mesh Doctor dashboard: http://localhost:{PORT}   (listening on {bind}"
           + (" inside the container; publish it with -p 127.0.0.1:%d:%d only)" % (PORT, PORT) if a.container
@@ -898,11 +906,11 @@ def main(argv=None):
         print(f"Web app: {', '.join(good)} may use /api/v1 with the pairing key. Pair a browser once with:",
               flush=True)
         print(f"  {url}", flush=True)
-        print("  (the link holds the key: treat it like a password; a new key: meshdoctor pair --new)", flush=True)
+        print(f"  (the link holds the key: treat it like a password; a new key: {prog.name()} pair --new)", flush=True)
         if a.open_app and not pairing.open_url(url):
             print("  could not open a browser here; copy the link instead", flush=True)
     print(f"Another machine? Use an SSH tunnel: ssh -L {PORT}:localhost:{PORT} <you>@<this host>", flush=True)
-    http.server.ThreadingHTTPServer((bind, PORT), H).serve_forever()
+    httpd.serve_forever()
 
 
 if __name__ == "__main__":

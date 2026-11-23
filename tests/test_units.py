@@ -1172,6 +1172,35 @@ class CommandNameTest(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+@unittest.skipUnless(os.name == "posix", "the engine runs on Linux")
+class ServePortTest(unittest.TestCase):
+    """meshdoctor serve on a port another program holds (item 162)."""
+
+    def test_a_port_in_use_says_so_before_the_banner(self):
+        import socket, server
+        saved = {k: getattr(server, k) for k in ("CASE", "PORT", "HOSTS", "ORIGINS", "APP_ORIGINS", "APP_KEY")}
+        self.addCleanup(lambda: [setattr(server, k, v) for k, v in saved.items()])
+        tmp = tempfile.mkdtemp(prefix="md_port_")
+        self.addCleanup(shutil.rmtree, tmp, True)
+        holder = socket.socket()
+        self.addCleanup(holder.close)
+        holder.bind(("127.0.0.1", 0))
+        holder.listen(1)
+        port = holder.getsockname()[1]
+        out = io.StringIO()
+        env = {"MESHDOCTOR_PROG": "meshdoctor", "MESHDOCTOR_WORKSPACE": os.path.join(tmp, "work"),
+               "MESHDOCTOR_KEY_FILE": os.path.join(tmp, "app.key")}
+        with mock.patch.dict(os.environ, env), contextlib.redirect_stdout(out), \
+                self.assertRaises(SystemExit) as e:
+            server.main(["--port", str(port)])
+        self.assertEqual(str(e.exception.code),
+                         f"port {port} is already in use: is meshdoctor serve already running, in another terminal? "
+                         f"Use that one, or start this one on another port: meshdoctor serve --port {port + 1}")
+        self.assertEqual(out.getvalue(), "")                       # no banner, no pairing link
+        self.assertFalse(os.path.exists(os.path.join(tmp, "work")))  # nor a workspace made for it
+        self.assertFalse(os.path.exists(os.path.join(tmp, "app.key")))
+
+
 class SelfCheckTest(unittest.TestCase):
     """meshdoctor check: one line per check, then what to do next (item 161)."""
 
