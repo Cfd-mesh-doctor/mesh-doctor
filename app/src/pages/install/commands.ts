@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The install commands, as the README's quickstart gives them. commands.test.ts keeps them equal to the README's.
+// The install commands, as the README's quickstart gives them, and the set-up of its First run. commands.test.ts keeps
+// them equal to the README's.
 import { REPO_URL } from "@/lib/site";
 
 /** The one-command set-ups: tools/setup_windows.ps1 (WSL, then the Linux script inside it) and tools/setup_linux.sh. */
@@ -44,3 +45,13 @@ export const DOCKER = [
   "docker build -t meshdoctor .",
   "docker run --rm -p 127.0.0.1:8765:8765 -v /path/to/cases:/cases:ro -v meshdoctor-work:/work meshdoctor",
 ];
+
+/** The README's First run, up to its first blank line: load OpenFOAM, copy its motorBike tutorial into $FOAM_RUN (where
+ * the engine looks for cases) and mesh it. The rest repairs it and tests the repair. */
+export const FIRST_RUN_SETUP = [
+  ". /opt/openfoam14/etc/bashrc",
+  "mkdir -p $FOAM_RUN && cd $FOAM_RUN",
+  "cp -r $FOAM_TUTORIALS/incompressibleFluid/motorBikeSteady motorBike",
+  "cp $FOAM_TUTORIALS/resources/geometry/motorBike.obj.gz motorBike/constant/geometry/",
+  "(cd motorBike && surfaceFeatures && blockMesh && snappyHexMesh) > mesh.log",
+] as const;

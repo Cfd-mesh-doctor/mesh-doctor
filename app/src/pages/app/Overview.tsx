@@ -4,6 +4,7 @@
 import { ArrowRight, Check, Cpu, FolderOpen, ListChecks, Terminal, Wrench } from "lucide-react";
 import { useId, type ReactNode } from "react";
 import { Link } from "react-router";
+import { CopyBlock } from "@/components/shared/CopyBlock";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { DashboardLink } from "@/components/shared/DashboardLink";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
@@ -23,6 +24,7 @@ import { formatCells, formatCount, formatRelative } from "@/lib/format";
 import { DOCS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
+import { FIRST_RUN_SETUP } from "@/pages/install/commands";
 
 /** Repairs a copy of a case, in WSL or a Linux terminal; the app can't start repairs itself yet. */
 const REPAIR_COMMAND = "meshdoctor full <case> <name>";
@@ -44,8 +46,9 @@ interface Step {
   title: string;
   state: StepState;
   text: ReactNode;
-  /** What to run, on the step to do now. */
+  /** What to run, on the step to do now: one command, or a few lines. */
   command?: string;
+  block?: string;
 }
 
 /** Each state's round mark: a tick, else the step's number. */
@@ -131,12 +134,15 @@ function GettingStarted({ cases, repairing }: { cases: readonly string[]; repair
       : {
           title: "Add a case",
           state: "next",
+          // The README's First run, its set-up here to copy: a newcomer needn't leave the app to find what to type.
+          block: FIRST_RUN_SETUP.join("\n"),
           text: (
             <>
-              None found yet. The README's{" "}
-              <a href={DOCS.firstRun} target="_blank" rel="noreferrer" className={LINK}>First run</a> sets up
-              OpenFOAM's motorBike tutorial in $FOAM_RUN, where the engine looks. For cases of your own, the{" "}
-              {casesScreen("Cases screen")} says how to point the engine at their folder.
+              None found yet. To try Mesh Doctor on OpenFOAM's motorBike tutorial, run these in a WSL or Linux
+              terminal: they copy the tutorial into $FOAM_RUN, where the engine looks, and mesh it, which takes a few
+              minutes. The README's{" "}
+              <a href={DOCS.firstRun} target="_blank" rel="noreferrer" className={LINK}>First run</a> has the rest. For
+              cases of your own, the {casesScreen("Cases screen")} says how to point the engine at their folder.
             </>
           ),
         },
@@ -168,6 +174,7 @@ function GettingStarted({ cases, repairing }: { cases: readonly string[]; repair
               </div>
               <p className="mt-0.5 text-[13px] text-muted-foreground">{s.text}</p>
               {s.command && <CopyCommand command={s.command} className="mt-3 max-w-xl" />}
+              {s.block && <CopyBlock code={s.block} className="mt-3 max-w-3xl" />}
             </div>
           </li>
         ))}

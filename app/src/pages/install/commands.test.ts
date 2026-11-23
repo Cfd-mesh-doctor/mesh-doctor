@@ -2,7 +2,7 @@
 // The install page's commands must stay the README's, so the page can't quietly fall behind the scripts.
 import { describe, expect, it } from "vitest";
 import { markdownCode, readRepo } from "@/test/markdown";
-import { DOCKER, LINUX, SETUP, WSL_INSTALL, type CommandGroup } from "./commands";
+import { DOCKER, FIRST_RUN_SETUP, LINUX, SETUP, WSL_INSTALL, type CommandGroup } from "./commands";
 
 const readme = readRepo("README.md");
 const blocks = markdownCode(readme);
@@ -36,5 +36,13 @@ describe("the install commands", () => {
   it("are the README's Docker commands and WSL install", () => {
     expect(DOCKER).toEqual(block("docker build"));
     expect(readme).toContain(`\`${WSL_INSTALL}\``);
+  });
+
+  it("give the set-up of the README's First run: its block, up to the first blank line", () => {
+    const first = blocks.find((b) => b.some((line) => line.startsWith("cp -r $FOAM_TUTORIALS/")));
+    if (!first) throw new Error("no README code block that copies a tutorial");
+    const end = first.findIndex((line) => line.trim() === "");
+    expect(end).toBeGreaterThan(0); // the repair and its test come after a blank line
+    expect(FIRST_RUN_SETUP).toEqual(first.slice(0, end));
   });
 });

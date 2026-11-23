@@ -9,6 +9,7 @@ import { IDLE_POLL_MS } from "@/engine/hooks";
 import { savePairing } from "@/engine/pairing";
 import type { JobList, RepairList } from "@/engine/types";
 import { DOCS } from "@/lib/site";
+import { FIRST_RUN_SETUP } from "@/pages/install/commands";
 import { renderScreen } from "@/test/render";
 import { Overview } from "./Overview";
 
@@ -226,7 +227,7 @@ describe("the Overview's Getting started", () => {
     params: { source: "wing", name: "wing-fix" }, name: "wing-fix", state: "queued", runner: "local",
     created: "2026-11-23T06:00:00Z", log: "wing-fix.log" };
 
-  it("with no case yet, ticks off the engine and gives the README's First run as the step to do next", async () => {
+  it("with no case yet, ticks off the engine and gives the README's First run set-up to copy as the step to do next", async () => {
     ownEngine();
     const [engine, aCase, repair] = await steps();
     expect(progress()).toHaveTextContent("1 of 3 done");
@@ -236,8 +237,12 @@ describe("the Overview's Getting started", () => {
     // The step to do next says so, in words and to screen readers.
     expect(aCase).toHaveAttribute("aria-current", "step");
     expect(within(aCase).getByText("Next")).toBeInTheDocument();
-    expect(aCase).toHaveTextContent(
-      "None found yet. The README's First run sets up OpenFOAM's motorBike tutorial in $FOAM_RUN, where the engine looks.");
+    expect(aCase).toHaveTextContent("None found yet. To try Mesh Doctor on OpenFOAM's motorBike tutorial, run these in a "
+      + "WSL or Linux terminal: they copy the tutorial into $FOAM_RUN, where the engine looks, and mesh it, which takes a "
+      + "few minutes. The README's First run has the rest.");
+    // The set-up, to copy: the README's own lines (commands.test.ts keeps them so).
+    const copy = within(aCase).getByRole("button", { name: "Copy the 5 lines starting “. /opt/openfoam14/etc/bashrc”" });
+    expect(copy.closest("div")!.querySelector("pre")!.textContent).toBe(FIRST_RUN_SETUP.join("\n"));
     const firstRun = within(aCase).getByRole("link", { name: "First run" });
     expect(firstRun).toHaveAttribute("href", DOCS.firstRun);
     expect(firstRun).toHaveAttribute("target", "_blank");
@@ -246,7 +251,7 @@ describe("the Overview's Getting started", () => {
     expect(repair).not.toHaveAttribute("aria-current");
     expect(repair).toHaveTextContent("Then one command repairs a copy of it, never the case itself.");
     expect(within(repair).queryByText(/^(Done|Next|Running)$/)).toBeNull();
-    expect(within(progress()).queryAllByRole("button")).toHaveLength(0);
+    expect(within(progress()).getAllByRole("button")).toEqual([copy]); // the set-up's alone
   });
 
   it("with a case, ticks that off too and gives its repair command, with the names filled in", async () => {
@@ -304,6 +309,7 @@ describe("the Overview's Getting started", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(IDLE_POLL_MS); });
     await waitFor(() => expect(progress()).toHaveTextContent("2 of 3 done"));
     expect(screen.getByRole("button", { name: "Copy “meshdoctor full motorBike motorBike-fix”" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Copy the 5 lines/ })).toBeNull(); // the set-up has gone with its step
   });
 
   it("goes once a repair run is listed", async () => {
