@@ -69,6 +69,15 @@ def main():
         line(OK if rc == 0 else NO, app, 'cd %s && ./Allwmake' % HERE)
     line(OK if has_py('numpy') else NO, 'python3 numpy (repair map)', 'sudo apt install python3-numpy')
     line(OK if os.path.isfile(os.path.join(HERE, 'bin', 'meshdoctor')) else NO, 'bin/meshdoctor launcher')
+    command = shutil.which('meshdoctor')
+    if command:
+        line(OK, 'meshdoctor command (%s)' % command)
+    elif os.path.exists(os.path.expanduser('~/.local/bin/meshdoctor')):
+        line(MAYBE, 'meshdoctor command: in ~/.local/bin, which this terminal has not loaded yet',
+             'open a new terminal (or run: . ~/.bashrc)')
+    else:
+        line(NO, 'meshdoctor command', 'bash %s/tools/setup_linux.sh links it, or add %s/bin to your PATH'
+             % (HERE, HERE))
 
     print('\nparaview-post')
     pv = shutil.which('pvbatch')
