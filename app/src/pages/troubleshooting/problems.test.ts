@@ -40,6 +40,12 @@ describe("the Troubleshooting page's problems", () => {
     expect(linked.sort()).toEqual(quoted.sort());
   });
 
+  it("say where to start an engine that isn't answering, on Linux as well as in WSL", () => {
+    const web = GROUPS.find((g) => g.id === "web-app");
+    const down = web!.table.rows.find((row) => row[0] === "\"The engine isn't answering\"");
+    expect(down?.[2]).toMatch(/^start it with `meshdoctor serve` in WSL or a Linux terminal, then \*\*Try again\*\*; /);
+  });
+
   it("send Safari users to the browsers the site names (the pairing page, the home page)", () => {
     const web = GROUPS.find((g) => g.id === "web-app");
     const safari = web!.table.rows.find((row) => row[0] === "Safari never connects");

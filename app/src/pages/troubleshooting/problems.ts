@@ -132,7 +132,7 @@ export const GROUPS: ProblemGroup[] = [
         [
           "\"The engine isn't answering\"",
           "`meshdoctor serve` isn't running, or listens on another port than the pairing link names; or the site's address isn't in the engine's `app_origins` (your own build or a fork)",
-          "start it in WSL with `meshdoctor serve`, then **Try again**; for another site address, add it to `app_origins` (README, Configuration) and restart the engine",
+          "start it with `meshdoctor serve` in WSL or a Linux terminal, then **Try again**; for another site address, add it to `app_origins` (README, Configuration) and restart the engine",
         ],
         [
           "\"Your browser blocked the connection\"",

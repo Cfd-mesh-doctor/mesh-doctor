@@ -38,7 +38,7 @@ Problems people actually hit, with the fix. Search this page for the message you
 
 | You see | Why | Fix |
 |---|---|---|
-| "The engine isn't answering" | `meshdoctor serve` isn't running, or listens on another port than the pairing link names; or the site's address isn't in the engine's `app_origins` (your own build or a fork) | start it in WSL with `meshdoctor serve`, then **Try again**; for another site address, add it to `app_origins` (README, Configuration) and restart the engine |
+| "The engine isn't answering" | `meshdoctor serve` isn't running, or listens on another port than the pairing link names; or the site's address isn't in the engine's `app_origins` (your own build or a fork) | start it with `meshdoctor serve` in WSL or a Linux terminal, then **Try again**; for another site address, add it to `app_origins` (README, Configuration) and restart the engine |
 | "Your browser blocked the connection" | Chrome or Edge asked to let the site reach apps on your device, and it was blocked | the icon left of the address bar → Site settings → allow "Apps on device" (Local network access), then try again |
 | "This browser needs pairing again" | the key was replaced (`meshdoctor pair --new`; a running engine keeps the old one until it restarts), or this browser's site data was cleared | if you ran `meshdoctor pair --new` since the engine started, restart it first (Ctrl+C in its window, then `meshdoctor serve`); then `meshdoctor pair --open` in a second WSL or Linux terminal (the engine keeps its own busy), or paste the link it prints on the Connect page |
 | "This engine version doesn't match the app" | the engine's API is a different major version from the app's | `git pull` in the repository, then restart `meshdoctor serve` |

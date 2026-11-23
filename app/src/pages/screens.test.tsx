@@ -49,6 +49,16 @@ describe("Connect", () => {
     expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
   });
 
+  it("tells a browser paired before where to start Mesh Doctor, and with what command", async () => {
+    savePairing({ engine: "http://localhost:8768", key: KEY, paired: "" });
+    renderScreen(<Connect />, { path: "/connect" });
+    // Coming back after a restart, the engine isn't running yet: on Windows in WSL, or in a Linux terminal.
+    const said = (await screen.findByText(/^This browser is paired\. Make sure Mesh Doctor is running/)).closest("p")!;
+    expect(said).toHaveTextContent("This browser is paired. Make sure Mesh Doctor is running in WSL or a Linux terminal "
+      + "(start it with meshdoctor serve), then connect.");
+    expect(within(said).getByText("meshdoctor serve", { selector: "code" })).toBeInTheDocument();
+  });
+
   it("tells a Safari user which browsers can reach the engine", async () => {
     const safari = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
     const ua = vi.spyOn(navigator, "userAgent", "get").mockReturnValue(safari);

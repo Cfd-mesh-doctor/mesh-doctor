@@ -350,7 +350,8 @@ test("an engine that isn't running gets a plain explanation, and a link to that 
   await page.goto(pairingLink());
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.getByText("The engine isn't answering")).toBeVisible();
-  await expect(page.getByText("meshdoctor serve")).toBeVisible();
+  // The panel gives the command to start it (the page names it too, for a browser paired before).
+  await expect(page.getByRole("alert").getByText("meshdoctor serve")).toBeVisible();
   const [tab] = await Promise.all([page.waitForEvent("popup"), page.getByRole("link", { name: "How to fix this" }).click()]);
   await expect(tab).toHaveURL(/\/troubleshooting\?q=The\+engine\+isn%27t\+answering$/);
   await expect(tab.getByRole("searchbox", { name: "Search for the message you see" })).toHaveValue("The engine isn't answering");
