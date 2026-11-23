@@ -80,6 +80,14 @@ describe("Connect", () => {
     expect(within(step("Open the pairing link it prints")).getByText("meshdoctor pair --open")).toBeInTheDocument();
   });
 
+  it("says a new key unpairs browsers only once the engine restarts", async () => {
+    renderScreen(<Connect />, { path: "/connect" });
+    // The engine reads its key when it starts: until a restart, the old key still works.
+    expect(await screen.findByText("Easy to undo")).toBeInTheDocument();
+    expect(screen.getByText("Forget the engine in Settings, or make a new key with meshdoctor pair --new, then restart "
+      + "the engine.")).toBeInTheDocument();
+  });
+
   it("refuses a link that points away from this computer", async () => {
     renderScreen(<Connect />, { path: "/connect", at: `/connect#key=${KEY}&engine=http%3A%2F%2Fevil.test%3A8765` });
     expect(await screen.findByText(/isn't on this computer/)).toBeInTheDocument();

@@ -18,4 +18,10 @@ describe("the Safety model page's text", () => {
     expect(targets).toEqual(["how-it-works.md", "limits.md"]);
     for (const target of targets) expect(docNames()).toContain(target);
   });
+
+  it("says a new key unpairs browsers only once the engine restarts: a running engine keeps the old one", () => {
+    // Someone whose key leaked must know the old key works until the restart.
+    expect(JSON.stringify(SAFETY)).toContain("`meshdoctor pair --new` makes a new key, which unpairs every browser "
+      + "once you restart `meshdoctor serve`; until then the running engine still accepts the old key.");
+  });
 });

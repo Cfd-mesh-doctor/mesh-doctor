@@ -100,7 +100,7 @@ const SAFETY: [typeof Lock, string, string][] = [
   [KeyRound, "The key never reaches this website", "It travels after the # in the link, which browsers keep to themselves."],
   [Laptop, "Only your own computer", "The app connects to localhost only. Your meshes and results never leave your PC."],
   [ShieldCheck, "Only this site, only with the key", "The engine answers this site's address and nothing else, and only when the key matches."],
-  [Lock, "Easy to undo", "Forget the engine in Settings, or make a new key with meshdoctor pair --new."],
+  [Lock, "Easy to undo", "Forget the engine in Settings, or make a new key with meshdoctor pair --new, then restart the engine."],
 ];
 
 export function Connect() {
