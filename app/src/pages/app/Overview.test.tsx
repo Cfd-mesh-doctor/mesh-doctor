@@ -100,7 +100,7 @@ describe("the Overview before anything has run", () => {
     expect(screen.queryByText(/improved/)).toBeNull();
     // The empty list says what goes in the command's blanks, next to it.
     expect(blanksSaid()).toHaveLength(1);
-    expect(blanksSaid()[0]).toHaveTextContent(/^Repair a copy of one of your cases with this in WSL \(putting/);
+    expect(blanksSaid()[0]).toHaveTextContent(/^Repair a copy of one of your cases with this in a WSL or Linux terminal \(putting/);
     // ...and that each case has its own command on the Cases screen, which is easier.
     expect(blanksSaid()[0]).toHaveTextContent(/On the Cases screen, each case has its own, with the names filled in\.$/);
     expect(screen.getByRole("link", { name: "Cases screen" })).toHaveAttribute("href", "/app/cases");
@@ -159,7 +159,8 @@ describe("the Overview before anything has run", () => {
     expect(screen.getAllByRole("button", { name: COPY_REPAIR })).toHaveLength(1);
     // The demo has no engine of its own: the card names the dashboard without linking it.
     expect(screen.getByText((_, el) => el?.tagName === "P" && (el.textContent ?? "").startsWith(
-      `From the engine's dashboard, or with this command in WSL ${BLANKS}: the run shows up here`))).toBeInTheDocument();
+      `From the engine's dashboard, or with this command in a WSL or Linux terminal ${BLANKS}: the run shows up here`)))
+      .toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "the engine's dashboard" })).toBeNull();
     // The Cases screen it points to is the demo's own.
     expect(screen.getByRole("link", { name: "Cases screen" })).toHaveAttribute("href", "/demo/cases");

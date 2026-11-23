@@ -87,7 +87,7 @@ describe("a repair's report on your own engine", () => {
     expect(await screen.findByText(/from your engine/)).toBeInTheDocument();
     expect(screen.getByText("Did it help the solver?")).toBeInTheDocument();
     expect(screen.getByText("Not tested yet")).toBeInTheDocument();
-    expect(screen.getByText(/Run it in WSL: its result shows up in this report\.$/)).toBeInTheDocument();
+    expect(screen.getByText(/Run it in a WSL or Linux terminal: its result shows up in this report\.$/)).toBeInTheDocument();
     // The source case by its folder's name, which the engine finds in the cases folder, then the run.
     expect(screen.getByRole("button", { name: "Copy “meshdoctor ab ahmed-25-medium ahmed25-medium-fix”" })).toBeInTheDocument();
   });

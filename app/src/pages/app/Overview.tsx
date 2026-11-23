@@ -19,7 +19,7 @@ import { caseName, improvedCleanly, madeWorse, runStep, runUpdated } from "@/eng
 import { formatCells, formatCount, formatRelative } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
 
-/** Repairs a copy of a case, in WSL; the app can't start repairs itself yet. */
+/** Repairs a copy of a case, in WSL or a Linux terminal; the app can't start repairs itself yet. */
 const REPAIR_COMMAND = "meshdoctor full <case> <name>";
 /** What the command's two blanks stand for: `<name>` could be read as your own name. */
 const BLANKS = (
@@ -203,7 +203,8 @@ export function Overview() {
               action={<CopyCommand command={REPAIR_COMMAND} className="max-w-full text-left" />}>
               Repair a copy of one of{" "}
               <Link to={to("/cases")} className="font-medium text-primary underline-offset-4 hover:underline">your cases</Link>{" "}
-              with this in WSL {BLANKS}, or from the engine's dashboard: the run shows here when it finishes.{" "}
+              with this in a WSL or Linux terminal {BLANKS}, or from the engine's dashboard: the run shows here when it
+              finishes.{" "}
               {ownCommands}
             </EmptyState>
           ) : (
@@ -249,7 +250,8 @@ export function Overview() {
                 dashboard stays linked once the empty lists that first offer it have gone. */}
             <CardTitle>Start a repair</CardTitle>
             <CardDescription>
-              From <DashboardLink />, or with this command in WSL {BLANKS}: the run shows up here when it finishes.{" "}
+              From <DashboardLink />, or with this command in a WSL or Linux terminal {BLANKS}: the run shows up here when
+              it finishes.{" "}
               {ownCommands} It works on a copy, so your case is never changed. Starting repairs from this app comes next.
             </CardDescription>
           </div>

@@ -165,7 +165,7 @@ describe("the Cases screen of your own engine", () => {
 
   it("says how to repair a case: its command, or the engine's dashboard, linked in a new tab", async () => {
     ownEngine(["wing"]);
-    expect(await screen.findByText(/To repair one, copy its repair command and run it in WSL, or start it from/))
+    expect(await screen.findByText(/To repair one, copy its repair command and run it in a WSL or Linux terminal, or start it from/))
       .toHaveTextContent(/start it from the engine's dashboard: the run shows up here when it finishes\.$/);
     const dashboard = screen.getByRole("link", { name: "the engine's dashboard" });
     expect(dashboard).toHaveAttribute("href", "http://localhost:8765/meshdoctor");

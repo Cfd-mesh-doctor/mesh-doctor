@@ -422,7 +422,8 @@ function AbNextCard({ command }: { command: string }) {
       <CardContent>
         <p className="text-sm text-muted-foreground">
           The A/B solver test runs your case twice, on the original mesh and on the repaired one, with the same
-          settings, and compares how they converge. Run it in WSL: its result shows up in this report.
+          settings, and compares how they converge. Run it in a WSL or Linux terminal: its result shows up in this
+          report.
         </p>
         <CopyCommand command={command} className="mt-3" />
       </CardContent>

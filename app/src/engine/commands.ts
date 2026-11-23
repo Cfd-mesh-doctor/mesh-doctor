@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The engine's commands the app gives you to run in WSL, until it can start them itself.
+// The engine's commands the app gives you to run in WSL or a Linux terminal, until it can start them itself.
 
 /** A plain folder name, as the engine takes for a run, and finds a case by from any folder: letters, digits and
  * _ . - (not first), at most 80. */

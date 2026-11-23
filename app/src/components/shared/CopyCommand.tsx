@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// A command to run in WSL, with a copy button.
+// A command to run in WSL or a Linux terminal, with a copy button.
 import { Check, Copy } from "lucide-react";
 import { useCopy } from "@/lib/useCopy";
 import { cn } from "@/lib/utils";

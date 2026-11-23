@@ -60,8 +60,8 @@ function EstimateLink({ name, cells, className }: { name: string; cells: number 
   );
 }
 
-/** Copies the command that repairs a copy of a case, to run in WSL; pointing at it or focusing it shows the command
- * (beside it: above it, it would hide the case's name). */
+/** Copies the command that repairs a copy of a case, to run in WSL or a Linux terminal; pointing at it or focusing it
+ * shows the command (beside it: above it, it would hide the case's name). */
 function CopyRepairCommand({ command }: { command: string }) {
   const { copied, copy } = useCopy();
   return (
@@ -125,8 +125,8 @@ export function Cases() {
         description={
           <>
             OpenFOAM cases in the engine's cases folder. Mesh Doctor only ever reads them: every repair works on a copy.
-            To repair one, copy its repair command and run it in WSL, or start it from <DashboardLink />: the run shows
-            up here when it finishes.
+            To repair one, copy its repair command and run it in a WSL or Linux terminal, or start it from{" "}
+            <DashboardLink />: the run shows up here when it finishes.
           </>
         }
       />
