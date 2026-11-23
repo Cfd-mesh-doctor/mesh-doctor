@@ -101,6 +101,9 @@ describe("the Overview before anything has run", () => {
     // The empty list says what goes in the command's blanks, next to it.
     expect(blanksSaid()).toHaveLength(1);
     expect(blanksSaid()[0]).toHaveTextContent(/^Repair a copy of one of your cases with this in WSL \(putting/);
+    // ...and that each case has its own command on the Cases screen, which is easier.
+    expect(blanksSaid()[0]).toHaveTextContent(/On the Cases screen, each case has its own, with the names filled in\.$/);
+    expect(screen.getByRole("link", { name: "Cases screen" })).toHaveAttribute("href", "/app/cases");
     // No jobs at all: the Active jobs tile says so too, rather than "0 jobs on record".
     expect(within(screen.getByText("Active jobs").closest("section")!).getByText("No jobs yet")).toBeInTheDocument();
     expect(screen.queryByText(/on record/)).toBeNull();
@@ -158,6 +161,8 @@ describe("the Overview before anything has run", () => {
     expect(screen.getByText((_, el) => el?.tagName === "P" && (el.textContent ?? "").startsWith(
       `From the engine's dashboard, or with this command in WSL ${BLANKS}: the run shows up here`))).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "the engine's dashboard" })).toBeNull();
+    // The Cases screen it points to is the demo's own.
+    expect(screen.getByRole("link", { name: "Cases screen" })).toHaveAttribute("href", "/demo/cases");
   });
 });
 
@@ -175,6 +180,9 @@ describe("the Overview once something has run", () => {
     // The card says what goes in the command's blanks.
     expect(blanksSaid()).toHaveLength(1);
     expect(card).toContainElement(blanksSaid()[0]!);
+    // ...and points to each case's own command, on the Cases screen.
+    expect(within(card).getByRole("link", { name: "Cases screen" })).toHaveAttribute("href", "/app/cases");
+    expect(card).toHaveTextContent("On the Cases screen, each case has its own, with the names filled in. It works on a copy");
     // With a run, the tile counts the verdicts, even when none is in yet.
     expect(screen.getByText("0 improved, none worse")).toBeInTheDocument();
     expect(screen.queryByText("None yet")).toBeNull();

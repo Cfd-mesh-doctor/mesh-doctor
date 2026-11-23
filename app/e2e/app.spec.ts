@@ -232,7 +232,7 @@ test("before anything has run, the Overview and Jobs say how to start: the engin
   expect(engine.requests.some((r) => new URL(r.url()).pathname === "/meshdoctor")).toBe(false);
 });
 
-test("once something has run, the Overview's Start a repair card and the Jobs screen keep the engine's dashboard linked", async ({ page }) => {
+test("once something has run, the Overview's Start a repair card (pointing to each case's own command) and the Jobs screen keep the engine's dashboard linked", async ({ page }) => {
   await mockEngine(page, {
     repairs: [{ name: "old-fix", finished: "2026-11-21 12:05:00", nCells: 1000, profile: "medium", source: "wing", status: {}, verdict: null }],
   });
@@ -247,6 +247,10 @@ test("once something has run, the Overview's Start a repair card and the Jobs sc
   await expect(dashboard).toHaveAttribute("href", `${ENGINE}/meshdoctor`);
   await expect(dashboard).toHaveAttribute("target", "_blank");
   await expect(main.getByRole("button", { name: "Copy “meshdoctor full <case> <name>”" })).toBeVisible();
+  // Easier than filling in the command's blanks: each case's own command, with the names filled in, on the Cases screen.
+  await main.getByRole("link", { name: "Cases screen" }).click();
+  await expect(page).toHaveURL(/\/app\/cases$/);
+  await expect(main.getByRole("button", { name: "Copy repair command: meshdoctor full wing wing-fix" })).toBeVisible();
   // The Jobs screen, with its two jobs, says where they start. (One is running: the sidebar says "Jobs (1 active)".)
   await page.getByRole("complementary").getByRole("link", { name: /^Jobs\b/ }).click();
   await expect(page).toHaveURL(/\/app\/jobs$/);

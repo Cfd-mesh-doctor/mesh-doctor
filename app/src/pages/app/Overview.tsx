@@ -51,6 +51,14 @@ export function Overview() {
   // asks again for each one that failed.
   const queries = [info, cases, jobs, repairs];
   const failed = queries.find((q) => q.isError);
+  // Easier than filling in the command's blanks: each case's own command, on the Cases screen.
+  const ownCommands = (
+    <>
+      On the{" "}
+      <Link to={to("/cases")} className="font-medium text-primary underline-offset-4 hover:underline">Cases screen</Link>,
+      each case has its own, with the names filled in.
+    </>
+  );
 
   return (
     <>
@@ -195,7 +203,8 @@ export function Overview() {
               action={<CopyCommand command={REPAIR_COMMAND} className="max-w-full text-left" />}>
               Repair a copy of one of{" "}
               <Link to={to("/cases")} className="font-medium text-primary underline-offset-4 hover:underline">your cases</Link>{" "}
-              with this in WSL {BLANKS}, or from the engine's dashboard: the run shows here when it finishes.
+              with this in WSL {BLANKS}, or from the engine's dashboard: the run shows here when it finishes.{" "}
+              {ownCommands}
             </EmptyState>
           ) : (
             <ul className="divide-y divide-border border-t border-border">
@@ -240,8 +249,8 @@ export function Overview() {
                 dashboard stays linked once the empty lists that first offer it have gone. */}
             <CardTitle>Start a repair</CardTitle>
             <CardDescription>
-              From <DashboardLink />, or with this command in WSL {BLANKS}: the run shows up here when it finishes. It
-              works on a copy, so your case is never changed. Starting repairs from this app comes next.
+              From <DashboardLink />, or with this command in WSL {BLANKS}: the run shows up here when it finishes.{" "}
+              {ownCommands} It works on a copy, so your case is never changed. Starting repairs from this app comes next.
             </CardDescription>
           </div>
           <CopyCommand command={REPAIR_COMMAND} className="sm:w-80" />
