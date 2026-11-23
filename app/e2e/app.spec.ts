@@ -53,6 +53,13 @@ test("a newcomer's main button leads to the three steps, which say how often eac
     await expect(steps.nth(i)).toContainText(`Step ${i + 1} · ${when}`);
   }
   await expect(steps.nth(0).getByRole("link", { name: "The full install guide" })).toHaveAttribute("href", "/install");
+  // Step 1 gives both set-ups, each named by where it runs: PowerShell can't run the Linux one, which installs no WSL.
+  await expect(steps.nth(0)).toContainText("Windows, in PowerShell");
+  await expect(steps.nth(0).getByRole("button", { name: "Copy “powershell -ExecutionPolicy Bypass -File tools\\setup_windows.ps1”" }))
+    .toBeVisible();
+  await expect(steps.nth(0)).toContainText("Linux or WSL, in a terminal");
+  await expect(steps.nth(0).getByRole("button", { name: "Copy “bash tools/setup_linux.sh”" })).toBeVisible();
+  await expect(steps.nth(0)).toContainText("On Windows it sets up WSL first, then installs them inside it.");
   await expect(steps.nth(2).getByRole("link", { name: "See a finished report in the demo" }))
     .toHaveAttribute("href", "/demo/repairs/ahmed35-medium-fix/report");
   // Step 3 gives both commands, the repair and the A/B test (full only repairs), and says what goes in their blanks.

@@ -12,7 +12,11 @@ import { Button } from "@/components/ui/button";
 import { usePairing } from "@/engine/context";
 import { BROWSERS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
+import { SETUP } from "@/pages/install/commands";
 import { HeroPreview } from "./HeroPreview";
+
+/** A command a "Running in three steps" step gives; `label` says where it runs, when that depends on the computer. */
+interface StepCommand { command: string; prompt?: string; label?: string }
 
 const STEPS: { icon: LucideIcon; title: string; text: string }[] = [
   {
@@ -206,8 +210,15 @@ export function Landing() {
           {/* Each step says how often it's done and links to where it's done or shown. */}
           <ol className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             {[
-              { title: "Install", when: "once", cmd: "bash tools/setup_linux.sh", link: { to: "/install", label: "The full install guide" },
-                text: "From a clone of the repository, one script installs WSL, OpenFOAM 14 and Mesh Doctor, and checks the result." },
+              // Both set-ups, each named by where it runs: PowerShell can't run the Linux one, and only the Windows one
+              // installs WSL.
+              { title: "Install", when: "once", link: { to: "/install", label: "The full install guide" },
+                cmd: [
+                  { label: "Windows, in PowerShell", command: SETUP.windows, prompt: "PS>" },
+                  { label: "Linux or WSL, in a terminal", command: SETUP.linux },
+                ],
+                text: "From a clone of the repository, one script installs OpenFOAM 14 and Mesh Doctor, and checks the "
+                  + "result. On Windows it sets up WSL first, then installs them inside it." },
               { title: "Start and pair", when: "each time you work", cmd: "meshdoctor serve", link: { to: "/connect", label: "Pair this browser" },
                 text: `Start the engine. It prints a pairing link for this site; open it in ${BROWSERS}, once per browser.` },
               // Both commands, the repair and then the A/B test (full only repairs), with the same two blanks, said in
@@ -228,13 +239,20 @@ export function Landing() {
                 <p className="mt-2 font-semibold">{title}</p>
                 <p className="mt-1.5 flex-1 text-[13.5px] text-muted-foreground">{text}</p>
                 <Link to={link.to} className="mt-3 text-[13px] font-medium text-primary hover:underline">{link.label}</Link>
-                {[cmd].flat().map((c, j) => <CopyCommand key={c} command={c} className={j ? "mt-2" : "mt-4"} />)}
+                {[cmd].flat().map((c, j) => {
+                  const { command, prompt, label }: StepCommand = typeof c === "string" ? { command: c } : c;
+                  return (
+                    <div key={command} className={j ? "mt-2" : "mt-4"}>
+                      {label && <p className="mb-1 text-xs text-muted-foreground">{label}</p>}
+                      <CopyCommand command={command} prompt={prompt} />
+                    </div>
+                  );
+                })}
               </li>
             ))}
           </ol>
           <p className="mt-6 text-[13px] text-muted-foreground">
-            On Windows, run <code>tools\setup_windows.ps1</code> instead of step 1. Full instructions, Docker and cluster
-            set-ups are on the{" "}
+            Full instructions, Docker and cluster set-ups are on the{" "}
             <Link to="/install" className="font-medium text-primary hover:underline">install page</Link>.
             Got a report file from someone? Open it in the{" "}
             <Link to="/report" className="font-medium text-primary hover:underline">report viewer</Link>: it needs no
