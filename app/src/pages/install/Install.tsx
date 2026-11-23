@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
 import { CopyCommand } from "@/components/shared/CopyCommand";
+import { InlineCode } from "@/components/shared/InlineCode";
 import { PageHeader } from "@/components/shared/page";
 import { Card } from "@/components/ui/card";
 import { DOCS, REPO_URL } from "@/lib/site";
@@ -87,21 +88,21 @@ export function Install() {
               <div>
                 <h3 className="font-semibold">What it does</h3>
                 <ul className="mt-2 list-disc space-y-1.5 pl-5 text-muted-foreground">
-                  <li>Installs OpenFOAM 14, numpy, matplotlib, PIL and ParaView, then builds Mesh Doctor&apos;s OpenFOAM utilities (<code className="text-foreground">./Allwmake</code>).</li>
+                  <li>Installs OpenFOAM 14, numpy, matplotlib, PIL and ParaView, then builds Mesh Doctor&apos;s OpenFOAM utilities <InlineCode lead="(" text="./Allwmake" trail=")." className="text-foreground" /></li>
                   <li>Makes OpenFOAM load in every new terminal.</li>
-                  <li>Puts the <code className="text-foreground">meshdoctor</code> command in every new terminal too: a link in <code className="text-foreground">~/.local/bin</code>.</li>
-                  <li>Ends with <code className="text-foreground">tools/toolkit_check.py</code>, which says what works.</li>
+                  <li>Puts the <InlineCode text="meshdoctor" className="text-foreground" /> command in every new terminal too: a link in <InlineCode text="~/.local/bin" trail="." className="text-foreground" /></li>
+                  <li>Ends with <InlineCode text="tools/toolkit_check.py" trail="," className="text-foreground" /> which says what works.</li>
                 </ul>
               </div>
               <div>
                 <h3 className="font-semibold">Options</h3>
                 <dl className="mt-2 space-y-1.5 text-muted-foreground">
                   <div>
-                    <dt className="inline"><code className="text-foreground">-DryRun</code> or <code className="text-foreground">--dry-run</code>: </dt>
+                    <dt className="inline"><InlineCode text="-DryRun" className="text-foreground" /> or <InlineCode text="--dry-run" trail=":" className="text-foreground" /> </dt>
                     <dd className="inline">print the steps without running them.</dd>
                   </div>
                   <div>
-                    <dt className="inline"><code className="text-foreground">-NoParaView</code> or <code className="text-foreground">--no-paraview</code>: </dt>
+                    <dt className="inline"><InlineCode text="-NoParaView" className="text-foreground" /> or <InlineCode text="--no-paraview" trail=":" className="text-foreground" /> </dt>
                     <dd className="inline">skip ParaView (about 600 MB; only the picture scripts need it).</dd>
                   </div>
                 </dl>
@@ -127,14 +128,14 @@ export function Install() {
                     <CopyCommand command={WSL_INSTALL} prompt="PS>" className="mt-2" />
                     <span className="mt-2 block">Then follow <Link to="#linux" className={link}>Linux</Link> below, inside the Ubuntu window.</span>
                   </li>
-                  <li>Start the engine inside WSL: <code>meshdoctor serve</code>.</li>
+                  <li>Start the engine inside WSL: <InlineCode text="meshdoctor serve" trail="." /></li>
                   <li>
-                    Open <code>http://localhost:8765</code> in your Windows browser. WSL forwards the port to Windows&apos;
+                    Open <InlineCode text="http://localhost:8765" /> in your Windows browser. WSL forwards the port to Windows&apos;
                     own localhost only, not to the network.
                   </li>
                 </ol>
                 <p className="mt-4 text-[13px] text-muted-foreground">
-                  Keep cases inside the WSL file system (<code>~/...</code>), not under <code>/mnt/c</code>: OpenFOAM is
+                  Keep cases inside the WSL file system <InlineCode lead="(" text="~/..." trail=")," /> not under <InlineCode text="/mnt/c" trail=":" /> OpenFOAM is
                   many times slower on Windows drives.
                 </p>
               </Card>
@@ -157,10 +158,10 @@ export function Install() {
                   ))}
                 </div>
                 <p className="mt-4 text-[13px] text-muted-foreground">
-                  To type just <code>meshdoctor</code>, add the clone&apos;s <code>bin/</code> folder to your PATH, or
-                  link <code>bin/meshdoctor</code> into <code>~/.local/bin</code> as the setup script does. With
-                  pip instead: <code className="whitespace-nowrap">pip install &quot;.[map]&quot;</code> in a virtual
-                  environment (or <code className="whitespace-nowrap">pipx install .</code>); <code>./Allwmake</code> is
+                  To type just <InlineCode text="meshdoctor" trail="," /> add the clone&apos;s <InlineCode text="bin/" /> folder to your PATH, or
+                  link <InlineCode text="bin/meshdoctor" /> into <InlineCode text="~/.local/bin" /> as the setup script does. With
+                  pip instead: <InlineCode text={"pip install \".[map]\""} /> in a virtual
+                  environment (or <InlineCode text="pipx install ." trail=");" /> <InlineCode text="./Allwmake" /> is
                   still needed for the OpenFOAM utilities.
                 </p>
               </Card>
@@ -171,9 +172,9 @@ export function Install() {
                   {DOCKER.map((command) => <li key={command}><CopyCommand command={command} /></li>)}
                 </ul>
                 <p className="mt-4 text-[13px] text-muted-foreground">
-                  Then open <code>http://localhost:8765</code>. Cases are mounted read-only; results go to the{" "}
-                  <code>meshdoctor-work</code> volume. Always publish the port as <code>127.0.0.1:8765:8765</code>:
-                  plain <code>8765:8765</code> would put the dashboard on your network.
+                  Then open <InlineCode text="http://localhost:8765" trail="." /> Cases are mounted read-only; results go to the{" "}
+                  <InlineCode text="meshdoctor-work" /> volume. Always publish the port as <InlineCode text="127.0.0.1:8765:8765" trail=":" />{" "}
+                  plain <InlineCode text="8765:8765" /> would put the dashboard on your network.
                 </p>
               </Card>
 
@@ -184,7 +185,7 @@ export function Install() {
             </div>
           </Section>
 
-          <Section id="next" title="Then" lead={<>Mesh Doctor is ready when <code className="text-foreground">meshdoctor check</code> says so.</>}>
+          <Section id="next" title="Then" lead={<>Mesh Doctor is ready when <InlineCode text="meshdoctor check" className="text-foreground" /> says so.</>}>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <Next icon={Play} title="Try the motorBike tutorial" text="OpenFOAM's own case: repair, A/B test and map, about 15 to 20 minutes on 4 cores, before you use your own cases.">
                 <a href={DOCS.firstRun} target="_blank" rel="noreferrer" className={link}>First run, in the README</a>
