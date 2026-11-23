@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { explain } from "@/engine/errors";
 import { cn } from "@/lib/utils";
 import { CopyCommand } from "./CopyCommand";
+import { InlineCode } from "./InlineCode";
 
 export function ErrorPanel({ error, onRetry, retrying, className, compact }: {
   error: unknown; onRetry?: () => void; retrying?: boolean; className?: string; compact?: boolean;
@@ -16,7 +17,7 @@ export function ErrorPanel({ error, onRetry, retrying, className, compact }: {
         <CircleExclamationPoint className="mt-0.5 size-5 shrink-0 text-danger" aria-hidden />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground">{e.title}</p>
-          <p className="mt-1 text-sm text-muted-foreground">{e.hint}</p>
+          <p className="mt-1 text-sm text-muted-foreground"><Hint text={e.hint} /></p>
           {e.command && <CopyCommand command={e.command} className="mt-3 max-w-md bg-surface" />}
           {(onRetry || e.troubleshooting) && (
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -44,4 +45,11 @@ export function ErrorPanel({ error, onRetry, retrying, className, compact }: {
       </div>
     </div>
   );
+}
+
+/** The hint, with the commands, settings and file names it names (in backticks) as code, as the docs show them: a
+ *  command split over two lines ("meshdoctor pair", then "--new") wouldn't read as one. */
+function Hint({ text }: { text: string }) {
+  // Split at a pair of backticks, keeping what they hold: that comes at the odd places.
+  return <>{text.split(/`([^`]+)`/).map((part, i) => (i % 2 ? <InlineCode key={i} text={part} /> : part))}</>;
 }

@@ -52,6 +52,7 @@ export function asEngineError(e: unknown): EngineError {
 
 export interface Explained {
   title: string;
+  /** What to do, in plain words; a command, setting or file name in it goes in backticks, and shows as code. */
   hint: string;
   /** A command that fixes it, shown with a copy button. */
   command?: string;
@@ -70,9 +71,10 @@ export function explain(err: unknown, origin = globalThis.location?.origin ?? ""
       title: "This browser needs pairing again",
       // The engine is answering, so its window is busy: a command typed there would wait for it to stop. And it reads
       // its key when it starts, so after a pair --new made while it runs, no link works until it restarts.
-      hint: "The engine has a different pairing key, or none was sent. Ran meshdoctor pair --new while the engine was "
-        + "running? Restart it first (Ctrl+C in its window, then meshdoctor serve): it reads the key only when it "
-        + "starts. Then run this in a second WSL window (the engine keeps its own busy): it opens the pairing link.",
+      hint: "The engine has a different pairing key, or none was sent. Ran `meshdoctor pair --new` while the engine "
+        + "was running? Restart it first (Ctrl+C in its window, then `meshdoctor serve`): it reads the key only "
+        + "when it starts. Then run this in a second WSL window (the engine keeps its own busy): it opens the pairing "
+        + "link.",
       command: "meshdoctor pair --open",
       troubleshooting: true,
     };
@@ -83,7 +85,7 @@ export function explain(err: unknown, origin = globalThis.location?.origin ?? ""
         title: "The engine isn't answering",
         hint:
           "Start Mesh Doctor on this computer and try again. If it is running already, it may use another port, " +
-          `or not allow this site (${origin || "this address"}) in its app_origins setting.`,
+          `or not allow this site (${origin || "this address"}) in its \`app_origins\` setting.`,
         command: "meshdoctor serve",
         troubleshooting: true,
       };
@@ -109,7 +111,7 @@ export function explain(err: unknown, origin = globalThis.location?.origin ?? ""
     case "not-enough-memory":
       return {
         title: "Not enough free memory",
-        hint: "Close other programs or WSL jobs, or give WSL more memory in .wslconfig, then try again.",
+        hint: "Close other programs or WSL jobs, or give WSL more memory in `.wslconfig`, then try again.",
       };
     case "finished":
       return { title: "That job has already finished", hint: e.message };
@@ -120,7 +122,7 @@ export function explain(err: unknown, origin = globalThis.location?.origin ?? ""
     case "forbidden":
       return { title: "The engine refused this request", hint: e.message };
     case "internal":
-      return { title: "The engine hit an error", hint: "Details are in the engine's window (where meshdoctor serve runs)." };
+      return { title: "The engine hit an error", hint: "Details are in the engine's window (where `meshdoctor serve` runs)." };
     case "bad-response":
       return { title: "Unexpected answer", hint: e.message || "The address may not be a Mesh Doctor engine." };
     default:

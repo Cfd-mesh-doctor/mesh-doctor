@@ -63,10 +63,10 @@ describe("httpTransport", () => {
     expect(explain(err).command).toBe("meshdoctor pair --open");
     // The engine answered, so its window is busy: the command goes in a second one. And a key made while the engine
     // runs works only once it restarts: the hint says so before the command.
-    expect(explain(err).hint).toBe("The engine has a different pairing key, or none was sent. Ran meshdoctor pair "
-      + "--new while the engine was running? Restart it first (Ctrl+C in its window, then meshdoctor serve): it reads "
-      + "the key only when it starts. Then run this in a second WSL window (the engine keeps its own busy): it opens "
-      + "the pairing link.");
+    expect(explain(err).hint).toBe("The engine has a different pairing key, or none was sent. Ran `meshdoctor pair "
+      + "--new` while the engine was running? Restart it first (Ctrl+C in its window, then `meshdoctor serve`): it "
+      + "reads the key only when it starts. Then run this in a second WSL window (the engine keeps its own busy): it "
+      + "opens the pairing link.");
   });
 
   it("says unreachable when nothing answers", async () => {
