@@ -7,7 +7,7 @@ import { expect, test, type Page } from "@playwright/test";
 const PAGES = [
   "/", "/connect", "/install", "/report", "/report?sample=ahmed35-medium-fix", "/estimate", "/how-it-works",
   "/accuracy", "/gallery", "/docs", "/troubleshooting", "/limits", "/safety", "/your-own-case", "/claude-code", "/dashboard-tour", "/architecture", "/nowhere",
-  "/demo", "/demo/cases", "/demo/jobs", "/demo/settings", "/demo/estimate", "/demo/repairs/ahmed35-medium-fix/report",
+  "/demo", "/demo/cases", "/demo/repairs", "/demo/jobs", "/demo/settings", "/demo/estimate", "/demo/repairs/ahmed35-medium-fix/report",
   "/demo/nowhere",
 ];
 
