@@ -31,7 +31,8 @@ ROOT = config.settings()["workspace"]          # Mesh Doctor runs live here (con
 
 
 def read_points(poly):
-    raw = open(os.path.join(poly, "points"), "rb").read()
+    with open(os.path.join(poly, "points"), "rb") as f:
+        raw = f.read()
     head = raw[:3000]
     m = re.search(rb"\n(\d+)\s*\n\(", raw)
     n, start = int(m.group(1)), m.end()
@@ -57,9 +58,11 @@ def patches(text):
 
 def wall_centres(poly, pts):
     """Centres of the wall faces of one polyMesh, as {patch name: (n, 3) array}."""
-    bnd = open(os.path.join(poly, "boundary"), encoding="utf-8", errors="replace").read()
+    with open(os.path.join(poly, "boundary"), encoding="utf-8", errors="replace") as f:
+        bnd = f.read()
     walls = [(name, s, n) for name, t, n, s in patches(bnd) if t == "wall"]
-    raw = open(os.path.join(poly, "faces"), "rb").read()
+    with open(os.path.join(poly, "faces"), "rb") as f:
+        raw = f.read()
     m = re.compile(rb"\n(\d+)\s*\n\(").search(raw)
     n1, s1 = int(m.group(1)), m.end()
     if not re.search(rb"format\s+binary", raw[:3000]):
@@ -136,17 +139,19 @@ def read_hot(case, n=3000):
     files = glob.glob(os.path.join(case, "processor*", "meshDoctor", "hotspots", "hot.txt")) \
         or glob.glob(os.path.join(case, "meshDoctor", "hotspots", "hot.txt"))
     for f in files:
-        for line in open(f):
-            t = line.split()
-            if t and t[0] == "H":
-                rows.append([float(t[5]), float(t[6]), float(t[7]), float(t[2])])
+        with open(f) as fh:
+            for line in fh:
+                t = line.split()
+                if t and t[0] == "H":
+                    rows.append([float(t[5]), float(t[6]), float(t[7]), float(t[2])])
     rows.sort(key=lambda r: -r[3])
     summ = {}
     sf = os.path.join(case, "meshDoctor", "hotspots_summary.txt")
     if os.path.isfile(sf):
-        for line in open(sf):
-            k, *v = line.split()
-            summ[k] = v[0] if v else ""
+        with open(sf) as fh:
+            for line in fh:
+                k, *v = line.split()
+                summ[k] = v[0] if v else ""
     return [[round(x, 4) for x in r] for r in rows[:n]], summ
 
 

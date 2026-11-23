@@ -62,7 +62,8 @@ def private_words(root):
     words = []
     p = os.path.join(root, ".data-guard-private.txt")
     if os.path.isfile(p):
-        words += open(p, encoding="utf-8").read().splitlines()
+        with open(p, encoding="utf-8") as f:
+            words += f.read().splitlines()
     words += os.environ.get("DATA_GUARD_PATTERNS", "").splitlines()
     return [w.strip().lower() for w in words if w.strip() and not w.strip().startswith("#")]
 

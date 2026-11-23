@@ -10,6 +10,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 os.environ["MESHDOCTOR_CONFIG"] = os.devnull                # ignore any local config file
 for _k in ("MESHDOCTOR_FLOW_AXIS", "MESHDOCTOR_UP_AXIS"):
     os.environ.pop(_k, None)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))    # leakcheck.py, beside this file
+from leakcheck import setUpModule, tearDownModule  # noqa: E402,F401 (fails the module on a file left open)
 import caseinfo  # noqa: E402
 import config  # noqa: E402
 

@@ -47,7 +47,8 @@ def main():
     if 'microsoft' in platform.release().lower():
         print('Running inside WSL. Keep cases under ~ (not /mnt/c): OpenFOAM is many times slower there.')
     try:
-        mem = int(open('/proc/meminfo').read().split()[1]) / 1048576
+        with open('/proc/meminfo') as f:
+            mem = int(f.read().split()[1]) / 1048576
         print('Memory: %.0f GB (python3 skills/cfd-results/scripts/size_estimate.py <Mcells> says what fits)' % mem)
     except Exception:
         pass

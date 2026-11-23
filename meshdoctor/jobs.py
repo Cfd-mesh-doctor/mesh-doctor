@@ -33,6 +33,7 @@ SOLVERS = ("foamRun", "snappyHexMesh", "foamMeshDoctor")
 ACTIVE = ("queued", "running")
 ID = re.compile(r"^[0-9]{8}-[0-9]{6}-[a-z]+-[A-Za-z0-9_.-]{1,80}-[0-9a-f]{4}$")
 START_GRACE = 60          # seconds a queued job may wait for its wrapper before it counts as lost
+SPAWN_TIMEOUT = 30        # seconds the wrapper has to say its pid (jobrun.detach)
 
 
 class Refused(Exception):
@@ -221,7 +222,12 @@ def _spawn(argv):
     init; see jobrun.detach) and return its pid.  Tests replace this."""
     p = subprocess.Popen(argv[:2] + ["--detach"] + argv[2:], start_new_session=True, stdin=subprocess.DEVNULL,
                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    out, _ = p.communicate(timeout=30)
+    try:
+        out, _ = p.communicate(timeout=SPAWN_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        p.kill()                       # and wait for it, which also closes its pipe
+        p.communicate()
+        raise Refused("internal", "the job runner did not start") from None
     if p.returncode != 0 or not out.strip().isdigit():
         raise Refused("internal", "the job runner did not start")
     return int(out.strip())

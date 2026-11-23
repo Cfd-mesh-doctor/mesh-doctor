@@ -181,7 +181,7 @@ git config core.hooksPath .githooks
 - `pre-commit` checks every staged file, and `pre-push` checks the whole history.
 - `python3 tools/data_guard.py --tree` checks at any time.
 - Private words to block (team or project names) go in `.data-guard-private.txt`, which is git-ignored and never committed.
-- Tests: `python3 -m unittest discover -s tests`, `python3 tests/security_check.py --start`, and with OpenFOAM loaded `tests/integration_motorbike.sh`.
+- Tests: `python3 -m unittest discover -s tests`, `python3 tests/security_check.py --start`, and with OpenFOAM loaded `tests/integration_motorbike.sh`. A new test module takes `setUpModule` and `tearDownModule` from `tests/leakcheck.py`, so a file it leaves open fails it.
 
 ## Licence
 Copyright (C) 2026 The Mesh Doctor authors (see `AUTHORS`).

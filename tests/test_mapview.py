@@ -5,6 +5,8 @@
 import importlib.util, os, sys, unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "meshdoctor"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))    # leakcheck.py, beside this file
+from leakcheck import setUpModule, tearDownModule  # noqa: E402,F401 (fails the module on a file left open)
 
 
 @unittest.skipUnless(importlib.util.find_spec("numpy"), "numpy is not installed (only the repair map needs it)")

@@ -67,7 +67,7 @@ def main(argv):
            + (f"-polishTetCap {o['tet-cap']} -polishNetConcave " if o["tet-cap"] > 1 else "") +
            f"-tagBefore pol_b -tagAfter pol_a {md.doctor_args(t, extra)}")
     run = md.sh(md.par(lay, cmd), os.path.join(mdir, "log.polish"), case)
-    log = open(os.path.join(mdir, "log.polish"), errors="replace").read()
+    log = md.read_log(os.path.join(mdir, "log.polish"))
     for l in log.splitlines():
         if "polish sweep" in l or "Polish:" in l or "sweep " in l:
             print(l.strip(), flush=True)
@@ -92,7 +92,8 @@ def main(argv):
            "maxDisplacement_m": re.findall(r"Max point displacement ([\d.eE+-]+)", log),
            "wallDeviation_m": re.findall(r"original wall ([\d.eE+-]+)", log),
            "seconds": round(time.time() - t0, 1)}
-    json.dump(res, open(os.path.join(mdir, "polish.json"), "w"), indent=1)
+    with open(os.path.join(mdir, "polish.json"), "w") as f:
+        json.dump(res, f, indent=1)
     print(json.dumps({"maxNonOrtho": [cb.get("maxNonOrtho"), ca.get("maxNonOrtho")],
                       "regressions": v["regressions"], "blocking": regs, "badTets": budget, "improved": v["improved"],
                       "rolledBack": rolled, "seconds": res["seconds"],

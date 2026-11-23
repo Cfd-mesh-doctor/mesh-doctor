@@ -171,26 +171,34 @@ def copy_case(src, name):
             s = os.path.join(src, d, "constant", "polyMesh")
             if os.path.isdir(s):
                 shutil.copytree(s, os.path.join(dst, d, "constant", "polyMesh"))
-    open(os.path.join(dst, ".meshDoctorCopy"), "w").write(src + "\n")
+    with open(os.path.join(dst, ".meshDoctorCopy"), "w") as f:
+        f.write(src + "\n")
     os.makedirs(os.path.join(dst, "meshDoctor"), exist_ok=True)
     return dst
 
 
 # --------------------------------------------------------------------------
+def read_log(path):
+    """A log's text, any bytes it can't decode replaced; the file is closed again."""
+    with open(path, errors="replace") as f:
+        return f.read()
+
+
 def parse_summary(path):
     out = {}
     try:
-        for line in open(path):
-            k, *v = line.split()
-            if not v:
-                continue
-            if len(v) == 1:
-                try:
-                    out[k] = float(v[0]) if re.search(r"[.eE]", v[0]) else int(v[0])
-                except ValueError:
-                    out[k] = v[0]
-            else:
-                out[k] = [float(x) for x in v]
+        with open(path) as f:
+            for line in f:
+                k, *v = line.split()
+                if not v:
+                    continue
+                if len(v) == 1:
+                    try:
+                        out[k] = float(v[0]) if re.search(r"[.eE]", v[0]) else int(v[0])
+                    except ValueError:
+                        out[k] = v[0]
+                else:
+                    out[k] = [float(x) for x in v]
     except OSError:
         pass
     return out
@@ -216,7 +224,7 @@ CM_PATTERNS = {
 
 def parse_checkmesh(log):
     try:
-        txt = open(log, errors="replace").read()
+        txt = read_log(log)
     except OSError:
         return {}
     out = {}
@@ -401,7 +409,8 @@ def inspect(case, profile="openfoam"):
     rep = {"case": case, "layout": lay, "profile": profile, "targets": t,
            "summary": parse_summary(os.path.join(case, "meshDoctor", "summary_report.txt")),
            "clusters": cl, "runs": [run]}
-    json.dump(rep, open(os.path.join(case, "meshDoctor", "report_report.json"), "w"), indent=1)
+    with open(os.path.join(case, "meshDoctor", "report_report.json"), "w") as f:
+        json.dump(rep, f, indent=1)
     status(case, "done", layout=lay)
     return rep
 
@@ -484,9 +493,11 @@ def collapse_stage(case, lay, t, extra, cm_prev):
     runs = []
     try:
         # collapseEdges has no -noFunctionObjects: strip them from the copy
-        txt = open(cd).read()
+        with open(cd) as f:
+            txt = f.read()
         txt = "\n".join(l for l in txt.splitlines() if not l.strip().startswith("#include"))
-        open(cd, "w").write(txt + "\n")
+        with open(cd, "w") as f:
+            f.write(txt + "\n")
         runs.append(sh("foamDictionary system/controlDict -entry functions -remove",
                        os.path.join(md, "log.collapse_dict"), case))
         runs.append(sh(par(lay, "collapseEdges -collapseFaceSet mdCollapse"),
@@ -506,7 +517,7 @@ def collapse_stage(case, lay, t, extra, cm_prev):
                 os.rmdir(os.path.join(b, "0"))
             except OSError:
                 pass
-    log = open(os.path.join(md, "log.collapse"), errors="replace").read()
+    log = read_log(os.path.join(md, "log.collapse"))
     m = re.findall(r"Collapsing (\d+) faces \(to point = (\d+), to edge = (\d+)\)", log)
     nColl = sum(int(x[0]) for x in m)
     ok = runs[-1]["exit"] == 0 and nColl > 0
@@ -534,7 +545,8 @@ def fix(case, profile="openfoam", extra="-slideFlat -slideCurved -slideEdges", c
     case = os.path.abspath(case)
     if not os.path.isfile(os.path.join(case, ".meshDoctorCopy")):
         sys.exit("refusing: not a Mesh Doctor copy")
-    src = open(os.path.join(case, ".meshDoctorCopy")).read().strip()
+    with open(os.path.join(case, ".meshDoctorCopy")) as f:
+        src = f.read().strip()
     if fp_before is None and os.path.isdir(src):
         status(case, "fingerprinting the source case (read only)")
         fp_before = source_fingerprint(src)
@@ -556,10 +568,9 @@ def fix(case, profile="openfoam", extra="-slideFlat -slideCurved -slideEdges", c
     status(case, "correcting (foamMeshDoctor -fix)", layout=lay)
     r = sh(par(lay, f"foamMeshDoctor -fix -writeCollapseSet {doctor_args(t, extra)}"),
            os.path.join(md, "log.fix"), case); runs.append(r)
-    sweeps = [l.strip() for l in open(os.path.join(md, "log.fix"), errors="replace")
-              if l.strip().startswith("sweep")]
-    disp = re.findall(r"Max point displacement ([\d.eE+-]+)",
-                      open(os.path.join(md, "log.fix"), errors="replace").read())
+    fix_log = read_log(os.path.join(md, "log.fix"))
+    sweeps = [l.strip() for l in fix_log.splitlines() if l.strip().startswith("sweep")]
+    disp = re.findall(r"Max point displacement ([\d.eE+-]+)", fix_log)
 
     # More passes while they still help: each pass starts from the current
     # mesh with fresh no-worse limits, so it can never undo the last one.
@@ -575,7 +586,7 @@ def fix(case, profile="openfoam", extra="-slideFlat -slideCurved -slideEdges", c
         if r["exit"] != 0:
             break
         npass = k
-        txt = open(log, errors="replace").read()
+        txt = read_log(log)
         sweeps += [f"pass {k}: " + l.strip() for l in txt.splitlines() if l.strip().startswith("sweep")]
         disp += re.findall(r"Max point displacement ([\d.eE+-]+)", txt)
         now = parse_summary(os.path.join(md, "summary_after.txt")).get("nFacesAboveTarget", 0)
@@ -597,7 +608,7 @@ def fix(case, profile="openfoam", extra="-slideFlat -slideCurved -slideEdges", c
 
     status(case, "grouping problem regions", layout=lay)
     res = {
-        "case": case, "source": open(os.path.join(case, ".meshDoctorCopy")).read().strip(),
+        "case": case, "source": src,
         "layout": lay, "profile": profile, "targets": t, "options": extra,
         "doctorBefore": parse_summary(os.path.join(md, "summary_before.txt")),
         "doctorAfter": parse_summary(os.path.join(md, "summary_after.txt")),

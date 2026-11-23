@@ -67,7 +67,8 @@ def _must_pass(run, case):
 
 def status(top, **kw):
     kw["time"] = time.strftime("%Y-%m-%d %H:%M:%S")
-    json.dump(kw, open(os.path.join(top, "ab_status.json"), "w"))
+    with open(os.path.join(top, "ab_status.json"), "w") as f:
+        json.dump(kw, f)
 
 
 # The decomposition a case run in serial gets in its copies: the A/B test solves in parallel, and run_one sets the
@@ -100,7 +101,8 @@ def make_case(src, dst, init, points=None):
     if not os.path.isfile(dpd):                # a case run in serial has none: these runs are parallel
         with open(dpd, "w") as f:
             f.write(DECOMPOSE_PAR_DICT)
-    open(os.path.join(dst, ".meshDoctorCopy"), "w").write(src + "\n")
+    with open(os.path.join(dst, ".meshDoctorCopy"), "w") as f:
+        f.write(src + "\n")
 
 
 def start_fields(src, init=None):
@@ -164,19 +166,20 @@ def _fo_residuals(case):
             continue
         cols, byt = None, {}
         for f in time_files(os.path.join(pp, d), "residuals.dat"):
-            for line in open(f):
-                if line.startswith("#"):
-                    if "Time" in line:
-                        cols = line[1:].split()
-                    continue
-                t = line.split()
-                if cols and len(t) == len(cols):
-                    try:
-                        r = [float(x) if x != "N/A" else None for x in t]
-                    except ValueError:
+            with open(f) as fh:
+                for line in fh:
+                    if line.startswith("#"):
+                        if "Time" in line:
+                            cols = line[1:].split()
                         continue
-                    if any(v is not None for v in r[1:]):
-                        byt[r[0]] = r
+                    t = line.split()
+                    if cols and len(t) == len(cols):
+                        try:
+                            r = [float(x) if x != "N/A" else None for x in t]
+                        except ValueError:
+                            continue
+                        if any(v is not None for v in r[1:]):
+                            byt[r[0]] = r
         if cols and byt:
             rows = [byt[t] for t in sorted(byt)]
             for i, c in enumerate(cols[1:], 1):
@@ -217,7 +220,7 @@ def summarise(case, window):
     res = parse_residuals(case)
     frc = parse_forces(case)
     log = os.path.join(case, "log.foamRun")
-    txt = open(log, errors="replace").read() if os.path.isfile(log) else ""
+    txt = caseinfo.read_text(log) if os.path.isfile(log) else ""
     et = [float(x) for x in re.findall(r"ExecutionTime = ([\d.]+) s", txt)]
     spi = (et[-1] - et[min(10, len(et) - 1)]) / max(1, len(et) - 1 - min(10, len(et) - 1)) if len(et) > 12 else None
     s = {"iterations": len(et), "secondsPerIteration": spi,
@@ -312,12 +315,13 @@ def read_hot(case):
     files = [f for f in files if os.path.isfile(f)] or [os.path.join(case, "meshDoctor/hotspots/hot.txt")]
     for f in files:
         if os.path.isfile(f):
-            for line in open(f):
-                t = line.split()
-                if t and t[0] == "H":
-                    rows.append({"score": float(t[2]), "dp": float(t[3]), "dU": float(t[4]),
-                                 "c": [float(t[5]), float(t[6]), float(t[7])],
-                                 "h": float(t[8]) ** (1 / 3), "nonOrtho": float(t[9])})
+            with open(f) as fh:
+                for line in fh:
+                    t = line.split()
+                    if t and t[0] == "H":
+                        rows.append({"score": float(t[2]), "dp": float(t[3]), "dU": float(t[4]),
+                                     "c": [float(t[5]), float(t[6]), float(t[7])],
+                                     "h": float(t[8]) ** (1 / 3), "nonOrtho": float(t[9])})
     rows.sort(key=lambda r: -r["score"])
     return rows
 
@@ -396,13 +400,14 @@ def hotspot_map(case, t_from, t_to, nproc, defects, runs=None, out="hotspots.jso
     summ = {}
     sf = os.path.join(case, "meshDoctor/hotspots_summary.txt")
     if os.path.isfile(sf):
-        for line in open(sf):
-            k, *v = line.split()
-            if v:
-                try:
-                    summ[k] = float(v[0])
-                except ValueError:
-                    summ[k] = v[0]
+        with open(sf) as fh:
+            for line in fh:
+                k, *v = line.split()
+                if v:
+                    try:
+                        summ[k] = float(v[0])
+                    except ValueError:
+                        summ[k] = v[0]
     rows = read_hot(case)[:5000]
     cl = cluster_points(rows)
     for c in cl:
@@ -424,7 +429,8 @@ def hotspot_map(case, t_from, t_to, nproc, defects, runs=None, out="hotspots.jso
 def defects_of(fixed_name):
     r = os.path.join(ROOT, fixed_name, "meshDoctor/result.json")
     try:
-        res = json.load(open(r))
+        with open(r) as f:
+            res = json.load(f)
         return res.get("clustersBefore", []), res.get("clustersAfter", [])
     except (OSError, ValueError):
         return [], []

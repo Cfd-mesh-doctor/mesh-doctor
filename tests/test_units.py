@@ -4,12 +4,15 @@
 
     python3 -m unittest discover -s tests
 """
-import contextlib, io, json, math, os, re, shutil, sys, tempfile, time, unittest
+import contextlib, gc, io, json, math, os, re, shutil, subprocess, sys, tempfile, time, unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "meshdoctor"))
 os.environ["MESHDOCTOR_CONFIG"] = os.devnull
 import abtest, md_api, repair  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))    # leakcheck.py, beside this file
+from leakcheck import setUpModule, tearDownModule  # noqa: E402,F401 (fails the module on a file left open)
+import leakcheck  # noqa: E402
 
 
 class BatchMeansTest(unittest.TestCase):
@@ -1655,6 +1658,20 @@ class LocalRunnerTest(unittest.TestCase):
             time.sleep(0.1)
         self.fail(f"job {job_id} still {j['state']}")
 
+    def test_a_wrapper_that_never_answers_is_stopped(self):
+        """_spawn waits a while for the wrapper to say its pid, then stops it: nothing is left running, and its
+        pipe is closed (a Popen dropped while its process runs, or an open pipe, warns as it is freed)."""
+        slow = os.path.join(self.ws, "slow.py")
+        with open(slow, "w") as f:
+            f.write("import time\ntime.sleep(60)\n")
+        seen, t0 = len(leakcheck.seen), time.monotonic()
+        with mock.patch.object(self.jobs, "SPAWN_TIMEOUT", 0.5), self.assertRaises(self.jobs.Refused) as e:
+            self.jobs._spawn([sys.executable, slow])
+        self.assertEqual(e.exception.code, "internal")
+        self.assertLess(time.monotonic() - t0, 30)          # stopped, not waited for
+        gc.collect()
+        self.assertEqual(leakcheck.seen[seen:], [])
+
     def test_done(self):
         j = self.wait(self.run_job("print('hello from the job')")["id"], ("done", "failed"))
         self.assertEqual((j["state"], j["exitCode"], j["error"]), ("done", 0, None))
@@ -1696,6 +1713,32 @@ class LocalRunnerTest(unittest.TestCase):
         j = self.jobs.get(jid, self.ws)
         self.assertEqual(j["state"], "failed")
         self.assertIn("without reporting", j["error"])
+
+
+class LeakCheckTest(unittest.TestCase):
+    """A file left open fails the test module (tests/leakcheck.py), though Python itself only prints it."""
+
+    def run_module(self, body, *flags):
+        """Run a one-test module that takes leakcheck's setUpModule and tearDownModule."""
+        with tempfile.TemporaryDirectory(prefix="leak_test_") as d:
+            with open(os.path.join(d, "test_leaky.py"), "w") as f:
+                f.write("import unittest\nfrom leakcheck import setUpModule, tearDownModule  # noqa: F401\n\n\n"
+                        "class T(unittest.TestCase):\n    def test_it(self):\n        " + body + "\n")
+            env = dict(os.environ, PYTHONPATH=os.path.dirname(os.path.abspath(__file__)))
+            return subprocess.run([sys.executable, *flags, "-m", "unittest", "test_leaky"], cwd=d, env=env,
+                                  capture_output=True, text=True, timeout=60)
+
+    def test_a_file_left_open_fails_the_module(self):
+        for flags in (["-W", "error::ResourceWarning"], []):      # as on GitHub, and a plain run
+            r = self.run_module("open(__file__).read()", *flags)
+            self.assertEqual(r.returncode, 1, r.stderr)
+            self.assertIn("ERROR: tearDownModule (test_leaky)", r.stderr)
+            self.assertIn("unclosed file", r.stderr)
+
+    def test_a_file_closed_passes(self):
+        r = self.run_module("with open(__file__) as f:\n            f.read()", "-W", "error::ResourceWarning")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("Exception ignored", r.stderr)
 
 
 if __name__ == "__main__":

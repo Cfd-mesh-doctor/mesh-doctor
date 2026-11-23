@@ -38,6 +38,8 @@ def detach():
     null = os.open(os.devnull, os.O_RDWR)
     for fd in (0, 1, 2):
         os.dup2(null, fd)
+    if null > 2:                       # 0, 1 and 2 are copies of it now
+        os.close(null)
 
 
 def main(argv):

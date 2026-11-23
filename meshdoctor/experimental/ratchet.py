@@ -99,7 +99,8 @@ def main(argv):
            "passes": passes, "seconds": round(time.time() - t0, 1)}
     if v["regressions"]:
         res["note"] = "checkMesh regressions present: review before using this mesh"
-    json.dump(res, open(os.path.join(mdir, "ratchet.json"), "w"), indent=1)
+    with open(os.path.join(mdir, "ratchet.json"), "w") as f:
+        json.dump(res, f, indent=1)
     print(json.dumps({"maxNonOrtho": [cb.get("maxNonOrtho"), ca.get("maxNonOrtho")],
                       "verdict": v, "seconds": res["seconds"]}, indent=1))
 
