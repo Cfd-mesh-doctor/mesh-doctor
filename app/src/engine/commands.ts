@@ -17,3 +17,10 @@ export function repairCommand(source: string, runs: Iterable<string>): string | 
     if (!taken.has(name)) return `meshdoctor full ${source} ${name}`;
   }
 }
+
+/** The command that runs the solver A/B test of repair run `name` against its source case `source` (its folder's
+ * name, which the engine finds in the cases folder): the result lands where the run's report reads it. None when
+ * either isn't a plain folder name. */
+export function abCommand(source: string | null, name: string): string | null {
+  return source && PLAIN.test(source) && PLAIN.test(name) ? `meshdoctor ab ${source} ${name}` : null;
+}

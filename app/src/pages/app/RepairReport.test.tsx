@@ -3,6 +3,7 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { demoTransport } from "@/demo/transport";
+import type { Transport } from "@/engine/client";
 import { checkReport } from "@/report/read";
 import { catchDownloads } from "@/test/downloads";
 import { renderScreen } from "@/test/render";
@@ -71,5 +72,31 @@ describe("the overview", () => {
     expect(links.map((a) => a.getAttribute("href"))).toContain("/demo/repairs/ahmed35-medium-fix/report");
     expect(links).toHaveLength(5);
     expect(screen.queryByRole("link", { name: "Report of ahmed25-fine-strict" })).not.toBeInTheDocument();
+  });
+});
+
+/** Opens a run's report on your own engine: the demo's recorded answers, as an engine of your own would give them. */
+function ownEngine(name: string) {
+  const transport: Transport = { ...demoTransport(undefined, 0), kind: "engine" };
+  return renderScreen(<RepairReport />, { path: "/app/repairs/:name/report", at: `/app/repairs/${name}/report`, transport });
+}
+
+describe("a repair's report on your own engine", () => {
+  it("offers the A/B test's command, with the names filled in, for a run that has none", async () => {
+    ownEngine("ahmed25-medium-fix");
+    expect(await screen.findByText(/from your engine/)).toBeInTheDocument();
+    expect(screen.getByText("Did it help the solver?")).toBeInTheDocument();
+    expect(screen.getByText("Not tested yet")).toBeInTheDocument();
+    expect(screen.getByText(/Run it in WSL: its result shows up in this report\.$/)).toBeInTheDocument();
+    // The source case by its folder's name, which the engine finds in the cases folder, then the run.
+    expect(screen.getByRole("button", { name: "Copy “meshdoctor ab ahmed-25-medium ahmed25-medium-fix”" })).toBeInTheDocument();
+  });
+
+  it("doesn't offer it for a run that has an A/B test: the test's result is there instead", async () => {
+    ownEngine("ahmed25-coarse-fix");
+    expect(await screen.findByRole("img", { name: /Initial residual of p per iteration/ })).toBeInTheDocument();
+    expect(screen.getByText("Did it help the solver?")).toBeInTheDocument();
+    expect(screen.queryByText("Not tested yet")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Copy “meshdoctor ab / })).toBeNull();
   });
 });

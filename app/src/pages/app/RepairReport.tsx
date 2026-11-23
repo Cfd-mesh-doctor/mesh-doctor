@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/shared/page";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { api } from "@/engine/client";
+import { abCommand } from "@/engine/commands";
 import { useAppPath, useEngine } from "@/engine/context";
 import { asEngineError } from "@/engine/errors";
 import { useTitle } from "@/lib/useTitle";
@@ -47,7 +48,11 @@ export function RepairReport() {
         <Button onClick={() => saveReport(doc)}><Download />Save report</Button>
       </div>
     );
-    return <ReportView summary={summary} from={mode === "demo" ? "the recorded demo" : "your engine"} action={actions} />;
+    // A run of your own engine with no A/B test yet gets the command for one (the view shows it only then); the
+    // demo's runs are recordings.
+    const next = mode === "demo" ? null : abCommand(summary.caseName, summary.name);
+    return <ReportView summary={summary} from={mode === "demo" ? "the recorded demo" : "your engine"} action={actions}
+      abCommand={next} />;
   }
   return (
     <>

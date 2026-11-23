@@ -245,7 +245,13 @@ class Section extends Component<{ title: string; children: ReactNode }, { error:
 }
 
 /** An open report. The app shows a repair's report from the engine with it too (pages/app/RepairReport). */
-export function ReportView({ summary: s, from, action }: { summary: ReportSummary; from: string; action: ReactNode }) {
+export function ReportView({ summary: s, from, action, abCommand }: {
+  summary: ReportSummary;
+  from: string;
+  action: ReactNode;
+  /** A run of your own engine with no A/B test yet: the command for one, offered where its result will show. */
+  abCommand?: string | null;
+}) {
   const sub = [
     s.caseName && `mesh ${s.caseName}`,
     s.cells != null && `${formatInt(s.cells)} cells`,
@@ -316,14 +322,18 @@ export function ReportView({ summary: s, from, action }: { summary: ReportSummar
         </Section>
       )}
 
-      {/* Two columns only when there is an A/B test to sit beside checkMesh. */}
-      <div className={cn("mt-4 grid grid-cols-1 items-start gap-4", s.ab && "lg:grid-cols-2")}>
+      {/* Two columns only when there is an A/B test, or the command for one, to sit beside checkMesh. */}
+      <div className={cn("mt-4 grid grid-cols-1 items-start gap-4", (s.ab || abCommand) && "lg:grid-cols-2")}>
         <Section title="checkMesh, before and after the repair">
           <CheckMeshCard rows={s.checkMesh} />
         </Section>
-        {s.ab && (
+        {s.ab ? (
           <Section title="Did it help the solver?">
             <AbCard ab={s.ab} />
+          </Section>
+        ) : abCommand && (
+          <Section title="Did it help the solver?">
+            <AbNextCard command={abCommand} />
           </Section>
         )}
       </div>
@@ -396,6 +406,27 @@ function RatioBar({ ratio }: { ratio: number }) {
       />
       <span className="absolute -inset-y-0.5 left-1/2 w-px bg-muted-foreground" />
     </span>
+  );
+}
+
+/** The next step for a run of your own engine that has no A/B test yet: the command, with the names filled in. */
+function AbNextCard({ command }: { command: string }) {
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>Did it help the solver?</CardTitle>
+          <CardDescription>Not tested yet</CardDescription>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground">
+          The A/B solver test runs your case twice, on the original mesh and on the repaired one, with the same
+          settings, and compares how they converge. Run it in WSL: its result shows up in this report.
+        </p>
+        <CopyCommand command={command} className="mt-3" />
+      </CardContent>
+    </Card>
   );
 }
 
