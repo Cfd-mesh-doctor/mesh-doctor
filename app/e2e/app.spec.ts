@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { ENGINE, KEY, mockEngine, pairingLink } from "./engine";
 
 /** Fails the test on any console error or failed page script. */
@@ -11,6 +11,23 @@ function watchErrors(page: Page): string[] {
   page.on("pageerror", (e) => errors.push(e.message));
   return errors;
 }
+
+test("a command longer than its box fades where it is cut off, until it is scrolled to that end", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto("/#start");
+  const steps = page.locator("#start ol > li");
+  const short = steps.nth(1).locator("code", { hasText: "meshdoctor serve" }); // fits its box
+  const long = steps.nth(2).locator("code", { hasText: "meshdoctor full" }); // doesn't, on a phone this narrow
+  const cut = (code: Locator) => code.evaluate((el) => el.scrollWidth > el.clientWidth);
+  const fades = (code: Locator) => code.evaluate((el) =>
+    ["--fade-start", "--fade-end"].map((p) => getComputedStyle(el).getPropertyValue(p)));
+  expect(await cut(long)).toBe(true);
+  expect(await cut(short)).toBe(false);
+  await expect.poll(() => fades(long)).toEqual(["0px", "24px"]); // more to the right: a fade there
+  expect(await fades(short)).toEqual(["0px", "0px"]); // all of it shows: none
+  await long.evaluate((el) => { el.scrollLeft = el.scrollWidth; });
+  await expect.poll(() => fades(long)).toEqual(["24px", "0px"]); // scrolled to its end: the fade moves to the start
+});
 
 test("the home page explains the app and links to the demo", async ({ page }) => {
   const errors = watchErrors(page);

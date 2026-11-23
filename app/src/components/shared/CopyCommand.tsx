@@ -9,7 +9,8 @@ export function CopyCommand({ command, className, prompt = "$" }: { command: str
   return (
     <div className={cn("group flex items-center gap-2 rounded-lg border border-border bg-surface-2 py-1.5 pr-1.5 pl-3 font-mono text-[13px]", className)}>
       <span className="text-muted-foreground select-none" aria-hidden>{prompt}</span>
-      <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap">{command}</code>
+      {/* scroll-fade: when the command is longer than the box, a fade where it is cut off (index.css). */}
+      <code className="scroll-fade min-w-0 flex-1 overflow-x-auto whitespace-nowrap">{command}</code>
       <button
         type="button"
         onClick={() => void copy(command)}

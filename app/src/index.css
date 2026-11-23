@@ -137,6 +137,27 @@
 /* Printed pages: the browser's own margins, and cards kept whole on a page where they fit. */
 @page { margin: 14mm; }
 
+/* A command longer than its box scrolls inside it (CopyCommand): a fade at the edge where it is cut off says there is
+   more, and goes once it is scrolled to that end. It follows the box's own scroll position, so a command that fits has
+   none (its scroll timeline is inactive), nor has a browser without scroll timelines, nor a printed page. */
+@property --fade-start { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --fade-end { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@keyframes md-scroll-fade {
+  from { --fade-start: 0px; --fade-end: 1.5rem; }
+  15% { --fade-start: 1.5rem; }
+  85% { --fade-end: 1.5rem; }
+  to { --fade-start: 1.5rem; --fade-end: 0px; }
+}
+@media screen {
+  @supports (animation-timeline: scroll()) {
+    .scroll-fade {
+      mask-image: linear-gradient(to right, transparent, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent);
+      animation: md-scroll-fade linear both;
+      animation-timeline: scroll(self inline);
+    }
+  }
+}
+
 /* Less motion: each animation runs once, and is over at once. Left to repeat, a 1 ms animation (the live dot, a
    spinner, a loading skeleton) would flicker at the screen's rate rather than stand still. */
 @media (prefers-reduced-motion: reduce) {
