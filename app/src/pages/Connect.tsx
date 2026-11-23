@@ -226,11 +226,13 @@ export function Connect() {
           </div>
         )}
         <ol className="mt-6">
+          {/* The engine keeps its window busy: a command typed there next would wait for it to stop. */}
           <Step n={1} title="Start Mesh Doctor in WSL">
             <CopyCommand command="meshdoctor serve" />
+            <p className="mt-2">Leave that window open while you use the app: Mesh Doctor runs in it.</p>
           </Step>
           <Step n={2} title="Open the pairing link it prints">
-            It starts with this site's address. Or have it open the link for you:
+            It starts with this site's address. Or have it open the link for you, from a second WSL window:
             <CopyCommand command="meshdoctor pair --open" className="mt-2" />
           </Step>
           <Step n={3} title="Or paste the link here">

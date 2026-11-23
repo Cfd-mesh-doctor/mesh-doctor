@@ -68,6 +68,18 @@ describe("Connect", () => {
     expect(loadPairing()?.key).toBe(OTHER);
   });
 
+  it("says to leave Mesh Doctor's window open, and to have it open the link from a second one", async () => {
+    renderScreen(<Connect />, { path: "/connect" });
+    const step = (title: string) => screen.getByText(title, { selector: "p" }).closest("li")!;
+    expect(await screen.findByText("Start Mesh Doctor in WSL")).toBeInTheDocument();
+    // meshdoctor serve keeps its window busy: a command typed there next would wait for it to stop.
+    expect(within(step("Start Mesh Doctor in WSL")).getByText("Leave that window open while you use the app: Mesh Doctor runs in it."))
+      .toBeInTheDocument();
+    expect(step("Open the pairing link it prints"))
+      .toHaveTextContent("It starts with this site's address. Or have it open the link for you, from a second WSL window:");
+    expect(within(step("Open the pairing link it prints")).getByText("meshdoctor pair --open")).toBeInTheDocument();
+  });
+
   it("refuses a link that points away from this computer", async () => {
     renderScreen(<Connect />, { path: "/connect", at: `/connect#key=${KEY}&engine=http%3A%2F%2Fevil.test%3A8765` });
     expect(await screen.findByText(/isn't on this computer/)).toBeInTheDocument();
