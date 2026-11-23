@@ -22,6 +22,7 @@ Default output: <workspace>/.reports/<name>.mdreport.json (.html, .json.gz).
 import argparse, base64, gzip, hashlib, json, os, re, sys, time
 
 import config
+import prog
 import schema
 import version
 
@@ -161,7 +162,7 @@ def write(report, path, fmt="json"):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="meshdoctor report", description=__doc__.split("\n\n")[0])
+    ap = argparse.ArgumentParser(prog=prog.name() + " report", description=__doc__.split("\n\n")[0])
     ap.add_argument("name", nargs="?", help="workspace run (a finished repair)")
     ap.add_argument("--ab", help="A/B test label to include (default <name>, if it exists)")
     ap.add_argument("-o", "--out", help="output file (default <workspace>/.reports/<name>.mdreport.<ext>)")

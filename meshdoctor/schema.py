@@ -143,7 +143,8 @@ def check(value, sch):
 
 def main(argv):
     if len(argv) != 2 or argv[0] not in VERSIONS:
-        print(__doc__)
+        import prog
+        print(prog.text(__doc__))
         return 2
     kind, path = argv
     with open(path, encoding="utf-8") as f:

@@ -23,6 +23,7 @@ RAM guard.  Progress is read from each tool's own status file when a job is read
 import calendar, json, os, re, secrets, signal, subprocess, sys, time
 
 import config
+import prog
 import ramguard
 import schema
 
@@ -287,7 +288,7 @@ def main(argv):
             sys.exit("no job " + argv[1])
         print(json.dumps(j, indent=1))
         return 0
-    print(__doc__)
+    print(prog.text(__doc__))
     return 2
 
 

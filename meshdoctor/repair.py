@@ -7,7 +7,7 @@
     python3 -m meshdoctor inspect <case>                  # detect + highlight
     python3 -m meshdoctor fix     <case> [--profile P]    # correct in-mesh
     python3 -m meshdoctor full    <srcCase> <name> [--profile P]
-                                   # copy -> checkMesh -> fix -> checkMesh -> report
+        # copy -> checkMesh -> fix -> checkMesh -> report
 
 A <srcCase> is a folder, or the name of a case in the cases folder (config.py),
 so `full motorBike mb` works from any folder.
@@ -20,6 +20,7 @@ numbers and verdicts.
 import hashlib, json, math, os, re, shutil, subprocess, sys, time
 
 import config
+import prog
 import ramguard
 import schema
 
@@ -625,7 +626,7 @@ def exit_code(res):
 
 def main(a):
     if len(a) < 2:
-        print(__doc__); return
+        print(prog.text(__doc__)); return
     prof = "openfoam"
     if "--profile" in a:
         prof = a[a.index("--profile") + 1]
@@ -649,7 +650,7 @@ def main(a):
         r = fix(dst, prof, fp_before=fp0); print(json.dumps(r["verdict"], indent=1))
         sys.exit(exit_code(r))
     else:
-        print(__doc__)
+        print(prog.text(__doc__))
 
 
 if __name__ == "__main__":

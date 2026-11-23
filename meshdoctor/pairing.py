@@ -113,7 +113,7 @@ def open_url(url):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="meshdoctor pair",
+    ap = argparse.ArgumentParser(prog=prog.name() + " pair",
                                  description="Pair the Mesh Doctor web app with the engine on this machine.")
     ap.add_argument("--new", action="store_true", help="make a new key (every paired browser must pair again)")
     ap.add_argument("--open", action="store_true", help="open the first link in the browser")

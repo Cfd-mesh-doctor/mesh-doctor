@@ -21,7 +21,7 @@ temporary folder.
 """
 import argparse, array, glob, gzip, json, math, os, re, shutil, statistics, sys, tempfile, time
 
-import caseinfo, ramguard, schema
+import caseinfo, prog, ramguard, schema
 
 TARGETS = (1.0, 5.0, 20.0)     # max Courant numbers to plan for: DES/LES need 1; URANS runs higher
 OUTER = 3                      # PIMPLE outer iterations per time step, for the cost estimate
@@ -285,7 +285,7 @@ def summary(p):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="meshdoctor transient-plan", description=__doc__.split("\n\n")[0])
+    ap = argparse.ArgumentParser(prog=prog.name() + " transient-plan", description=__doc__.split("\n\n")[0])
     ap.add_argument("case", help="a steady case with a written result (only read)")
     ap.add_argument("--time", help="result time to plan from (default: the latest with phi)")
     ap.add_argument("--co", default=",".join(f"{c:g}" for c in TARGETS), help="max Courant numbers (default %(default)s)")

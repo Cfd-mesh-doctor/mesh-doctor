@@ -17,6 +17,7 @@ import argparse, http.server, json, os, re, sys, time, threading
 
 import caseinfo
 import config
+import prog
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WEB = os.path.join(HERE, "web")
@@ -852,7 +853,8 @@ class H(http.server.BaseHTTPRequestHandler):
 
 def main(argv=None):
     global CASE, PORT, HOSTS, ORIGINS, APP_ORIGINS, APP_KEY
-    ap = argparse.ArgumentParser(prog="meshdoctor serve", description="Mesh Doctor dashboard (127.0.0.1 only).")
+    ap = argparse.ArgumentParser(prog=prog.name() + " serve",
+                                 description="Mesh Doctor dashboard (127.0.0.1 only).")
     ap.add_argument("--port", type=int, default=PORT, help="port on 127.0.0.1 (default %(default)s)")
     ap.add_argument("--case", default=None, help="live case for the transient page (default: live_case setting)")
     ap.add_argument("--open-app", action="store_true",

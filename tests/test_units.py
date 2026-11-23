@@ -1172,6 +1172,58 @@ class CommandNameTest(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+class CommandHelpTest(unittest.TestCase):
+    """Each command's own help gives commands as they are typed here, as the main help does (item 160)."""
+
+    def help_of(self, call, told="meshdoctor"):
+        """What call() prints, or exits with, while the command is called told (None: python3 -m meshdoctor)."""
+        out = io.StringIO()
+        with mock.patch.dict(os.environ), mock.patch.object(sys, "argv", ["md_test"]), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            os.environ.pop("MESHDOCTOR_PROG", None)
+            if told is not None:
+                os.environ["MESHDOCTOR_PROG"] = told
+            try:
+                call()
+            except SystemExit as e:
+                if not isinstance(e.code, int):                  # sys.exit(text): the text is the help
+                    out.write(str(e.code))
+        return out.getvalue()
+
+    def test_each_command_names_itself(self):
+        import jobs, pairing, report, schema, server, tplan
+        from experimental import polish, ratchet
+        cases = [
+            ("meshdoctor full    <srcCase> <name>", lambda: repair.main([])),
+            ("meshdoctor ab <srcCase> <fixedName>", lambda: abtest.main([])),
+            ("meshdoctor ab extend <abDir> <endIter>", lambda: abtest.main(["--help"])),
+            ("meshdoctor judge <case>", lambda: abtest.main(["judge"])),
+            ("meshdoctor config shows <workspace>", lambda: abtest.main([])),
+            ("meshdoctor jobs [list", lambda: jobs.main(["help"])),
+            ("meshdoctor schema <kind> <file>", lambda: schema.main([])),
+            ("meshdoctor experimental polish <srcCase>", lambda: polish.main([])),
+            ("meshdoctor experimental ratchet <srcCase>", lambda: ratchet.main([])),
+            ("usage: meshdoctor report", lambda: report.main(["--help"])),
+            ("usage: meshdoctor transient-plan", lambda: tplan.main(["--help"])),
+            ("usage: meshdoctor serve", lambda: server.main(["--help"])),
+            ("usage: meshdoctor pair", lambda: pairing.main(["--help"])),
+        ]
+        for want, call in cases:
+            with self.subTest(want):
+                out = self.help_of(call)
+                self.assertIn(want, out)
+                self.assertNotRegex(out, r"python3 (-m|\S+\.py)")
+
+    def test_from_the_clone(self):
+        import pairing, report, server, tplan
+        with self.subTest("ab"):
+            self.assertIn("\n    python3 -m meshdoctor ab hotspots <abDir>\n", self.help_of(lambda: abtest.main([]), None))
+        for command, module in [("report", report), ("transient-plan", tplan), ("serve", server), ("pair", pairing)]:
+            with self.subTest(command):
+                self.assertIn("usage: python3 -m meshdoctor " + command,
+                              self.help_of(lambda: module.main(["--help"]), None))
+
+
 class PairingTest(unittest.TestCase):
     """pairing.py: which app addresses count, the key file, and the pairing link."""
 

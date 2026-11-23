@@ -3,16 +3,17 @@
 # Copyright (C) 2026 The Mesh Doctor authors
 """A/B solver test: does the repaired mesh converge better than the original?
 
-    python3 abtest.py <srcCase> <fixedName> [--iters 200] [--np 6] [--init <folder>]
-    python3 abtest.py hotspots <abDir>      # residual hotspot map for both runs
-    python3 abtest.py mode <case> <t1> <t2> [--defects <mdCase>]
-                                            # where the solution moves between two
-                                            # written times (slow oscillation shape)
-    python3 abtest.py extend <abDir> <endIter> [--variant P]
-                                            # continue the second run to iteration
-                                            # endIter (optionally with another
-                                            # preset), judge it
-    python3 abtest.py judge <case> [window|auto] [--to N]   # convergence verdict for any case
+    python3 -m meshdoctor ab <srcCase> <fixedName> [--iters 200] [--np 6] [--init <folder>]
+        solve the original and the repaired mesh the same way, and compare them
+    python3 -m meshdoctor ab hotspots <abDir>
+        residual hotspot map for both runs
+    python3 -m meshdoctor ab mode <case> <t1> <t2> [--defects <mdCase>]
+        where the solution moves between two written times (slow oscillation shape)
+    python3 -m meshdoctor ab extend <abDir> <endIter> [--variant P]
+        continue the second run to iteration endIter (optionally with another preset), judge it
+    python3 -m meshdoctor judge <case> [window|auto] [--to N]
+        convergence verdict for any case
+
     <abDir>               an A/B test's folder, or the name of the repaired run it
                           tested (its test in the workspace, <name>_ab)
     --init <folder>       the case's folder both runs start from (default: 0.warm
@@ -30,7 +31,7 @@ identical too; only the point positions differ.
 
 Writes <workspace>/<fixedName>_ab/ab_result.json with residual levels, force
 means/oscillation and seconds per iteration for both runs, plus a checksum
-proving the source case was only read.  <workspace> comes from config.py.
+proving the source case was only read.  python3 -m meshdoctor config shows <workspace>.
 Serial-mesh sources only (the root polyMesh must be the real mesh). A case without a
 system/decomposeParDict (run in serial) gets a scotch one in both copies.
 """
@@ -38,6 +39,7 @@ import bisect, gzip, json, os, re, shutil, statistics, subprocess, sys, time
 
 import caseinfo
 import config
+import prog
 import ramguard
 import schema
 
@@ -687,7 +689,7 @@ def _topology(poly):
 
 def main(a):
     if len(a) < 2:
-        print(__doc__); return
+        print(prog.text(__doc__)); return
     if a[0] == "judge":
         # judge <case> [window|auto] [avgFrom] [--log <file or glob>] [--to <iteration or time>]
         logs = to = None

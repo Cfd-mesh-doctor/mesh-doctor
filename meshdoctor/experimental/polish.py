@@ -3,9 +3,9 @@
 # Copyright (C) 2026 The Mesh Doctor authors
 """Skills A2/A3: gradient cluster polish of the worst non-orthogonal faces.
 
-    python3 polish.py <srcCase> <name> [--fix] [--faces 200] [--sweeps 10]
-                      [--steps 20] [--rings 1] [--maxpts 80] [--tau 1]
-                      [--tet-cap 4] [--disp 1] [--no-walls]
+    python3 -m meshdoctor experimental polish <srcCase> <name> [--fix] [--faces 200]
+        [--sweeps 10] [--steps 20] [--rings 1] [--maxpts 80] [--tau 1] [--tet-cap 4]
+        [--disp 1] [--no-walls]
 
 --tet-cap F lets face-tet decomposition failures (checkMesh "bad tets") grow up
 to F x the starting count, and cells may turn concave as long as the total
@@ -22,6 +22,7 @@ import json, os, re, shutil, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 import repair as md  # read-only reuse of the existing driver helpers
+import prog
 
 
 def point_files(case):
@@ -36,7 +37,7 @@ def point_files(case):
 
 def main(argv):
     if len(argv) < 2:
-        sys.exit(__doc__)
+        sys.exit(prog.text(__doc__))
     src, name = argv[0], argv[1]
     o = {"faces": 200, "sweeps": 10, "steps": 20, "rings": 1, "maxpts": 80, "tau": 1.0, "tet-cap": 4.0, "disp": 1.0}
     greedy, walls = False, True

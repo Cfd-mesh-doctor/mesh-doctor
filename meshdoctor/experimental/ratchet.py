@@ -10,8 +10,8 @@ pass after pass, until a pass no longer lowers the maximum.  foamMeshDoctor's
 own rules guarantee no face metric gets worse than its limit in any pass, and
 the final checkMesh is compared with the original.
 
-    python3 ratchet.py <srcCase> <name> [--step 3] [--min-step 0.25]
-                       [--passes 15] [--floor 30] [--no-walls]
+    python3 -m meshdoctor experimental ratchet <srcCase> <name> [--step 3] [--min-step 0.25]
+        [--passes 15] [--floor 30] [--no-walls]
 
 Works on a copy in <workspace>/<name> (config.py); the source is only read.
 Writes <copy>/meshDoctor/ratchet.json.
@@ -21,6 +21,7 @@ import json, os, re, shutil, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 import repair as md  # read-only reuse of the existing driver helpers
+import prog
 
 
 def backup(case, tag):
@@ -44,7 +45,7 @@ def restore(case, tag):
 
 def main(argv):
     if len(argv) < 2:
-        sys.exit(__doc__)
+        sys.exit(prog.text(__doc__))
     src, name = argv[0], argv[1]
     opt = {"step": 3.0, "min-step": 0.25, "passes": 15, "floor": 30.0}
     walls = True
