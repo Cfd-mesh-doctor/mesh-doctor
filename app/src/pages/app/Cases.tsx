@@ -89,6 +89,7 @@ function CopyRepairCommand({ command }: { command: string }) {
 
 export function Cases() {
   useTitle("Cases");
+  const to = useAppPath();
   const cases = useCases();
   const repairs = useRepairs();
   // The case whose repair dialog is open, if any.
@@ -130,8 +131,8 @@ export function Cases() {
         title="Cases"
         description={
           <>
-            OpenFOAM cases in the engine's cases folder. Mesh Doctor only ever reads them: every repair works on a copy.
-            To repair one, press Repair under its name and follow the job on the Jobs screen, or copy its repair command
+            OpenFOAM cases in the engine's cases folder. Mesh Doctor never changes them: every repair works on a copy,
+            and a new case from a template goes in a folder of its own. To repair one, press Repair under its name and follow the job on the Jobs screen, or copy its repair command
             and run it in a WSL or Linux terminal. The run shows up here when it finishes.
           </>
         }
@@ -184,7 +185,13 @@ export function Cases() {
             <CopyCommand command="MESHDOCTOR_CASES=~/cases meshdoctor serve" className="mx-auto mt-3 max-w-sm text-left" />
             {/* A newcomer's first case: the README's First run, its set-up below to copy, as Getting started gives it. */}
             <p className="mt-4">
-              No case yet? To try Mesh Doctor on OpenFOAM&apos;s motorBike tutorial, run these in a WSL or Linux
+              No case yet? <Link to={to("/solve")}
+                className="font-medium text-primary underline-offset-4 hover:underline">New case</Link> on the Solve
+              screen makes one from a template, the Ahmed body or a wheel and a front wing: the engine copies it into
+              its cases folder and meshes it.
+            </p>
+            <p className="mt-4">
+              Or, to try Mesh Doctor on OpenFOAM&apos;s motorBike tutorial, run these in a WSL or Linux
               terminal: they copy it into $FOAM_RUN, where the engine looks, and mesh it, which takes a few minutes. The
               README&apos;s{" "}
               <a href={DOCS.firstRun} target="_blank" rel="noreferrer"

@@ -11,20 +11,27 @@ The command comes from this process's arguments, never from the job file.
 """
 import os, signal, subprocess, sys, time
 
+import config
 import jobs
 
 KILL_AFTER = 30
 
 
 def _last_line(log, ws):
-    """The log's last non-empty line, without workspace paths (it may be shown on a web page)."""
+    """The log's last non-empty line, without the workspace's or the cases folder's paths (it may be shown on a
+    web page; a new case's job works in the cases folder)."""
     try:
         with open(log, "rb") as f:
             f.seek(max(0, os.path.getsize(log) - 4096))
             lines = [x.strip() for x in f.read().decode("utf-8", "replace").splitlines() if x.strip()]
     except OSError:
         return ""
-    return lines[-1].replace(ws.rstrip("/") + "/", "")[:300] if lines else ""
+    if not lines:
+        return ""
+    line = lines[-1]
+    for folder in sorted({ws.rstrip("/"), config.settings()["cases"].rstrip("/")} - {""}, key=len, reverse=True):
+        line = line.replace(folder + "/", "")
+    return line[:300]
 
 
 def detach():

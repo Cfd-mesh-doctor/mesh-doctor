@@ -122,7 +122,7 @@ def _wrapper_alive(pid, job_id):
 # --------------------------------------------------------------------------
 # reading jobs
 
-# kind -> (status file relative to the workspace, [(step prefix, fraction)])
+# kind -> (status file relative to the workspace, or in the cases folder, [(step prefix, fraction)])
 PROGRESS = {
     "repair": ("{name}/meshDoctor/status.json", [
         ("fingerprinting", 0.03), ("checkMesh (before)", 0.08), ("inspect", 0.15),
@@ -132,6 +132,11 @@ PROGRESS = {
         ("copying base", 0.02), ("solving base", 0.05), ("copying fixed", 0.45), ("solving fixed", 0.5),
         ("hotspots", 0.92), ("done", 1.0)]),
     "abextend": ("{name}_ab/ab_status.json", [("extending", 0.1), ("hotspots", 0.92), ("done", 1.0)]),
+    # templates.py's marker in the new case: Allmesh's steps, snappyHexMesh's three phases the longest
+    "case": ("{cases}/{name}/.meshdoctor-case.json", [
+        ("copying", 0.02), ("geometry", 0.04), ("surfaceFeatures", 0.06), ("blockMesh", 0.08),
+        ("snappyHexMesh: refining", 0.1), ("snappyHexMesh: snapping", 0.35), ("snappyHexMesh: adding layers", 0.6),
+        ("checkMesh", 0.95), ("done", 1.0)]),
 }
 
 
@@ -141,7 +146,8 @@ def progress(job, ws):
     if not rel:
         return None
     try:
-        with open(os.path.join(ws, rel.format(name=job["name"])), encoding="utf-8") as f:
+        with open(os.path.join(ws, rel.format(name=job["name"], cases=config.settings()["cases"])),
+                  encoding="utf-8") as f:
             st = json.load(f)
         if os.path.getmtime(f.name) < _epoch(job.get("created")) - 1:
             return None        # an older run's status file
@@ -237,13 +243,14 @@ def submit(kind, params, name, cmd, log, result=None, ram=None, ws=None):
     """Admit and start a job; the job dict, or Refused.
 
     cmd: the argument list to run (no shell).  log and result: paths relative
-    to the workspace.  ram: (case folder, "repair" | "solve") for the RAM guard."""
+    to the workspace.  ram: (case folder, "repair" | "solve") for the RAM guard, or
+    (cells, "mesh") for a mesh the job makes."""
     ws = ws or workspace()
     why = busy(ws)
     if why:
         raise Refused("busy", why)
     if ram:
-        ok, msg = ramguard.check(*ram)
+        ok, msg = ramguard.check_cells(*ram) if isinstance(ram[0], int) else ramguard.check(*ram)
         if not ok:
             raise Refused("not-enough-memory", msg)
     config.ensure_workspace(ws)

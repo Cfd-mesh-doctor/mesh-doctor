@@ -18,7 +18,7 @@ export type Job = components["schemas"]["Job"];
 export type JobState = Job["state"];
 export type JobKind = Job["kind"];
 export type ApiErrorCode = components["schemas"]["Error"]["error"]["code"];
-/** What POST /jobs takes: a repair, an A/B test or an A/B extension, with its params. */
+/** What POST /jobs takes: a repair, an A/B test, an A/B extension or a new case, with its params. */
 export type JobRequest = Json<operations["start_job"]["requestBody"]>;
 /** One defect cluster's shapes, for its 3D view: every face of the cells beside its failing faces, and the boundary
  *  faces nearby. */
@@ -41,6 +41,10 @@ export type Variant = VariantList["items"][number];
  *  largest mesh a repair or a solve could take in the memory free now. */
 export type Readiness = Json<operations["readiness"]["responses"][200]>;
 export type ReadinessCheck = Readiness["checks"][number];
+/** The cases the engine can make (API 1.5): the templates in its examples/ folder, each with its mesh sizes. */
+export type TemplateList = Json<operations["list_templates"]["responses"][200]>;
+export type Template = TemplateList["items"][number];
+export type TemplateSize = Template["sizes"][number];
 
 /** The API major version this app speaks; the engine reports major.minor and any 1.x works. */
 export const API_MAJOR = 1;
@@ -53,4 +57,5 @@ export const JOB_KIND_LABEL: Record<JobKind, string> = {
   repair: "Repair",
   abtest: "A/B test",
   abextend: "A/B extension",
+  case: "New case",
 };

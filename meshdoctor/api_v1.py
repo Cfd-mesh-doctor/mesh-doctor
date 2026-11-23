@@ -21,9 +21,10 @@ import jobs
 import md_api
 import ramguard
 import schema
+import templates
 import version
 
-API_VERSION = "1.4"
+API_VERSION = "1.5"
 PREFIX = "/api/v1"
 MAX_BODY = 64 * 1024
 
@@ -131,7 +132,8 @@ def result_schema(p, q, b):
     return schema.schema(p["kind"])
 
 
-@route("GET", "/cases", "Source cases this worker may read (only ever read, never changed), with their sizes",
+@route("GET", "/cases", "Source cases this worker may read (never changed: a new case from a template goes in a "
+       "new folder), with their sizes",
        ok={"type": "object", "required": ["items", "cells"], "properties": {
            "items": {"type": "array", "items": {"type": "string"}},
            "cells": {"type": "object", "additionalProperties": {"type": ["integer", "null"]},
@@ -479,6 +481,24 @@ def live(p, q, b):
     return _live["live"]()
 
 
+@route("GET", "/templates", "Cases the engine can make (a `case` job): the templates in examples/, each with its "
+       "mesh sizes and about how many cells each one makes (API 1.5)",
+       ok=_items({"type": "object", "required": ["name", "label", "about", "size", "sizes"], "properties": {
+           "name": {"type": "string", "description": "the template's folder in examples/, as a case job names it"},
+           "label": {"type": "string"},
+           "about": {"type": "string", "description": "what the case is, in a sentence or two"},
+           "size": {"enum": templates.SIZES, "description": "the size a case job makes when it names none"},
+           "sizes": {"type": "array", "items": {
+               "type": "object", "required": ["name", "label", "cells", "about"], "properties": {
+                   "name": {"enum": templates.SIZES},
+                   "label": {"type": "string"},
+                   "cells": {"type": "integer", "minimum": 1,
+                             "description": "about how many cells the mesh has, as OpenFOAM 14 made it here"},
+                   "about": {"type": "string", "description": "what the size is for"}}}}}}))
+def list_templates(p, q, b):
+    return {"items": templates.listing()}
+
+
 @route("GET", "/variants", "Solver-setting variants an A/B second run can use",
        ok=_items({"type": "object", "required": ["name", "label"],
                   "properties": {"name": {"type": "string"}, "label": {"type": "string"}}}))
@@ -528,6 +548,20 @@ JOBS = {
                                                  "ended)"}}, ["name", "to"]),
         "start": lambda a: md_api.ab_extend(a["name"], a["to"]),
         "links": lambda n: {"abtest": f"{PREFIX}/abtests/{n}", "live": f"{PREFIX}/abtests/{n}/live"},
+    },
+    "case": {
+        "summary": "make a new case from a template: copy it into the cases folder under a new name and mesh it",
+        "params": _params({"template": dict(NAME, description="a template (GET /templates)"),
+                           "size": {"enum": templates.SIZES, "default": "medium",
+                                    "description": "one of the template's mesh sizes"},
+                           "name": dict(NAME, description="the new case's folder in the cases folder: a name not "
+                                                          "taken there"),
+                           "replace": {"type": "boolean", "default": False,
+                                       "description": "make again a case of the same name that an earlier case job "
+                                                      "made (deleted first, with everything in it); a case Mesh "
+                                                      "Doctor didn't make is never replaced"}}, ["template", "name"]),
+        "start": lambda a: templates.start(a["template"], a["size"], a["name"], replace=a["replace"]),
+        "links": lambda n: {"cases": f"{PREFIX}/cases"},
     },
 }
 JOB_REQUEST = {"oneOf": [
@@ -634,7 +668,7 @@ def cancel_job(p, q, b):
 
 
 @route("POST", "/jobs",
-       "Start a repair, A/B test or A/B extension.  Needs the launch token (X-MD-Token) or the pairing key "
+       "Start a repair, A/B test, A/B extension or new case.  Needs the launch token (X-MD-Token) or the pairing key "
        "(X-MD-Key).", body=JOB_REQUEST, ok=_ref("job"), status=202)
 def start_job(p, q, b):
     if not isinstance(b, dict) or b.get("kind") not in JOBS:

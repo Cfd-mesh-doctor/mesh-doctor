@@ -412,6 +412,44 @@ test("an engine older than the readiness check is told to update, with the same 
   await expect(page.getByRole("button", { name: "Copy “meshdoctor check”" })).toBeVisible();
 });
 
+test("Solve's New case makes a case from a template: a free name, the memory it needs, then its job on Jobs", async ({ page }) => {
+  const engine = await mockEngine(page, { noJobs: true });
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  await page.goto("/app/solve");
+  await page.getByRole("button", { name: "New case", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "New case" });
+  await expect(dialog.getByRole("combobox", { name: "Template" })).toHaveValue("ahmed-body");
+  const name = dialog.getByRole("textbox", { name: "Name of the new case" });
+  await expect(name).toHaveValue("ahmed-medium");
+  await dialog.getByRole("radio", { name: "Coarse" }).click();
+  await expect(name).toHaveValue("ahmed-coarse");
+  await expect(dialog.getByText("About 480,000 cells: for a quick look.")).toBeVisible();
+  await expect(dialog.getByText(/^Its mesh needs about 1\.0 GB of memory; your engine's computer has 15\.6 GB\.$/)).toBeVisible();
+  await name.fill("wing");                                                       // a case's name
+  await expect(dialog.getByText("A case with this name exists already. Pick another name.")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Make case" })).toBeDisabled();
+  await name.fill("ahmed-coarse");
+  await dialog.getByRole("button", { name: "Make case" }).click();
+  await expect(page).toHaveURL(/\/app\/jobs\?job=20261123-120000-case-ahmed-coarse-e2e1$/);
+  const details = page.getByRole("dialog", { name: "ahmed-coarse" });
+  await expect(details.getByText("New case", { exact: true })).toBeVisible();
+  expect(engine.started).toEqual([{ kind: "case", params: { template: "ahmed-body", size: "coarse", name: "ahmed-coarse", replace: false } }]);
+});
+
+test("an engine older than templates is told to update when New case opens", async ({ page }) => {
+  await mockEngine(page, { templates: null, noJobs: true });
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  await page.goto("/app/solve");
+  await page.getByRole("button", { name: "New case", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "New case" });
+  await expect(dialog.getByText(/^Your engine is older than this page and can't make cases from templates yet/)).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Make case" })).toHaveCount(0);
+});
+
 test("a list the engine fails to give says it didn't load, with the reason above it, on the Overview and on Cases", async ({ page }) => {
   await mockEngine(page, { broken: ["/cases"] });
   await page.goto(pairingLink());

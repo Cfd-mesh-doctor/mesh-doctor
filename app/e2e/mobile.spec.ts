@@ -342,6 +342,23 @@ test("on a small phone a job's details fit the screen, scrolling inside rather t
   await expect(details).toBeHidden();
 });
 
+test("on a small phone the New case dialog fits the screen, with its command in a block of its own", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 });
+  await page.emulateMedia({ reducedMotion: "reduce" }); // no pop-in while measuring
+  await page.goto("/demo/solve");
+  await page.getByRole("button", { name: "New case", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "New case" });
+  await expect(dialog.getByRole("textbox", { name: "Name of the new case" })).toHaveValue("ahmed-medium");
+  const box = (await dialog.boundingBox())!;
+  expect(box.x, "the dialog starts off the screen").toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width, "the dialog ends off the screen").toBeLessThanOrEqual(360);
+  const mesh = (await dialog.getByRole("radiogroup", { name: "Mesh" }).boundingBox())!;
+  expect(mesh.x + mesh.width, "the mesh sizes are cut off").toBeLessThanOrEqual(box.x + box.width);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow, "the page is wider than a 360 px screen").toBeLessThanOrEqual(1);
+  await expect(dialog.getByRole("button", { name: "Copy “meshdoctor new ahmed-body ahmed-medium”" })).toBeVisible();
+});
+
 test("on a small phone a job's result path breaks after its slash, not inside a name", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 667 }); // it broke as "fix_ab/ab_result." / "json" here
   await page.goto("/demo/jobs?job=20261121-130610-abtest-ahmed25-medium-fix-13c2");

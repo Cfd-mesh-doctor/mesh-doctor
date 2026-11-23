@@ -22,7 +22,7 @@ before versioning existed ("legacy"), and refuse a newer major version.
 import json, os, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSIONS = {"repair": "1.0", "abtest": "1.0", "judge": "1.1", "map": "1.0", "job": "1.0", "report": "1.0", "tplan": "1.0"}
+VERSIONS = {"repair": "1.0", "abtest": "1.0", "judge": "1.1", "map": "1.0", "job": "1.1", "report": "1.0", "tplan": "1.0"}
 _cache = {}
 
 

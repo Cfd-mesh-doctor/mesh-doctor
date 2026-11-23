@@ -22,7 +22,8 @@ def _start_server():
                MESHDOCTOR_WORKSPACE=os.path.join(tmp, "work"), MESHDOCTOR_APP_ORIGINS=APP,
                MESHDOCTOR_KEY_FILE=os.path.join(tmp, "app.key"))
     _start_server.key_file = env["MESHDOCTOR_KEY_FILE"]
-    os.makedirs(env["MESHDOCTOR_CASES"])
+    _start_server.cases = env["MESHDOCTOR_CASES"]
+    os.makedirs(os.path.join(env["MESHDOCTOR_CASES"], "mine"))     # a case you made, which a new case never replaces
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     p = subprocess.Popen([sys.executable, "-m", "meshdoctor", "serve", "--port", str(port)], cwd=repo, env=env,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -71,6 +72,7 @@ m = re.search(r'<meta name="md-token" content="([^"]+)">', page)
 TOKEN = m.group(1) if m else ""
 JOB = "/api/md/start?src=example_case&name=..&profile=openfoam"
 V1JOB = b'{"kind": "repair", "params": {"source": "example_case", "name": ".."}}'
+CASEJOB = b'{"kind": "case", "params": {"template": "ahmed-body", "name": ".."}}'
 JSON = "application/json"
 PAGES = ("/", "/run", "/meshdoctor", "/meshmap", "/report")
 APP_KEY = ""
@@ -108,6 +110,7 @@ CHECKS = [
     ("v1 list works", "GET", "/api/v1/cases", {}, 200, '"items"'),
     ("v1 machine works", "GET", "/api/v1/machine", {}, 200, '"memoryMb"'),
     ("v1 readiness check works", "GET", "/api/v1/check", {}, 200, '"checks"'),
+    ("v1 templates list works", "GET", "/api/v1/templates", {}, 200, '"sizes"'),
     ("v1 readiness check takes no POST", "POST", "/api/v1/check", {"X-MD-Token": TOKEN, "Content-Type": JSON}, 405,
      '"code": "method-not-allowed"', b"{}"),
     ("v1 unknown host refused", "GET", "/api/v1/cases", {"Host": f"evil.example:{PORT}"}, 403, '"code": "forbidden"'),
@@ -133,6 +136,9 @@ CHECKS = [
      {"Content-Type": JSON, "X-MD-Token": TOKEN, "Content-Length": "10000000"}, 413, "too-large", b""),
     ("v1 job with token reaches the API, which refuses '..'", "POST", "/api/v1/jobs",
      {"Content-Type": JSON, "X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 400, '"code": "bad-request"', V1JOB),
+    ("v1 new case without token refused", "POST", "/api/v1/jobs", {"Content-Type": JSON}, 403, "token", CASEJOB),
+    ("v1 new case with token reaches the API, which refuses '..'", "POST", "/api/v1/jobs",
+     {"Content-Type": JSON, "X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 400, '"code": "bad-request"', CASEJOB),
     # page scripts: only plain names from web/js/
     ("shared page script is served", "GET", "/js/md.js", {}, 200, "MD.render"),
     ("unknown script is not served", "GET", "/js/nope.js", {}, 404, ""),
@@ -226,6 +232,10 @@ if START:
                                       {"Origin": APP, "Access-Control-Request-Method": "POST"})
          and header("/api/v1/jobs", "Access-Control-Max-Age", "OPTIONS",
                     {"Origin": APP, "Access-Control-Request-Method": "POST"}) == "600"),
+        ("v1 new case never replaces a case it didn't make, and names none of this machine's folders",
+         lambda: (lambda r: r[0] == 409 and "never changed" in r[1] and "md_sec_" not in r[1])(
+             req("POST", "/api/v1/jobs", {"Content-Type": JSON, "X-MD-Token": TOKEN, "Origin": f"http://{HOST}"},
+                 b'{"kind": "case", "params": {"template": "ahmed-body", "name": "mine", "replace": true}}'))),
         ("v1 readiness check names none of this machine's folders",
          lambda: "md_sec_" not in req("GET", "/api/v1/check")[1]
          and '"cases"' in req("GET", "/api/v1/check", {"Origin": APP, "X-MD-Key": APP_KEY})[1]),

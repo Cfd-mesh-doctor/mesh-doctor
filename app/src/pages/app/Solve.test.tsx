@@ -165,8 +165,19 @@ describe("the Solve screen's other parts", () => {
   it("lists what comes next on it, and where to solve a case until then", () => {
     renderScreen(<Solve />, { path, transport: engine(withChecks({})) });
     const next = within(screen.getByRole("heading", { name: "Coming next on this screen" }).closest("section")!);
-    expect(next.getAllByRole("listitem")).toHaveLength(3);
+    expect(next.getAllByRole("listitem")).toHaveLength(2);
     expect(next.getByRole("link", { name: /the Ahmed body/ })).toHaveAttribute("href", expect.stringContaining("examples/ahmed-body"));
+  });
+
+  it("makes a case from a template with New case", async () => {
+    const user = userEvent.setup();
+    renderScreen(<Solve />, { path: "/demo/solve", transport: demoTransport(undefined, 0) });
+    const card = within(screen.getByRole("heading", { name: "New case" }).closest("section")!);
+    expect(card.getByText(/^A ready-made case from a template: the Ahmed body/)).toBeInTheDocument();
+    expect(card.getByText("meshdoctor new").tagName).toBe("CODE");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await user.click(card.getByRole("button", { name: "New case" }));
+    expect(await screen.findByRole("dialog", { name: "New case" })).toBeInTheDocument();
   });
 
   it("rounds a mesh size down, so it's never more than fits", () => {

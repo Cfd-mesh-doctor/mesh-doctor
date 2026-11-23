@@ -79,12 +79,14 @@ describe("the Cases screen of your own engine", () => {
     expect(await screen.findByRole("heading", { name: "No cases found" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy “MESHDOCTOR_CASES=~/cases meshdoctor serve”" })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
-    // ...and how to get a first case: the README's First run sets up the motorBike tutorial where the engine looks.
+    // ...and how to get a first case: New case on Solve makes one from a template, or the README's First run sets up
+    // the motorBike tutorial where the engine looks.
+    expect(screen.getByRole("link", { name: "New case" })).toHaveAttribute("href", "/app/solve");
     const firstRun = screen.getByRole("link", { name: "First run" });
     expect(firstRun).toHaveAttribute("href", DOCS.firstRun);
     expect(firstRun).toHaveAttribute("target", "_blank");
     expect(firstRun.closest("p")).toHaveTextContent(
-      "No case yet? To try Mesh Doctor on OpenFOAM's motorBike tutorial, run these in a WSL or Linux terminal: they " +
+      "Or, to try Mesh Doctor on OpenFOAM's motorBike tutorial, run these in a WSL or Linux terminal: they " +
       "copy it into $FOAM_RUN, where the engine looks, and mesh it, which takes a few minutes. The README's First run " +
       "has the rest.");
     // ...with its set-up lines to copy, as Getting started gives them: the README's own (commands.test.ts).

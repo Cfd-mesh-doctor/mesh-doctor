@@ -47,6 +47,24 @@ export function readiness(change: Record<string, Record<string, unknown>> = {}) 
 }
 
 /** An A/B test as GET /abtests/{name} answers it. */
+/** GET /templates (API 1.5): the engine's two templates, the Ahmed body in three mesh sizes. */
+const TEMPLATES = {
+  items: [
+    {
+      name: "ahmed-body", label: "Ahmed body", about: "The standard test shape for car aerodynamics.", size: "medium",
+      sizes: [
+        { name: "coarse", label: "Coarse", cells: 480_000, about: "for a quick look" },
+        { name: "medium", label: "Medium", cells: 836_000, about: "the accuracy check's mesh" },
+        { name: "fine", label: "Fine", cells: 1_570_000, about: "twice the medium mesh's cells" },
+      ],
+    },
+    {
+      name: "wheel-wing", label: "Wheel and front wing", about: "A front wing ahead of a rolling wheel.", size: "medium",
+      sizes: [{ name: "medium", label: "Medium", cells: 920_000, about: "the template's tested mesh" }],
+    },
+  ],
+};
+
 interface AbDetail {
   status?: { step?: string; time?: string } | null;
   result?: { finished?: string | null; residualRatioFixedOverBase?: Record<string, number> } | null;
@@ -63,6 +81,8 @@ export async function mockEngine(
     refuse?: { code: string; message: string }; abtests?: Record<string, AbDetail>;
     /** GET /check's answer (everything in place by default); null: none, as from an engine before API 1.4. */
     check?: unknown;
+    /** GET /templates' answer (two templates by default); null: none, as from an engine before API 1.5. */
+    templates?: unknown;
   } = {},
 ): Promise<MockEngine> {
   const state: MockEngine = {
@@ -100,6 +120,7 @@ export async function mockEngine(
     // A 16 GB laptop with no RAM limit (API 1.1).
     if (path === "/machine") return json(200, { cpus: 8, cores: 4, memoryMb: 16_000, ramLimitMb: null });
     if (path === "/check" && opts.check !== null) return json(200, opts.check ?? readiness());
+    if (path === "/templates" && opts.templates !== null) return json(200, opts.templates ?? TEMPLATES);
     // Its A/B tests (API 1.3): none unless asked, and one solver-setting variant for a test's second run.
     const tests = opts.abtests ?? {};
     if (path === "/abtests") {

@@ -5,7 +5,7 @@ import { NOT_THE_ENGINE, EngineError, isEngineCode } from "./errors";
 import { localAccessState } from "./permission";
 import type {
   AbtestDetail, AbtestList, AbtestLive, CaseList, ClusterShape, EngineInfo, Job, JobList, JobRequest, JudgeAnswer, MachineInfo,
-  Readiness, RepairList, VariantList,
+  Readiness, RepairList, TemplateList, VariantList,
 } from "./types";
 import { API_MAJOR } from "./types";
 import type { Report } from "@/report/read";
@@ -124,4 +124,5 @@ export const api = {
   machine: (t: Transport, signal?: AbortSignal) => t.request<MachineInfo>("GET", "/machine", undefined, signal),
   /** The engine's self check (API 1.4), run for this answer; an older engine answers not-found. */
   readiness: (t: Transport, signal?: AbortSignal) => t.request<Readiness>("GET", "/check", undefined, signal),
+  templates: (t: Transport, signal?: AbortSignal) => t.request<TemplateList>("GET", "/templates", undefined, signal),
 };

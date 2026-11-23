@@ -1,0 +1,44 @@
+{
+  "items": [
+    {
+      "name": "ahmed-body",
+      "label": "Ahmed body",
+      "about": "The standard test shape for car aerodynamics: a box with a rounded nose and a 25° slanted rear, measured in wind tunnels many times. A half model at 40 m/s over a moving ground.",
+      "size": "medium",
+      "sizes": [
+        {
+          "name": "coarse",
+          "label": "Coarse",
+          "cells": 480000,
+          "about": "for a quick look; its drag comes out 7 % above the medium mesh's"
+        },
+        {
+          "name": "medium",
+          "label": "Medium",
+          "cells": 836000,
+          "about": "the accuracy check's mesh, with drag within 2 % of the wind tunnel's"
+        },
+        {
+          "name": "fine",
+          "label": "Fine",
+          "cells": 1570000,
+          "about": "twice the medium mesh's cells, for the same drag"
+        }
+      ]
+    },
+    {
+      "name": "wheel-wing",
+      "label": "Wheel and front wing",
+      "about": "A front wing in ground effect ahead of a rolling 18-inch wheel, with the forces on each part. A full model at 15 m/s over a moving ground; your own parts can take the demo geometry's place.",
+      "size": "medium",
+      "sizes": [
+        {
+          "name": "medium",
+          "label": "Medium",
+          "cells": 920000,
+          "about": "the template's tested mesh"
+        }
+      ]
+    }
+  ]
+}

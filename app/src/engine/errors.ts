@@ -73,12 +73,14 @@ function memoryNumbers(message: string): string {
   return m ? `It needs about ${m[1]} GB, and ${m[2]} GB is free. ` : "";
 }
 
-const BUSY_KIND: Record<string, string> = { repair: "The repair", abtest: "The A/B test", abextend: "The A/B extension" };
+const BUSY_KIND: Record<string, string> = {
+  repair: "The repair", abtest: "The A/B test", abextend: "The A/B extension", case: "The new case",
+};
 
 /** The job in the way, from the engine's refusal ("job <id> (repair wing-fix) is running; one big job at a time"), as a
  * sentence; empty when it names none (an OpenFOAM run started elsewhere). */
 function busyJob(message: string): string {
-  const m = /\((repair|abtest|abextend) ([^)\s]+)\) is (queued|running)/.exec(message);
+  const m = /\((repair|abtest|abextend|case) ([^)\s]+)\) is (queued|running)/.exec(message);
   if (!m) return "";
   return `${BUSY_KIND[m[1]!]} ${m[2]} is ${m[3] === "queued" ? "waiting to start" : "running"}. `;
 }
@@ -148,6 +150,15 @@ export function explain(err: unknown, origin = globalThis.location?.origin ?? ""
         return {
           title: "An A/B test with that name already exists",
           hint: "Tick Replace to run it again (its results are deleted), or run it longer from its own page.",
+          troubleshooting: true,
+        };
+      }
+      // A new case: the engine never changes a case you made, so the way on is a new name (the dialog makes again,
+      // by itself, only a new case of its own that stopped before its mesh was made).
+      if (/^a case named /.test(e.message)) {
+        return {
+          title: "A case with that name already exists",
+          hint: "Pick another name. Mesh Doctor never changes a case you made.",
           troubleshooting: true,
         };
       }

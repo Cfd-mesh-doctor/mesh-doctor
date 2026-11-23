@@ -114,6 +114,7 @@ meshdoctor serve                               # http://localhost:8765/meshdocto
 
 ```bash
 meshdoctor help                       # every command; <command> --help for its options
+meshdoctor new <template> <name>      # a new case from a template, meshed (meshdoctor new lists them)
 meshdoctor full <case> <name>         # repair a copy of <case> as <workspace>/<name>
 meshdoctor ab <case> <name>           # A/B solver test: original vs repaired mesh
 meshdoctor judge <case>               # is this run converged? (steady or transient)
@@ -142,7 +143,7 @@ ssh -L 8765:localhost:8765 <you>@<host>
 
 Then open `http://localhost:8765` on your own computer.
 
-**Memory:** a repair needs about 1.5 KB per cell and a solve about 1.35 KB per cell, plus 0.5 GB. Mesh Doctor refuses a job that would not fit in free memory; `meshdoctor check` shows how many cells fit now. Only one big job runs at a time.
+**Memory:** a repair needs about 1.5 KB per cell, a solve about 1.35 KB per cell and a new case's mesh about 2.2 KB per cell, plus 0.5 GB. Mesh Doctor refuses a job that would not fit in free memory; `meshdoctor check` shows how many cells fit now. Only one big job runs at a time.
 
 ## Configuration
 Settings come from environment variables, else `~/.config/meshdoctor/config.ini`, else defaults. `meshdoctor config` prints the values in use and where each came from.

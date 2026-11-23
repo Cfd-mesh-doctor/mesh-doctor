@@ -196,6 +196,29 @@ describe("the Jobs screen", () => {
     expect(within(details).getByRole("link", { name: "Open report" })).toHaveAttribute("href", "/demo/repairs/ahmed25-fine-fix/report");
   });
 
+  it("words a new case's step, and links one that's made to it on Cases, from its row and its details", async () => {
+    const answers = structuredClone(DEMO_ANSWERS);
+    const items = (answers["/jobs"] as JobList).items;
+    const running = items.find((j) => j.state === "running")!;
+    const done = items.find((j) => j.state === "done")!;
+    const id = "20261123-120000-case-ahmed-coarse-0001";
+    items.unshift(
+      { ...running, id: "20261123-130000-case-wheel-wing-0002", kind: "case", name: "wheel-wing",
+        params: { template: "wheel-wing", size: "medium", name: "wheel-wing", replace: false },
+        progress: { step: "snappyHexMesh: snapping", fraction: 0.35, updated: null } },
+      { ...done, id, kind: "case", name: "ahmed-coarse", params: { template: "ahmed-body", size: "coarse", name: "ahmed-coarse", replace: false } },
+    );
+    const view = renderScreen(<Jobs />, { path, at: path, transport: demoTransport(answers, 0) });
+    expect(await screen.findAllByText("Snapping the mesh to the shape (snappyHexMesh)")).not.toHaveLength(0);
+    expect(screen.getByRole("link", { name: "The case ahmed-coarse on Cases" })).toHaveAttribute("href", "/demo/cases?q=ahmed-coarse");
+    expect(screen.queryByRole("link", { name: "The case wheel-wing on Cases" })).toBeNull();     // no mesh yet
+    expect(screen.getAllByText("New case")).toHaveLength(2);                                     // their kind
+    view.unmount();
+    renderScreen(<Jobs />, { path, at: `${path}?job=${id}`, transport: demoTransport(answers, 0) });
+    const details = await screen.findByRole("dialog", { name: "ahmed-coarse" });
+    expect(within(details).getByRole("link", { name: "Open on Cases" })).toHaveAttribute("href", "/demo/cases?q=ahmed-coarse");
+  });
+
   it("shows every job when the address names a filter it doesn't know", async () => {
     open(`${path}?show=nonsense`);
     expect(await screen.findAllByRole("button", { name: "ahmed25-medium-fix" })).toHaveLength(2);

@@ -140,6 +140,16 @@ export function useReadiness() {
   });
 }
 
+/** The cases the engine can make (API 1.5): its templates, which change only with the engine itself. */
+export function useTemplates(enabled = true) {
+  const { transport } = useEngine();
+  return useQuery({
+    queryKey: [transport?.scope, "templates"],
+    queryFn: transport && enabled ? ({ signal }) => api.templates(transport, signal) : skipToken,
+    staleTime: Infinity,
+  });
+}
+
 /** The solver-setting presets an A/B test's second run can use. They change only with Mesh Doctor itself, so they
  * are asked for once, while `enabled` (the A/B test dialog is open). */
 export function useVariants(enabled = true) {
@@ -169,7 +179,8 @@ export function useStartJob() {
     onSettled: (_job, _error, body) => {
       void qc.invalidateQueries({ queryKey: [transport?.scope, "jobs"] });
       void qc.invalidateQueries({ queryKey: [transport?.scope, "repairs"] });
-      if (body.kind !== "repair") {
+      if (body.kind === "case") void qc.invalidateQueries({ queryKey: [transport?.scope, "cases"] });
+      if (body.kind === "abtest" || body.kind === "abextend") {
         void qc.invalidateQueries({ queryKey: [transport?.scope, "abtests"] });
         void qc.invalidateQueries({ queryKey: [transport?.scope, "abtest"] });
       }

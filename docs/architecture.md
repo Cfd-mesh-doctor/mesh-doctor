@@ -114,7 +114,8 @@ All routes live under `/api/v1` (`meshdoctor/api_v1.py`). The routes are a table
 | `GET /variants` | `/api/md/variants` | solver-setting variants for an A/B second run |
 | `GET /machine` | | the computer the engine runs on, as Linux sees it (inside WSL, what WSL was given): processors, physical cores, memory and the RAM guard's `ram_limit_mb`; the app's size estimator fills in its memory and solver ranks from it (API 1.1) |
 | `GET /check` | (CLI only) | is this computer ready: `meshdoctor check` as JSON. Python, numpy, the cases folder and the workspace, OpenFOAM 14, the programs a repair, an A/B test and a solve run (`mpirun` among them) and the memory, each `ok`, `warn` or `fail` with what was found, the fix and a command for it, never this machine's folders; and the largest mesh a repair or a solve could take in the memory free now, by the RAM guard. The app's Solve screen opens with it. Each answer runs the checks (a second or two), one at a time (API 1.4) |
-| `POST /jobs` | `/api/md/start`, `abstart`, `abextend` | start a repair, A/B test or A/B extension (202 Accepted, the job document) |
+| `GET /templates` | (CLI only) | the cases the engine can make: the templates in `examples/` (the Ahmed body, a wheel and a front wing), each with its mesh sizes and about how many cells each one makes. A `case` job makes one; `meshdoctor new` lists the same (API 1.5) |
+| `POST /jobs` | `/api/md/start`, `abstart`, `abextend` | start a repair, A/B test, A/B extension or new case (202 Accepted, the job document) |
 | `GET /jobs?state=&limit=`, `GET /jobs/{job}` | | jobs, newest first, with progress and links to their runs (job schema) |
 | `POST /jobs/{job}/cancel` | | stop a job and everything it started (`409 finished` if it already ended) |
 
@@ -124,9 +125,10 @@ A job request names its kind and its parameters, which are checked against a sch
 {"kind": "repair", "params": {"source": "motorBike", "name": "mb", "profile": "openfoam"}}
 {"kind": "abtest", "params": {"name": "mb", "iters": 200, "init": "0.warm", "variant": ""}}
 {"kind": "abextend", "params": {"name": "mb", "to": 1000}}
+{"kind": "case", "params": {"template": "ahmed-body", "size": "coarse", "name": "ahmed"}}
 ```
 
-A new repair or A/B test refuses to replace an existing run of the same name (`409 exists`) unless the request says `"replace": true`, because the copy step deletes the old run. The old routes keep their old behaviour.
+A new repair or A/B test refuses to replace an existing run of the same name (`409 exists`) unless the request says `"replace": true`, because the copy step deletes the old run. A new case refuses a name that is taken in the cases folder; there `"replace": true` makes again only a case that an earlier case job made (it holds a `.meshdoctor-case.json`), never one you made. The old routes keep their old behaviour.
 
 | Error code | HTTP | Meaning |
 |---|---|---|
@@ -179,9 +181,9 @@ The pages are plain HTML and CSS with no build step, so they can be served by th
 
   The command comes from the wrapper's own arguments, never from the job file. While a job is live, only the wrapper writes its file, so no update is lost.
 - **Cancel** sends SIGTERM to the wrapper. The wrapper stops the whole process group (mpirun ranks included), sends SIGKILL after 30 s, and records `cancelled`.
-- **Progress** is read when a job is read, from the tool's own `status.json` / `ab_status.json`. It holds the current step, and a rough fraction where the step is known.
+- **Progress** is read when a job is read, from the tool's own `status.json` / `ab_status.json`, or a new case's `.meshdoctor-case.json`, which follows its `Allmesh` and snappyHexMesh's phases. It holds the current step, and a rough fraction where the step is known.
 - **Lost jobs:** a `running` job whose wrapper is gone (machine restarted, process killed) is marked `failed` with a reason the next time it is read. So is a `queued` job that never started within a minute.
-- **Errors** are the last line of the job's log, with workspace paths removed, because they may be shown on a web page.
+- **Errors** are the last line of the job's log, with the workspace's and the cases folder's paths removed, because they may be shown on a web page.
 - `md_api` (and so the old dashboard routes and `/api/v1/jobs`) starts work only through `jobs.submit`. `meshdoctor jobs [list | show <id> | cancel <id>]` follows jobs from the shell. The CLI commands (`full`, `ab`, ...) still run in the foreground without a job file.
 - **Later runners:** a `SlurmRunner` would submit the sbatch templates and read `squeue`. A remote **worker** would poll a queue over an outgoing connection, so no port on your machine is ever opened to the internet. Both write the same job files.
 

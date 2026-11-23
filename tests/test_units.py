@@ -1055,6 +1055,227 @@ class ApiV1Test(unittest.TestCase):
         self.assertTrue(refs and all(k in self.schema.VERSIONS for k in refs), refs)
 
 
+class TemplatesTest(unittest.TestCase):
+    """templates.py: the templates, the case job's checks, and making a case with a stand-in Allmesh and
+    OpenFOAM environment, so neither OpenFOAM nor a mesh is needed."""
+
+    ALLMESH = """#!/bin/sh
+cd "${0%/*}" || exit 1
+: > log.surfaceFeatures
+: > log.blockMesh
+[ -n "$MD_TEST_FAIL" ] && exit 1
+printf 'Refinement phase\\nMorphing phase\\nShrinking and layer addition phase\\n' > log.snappyHexMesh
+mkdir -p constant/polyMesh
+printf 'FoamFile\\n{\\n    note "nPoints:900 nCells:480 nFaces:2000 nInternalFaces:1500";\\n}\\n' > constant/polyMesh/owner
+: > log.checkMesh
+"""
+
+    def setUp(self):
+        import api_v1, jobs, jobrun, schema, templates
+        self.api, self.jobs, self.jobrun, self.schema, self.t = api_v1, jobs, jobrun, schema, templates
+        self.d = tempfile.mkdtemp(prefix="templates_test_")
+        self.addCleanup(shutil.rmtree, self.d, True)
+        self.cases = os.path.join(self.d, "cases")
+        os.makedirs(os.path.join(self.cases, "mine", "constant", "polyMesh"))      # a case you made
+        bashrc = os.path.join(self.d, "bashrc")
+        with open(bashrc, "w") as f:
+            f.write("export WM_PROJECT_DIR=/nowhere\n")
+        env = mock.patch.dict(os.environ, {"MESHDOCTOR_CASES": self.cases, "MD_TEST_FAIL": "",
+                                           "MESHDOCTOR_WORKSPACE": os.path.join(self.d, "work"),
+                                           "MESHDOCTOR_FOAM_BASHRC": bashrc})
+        env.start()
+        self.addCleanup(env.stop)
+        self.launched = []
+        for obj, attr, value in ((jobs, "_spawn", lambda argv: self.launched.append(argv) or 2 ** 22 + 7),
+                                 (jobs, "solver_running", lambda: False), (templates, "POLL_S", 0.05)):
+            patcher = mock.patch.object(obj, attr, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def post(self, params):
+        return self.api.handle("POST", "/api/v1/jobs", {}, json.dumps({"kind": "case", "params": params}).encode(),
+                               "application/json")
+
+    def assertRefused(self, answer, status, code, text):
+        got, doc, _ = answer
+        self.assertEqual((got, doc["error"]["code"]), (status, code), doc)
+        self.assertIn(text, doc["error"]["message"])
+        self.assertNotIn(self.d, doc["error"]["message"])                   # never this machine's folders
+
+    def stand_in(self):
+        """A template like the Ahmed body's, with the stand-in Allmesh, and things a copy leaves out."""
+        ex = os.path.join(self.d, "examples")
+        src = os.path.join(ex, "ahmed-body")
+        for sub in ("system", "constant/geometry", "0", "log.x"):
+            os.makedirs(os.path.join(src, sub))
+        files = {"Allmesh": self.ALLMESH, "Allvalidate": "#!/bin/sh\nexit 1\n", "make_ahmed.py": "",
+                 "system/blockMeshDict": "blocks ( hex (0 1 2 3 4 5 6 7) (130 15 15) simpleGrading (1 1 1) );\n",
+                 "constant/geometry/README": "", "constant/geometry/ahmed.stl": "solid"}
+        for rel, text in files.items():
+            with open(os.path.join(src, rel), "w") as f:
+                f.write(text)
+        patcher = mock.patch.object(self.t, "EXAMPLES", ex)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def make(self, *args, **kw):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = self.t.make(*args, **kw)
+        return rc, out.getvalue().strip().splitlines()
+
+    def test_the_templates_list_their_sizes_and_each_resizes_its_own_blocks(self):
+        st, doc, _ = self.api.handle("GET", "/api/v1/templates", {})
+        self.assertEqual(st, 200)
+        ok = next(r.ok for r in self.api.ROUTES if r.template == "/templates")
+        self.assertEqual(self.schema.check(doc, ok), [])
+        items = {t["name"]: t for t in doc["items"]}
+        self.assertEqual(list(items), ["ahmed-body", "wheel-wing"])
+        self.assertEqual([s["name"] for s in items["ahmed-body"]["sizes"]], ["coarse", "medium", "fine"])
+        self.assertEqual((items["ahmed-body"]["size"], items["wheel-wing"]["size"]), ("medium", "medium"))
+        for name, t in self.t.TEMPLATES.items():       # the blocks each size replaces are in the template, once
+            with open(os.path.join(self.t.EXAMPLES, name, "system", "blockMeshDict")) as f:
+                self.assertEqual(f.read().count(t["blocks"]), 1, name)
+        with mock.patch.object(self.t, "EXAMPLES", self.d):                  # no examples folder: none to make
+            self.assertEqual(self.api.handle("GET", "/api/v1/templates", {})[1], {"items": []})
+            self.assertRefused(self.post({"template": "wheel-wing", "name": "w"}), 404, "not-found", "no template")
+
+    def test_a_case_job_makes_a_new_folder_of_the_size_asked_for(self):
+        st, doc, _ = self.post({"template": "ahmed-body", "size": "coarse", "name": "ahmed"})
+        self.assertEqual((st, doc["kind"], doc["name"], doc["log"]), (202, "case", "ahmed", ".cases/ahmed.log"))
+        self.assertEqual(self.schema.validate(doc, "job"), [])
+        self.assertEqual(doc["links"]["cases"], "/api/v1/cases")
+        argv = self.launched[0]
+        cmd = argv[argv.index("--") + 1:]
+        self.assertTrue(cmd[1].endswith("templates.py"), cmd)
+        self.assertEqual(cmd[2:], ["make", "ahmed-body", "ahmed", "--size", "coarse"])
+        self.assertTrue(os.path.isdir(os.path.join(self.d, "work", ".cases")))   # where its log goes
+
+    def test_a_case_job_refuses_a_name_that_is_taken_and_a_size_the_template_hasnt(self):
+        self.assertRefused(self.post({"template": "ahmed-body", "name": "mine"}), 409, "exists", "never changed")
+        self.assertRefused(self.post({"template": "ahmed-body", "name": "mine", "replace": True}), 409, "exists",
+                           "never changed")
+        self.assertRefused(self.post({"template": "wheel-wing", "size": "coarse", "name": "w"}), 400, "bad-request",
+                           "has no coarse mesh")
+        self.assertRefused(self.post({"template": "nope", "name": "w"}), 404, "not-found", "no template nope")
+        self.assertRefused(self.post({"template": "../x", "name": "w"}), 400, "bad-request", "template")
+        self.assertRefused(self.post({"template": "wheel-wing", "name": "../w"}), 400, "bad-request", "name")
+        # A case made here before (its marker) is made again only when asked to.
+        made = os.path.join(self.cases, "ahmed")
+        os.makedirs(made)
+        open(os.path.join(made, self.t.MARKER), "w").close()
+        self.assertRefused(self.post({"template": "ahmed-body", "name": "ahmed"}), 409, "exists", "replace it")
+        st, doc, _ = self.post({"template": "ahmed-body", "name": "ahmed", "replace": True})
+        self.assertEqual((st, doc["params"]["replace"]), (202, True))
+        self.assertEqual(self.launched[-1][-1], "--replace")
+        self.assertTrue(os.path.isdir(made))                    # the job deletes it, not the request
+        with mock.patch.dict(os.environ, {"MESHDOCTOR_WORKSPACE": os.path.join(self.cases, "meshdoctor")}):
+            self.assertRefused(self.post({"template": "ahmed-body", "name": "meshdoctor"}), 400, "bad-request",
+                               "workspace")
+
+    def test_the_ram_guard_checks_the_mesh_the_job_will_make(self):
+        need = int(480_000 * 2.2 / 1024) + 512                  # the coarse Ahmed body
+        with mock.patch.object(self.t.ramguard, "available_mb", lambda: need - 1):
+            self.assertRefused(self.post({"template": "ahmed-body", "size": "coarse", "name": "a"}), 409,
+                               "not-enough-memory", "mesh of 480,000 cells")
+        with mock.patch.object(self.t.ramguard, "available_mb", lambda: need):
+            self.assertEqual(self.post({"template": "ahmed-body", "size": "coarse", "name": "a"})[0], 202)
+
+    def test_make_copies_the_template_resizes_it_and_meshes_it(self):
+        self.stand_in()
+        rc, lines = self.make("ahmed-body", "a1", "coarse")
+        self.assertEqual(rc, 0, lines)
+        self.assertEqual(lines[-1], "a1: 480 cells, ready in the cases folder")
+        case = os.path.join(self.cases, "a1")
+        with open(os.path.join(case, "system", "blockMeshDict")) as f:
+            self.assertIn("(104 12 12)", f.read())
+        left = sorted(os.listdir(case))
+        for gone in ("Allvalidate", "0", "log.x"):
+            self.assertNotIn(gone, left)
+        self.assertFalse(os.path.exists(os.path.join(case, "constant", "geometry", "ahmed.stl")))
+        self.assertTrue(os.path.isfile(os.path.join(case, "constant", "geometry", "README")))
+        with open(os.path.join(case, self.t.MARKER)) as f:
+            mark = json.load(f)
+        self.assertEqual((mark["template"], mark["size"], mark["state"], mark["step"], mark["cells"]),
+                         ("ahmed-body", "coarse", "done", "done", 480))
+        job = {"kind": "case", "name": "a1", "created": "2000-01-01T00:00:00Z"}
+        self.assertEqual(self.jobs.progress(job, os.path.join(self.d, "work"))["fraction"], 1.0)
+        self.assertIn("a1", self.api.handle("GET", "/api/v1/cases", {})[1]["items"])    # listed, with its mesh
+        self.assertEqual(self.make("ahmed-body", "a1", "coarse")[0], 1)                  # made already
+
+    def test_a_failed_mesh_says_where_and_can_be_made_again(self):
+        self.stand_in()
+        with mock.patch.dict(os.environ, {"MD_TEST_FAIL": "1"}):
+            rc, lines = self.make("ahmed-body", "a2", "medium")
+        self.assertEqual((rc, lines[-1]), (1, "the mesh failed at blockMesh: see log.blockMesh in the case's folder"))
+        with open(os.path.join(self.cases, "a2", self.t.MARKER)) as f:
+            self.assertEqual(json.load(f)["state"], "failed")
+        rc, lines = self.make("ahmed-body", "a2", "medium")
+        self.assertEqual(rc, 1)
+        self.assertIn("replace it", lines[-1])
+        rc, lines = self.make("ahmed-body", "a2", "medium", replace=True)
+        self.assertEqual((rc, lines[0]), (0, "replacing a2, which a template made here before"))
+        with open(os.path.join(self.cases, "a2", "system", "blockMeshDict")) as f:
+            self.assertIn("(130 15 15)", f.read())                                       # medium: the template's own
+
+    def test_without_openfoams_environment_it_says_which_setting(self):
+        self.stand_in()
+        with open(os.environ["MESHDOCTOR_FOAM_BASHRC"], "w") as f:
+            f.write("true\n")
+        with mock.patch.dict(os.environ, {"WM_PROJECT_DIR": ""}):
+            rc, lines = self.make("ahmed-body", "a3", "medium")
+        self.assertEqual(rc, 1)
+        self.assertIn("OpenFOAM's environment didn't load: check the bashrc setting", lines[-1])
+
+    def test_progress_follows_allmesh_and_snappyhexmeshs_phases(self):
+        case = os.path.join(self.cases, "p")
+        os.makedirs(case)
+        w = self.t.Watch(case)
+        seen = [w.step()]
+        for program in ("surfaceFeatures", "blockMesh"):
+            open(os.path.join(case, "log." + program), "w").close()
+            seen.append(w.step())
+        snappy = os.path.join(case, "log.snappyHexMesh")
+        for text in ("Refinement level 3 inside wake\nRefinement phase\n", "Morphing phase\n", "Shrinking and lay",
+                     "er addition phase\nLayer addition iteration 0\n"):
+            with open(snappy, "a") as f:
+                f.write(text)
+            seen.append(w.step())
+        open(os.path.join(case, "log.checkMesh"), "w").close()
+        seen.append(w.step())
+        self.assertEqual(seen, ["geometry", "surfaceFeatures", "blockMesh", "snappyHexMesh: refining",
+                                "snappyHexMesh: snapping", "snappyHexMesh: snapping", "snappyHexMesh: adding layers",
+                                "checkMesh"])
+        status = self.t.Status(case, "ahmed-body", "medium")
+        status.step("snappyHexMesh: snapping")
+        job = {"kind": "case", "name": "p", "created": "2000-01-01T00:00:00Z"}
+        self.assertEqual(self.jobs.progress(job, os.path.join(self.d, "work"))["fraction"], 0.35)
+
+    def test_a_job_error_names_no_folder_of_the_cases_folder(self):
+        log = os.path.join(self.d, "job.log")
+        with open(log, "w") as f:
+            f.write(f"Running snappyHexMesh on {self.cases}/a1/system\n")
+        self.assertEqual(self.jobrun._last_line(log, os.path.join(self.d, "work")),
+                         "Running snappyHexMesh on a1/system")
+
+    def test_the_apps_demo_has_the_templates_as_the_engine_lists_them(self):
+        app = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "app", "src", "demo", "templates.json")
+        with open(app, encoding="utf-8") as f:
+            self.assertEqual(json.load(f), {"items": self.t.listing()},
+                             "remake it: python3 -c \"import sys, json; sys.path.insert(0, 'meshdoctor'); import "
+                             "templates; print(json.dumps({'items': templates.listing()}, indent=2, ensure_ascii=False))\"")
+
+    def test_the_command_lists_the_templates_and_refuses_an_unknown_one(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(self.t.main([]), 0)
+        self.assertIn("ahmed-body: Ahmed body.", out.getvalue())
+        self.assertIn("--size coarse  about 480,000 cells: for a quick look; its drag", out.getvalue())
+        with self.assertRaises(SystemExit) as e:
+            self.t.main(["nope", "x"])
+        self.assertIn("no template nope", str(e.exception.code))
+
+
 class MachineTest(unittest.TestCase):
     """GET /api/v1/machine: what the app's size estimator fills in (ramguard.machine)."""
 

@@ -2,9 +2,10 @@
 // The Solve screen: OpenFOAM cases set up and run on the computer the engine runs on. It opens with Ready to solve?,
 // the engine's self check (GET /check, API 1.4: what `meshdoctor check` prints, as JSON): each check with what it
 // found, and a warning's or a problem's fix with its command to copy, then the largest mesh the free memory takes.
-// What the screen does next (a new case from a template, its solve with live charts) is listed under it until then.
-import { CircleCheck, CircleX, ExternalLink, RefreshCw, TriangleAlert } from "lucide-react";
-import type { ReactNode } from "react";
+// Then New case: a case made from a template (API 1.5, NewCase.tsx). What the screen does next (a case's solve with
+// live charts) is listed under them until then.
+import { CircleCheck, CircleX, ExternalLink, FolderPlus, RefreshCw, TriangleAlert } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
@@ -22,6 +23,7 @@ import { formatCount, formatDateTime } from "@/lib/format";
 import { DOCS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
+import { NewCaseDialog } from "./NewCase";
 import { CHECK_COMMAND, OLD_ENGINE, cellsAtMost, sentence } from "./readiness";
 
 const STATE = {
@@ -204,6 +206,32 @@ function ReadinessCard() {
   );
 }
 
+/** A case to try things on, made from a template: the button that opens the New case dialog. */
+function NewCase() {
+  const [open, setOpen] = useState(false);
+  return (
+    <Card className="mt-6">
+      <CardHeader className="block">
+        <CardTitle>New case</CardTitle>
+        <CardDescription>
+          A ready-made case from a template: the Ahmed body, the standard shape for car aerodynamics, or a wheel and a
+          front wing. The engine copies it into its cases folder and meshes it; it then shows on Cases, where a repair
+          and an A/B test take it.
+        </CardDescription>
+      </CardHeader>
+      <CardFooter className="flex-wrap">
+        <Button size="sm" onClick={() => setOpen(true)}>
+          <FolderPlus aria-hidden /> New case
+        </Button>
+        <span className="text-muted-foreground">
+          In a terminal, <InlineCode text="meshdoctor new" /> lists the templates.
+        </span>
+      </CardFooter>
+      <NewCaseDialog open={open} onOpenChange={setOpen} />
+    </Card>
+  );
+}
+
 /** What this screen does next, until it does. */
 function ComingNext() {
   return (
@@ -211,7 +239,7 @@ function ComingNext() {
       <CardHeader className="block">
         <CardTitle>Coming next on this screen</CardTitle>
         <CardDescription>
-          Until then, the worked example&apos;s scripts set up and solve a case in a terminal:{" "}
+          Until then, a case&apos;s Allrun solves it in a terminal, as the worked example shows:{" "}
           <a href={DOCS.example} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
             the Ahmed body <ExternalLink className="size-3.5" aria-hidden />
           </a>
@@ -219,7 +247,6 @@ function ComingNext() {
       </CardHeader>
       <CardContent>
         <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-          <li>A new case from a template (the Ahmed body, or a wheel and a front wing), meshed in the cases folder.</li>
           <li>Its solve on this computer, with the residuals and forces drawn as it runs, the convergence judge, and Stop and Continue.</li>
           <li>A first run, guided from start to finish: the Ahmed body solved, then a repair and an A/B test of it.</li>
         </ul>
@@ -237,6 +264,7 @@ export function Solve() {
         description="Set up and run OpenFOAM cases on the computer the engine runs on. First, whether it has everything a solve needs."
       />
       <ReadinessCard />
+      <NewCase />
       <ComingNext />
     </>
   );

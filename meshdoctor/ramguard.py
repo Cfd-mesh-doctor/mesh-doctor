@@ -10,6 +10,10 @@ The need is estimated from the cell count, with figures measured on an
   post (transient-plan: foamPostProcess CourantNo, cell centres and volumes, 6 ranks,
         plus reading the fields in Python): ~5 GB at peak   -> 0.5 KB per cell
 
+and for a mesh, from the templates' own (templates.py): snappyHexMesh, serial, 1.5 GB for the
+Ahmed body's 0.84 million cells and 1.7 GB for the wheel and wing's 0.92 million (1.8 KB per
+cell)   -> 2.2 KB per cell, as the app's size estimator (2.1 GB per million cells)
+
 plus 0.5 GB of headroom.  Free memory is MemAvailable from /proc/meminfo,
 capped by the optional `ram_limit_mb` setting (config.py).  On a cluster,
 heavy jobs belong in the scheduler (cluster/slurm), not on the login node.
@@ -18,7 +22,7 @@ import glob, gzip, os, re
 
 import config
 
-KB_PER_CELL = {"repair": 1.5, "solve": 1.35, "post": 0.5}
+KB_PER_CELL = {"repair": 1.5, "solve": 1.35, "post": 0.5, "mesh": 2.2}
 HEADROOM_MB = 512
 
 
@@ -112,7 +116,11 @@ def max_cells(kind, free_mb):
 
 def check(case, kind):
     """(ok, message).  kind: "repair", "solve" or "post".  Unknown sizes are let through."""
-    cells = mesh_cells(case)
+    return check_cells(mesh_cells(case), kind)
+
+
+def check_cells(cells, kind):
+    """check() for a mesh of this many cells, as one a job is about to make ("mesh")."""
     free = available_mb()
     if not cells or free is None:
         return True, "RAM guard: mesh size or free memory unknown; not checked"

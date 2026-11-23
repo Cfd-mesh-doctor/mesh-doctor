@@ -93,7 +93,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Source cases this worker may read (only ever read, never changed), with their sizes */
+        /** Source cases this worker may read (never changed: a new case from a template goes in a new folder), with their sizes */
         get: operations["cases"];
         put?: never;
         post?: never;
@@ -130,7 +130,7 @@ export interface paths {
         /** Jobs on this worker, newest first, with their progress */
         get: operations["list_jobs"];
         put?: never;
-        /** Start a repair, A/B test or A/B extension.  Needs the launch token (X-MD-Token) or the pairing key (X-MD-Key). */
+        /** Start a repair, A/B test, A/B extension or new case.  Needs the launch token (X-MD-Token) or the pairing key (X-MD-Key). */
         post: operations["start_job"];
         delete?: never;
         options?: never;
@@ -410,6 +410,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cases the engine can make (a `case` job): the templates in examples/, each with its mesh sizes and about how many cells each one makes (API 1.5) */
+        get: operations["list_templates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/variants": {
         parameters: {
             query?: never;
@@ -538,7 +555,7 @@ export interface components {
             /** @description local start time (yyyymmdd-hhmmss), kind, run name and a random suffix */
             id: string;
             /** @enum {unknown} */
-            kind: "repair" | "abtest" | "abextend";
+            kind: "repair" | "abtest" | "abextend" | "case";
             /** @description added by the API: where to follow the job and its run */
             links?: Record<string, unknown>;
             log: string;
@@ -1395,6 +1412,26 @@ export interface operations {
                         /** @description continue to this iteration, past the one the second run is at now (the A/B test's iterations, or where an earlier extension ended) */
                         to: number;
                     };
+                } | {
+                    /** @enum {unknown} */
+                    kind: "case";
+                    params: {
+                        /** @description the new case's folder in the cases folder: a name not taken there */
+                        name: string;
+                        /**
+                         * @description make again a case of the same name that an earlier case job made (deleted first, with everything in it); a case Mesh Doctor didn't make is never replaced
+                         * @default false
+                         */
+                        replace?: boolean;
+                        /**
+                         * @description one of the template's mesh sizes
+                         * @default medium
+                         * @enum {unknown}
+                         */
+                        size?: "coarse" | "medium" | "fine";
+                        /** @description a template (GET /templates) */
+                        template: string;
+                    };
                 };
             };
         };
@@ -2042,6 +2079,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": Record<string, unknown>;
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_templates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: {
+                            /** @description what the case is, in a sentence or two */
+                            about: string;
+                            label: string;
+                            /** @description the template's folder in examples/, as a case job names it */
+                            name: string;
+                            /**
+                             * @description the size a case job makes when it names none
+                             * @enum {unknown}
+                             */
+                            size: "coarse" | "medium" | "fine";
+                            sizes: {
+                                /** @description what the size is for */
+                                about: string;
+                                /** @description about how many cells the mesh has, as OpenFOAM 14 made it here */
+                                cells: number;
+                                label: string;
+                                /** @enum {unknown} */
+                                name: "coarse" | "medium" | "fine";
+                            }[];
+                        }[];
+                    };
                 };
             };
             /** @description Error (the code says which; see STATUS in api_v1.py) */

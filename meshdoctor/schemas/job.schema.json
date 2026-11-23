@@ -30,7 +30,8 @@
    "enum": [
     "repair",
     "abtest",
-    "abextend"
+    "abextend",
+    "case"
    ]
   },
   "params": {

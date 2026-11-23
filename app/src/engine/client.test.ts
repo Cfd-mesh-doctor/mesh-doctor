@@ -114,6 +114,8 @@ describe("httpTransport", () => {
       + "finish, or cancel it on the Jobs page.");
     expect(explain(new EngineError("busy", job.replace("(repair", "(abtest").replace("is running", "is queued"), 409)).hint)
       .toMatch(/^The A\/B test wing-fix is waiting to start\. Wait/);
+    expect(explain(new EngineError("busy", job.replace("(repair wing-fix)", "(case ahmed-coarse)"), 409)).hint)
+      .toMatch(/^The new case ahmed-coarse is running\. Wait/);
     expect(explain(new EngineError("busy", "another OpenFOAM job is running; one big job at a time (RAM)", 409)).hint)
       .toBe("Wait for it to finish, or cancel it on the Jobs page.");
   });

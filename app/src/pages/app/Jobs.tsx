@@ -2,7 +2,7 @@
 // Every job on the engine: live progress while running, details, cancelling (after a confirmation), the report of a
 // finished repair's run, and an A/B job's test page. The filter lives in the address (?show=failed), so a reload or a
 // link keeps it.
-import { FileText, FlaskConical, ListChecks, OctagonX } from "lucide-react";
+import { FileText, FlaskConical, FolderOpen, ListChecks, OctagonX } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { DashboardLink } from "@/components/shared/DashboardLink";
@@ -23,6 +23,7 @@ import { JOB_KIND_LABEL, isActive, type Job, type JobState } from "@/engine/type
 import { elapsed, formatDateTime, formatDuration, formatPercent, formatRelative } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
 import { settingsOf, stepText } from "@/report/abtest";
+import { caseStep } from "./caseStart";
 
 const FILTERS = ["all", "active", "done", "failed", "cancelled"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -36,10 +37,12 @@ const isAbJob = (job: Job) => job.kind === "abtest" || job.kind === "abextend";
 
 /** Where a job's run shows, or null while it has nothing to show. A job is named after its run. An A/B job's is its
  * test's page, running or not: it follows a running test, and says how a stopped one ended. A repair's is its run's
- * report, once the repair is done (GET /repairs/{name}/report). */
+ * report, once the repair is done (GET /repairs/{name}/report). A new case's is the case on Cases, once it has its
+ * mesh. */
 function runPath(job: Job): string | null {
   if (isAbJob(job)) return `/abtests/${encodeURIComponent(job.name)}`;
-  return job.state === "done" ? `/repairs/${encodeURIComponent(job.name)}/report` : null;
+  if (job.state !== "done") return null;
+  return job.kind === "case" ? `/cases?q=${encodeURIComponent(job.name)}` : `/repairs/${encodeURIComponent(job.name)}/report`;
 }
 
 /** The table's link to where a job's run shows, named like the Overview's report links and the A/B tests list's
@@ -49,7 +52,9 @@ function RunLink({ job }: { job: Job }) {
   const to = useAppPath();
   const path = runPath(job);
   if (!path) return null;
-  const [text, label] = !isAbJob(job)
+  const [text, label] = job.kind === "case"
+    ? ["Case", `The case ${job.name} on Cases`]
+    : !isAbJob(job)
     ? ["Report", `Report of ${job.name}`]
     : isActive(job.state)
       ? ["Follow", `Follow the A/B test of ${job.name}`]
@@ -72,7 +77,8 @@ function ProgressCell({ job, jobs }: { job: Job; jobs?: readonly Job[] }) {
     // An A/B job's step reads as on its test's page ("Solving on the repaired mesh", not "solving fixed"). A long step
     // takes a second line: on one, it widened the column and took the room a job's name needs for its line.
     const settings = isAbJob(job) ? settingsOf(job.name, { jobs: jobs ?? [job] }) : null;
-    const step = isAbJob(job) ? stepText(job.progress?.step, settings) : job.progress?.step;
+    const step = isAbJob(job) ? stepText(job.progress?.step, settings)
+      : job.kind === "case" ? caseStep(job.progress?.step) : job.progress?.step;
     return (
       <div className="min-w-40">
         <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
@@ -236,7 +242,10 @@ function DetailsDialog({ job, jobs, onClose, onCancel, nameOf }: {
               <Button ref={close} variant="secondary" onClick={onClose}>Close</Button>
               {run && (
                 <Button asChild>
-                  <Link to={to(run)}>{isAbJob(job) ? <><FlaskConical /> Open A/B test</> : <><FileText /> Open report</>}</Link>
+                  <Link to={to(run)}>
+                    {isAbJob(job) ? <><FlaskConical /> Open A/B test</>
+                      : job.kind === "case" ? <><FolderOpen /> Open on Cases</> : <><FileText /> Open report</>}
+                  </Link>
                 </Button>
               )}
             </DialogActions>

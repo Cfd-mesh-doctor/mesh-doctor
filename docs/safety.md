@@ -7,7 +7,8 @@ Mesh Doctor is built so that it cannot damage a case you care about, and so that
 - **Every job works on a copy** in the workspace (`<workspace>/<name>`). The source case is opened read-only.
 - **The utility refuses to touch an original.** `foamMeshDoctor -fix` exits unless the case holds a `.meshDoctorCopy` marker, which only Mesh Doctor's own copy step writes.
 - **Proof afterwards.** Before each job, Mesh Doctor takes a SHA-256 fingerprint of the source case's mesh and settings, and checks it again at the end. The result is in `result.json` (`sourceCheck`) and `ab_result.json`. If the source ever changed, the dashboard says so and the command exits with code **3**.
-- **Plain names only.** Run names must be letters, digits, `_`, `.` and `-` (at most 80 characters, not starting with `.`), so no name can reach outside the workspace. Mesh Doctor only deletes and re-makes folders inside the workspace.
+- **Plain names only.** Run and case names must be letters, digits, `_`, `.` and `-` (at most 80 characters, not starting with `.`), so no name can reach outside the workspace or the cases folder. Mesh Doctor only deletes and re-makes folders inside the workspace, and the cases it made from a template (below).
+- **A new case goes in a new folder.** A case made from a template (`meshdoctor new`, or New case on the app's Solve screen) is copied into the cases folder under a name that isn't taken there, with a `.meshdoctor-case.json` marker. Only a case with that marker is ever replaced, and only when you ask (`--replace`), as after a mesh that failed. A case you made is never changed.
 - **Keep the workspace outside your cases.** By default it is `<cases>/meshdoctor`, a separate folder.
 
 ## The mesh can only get better

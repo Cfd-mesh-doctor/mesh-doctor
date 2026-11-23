@@ -410,7 +410,8 @@
             "enum": [
               "repair",
               "abtest",
-              "abextend"
+              "abextend",
+              "case"
             ]
           },
           "params": {
@@ -1669,7 +1670,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.4"
+    "version": "1.5"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -2473,7 +2474,7 @@
             "description": "Error (the code says which; see STATUS in api_v1.py)"
           }
         },
-        "summary": "Source cases this worker may read (only ever read, never changed), with their sizes"
+        "summary": "Source cases this worker may read (never changed: a new case from a template goes in a new folder), with their sizes"
       }
     },
     "/check": {
@@ -2841,6 +2842,56 @@
                       "params"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "description": "make a new case from a template: copy it into the cases folder under a new name and mesh it",
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "case"
+                        ]
+                      },
+                      "params": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "description": "the new case's folder in the cases folder: a name not taken there",
+                            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+                            "type": "string"
+                          },
+                          "replace": {
+                            "default": false,
+                            "description": "make again a case of the same name that an earlier case job made (deleted first, with everything in it); a case Mesh Doctor didn't make is never replaced",
+                            "type": "boolean"
+                          },
+                          "size": {
+                            "default": "medium",
+                            "description": "one of the template's mesh sizes",
+                            "enum": [
+                              "coarse",
+                              "medium",
+                              "fine"
+                            ]
+                          },
+                          "template": {
+                            "description": "a template (GET /templates)",
+                            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "template",
+                          "name"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "params"
+                    ],
+                    "type": "object"
                   }
                 ]
               }
@@ -2878,7 +2929,7 @@
             "pairingKey": []
           }
         ],
-        "summary": "Start a repair, A/B test or A/B extension.  Needs the launch token (X-MD-Token) or the pairing key (X-MD-Key)."
+        "summary": "Start a repair, A/B test, A/B extension or new case.  Needs the launch token (X-MD-Token) or the pairing key (X-MD-Key)."
       }
     },
     "/jobs/{job}": {
@@ -3980,6 +4031,106 @@
           }
         },
         "summary": "JSON Schema of a versioned result document (repair, abtest, judge, map)"
+      }
+    },
+    "/templates": {
+      "get": {
+        "operationId": "list_templates",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "about": {
+                            "description": "what the case is, in a sentence or two",
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "description": "the template's folder in examples/, as a case job names it",
+                            "type": "string"
+                          },
+                          "size": {
+                            "description": "the size a case job makes when it names none",
+                            "enum": [
+                              "coarse",
+                              "medium",
+                              "fine"
+                            ]
+                          },
+                          "sizes": {
+                            "items": {
+                              "properties": {
+                                "about": {
+                                  "description": "what the size is for",
+                                  "type": "string"
+                                },
+                                "cells": {
+                                  "description": "about how many cells the mesh has, as OpenFOAM 14 made it here",
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "enum": [
+                                    "coarse",
+                                    "medium",
+                                    "fine"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "label",
+                                "cells",
+                                "about"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "label",
+                          "about",
+                          "size",
+                          "sizes"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "Cases the engine can make (a `case` job): the templates in examples/, each with its mesh sizes and about how many cells each one makes (API 1.5)"
       }
     },
     "/variants": {

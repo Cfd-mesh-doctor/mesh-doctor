@@ -3,13 +3,16 @@
 // "_about"), served without any engine. It can cancel its own jobs; it cannot start anything.
 import type { Method, Transport } from "@/engine/client";
 import { EngineError } from "@/engine/errors";
-import type { AbtestDetail, CaseList, Job, JobList, MachineInfo, Readiness, RepairList, VariantList } from "@/engine/types";
+import type {
+  AbtestDetail, CaseList, Job, JobList, MachineInfo, Readiness, RepairList, TemplateList, VariantList,
+} from "@/engine/types";
 import { caseName } from "@/engine/verdict";
 import { toMillis } from "@/lib/format";
 import { RECORDED } from "@/report/samples";
 import { DEMO_JUDGE_NOTE, DEMO_LIVE_NOTE, RECORDED_ABTESTS, briefOf, demoAbtest, recordedJudge } from "./abtests";
 import { DEMO_CLUSTERS_NOTE, recordedCluster } from "./clusters";
 import recorded from "./fixtures.json";
+import templates from "./templates.json";
 
 type Answers = Record<string, unknown>;
 
@@ -37,6 +40,10 @@ export const DEMO_READINESS: Omit<Readiness, "checked"> = {
   ],
   memory: { availableMb: 21_300, limitMb: null, cells: { repair: 14_191_274, solve: 15_768_082 } },
 };
+
+/** The cases the demo engine can make (GET /templates, API 1.5), which the recording's engine predates: the engine's
+ *  own list, which the engine's tests keep equal to it (tests/test_units.py, TemplatesTest). */
+export const DEMO_TEMPLATES = templates as TemplateList;
 
 /** The solver-setting presets for an A/B test's second run (GET /variants), which the recording's engine predates:
  *  Mesh Doctor's own, as it names them. */
@@ -244,6 +251,7 @@ export function demoTransport(answers: Answers = DEMO_ANSWERS, delayMs = DELAY_M
         return doc as T;
       }
       if (route === "/check") return { ...structuredClone(DEMO_READINESS), checked: new Date().toISOString() } as T;
+      if (route === "/templates") return structuredClone(DEMO_TEMPLATES) as T;
       if (route === "/abtests") {
         const tests = await abtests();
         const items = [...tests.keys()].sort();
