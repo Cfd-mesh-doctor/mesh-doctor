@@ -63,7 +63,7 @@ test("on a phone your own app before its first case doesn't scroll sideways: the
 });
 
 test("on a phone your own app's top bar fits down to 320 px, whatever the engine says", async ({ page }) => {
-  test.slow(); // five states at five widths, and the engine that isn't running is asked three times
+  test.slow(); // six states at five widths, and the engine that isn't running is asked three times
   const engine = await mockEngine(page, { noJobs: true });
   await page.goto(pairingLink());
   await page.getByRole("button", { name: "Connect", exact: true }).click();
@@ -76,6 +76,14 @@ test("on a phone your own app's top bar fits down to 320 px, whatever the engine
     ["Engine offline", "Offline", () => { engine.down = true; }],
     ["Pair again", "Pair again", () => { engine.down = false; engine.wrongKey = true; }],
     ["Version mismatch", "Mismatch", () => { engine.wrongKey = false; engine.apiVersion = "2.0"; }],
+    // Something else answers at the engine's address (its preflight goes on to the pretend engine).
+    ["Engine error", "Error", () => {
+      engine.apiVersion = "1.0";
+      return page.route(`${ENGINE}/api/v1/`, (r) => r.request().method() === "OPTIONS" ? r.fallback() : r.fulfill({
+        status: 200, headers: { "Access-Control-Allow-Origin": "http://localhost:4173", "Content-Type": "text/html" },
+        body: "<html>another program</html>",
+      }));
+    }],
     // The engine's first answer has yet to come.
     ["Connecting…", "Waiting…", () => page.route(`${ENGINE}/api/v1/`, () => {})],
   ];

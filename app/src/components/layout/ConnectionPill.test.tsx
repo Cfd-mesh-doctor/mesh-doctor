@@ -30,6 +30,11 @@ describe("the engine's state in the top bar", () => {
     ["not running", async () => { throw new EngineError("unreachable", "Nothing answered"); }, "Engine offline", "Offline"],
     ["speaking another API", async () => ({ apiVersion: "2.0", version: "0.9.0" }), "Version mismatch", "Mismatch"],
     ["yet to answer", () => new Promise<never>(() => {}), "Connecting…", "Waiting…"],
+    // Offline only when nothing answered: the panel under it says the engine is slow, or something answered.
+    ["slow to answer", async () => { throw new EngineError("timeout", "No answer in 15 s"); }, "Slow to answer", "Slow"],
+    ["answered by something else", async () => { throw new EngineError("bad-response", "HTTP 200 without the engine's JSON", 200); },
+      "Engine error", "Error"],
+    ["in trouble", async () => { throw new EngineError("internal", "internal error", 500); }, "Engine error", "Error"],
   ])("for an engine %s says it in a short word on a phone under 400 px", async (_, info, label, short) => {
     showOwn(info);
     await waitFor(() => expect(pill()).toHaveTextContent(label));
