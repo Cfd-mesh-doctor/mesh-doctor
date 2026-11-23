@@ -13,6 +13,7 @@ import { Link, useNavigate, useSearchParams } from "react-router";
 import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { PageHeader, StatTile } from "@/components/shared/page";
+import { withVariant } from "@/components/shared/withVariant";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -339,7 +340,7 @@ export function ReportView({ summary: s, from, action, abNext, clusterSource }: 
 
       {s.judge && (
         <Section title={`Is ${abWords(s.ab?.settings).secondRun} converged?`}>
-          <JudgeCard judge={s.judge} title={`Is ${abWords(s.ab?.settings).secondRun} converged?`} />
+          <JudgeCard judge={s.judge} title={withVariant(`Is ${abWords(s.ab?.settings).secondRun} converged?`, s.ab?.settings)} />
         </Section>
       )}
 

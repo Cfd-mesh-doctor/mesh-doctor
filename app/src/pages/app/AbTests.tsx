@@ -11,6 +11,7 @@ import { Link } from "react-router";
 import { AbStateBadge } from "@/components/shared/badges";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { EmptyState, PageHeader, TableSkeleton } from "@/components/shared/page";
+import { withVariant } from "@/components/shared/withVariant";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
@@ -134,7 +135,7 @@ export function AbTests() {
                     <TD>
                       <Link to={to(path)} className="font-medium wrap-anywhere underline-offset-4 hover:underline">{r.name}</Link>
                       <div className="text-xs text-muted-foreground wrap-anywhere">
-                        {[r.caseName, doing ?? (r.settings && `${r.settings} settings`)].filter(Boolean).join(" · ") || "–"}
+                        {withVariant([r.caseName, doing ?? (r.settings && `${r.settings} settings`)].filter(Boolean).join(" · ") || "–", r.settings)}
                         {r.outcome && (
                           <span className="sm:hidden"> · <span className={changeText(r.outcome.change)}>{r.outcome.ratio.toFixed(2)}×</span></span>
                         )}

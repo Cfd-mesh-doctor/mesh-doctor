@@ -10,6 +10,7 @@ import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { JobStateBadge } from "@/components/shared/badges";
 import { NoJobsYet } from "@/components/shared/NoJobsYet";
 import { EmptyState, Field, PageHeader, TableSkeleton } from "@/components/shared/page";
+import { withVariant } from "@/components/shared/withVariant";
 import { Dot } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -70,11 +71,14 @@ function ProgressCell({ job, jobs }: { job: Job; jobs?: readonly Job[] }) {
     const f = job.progress?.fraction;
     // An A/B job's step reads as on its test's page ("Solving on the repaired mesh", not "solving fixed"). A long step
     // takes a second line: on one, it widened the column and took the room a job's name needs for its line.
-    const step = isAbJob(job) ? stepText(job.progress?.step, settingsOf(job.name, { jobs: jobs ?? [job] })) : job.progress?.step;
+    const settings = isAbJob(job) ? settingsOf(job.name, { jobs: jobs ?? [job] }) : null;
+    const step = isAbJob(job) ? stepText(job.progress?.step, settings) : job.progress?.step;
     return (
       <div className="min-w-40">
         <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
-          <span className="line-clamp-2 text-muted-foreground">{step || (job.state === "queued" ? "Waiting to start" : "Starting")}</span>
+          <span className="line-clamp-2 text-muted-foreground">
+            {step ? withVariant(step, settings) : job.state === "queued" ? "Waiting to start" : "Starting"}
+          </span>
           <span className="shrink-0 font-medium whitespace-nowrap tabular-nums">{f == null ? "" : formatPercent(f)}</span>
         </div>
         <Progress value={f} label={`${job.name} progress`} />

@@ -9,6 +9,7 @@ import { useId, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
+import { withVariant } from "@/components/shared/withVariant";
 import { Button } from "@/components/ui/button";
 import { DialogActions, DialogClose, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/misc";
@@ -330,7 +331,7 @@ function ExtendAbTestForm({ test, onDone }: { test: ExtendTarget; onDone: () => 
   const busy = jobs.data?.items.find((j) => isActive(j.state));
   const demo = mode === "demo";
   const ready = !demo && !atEnd && !problem && !busy && !start.isPending;
-  const which = test.variant ? `the original mesh with ${test.variant} settings` : "the repaired mesh";
+  const which = withVariant(test.variant ? `the original mesh with ${test.variant} settings` : "the repaired mesh", test.variant);
 
   const submit = () => {
     if (!ready || target == null) return;

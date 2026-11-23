@@ -7,11 +7,12 @@
 // /abtests/{name}/judge) once it has ended. Run longer continues the second run of a test that has ended
 // (StartAbTest.tsx); a test just started shows as waiting until its job makes its folder.
 import { ArrowLeft, FastForward, FileText, ListChecks } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import { AbStateBadge } from "@/components/shared/badges";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { PageHeader } from "@/components/shared/page";
+import { withVariant } from "@/components/shared/withVariant";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/misc";
@@ -115,7 +116,7 @@ function StatusCard({ state, detail, job, live, liveError, settings }: {
     <Card>
       <CardHeader className="flex-wrap">
         <div>
-          <CardTitle>{title(state, running, step, o, settings)}</CardTitle>
+          <CardTitle>{withVariant(title(state, running, step, o, settings), settings)}</CardTitle>
           <CardDescription>
             {detail.result?.finished && (state === "done" || state === "changed")
               ? `Both runs ended ${formatRelative(detail.result.finished)} (${formatDateTime(detail.result.finished)})`
@@ -133,7 +134,7 @@ function StatusCard({ state, detail, job, live, liveError, settings }: {
             </p>
           </div>
         )}
-        {(state === "done" || state === "changed") && <p className="text-[15px] leading-relaxed">{outcomeSentence(o, fields, settings)}</p>}
+        {(state === "done" || state === "changed") && <p className="text-[15px] leading-relaxed">{withVariant(outcomeSentence(o, fields, settings), settings)}</p>}
         {state === "changed" && (
           <p className="text-warning">
             The source case changed while the test ran, so the two runs may not have solved the same case. Run the test
@@ -148,7 +149,7 @@ function StatusCard({ state, detail, job, live, liveError, settings }: {
         {state === "cancelled" && <p className="text-muted-foreground">Stopped by request. See {jobLink}.</p>}
         {state === "unfinished" && !running && (
           <p className="text-muted-foreground">
-            {solver ? `${capital(abWords(settings).secondRun)}: ${solver}. ` : ""}
+            {solver ? withVariant(`${capital(abWords(settings).secondRun)}: ${solver}. `, settings) : ""}
             No job in this app is making it: it may be running in a terminal, or have stopped there. This screen asks the
             engine again every 15 s.
           </p>
@@ -161,7 +162,7 @@ function StatusCard({ state, detail, job, live, liveError, settings }: {
   );
 }
 
-function ModesCard({ modes, secondRun }: { modes: AbtestDetail["modes"]; secondRun: string }) {
+function ModesCard({ modes, secondRun }: { modes: AbtestDetail["modes"]; secondRun: ReactNode }) {
   return (
     <Card>
       <CardHeader>
@@ -349,7 +350,7 @@ export function AbTest() {
 
   return (
     <>
-      <PageHeader title={name} description={[kind, ...sub].join(" · ")} actions={actions} />
+      <PageHeader title={name} description={withVariant([kind, ...sub].join(" · "), second)} actions={actions} />
       {first.isError && (
         <ErrorPanel className="mb-4" compact error={first.error} onRetry={() => void first.refetch()} retrying={first.isFetching} />
       )}
@@ -374,7 +375,7 @@ export function AbTest() {
       {shownJudges.length > 0 && (
         <Section title="Are the runs converged?">
           <div className="mt-4 grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
-            {shownJudges.map((j) => j.judge && <JudgeCard key={j.key} judge={j.judge} title={j.title} className="" />)}
+            {shownJudges.map((j) => j.judge && <JudgeCard key={j.key} judge={j.judge} title={withVariant(j.title, settings)} className="" />)}
           </div>
         </Section>
       )}
@@ -384,7 +385,7 @@ export function AbTest() {
 
       {detail.modes.length > 0 && (
         <Section title="Where the solution swings">
-          <div className="mt-4"><ModesCard modes={detail.modes} secondRun={words.secondRun} /></div>
+          <div className="mt-4"><ModesCard modes={detail.modes} secondRun={withVariant(words.secondRun, settings)} /></div>
         </Section>
       )}
     </>

@@ -166,7 +166,9 @@ describe("the Jobs screen", () => {
         params: { name: "wing-fix", iters: 200, init: "auto", variant: "lts" }, progress: null },
     );
     renderScreen(<Jobs />, { path, at: path, transport: demoTransport(answers, 0) });
-    expect(await screen.findAllByText("Continuing the run with lts settings from iteration 200 to 400")).not.toHaveLength(0);
+    const step = "Continuing the run with lts settings from iteration 200 to 400";
+    expect(await screen.findAllByText((_, el) => el?.textContent === step && ![...el.children].some((c) => c.textContent === step)))
+      .not.toHaveLength(0);
     expect(screen.getAllByText("Solving on the repaired mesh")).not.toHaveLength(0); // the demo's own test is of a repair
   });
 

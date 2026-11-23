@@ -4,6 +4,7 @@
 // judge's verdict on a run. A test of solver settings names its runs by their settings, both on the original mesh.
 import { useMemo, useState, type ReactNode } from "react";
 import { LineChart, type LineSeries } from "@/components/charts/LineChart";
+import { withVariant } from "@/components/shared/withVariant";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Segmented } from "@/components/ui/misc";
@@ -50,7 +51,7 @@ export function AbCard({ ab }: { ab: AbSummary }) {
         <div>
           <CardTitle>Did it help the solver?</CardTitle>
           <CardDescription>
-            {[...ab.meta, ab.finished && `finished ${formatDateTime(ab.finished)}`].filter(Boolean).join(" · ")}
+            {withVariant([...ab.meta, ab.finished && `finished ${formatDateTime(ab.finished)}`].filter(Boolean).join(" · "), v ?? ab.variant)}
           </CardDescription>
         </div>
       </CardHeader>
@@ -62,7 +63,7 @@ export function AbCard({ ab }: { ab: AbSummary }) {
             <TR className="hover:bg-transparent">
               <TH className={CELL}>Field</TH>
               {/* A head may take two lines, so the table needs less room on a phone. */}
-              {heads.map((h) => <TH key={h} className={cn(CELL, "text-right whitespace-normal")}>{h}</TH>)}
+              {heads.map((h) => <TH key={h} className={cn(CELL, "text-right whitespace-normal")}>{withVariant(h, v)}</TH>)}
             </TR>
           </THead>
           <TBody>
@@ -81,9 +82,10 @@ export function AbCard({ ab }: { ab: AbSummary }) {
       )}
       <p className="border-t border-border px-5 py-3 text-xs text-muted-foreground">
         Mean initial residual over {ab.window ? `the last ${formatInt(ab.window)} iterations` : "the end of each run"},{" "}
-        {same}. {v ? `Below 1× the ${v} settings converge further.` : "Below 1× the repaired mesh converges further."}
+        {withVariant(same, v ?? ab.variant)}.{" "}
+        {withVariant(v ? `Below 1× the ${v} settings converge further.` : "Below 1× the repaired mesh converges further.", v)}
         {spi && (v
-          ? ` Time per iteration: ${spi.original.toFixed(2)} s with the case's settings, ${spi.repaired.toFixed(2)} s with ${v}.`
+          ? withVariant(` Time per iteration: ${spi.original.toFixed(2)} s with the case's settings, ${spi.repaired.toFixed(2)} s with ${v}.`, v)
           : ` Time per iteration: ${spi.original.toFixed(2)} s original, ${spi.repaired.toFixed(2)} s repaired.`)}
       </p>
     </Card>
@@ -125,7 +127,7 @@ export function ResidualCard({ history, settings, className = "mt-4" }: {
     <Card className={className}>
       <CardHeader className="flex-wrap">
         <div>
-          <CardTitle>{w.vs}</CardTitle>
+          <CardTitle>{withVariant(w.vs, settings)}</CardTitle>
           <CardDescription>Initial residual per iteration, log scale: lower and still falling is better.</CardDescription>
         </div>
         {fields.length > 1 && (
@@ -135,8 +137,8 @@ export function ResidualCard({ history, settings, className = "mt-4" }: {
       </CardHeader>
       <CardContent>
         <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          {original && <LegendLine dashed className="stroke-foreground">{w.first}</LegendLine>}
-          {repaired && <LegendLine className="stroke-primary">{w.second}</LegendLine>}
+          {original && <LegendLine dashed className="stroke-foreground">{withVariant(w.first, settings)}</LegendLine>}
+          {repaired && <LegendLine className="stroke-primary">{withVariant(w.second, settings)}</LegendLine>}
         </div>
         <LineChart series={series} log xLabel="iteration" empty="No residuals for this field"
           label={`Initial residual of ${field} per iteration ${w.both}, log scale`} />
@@ -148,7 +150,7 @@ export function ResidualCard({ history, settings, className = "mt-4" }: {
 /** The judge's verdict on one run, its averaged forces and its notes. `title` names the run it judged. */
 export function JudgeCard({ judge, title = "Is the repaired-mesh run converged?", className = "mt-4" }: {
   judge: JudgeSummary;
-  title?: string;
+  title?: ReactNode;
   className?: string;
 }) {
   const over = judge.window == null ? null : `${formatInt(judge.window)} ${judge.transient ? "time steps" : "iterations"}`;

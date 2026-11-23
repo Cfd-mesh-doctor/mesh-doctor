@@ -26,6 +26,10 @@ function engine(abtests: unknown, jobs: unknown[] = []): Transport {
   };
 }
 
+/** The innermost element whose words are `text`, across the elements in it (a variant's name is in one of its own). */
+const whole = (text: string) => (_: string, el: Element | null) =>
+  !!el && el.textContent === text && ![...el.children].some((c) => c.textContent === text);
+
 /** A finished A/B test of solver settings on case wing: the original mesh with the case's settings, then with lts'. */
 const settingsTest = (over: Record<string, unknown> = {}) => ({
   status: { step: "done", time: "2026-11-23 12:00:00" },
@@ -84,7 +88,10 @@ describe("the A/B tests list", () => {
   it("lists a test of solver settings by its case and settings, under the second run's ratio", async () => {
     renderScreen(<AbTests />, { path: "/app/abtests", transport: settingsEngine(settingsTest()) });
     const row = (await screen.findByRole("link", { name: "wing_lts" })).closest("tr")!;
-    expect(await within(row).findByText("wing · lts settings")).toBeInTheDocument();
+    // (The row's line goes on with the ratio on a phone.)
+    expect(await within(row).findByText((_, el) => el?.tagName === "DIV" && (el.textContent ?? "").startsWith("wing · lts settings")))
+      .toBeInTheDocument();
+    expect(within(row).getByText("lts", { selector: "code" })).toBeInTheDocument(); // in the mono font: not "Its"
     expect(screen.getByRole("columnheader", { name: "Second run ÷ first" })).toBeInTheDocument();
     expect(within(row).getByText("helped")).toBeInTheDocument();
   });
@@ -129,17 +136,22 @@ describe("one A/B test", () => {
 
   it("words a test of solver settings as the case's settings against the variant's, on the original mesh", async () => {
     renderScreen(<AbTest />, { path: "/app/abtests/:name", at: "/app/abtests/wing_lts", transport: settingsEngine(settingsTest()) });
-    expect(await screen.findByText("The lts settings helped the solver")).toBeInTheDocument();
-    expect(screen.getByText("With lts settings the residuals end at 0.50× those with the case's settings, so the lts settings helped the solver."))
+    const status = await screen.findByText(whole("The lts settings helped the solver"));
+    expect(status.querySelector("code")).toHaveTextContent(/^lts$/); // in the mono font: not "Its"
+    expect(screen.getByText(whole("With lts settings the residuals end at 0.50× those with the case's settings, so the lts settings helped the solver.")))
       .toBeInTheDocument();
-    expect(screen.getByText("A/B test of solver settings · case wing · 200 iterations a run · second run with lts settings")).toBeInTheDocument();
+    expect(screen.getByText(whole("A/B test of solver settings · case wing · 200 iterations a run · second run with lts settings"))).toBeInTheDocument();
     expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Field", "Case's settings", "lts settings", "lts ÷ case's"]);
-    expect(screen.getByText(/the same case, mesh and start for both settings\. Below 1× the lts settings converge further\. Time per iteration: 0\.50 s with the case's settings, 0\.60 s with lts\./))
+    // The variant is in the mono font wherever the page writes it: in the app's font, lts reads as "Its".
+    const card = screen.getByRole("heading", { name: "Did it help the solver?" }).parentElement!;
+    expect(within(card).getByText("lts", { selector: "code" })).toBeInTheDocument(); // its description
+    expect(screen.getAllByRole("columnheader").filter((h) => h.querySelector("code")?.textContent === "lts")).toHaveLength(2);
+    expect(screen.getByText((_, el) => el?.tagName === "P" && /the same case, mesh and start for both settings\. Below 1× the lts settings converge further\. Time per iteration: 0\.50 s with the case's settings, 0\.60 s with lts\./.test(el.textContent ?? "")))
       .toBeInTheDocument();
-    expect(screen.getAllByText("Residuals, the case's settings vs lts").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(whole("Residuals, the case's settings vs lts")).length).toBeGreaterThan(0);
     expect(screen.getByRole("img", { name: "Initial residual of p per iteration with the case's settings and with lts, log scale" })).toBeInTheDocument();
     expect(await screen.findByText("Is the run with the case's settings converged?")).toBeInTheDocument();
-    expect(await screen.findByText("Is the run with lts settings converged?")).toBeInTheDocument();
+    expect(await screen.findByText(whole("Is the run with lts settings converged?"))).toBeInTheDocument();
     expect(screen.queryByText(/repaired/i)).not.toBeInTheDocument();
   });
 
@@ -151,8 +163,8 @@ describe("one A/B test", () => {
     const detail = settingsTest({ status: { step: "solving base", time: "2026-11-23 11:00:00" }, result: null });
     renderScreen(<AbTest />, { path: "/app/abtests/:name", at: "/app/abtests/wing_lts", transport: settingsEngine(detail, [job]) });
     expect(await screen.findByText("Solving with the case's settings")).toBeInTheDocument();
-    expect(screen.getByText("A/B test of solver settings · second run with lts settings")).toBeInTheDocument();
-    expect(screen.getAllByText("Residuals, the case's settings vs lts").length).toBeGreaterThan(0);
+    expect(screen.getByText(whole("A/B test of solver settings · second run with lts settings"))).toBeInTheDocument();
+    expect(screen.getAllByText(whole("Residuals, the case's settings vs lts")).length).toBeGreaterThan(0);
   });
 
   it("says when the engine has no test of that name", async () => {
