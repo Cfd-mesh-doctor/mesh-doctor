@@ -352,11 +352,18 @@ export function Overview() {
         </Card>
 
         <Card className="xl:col-span-2">
-          <CardHeader>
-            <div>
+          {/* Like Recent jobs: the screen with every run is a link beside the title. */}
+          <CardHeader className="block">
+            <CardTitleRow>
               <CardTitle>Repair runs</CardTitle>
-              <CardDescription>Newest first. The verdict compares checkMesh before and after</CardDescription>
-            </div>
+              <Link
+                to={to("/repairs")}
+                className="inline-flex shrink-0 items-center gap-1 text-[13px] font-medium whitespace-nowrap text-primary hover:underline"
+              >
+                All repairs <ArrowRight className="size-3.5" />
+              </Link>
+            </CardTitleRow>
+            <CardDescription>Newest first. The verdict compares checkMesh before and after</CardDescription>
           </CardHeader>
           {repairs.isPending ? (
             <TableSkeleton rows={4} cols={2} />
@@ -406,10 +413,11 @@ export function Overview() {
               ))}
             </ul>
           )}
-          {/* The list keeps to the newest: it says there are more, and where each case's latest is. */}
+          {/* The list keeps to the newest: it says there are more, where they all are, and where each case's latest is. */}
           {repairItems.length > RUNS_SHOWN && (
             <p className="border-t border-border px-5 py-3 text-[13px] text-muted-foreground">
-              The {RUNS_SHOWN} newest of {formatCount(repairItems.length, "run")}. Each case&apos;s latest is on the{" "}
+              The {RUNS_SHOWN} newest of {formatCount(repairItems.length, "run")}. All of them are on the{" "}
+              <Link to={to("/repairs")} className={LINK}>Repairs screen</Link>, and each case&apos;s latest on the{" "}
               <Link to={to("/cases")} className={LINK}>Cases screen</Link>.
             </p>
           )}

@@ -23,3 +23,10 @@ test("a cancelled repair's run leads to its job's details", async ({ page }) => 
   await expect(page).toHaveURL(/\/demo\/jobs\?job=20261121-130141-repair-ahmed25-fine-strict-0266$/);
   await expect(page.getByRole("dialog", { name: "ahmed25-fine-strict" })).toBeVisible();
 });
+
+test("the Overview's Repair runs card leads to every run", async ({ page }) => {
+  await page.goto("/demo");
+  await page.getByRole("link", { name: "All repairs" }).click();
+  await expect(page).toHaveURL(/\/demo\/repairs$/);
+  await expect(page.getByRole("heading", { name: "Repairs", level: 1 })).toBeVisible();
+});

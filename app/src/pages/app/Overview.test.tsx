@@ -191,8 +191,11 @@ describe("the Overview before anything has run", () => {
     expect(within(list).getAllByRole("listitem").map((li) => li.querySelector(":scope > div > div")!.textContent))
       .toEqual(["z-under-way", "e-newest", "g", "f", "d", "c"]);
     const more = screen.getByText((_, el) => el?.tagName === "P" && (el.textContent ?? "").startsWith("The 6 newest of"));
-    expect(more).toHaveTextContent("The 6 newest of 8 runs. Each case's latest is on the Cases screen.");
+    expect(more).toHaveTextContent("The 6 newest of 8 runs. All of them are on the Repairs screen, and each case's latest on the Cases screen.");
+    expect(within(more).getByRole("link", { name: "Repairs screen" })).toHaveAttribute("href", "/app/repairs");
     expect(within(more).getByRole("link", { name: "Cases screen" })).toHaveAttribute("href", "/app/cases");
+    // Beside the card's title, as All jobs is beside Recent jobs'.
+    expect(screen.getByRole("link", { name: "All repairs" })).toHaveAttribute("href", "/app/repairs");
   });
 
   it("says nothing of more runs when it lists them all", async () => {

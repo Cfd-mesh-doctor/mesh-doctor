@@ -217,6 +217,7 @@ test("on a phone a card's description runs across the card, under its title and 
     ["/app/settings", "Engine", "Connected", "Mesh Doctor on this computer."],
     ["/app", "Getting started", "of 3 done", "Three steps to your first repair."],
     ["/app", "Recent jobs", "All jobs", "Repairs and A/B tests, newest first"],
+    ["/app", "Repair runs", "All repairs", "Newest first. The verdict compares"],
     ["/demo/settings", "Engine", "Demo data", "The demo shows data recorded"],
   ] as const) {
     await page.goto(path);
