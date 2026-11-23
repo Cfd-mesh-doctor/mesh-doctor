@@ -72,7 +72,18 @@ def _read_json(path, kind=None):
         return None
 
 
+def _unfinished(case):
+    """Is this a new case from a template that isn't made yet: being made, or stopped before its mesh was?  Its
+    marker says so (jobs.CASE_MARKER); blockMesh's background mesh is in it long before the case's mesh is."""
+    marker = os.path.join(case, jobs.CASE_MARKER)
+    if not os.path.isfile(marker):
+        return False
+    doc = _read_json(marker)
+    return not (isinstance(doc, dict) and doc.get("state") == "done")
+
+
 def sources():
+    """The cases in the cases folder: each folder with a mesh, but the workspace and a new case not made yet."""
     out = []
     cases, ws, _ = _paths()
     try:
@@ -83,8 +94,8 @@ def sources():
         if (ws + "/").startswith(posixpath.join(cases, n) + "/"):
             continue                          # the workspace itself is not a source case
         d = os.path.join(run_dir(), n)
-        if os.path.isfile(os.path.join(d, "constant", "polyMesh", "owner")) or \
-           os.path.isfile(os.path.join(d, "processor0", "constant", "polyMesh", "owner")):
+        if (os.path.isfile(os.path.join(d, "constant", "polyMesh", "owner")) or
+                os.path.isfile(os.path.join(d, "processor0", "constant", "polyMesh", "owner"))) and not _unfinished(d):
             out.append(n)
     return out
 

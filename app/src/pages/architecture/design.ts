@@ -265,7 +265,7 @@ export const DESIGN: DocSection[] = [
             [
               "`GET /cases`",
               "`/api/md/sources`",
-              "source cases the worker may read, with each one's cell count from its mesh's owner header (null when the header doesn't say; API 1.2)"
+              "source cases the worker may read, with each one's cell count from its mesh's owner header (null when the header doesn't say; API 1.2); a new case from a template is listed once its mesh is made"
             ],
             [
               "`GET /repairs`, `GET /repairs/{name}`",

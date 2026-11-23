@@ -13,13 +13,15 @@ starts the same thing as a `case` job (POST /api/v1/jobs), which runs `templates
 import json, os, re, shlex, shutil, signal, subprocess, sys, time
 
 import config
+import jobs
 import md_api
 import prog
 import ramguard
 
 PKG = os.path.dirname(os.path.abspath(__file__))
 EXAMPLES = os.path.join(os.path.dirname(PKG), "examples")
-MARKER = ".meshdoctor-case.json"      # in every case made here; jobs.py reads its step as the job's progress
+MARKER = jobs.CASE_MARKER              # in every case made here: jobs.py reads its step as the job's progress,
+                                      # and md_api.sources() lists the case only once its state is done
 LOGS = ".cases"                       # the case jobs' logs, in the workspace
 SAFE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$")      # md_api.SAFE: plain folder names only
 POLL_S = 2.0

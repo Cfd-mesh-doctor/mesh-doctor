@@ -133,7 +133,7 @@ def result_schema(p, q, b):
 
 
 @route("GET", "/cases", "Source cases this worker may read (never changed: a new case from a template goes in a "
-       "new folder), with their sizes",
+       "new folder, listed once its mesh is made), with their sizes",
        ok={"type": "object", "required": ["items", "cells"], "properties": {
            "items": {"type": "array", "items": {"type": "string"}},
            "cells": {"type": "object", "additionalProperties": {"type": ["integer", "null"]},

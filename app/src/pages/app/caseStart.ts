@@ -13,8 +13,8 @@ export function newCaseCommand(template: Template, size: string, name: string): 
   return `meshdoctor new ${template.name} ${name}${size === template.size ? "" : ` --size ${size}`}`;
 }
 
-/** Names a new case can't take without a word: every case's, and every earlier new case's (one that stopped leaves a
- * folder with no mesh, which isn't listed as a case). */
+/** Names a new case can't take without a word: every case's, and every earlier new case's (the engine lists a new case
+ * only once its mesh is made, so one being made or that stopped is known here by its job). */
 export function takenCaseNames(cases: readonly string[] | undefined, jobs: readonly Job[] | undefined): Set<string> {
   return new Set([...(cases ?? []), ...(jobs ?? []).filter((j) => j.kind === "case").map((j) => j.name)]);
 }

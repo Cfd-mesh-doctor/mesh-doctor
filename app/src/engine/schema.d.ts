@@ -93,7 +93,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Source cases this worker may read (never changed: a new case from a template goes in a new folder), with their sizes */
+        /** Source cases this worker may read (never changed: a new case from a template goes in a new folder, listed once its mesh is made), with their sizes */
         get: operations["cases"];
         put?: never;
         post?: never;

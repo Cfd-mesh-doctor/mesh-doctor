@@ -1059,13 +1059,16 @@ class TemplatesTest(unittest.TestCase):
     """templates.py: the templates, the case job's checks, and making a case with a stand-in Allmesh and
     OpenFOAM environment, so neither OpenFOAM nor a mesh is needed."""
 
+    # As the real one: blockMesh writes the background mesh, which snappyHexMesh then turns into the case's mesh.
     ALLMESH = """#!/bin/sh
 cd "${0%/*}" || exit 1
 : > log.surfaceFeatures
 : > log.blockMesh
-[ -n "$MD_TEST_FAIL" ] && exit 1
-printf 'Refinement phase\\nMorphing phase\\nShrinking and layer addition phase\\n' > log.snappyHexMesh
 mkdir -p constant/polyMesh
+printf 'FoamFile\\n{\\n    note "nPoints:90 nCells:48 nFaces:200 nInternalFaces:150";\\n}\\n' > constant/polyMesh/owner
+printf 'Refinement phase\\n' > log.snappyHexMesh
+[ -n "$MD_TEST_FAIL" ] && exit 1
+printf 'Morphing phase\\nShrinking and layer addition phase\\n' >> log.snappyHexMesh
 printf 'FoamFile\\n{\\n    note "nPoints:900 nCells:480 nFaces:2000 nInternalFaces:1500";\\n}\\n' > constant/polyMesh/owner
 : > log.checkMesh
 """
@@ -1207,9 +1210,16 @@ printf 'FoamFile\\n{\\n    note "nPoints:900 nCells:480 nFaces:2000 nInternalFac
         self.stand_in()
         with mock.patch.dict(os.environ, {"MD_TEST_FAIL": "1"}):
             rc, lines = self.make("ahmed-body", "a2", "medium")
-        self.assertEqual((rc, lines[-1]), (1, "the mesh failed at blockMesh: see log.blockMesh in the case's folder"))
+        self.assertEqual((rc, lines[-1]),
+                         (1, "the mesh failed at snappyHexMesh: see log.snappyHexMesh in the case's folder"))
         with open(os.path.join(self.cases, "a2", self.t.MARKER)) as f:
             self.assertEqual(json.load(f)["state"], "failed")
+        # blockMesh's background mesh is there, but it isn't a case: not on Cases, and no repair takes it.
+        self.assertTrue(os.path.isfile(os.path.join(self.cases, "a2", "constant", "polyMesh", "owner")))
+        self.assertNotIn("a2", self.api.handle("GET", "/api/v1/cases", {})[1]["items"])
+        st, doc, _ = self.api.handle("POST", "/api/v1/jobs", {}, json.dumps(
+            {"kind": "repair", "params": {"source": "a2", "name": "a2-fix"}}).encode(), "application/json")
+        self.assertEqual((st, doc["error"]["code"]), (404, "not-found"), doc)
         rc, lines = self.make("ahmed-body", "a2", "medium")
         self.assertEqual(rc, 1)
         self.assertIn("replace it", lines[-1])
@@ -1217,6 +1227,19 @@ printf 'FoamFile\\n{\\n    note "nPoints:900 nCells:480 nFaces:2000 nInternalFac
         self.assertEqual((rc, lines[0]), (0, "replacing a2, which a template made here before"))
         with open(os.path.join(self.cases, "a2", "system", "blockMeshDict")) as f:
             self.assertIn("(130 15 15)", f.read())                                       # medium: the template's own
+        self.assertIn("a2", self.api.handle("GET", "/api/v1/cases", {})[1]["items"])    # made now
+
+    def test_a_new_case_is_listed_once_it_is_made_and_a_case_you_made_always(self):
+        import md_api
+        for name, marker in (("yours", None), ("making", '{"state": "running"}'), ("failed", '{"state": "failed"}'),
+                             ("stopped", '{"state": "cancelled"}'), ("garbled", "{"), ("made", '{"state": "done"}')):
+            mesh = os.path.join(self.cases, name, "constant", "polyMesh")
+            os.makedirs(mesh)
+            open(os.path.join(mesh, "owner"), "w").close()
+            if marker is not None:
+                with open(os.path.join(self.cases, name, self.t.MARKER), "w") as f:
+                    f.write(marker)
+        self.assertEqual(md_api.sources(), ["made", "yours"])
 
     def test_without_openfoams_environment_it_says_which_setting(self):
         self.stand_in()
@@ -1249,7 +1272,7 @@ printf 'FoamFile\\n{\\n    note "nPoints:900 nCells:480 nFaces:2000 nInternalFac
         status = self.t.Status(case, "ahmed-body", "medium")
         status.step("snappyHexMesh: snapping")
         job = {"kind": "case", "name": "p", "created": "2000-01-01T00:00:00Z"}
-        self.assertEqual(self.jobs.progress(job, os.path.join(self.d, "work"))["fraction"], 0.35)
+        self.assertEqual(self.jobs.progress(job, os.path.join(self.d, "work"))["fraction"], 0.25)
 
     def test_a_job_error_names_no_folder_of_the_cases_folder(self):
         log = os.path.join(self.d, "job.log")

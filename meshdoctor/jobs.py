@@ -31,6 +31,8 @@ PKG = os.path.dirname(os.path.abspath(__file__))
 WRAPPER = os.path.join(PKG, "jobrun.py")
 SOLVERS = ("foamRun", "snappyHexMesh", "foamMeshDoctor")
 ACTIVE = ("queued", "running")
+# In a new case a case job makes (templates.py): its template, its size, and how far the making is.
+CASE_MARKER = ".meshdoctor-case.json"
 ID = re.compile(r"^[0-9]{8}-[0-9]{6}-[a-z]+-[A-Za-z0-9_.-]{1,80}-[0-9a-f]{4}$")
 START_GRACE = 60          # seconds a queued job may wait for its wrapper before it counts as lost
 SPAWN_TIMEOUT = 30        # seconds the wrapper has to say its pid (jobrun.detach)
@@ -132,11 +134,12 @@ PROGRESS = {
         ("copying base", 0.02), ("solving base", 0.05), ("copying fixed", 0.45), ("solving fixed", 0.5),
         ("hotspots", 0.92), ("done", 1.0)]),
     "abextend": ("{name}_ab/ab_status.json", [("extending", 0.1), ("hotspots", 0.92), ("done", 1.0)]),
-    # templates.py's marker in the new case: Allmesh's steps, snappyHexMesh's three phases the longest
-    "case": ("{cases}/{name}/.meshdoctor-case.json", [
-        ("copying", 0.02), ("geometry", 0.04), ("surfaceFeatures", 0.06), ("blockMesh", 0.08),
-        ("snappyHexMesh: refining", 0.1), ("snappyHexMesh: snapping", 0.35), ("snappyHexMesh: adding layers", 0.6),
-        ("checkMesh", 0.95), ("done", 1.0)]),
+    # templates.py's marker in the new case: Allmesh's steps, each where it started in a real run (the coarse Ahmed
+    # body, 57 s on one core: snappyHexMesh refined until 25 %, snapped until 59 % and added layers until 91 %)
+    "case": ("{cases}/{name}/" + CASE_MARKER, [
+        ("copying", 0.01), ("geometry", 0.02), ("surfaceFeatures", 0.03), ("blockMesh", 0.04),
+        ("snappyHexMesh: refining", 0.05), ("snappyHexMesh: snapping", 0.25), ("snappyHexMesh: adding layers", 0.6),
+        ("checkMesh", 0.9), ("done", 1.0)]),
 }
 
 
