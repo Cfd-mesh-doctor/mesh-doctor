@@ -26,7 +26,8 @@ import {
 const FIELDS: { key: Field; param: string; label: string; unit: string; hint: string }[] = [
   { key: "cells", param: "cells", label: "Mesh size", unit: "million cells", hint: "The cell count checkMesh prints, in millions." },
   { key: "iterations", param: "iters", label: "Iterations", unit: "iterations", hint: "Steady car and wheel cases needed 1000 to 1500 or more to settle." },
-  { key: "ram", param: "ram", label: "Memory for OpenFOAM", unit: "GB", hint: "What WSL may use: about 26 GB on a 32 GB PC." },
+  { key: "ram", param: "ram", label: "Memory for OpenFOAM", unit: "GB",
+    hint: "On Windows, what WSL may use: about 26 GB on a 32 GB PC. On Linux, the computer's memory." },
   { key: "cores", param: "cores", label: "Solver ranks on this computer", unit: "ranks", hint: "Physical cores, not threads." },
   { key: "price", param: "price", label: "Cloud machine price", unit: "$ per hour", hint: "12 vCPU, 96 GB; $0.84 is a custom N2 on Google Cloud at list price." },
 ];

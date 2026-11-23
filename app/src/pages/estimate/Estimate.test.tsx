@@ -38,6 +38,13 @@ describe("Size estimator", () => {
     expect(screen.getByLabelText("Mesh size")).toHaveValue("5");
   });
 
+  it("says what memory to enter, in WSL on Windows and on Linux", () => {
+    renderScreen(<Estimate />, { path: "/estimate" });
+    // On Linux there is no WSL: OpenFOAM may use the computer's own memory.
+    expect(screen.getByLabelText("Memory for OpenFOAM")).toHaveAccessibleDescription(
+      "On Windows, what WSL may use: about 26 GB on a 32 GB PC. On Linux, the computer's memory.");
+  });
+
   it("opens an estimate from a link", () => {
     renderScreen(<Estimate />, { path: "/estimate", at: "/estimate?cells=0.84&iters=300&cores=4" });
     expect(screen.getByLabelText("Mesh size")).toHaveValue("0.84");
