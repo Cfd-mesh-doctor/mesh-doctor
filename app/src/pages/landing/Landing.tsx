@@ -210,16 +210,25 @@ export function Landing() {
                 text: "From a clone of the repository, one script installs WSL, OpenFOAM 14 and Mesh Doctor, and checks the result." },
               { title: "Start and pair", when: "each time you work", cmd: "meshdoctor serve", link: { to: "/connect", label: "Pair this browser" },
                 text: `Start the engine. It prints a pairing link for this site; open it in ${BROWSERS}, once per browser.` },
-              { title: "Repair and prove", when: "for each case", cmd: "meshdoctor full <case> <name>",
+              // Both commands, the repair and then the A/B test (full only repairs), with the same two blanks, said in
+              // words: <name> could be read as your own name.
+              { title: "Repair and prove", when: "for each case", cmd: ["meshdoctor full <case> <name>", "meshdoctor ab <case> <name>"],
                 link: { to: "/demo/repairs/ahmed35-medium-fix/report", label: "See a finished report in the demo" },
-                text: "Repair a copy of your case, then test it with an A/B solver run. The results show up in the app." },
+                text: (
+                  <>
+                    Repair a copy of your case, then test it with an A/B solver run, putting a case's name in place of{" "}
+                    <code className="font-mono text-[12px]">&lt;case&gt;</code> and a name for the repaired copy in place
+                    of <code className="font-mono text-[12px]">&lt;name&gt;</code>, the same in both. The results show up
+                    in the app.
+                  </>
+                ) },
             ].map(({ title, when, cmd, link, text }, i) => (
               <li key={title} className="flex flex-col rounded-xl border border-border bg-surface p-5 shadow-card">
                 <span className="font-mono text-xs text-muted-foreground">Step {i + 1} · {when}</span>
                 <p className="mt-2 font-semibold">{title}</p>
                 <p className="mt-1.5 flex-1 text-[13.5px] text-muted-foreground">{text}</p>
                 <Link to={link.to} className="mt-3 text-[13px] font-medium text-primary hover:underline">{link.label}</Link>
-                <CopyCommand command={cmd} className="mt-4" />
+                {[cmd].flat().map((c, j) => <CopyCommand key={c} command={c} className={j ? "mt-2" : "mt-4"} />)}
               </li>
             ))}
           </ol>

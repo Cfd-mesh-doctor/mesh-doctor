@@ -38,6 +38,11 @@ test("a newcomer's main button leads to the three steps, which say how often eac
   await expect(steps.nth(0).getByRole("link", { name: "The full install guide" })).toHaveAttribute("href", "/install");
   await expect(steps.nth(2).getByRole("link", { name: "See a finished report in the demo" }))
     .toHaveAttribute("href", "/demo/repairs/ahmed35-medium-fix/report");
+  // Step 3 gives both commands, the repair and the A/B test (full only repairs), and says what goes in their blanks.
+  await expect(steps.nth(2).getByRole("button", { name: "Copy “meshdoctor full <case> <name>”" })).toBeVisible();
+  await expect(steps.nth(2).getByRole("button", { name: "Copy “meshdoctor ab <case> <name>”" })).toBeVisible();
+  await expect(steps.nth(2)).toContainText(
+    "putting a case's name in place of <case> and a name for the repaired copy in place of <name>, the same in both.");
   await steps.nth(1).getByRole("link", { name: "Pair this browser" }).click();
   await expect(page).toHaveURL(/\/connect$/);
 });
