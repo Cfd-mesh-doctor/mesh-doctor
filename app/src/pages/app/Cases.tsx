@@ -22,6 +22,7 @@ import { caseName } from "@/engine/verdict";
 import { cellsField } from "@/estimate/estimate";
 import { ADDRESS_FIELD } from "@/lib/addressField";
 import { formatCells, formatCount, formatDateTime, formatRelative } from "@/lib/format";
+import { DOCS } from "@/lib/site";
 import { useCopy } from "@/lib/useCopy";
 import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
@@ -171,6 +172,13 @@ export function Cases() {
               another folder, set it and restart the engine:
             </p>
             <CopyCommand command="MESHDOCTOR_CASES=~/cases meshdoctor serve" className="mx-auto mt-3 max-w-sm text-left" />
+            {/* A newcomer's first case: the README's First run meshes OpenFOAM's motorBike tutorial in $FOAM_RUN. */}
+            <p className="mt-4">
+              No case yet? The README&apos;s{" "}
+              <a href={DOCS.firstRun} target="_blank" rel="noreferrer"
+                className="font-medium text-primary underline-offset-4 hover:underline">First run</a>{" "}
+              sets up OpenFOAM&apos;s motorBike tutorial in $FOAM_RUN, where the engine finds it.
+            </p>
           </EmptyState>
         ) : shown.length === 0 ? (
           <EmptyState icon={Search} title="No case matches">Try another part of the name.</EmptyState>

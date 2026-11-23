@@ -6,6 +6,7 @@ import { demoTransport } from "@/demo/transport";
 import type { Transport } from "@/engine/client";
 import { EngineError } from "@/engine/errors";
 import { savePairing } from "@/engine/pairing";
+import { DOCS } from "@/lib/site";
 import { renderScreen } from "@/test/render";
 import { Cases } from "./Cases";
 
@@ -77,6 +78,12 @@ describe("the Cases screen of your own engine", () => {
     expect(await screen.findByRole("heading", { name: "No cases found" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy “MESHDOCTOR_CASES=~/cases meshdoctor serve”" })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
+    // ...and how to get a first case: the README's First run sets up the motorBike tutorial where the engine looks.
+    const firstRun = screen.getByRole("link", { name: "First run" });
+    expect(firstRun).toHaveAttribute("href", DOCS.firstRun);
+    expect(firstRun).toHaveAttribute("target", "_blank");
+    expect(firstRun.closest("p")).toHaveTextContent(
+      "No case yet? The README's First run sets up OpenFOAM's motorBike tutorial in $FOAM_RUN, where the engine finds it.");
   });
 
   it("whose cases didn't load says so under the message that says why, not that nothing matches the filter", async () => {
