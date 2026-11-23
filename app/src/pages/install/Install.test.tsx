@@ -26,4 +26,12 @@ describe("Install", () => {
     expect(main.getByRole("link", { name: "Connect" })).toHaveAttribute("href", "/connect");
     expect(main.getByRole("link", { name: "Size estimator" })).toHaveAttribute("href", "/estimate");
   });
+
+  it("says the one-command set-up puts the meshdoctor command in every new terminal", () => {
+    renderScreen(<Install />, { path: "/install" });
+    const one = within(screen.getByRole("region", { name: "One command" }));
+    expect(one.getByText(/^Puts the/)).toHaveTextContent(
+      "Puts the meshdoctor command in every new terminal too: a link in ~/.local/bin.",
+    );
+  });
 });

@@ -29,6 +29,11 @@ run() {                         # print, then run unless --dry-run
     "$@" || { echo "FAILED: $*"; exit 1; }
 }
 have_pkg() { dpkg -s "$1" > /dev/null 2>&1; }
+load_foam() {                   # OpenFOAM's bashrc reads variables nobody sets ($ZSH_NAME): never under set -u
+    set +u
+    . "$BASHRC"
+    set -u
+}
 
 . /etc/os-release 2>/dev/null
 if [ "${VERSION_CODENAME:-}" != "jammy" ]; then
@@ -73,7 +78,7 @@ esac
 if [ "$DRY" = 1 ]; then
     echo "+ (cd $ROOT && . $BASHRC && ./Allwmake)"
 else
-    (cd "$ROOT" && . "$BASHRC" && ./Allwmake > log.Allwmake 2>&1) || { echo "FAILED: ./Allwmake, see $ROOT/log.Allwmake"; exit 1; }
+    (cd "$ROOT" && load_foam && ./Allwmake > log.Allwmake 2>&1) || { echo "FAILED: ./Allwmake, see $ROOT/log.Allwmake"; exit 1; }
     echo "Mesh Doctor: built"
 fi
 
@@ -86,14 +91,33 @@ else
     echo ". $BASHRC" >> "$HOME/.bashrc"; echo "~/.bashrc: now loads OpenFOAM"
 fi
 
-# 5. A folder for cases, and the check
+# 5. The meshdoctor command in every new terminal: a link to the clone's bin/meshdoctor in ~/.local/bin
+LINK=$HOME/.local/bin/meshdoctor
+if [ "$(readlink -f "$LINK" 2>/dev/null)" = "$(readlink -f "$ROOT/bin/meshdoctor")" ]; then
+    echo "meshdoctor command: already in ~/.local/bin"
+elif [ -e "$LINK" ]; then
+    echo "meshdoctor command: ~/.local/bin/meshdoctor is another one (from pip or pipx?), left as it is"
+else
+    run mkdir -p "$HOME/.local/bin"
+    run ln -sfn "$ROOT/bin/meshdoctor" "$LINK"
+    [ "$DRY" = 1 ] || echo "meshdoctor command: now in ~/.local/bin"
+fi
+if grep -qs '\.local/bin' "$HOME/.bashrc"; then
+    echo "~/.bashrc: already puts ~/.local/bin on PATH"
+elif [ "$DRY" = 1 ]; then
+    echo "+ echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc"
+else
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"; echo "~/.bashrc: now puts ~/.local/bin on PATH"
+fi
+
+# 6. A folder for cases, and the check
 if [ "$DRY" = 0 ]; then
-    . "$BASHRC"
+    load_foam
     mkdir -p "$FOAM_RUN"
     echo
     python3 "$ROOT/tools/toolkit_check.py"
     echo
-    echo "Done. Open a new terminal (or run: . $BASHRC), then try the worked example:"
+    echo "Done. Open a new terminal (or run: . ~/.bashrc), then try the worked example:"
     echo "  cp -r $ROOT/examples/ahmed-body \$FOAM_RUN/ahmed && cd \$FOAM_RUN/ahmed && ./Allmesh"
     echo "In Claude Code with the cfd-toolkit plugin, /testrun does all of it."
 fi

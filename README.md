@@ -34,9 +34,10 @@ bash tools/setup_linux.sh                                          # Ubuntu 22.0
 ```
 
 They install only what is missing (OpenFOAM 14, numpy/matplotlib/PIL, ParaView, then `./Allwmake`), make OpenFOAM
-load in new terminals, and finish with `tools/toolkit_check.py`. Add `-DryRun` / `--dry-run` to see the steps
-first, `-NoParaView` / `--no-paraview` to skip ParaView. The first WSL install needs an administrator PowerShell and
-a restart; run the script again afterwards. The steps by hand:
+and the `meshdoctor` command (a link in `~/.local/bin`) work in new terminals, and finish with
+`tools/toolkit_check.py`. Add `-DryRun` / `--dry-run` to see the steps first, `-NoParaView` / `--no-paraview` to
+skip ParaView. The first WSL install needs an administrator PowerShell and a restart; run the script again
+afterwards. The steps by hand:
 
 ### Windows (WSL)
 1. Install Ubuntu 22.04 from the Microsoft Store (or `wsl --install -d Ubuntu-22.04`), then follow **Linux** below inside the Ubuntu window.
@@ -60,7 +61,7 @@ git clone https://github.com/Cfd-mesh-doctor/mesh-doctor mesh-doctor && cd mesh-
 bin/meshdoctor check          # says "ready", or lists what is missing
 ```
 
-To type just `meshdoctor`, add the clone's `bin/` folder to your PATH (or link `bin/meshdoctor` into `~/bin`). With pip instead: `pip install ".[map]"` in a virtual environment (or `pipx install .`) gives the same command; `./Allwmake` is still needed for the OpenFOAM utilities.
+To type just `meshdoctor`, add the clone's `bin/` folder to your PATH (or link `bin/meshdoctor` into `~/.local/bin`, as the setup scripts do). With pip instead: `pip install ".[map]"` in a virtual environment (or `pipx install .`) gives the same command; `./Allwmake` is still needed for the OpenFOAM utilities.
 
 ### Docker (OpenFOAM included)
 

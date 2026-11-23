@@ -89,6 +89,7 @@ export function Install() {
                 <ul className="mt-2 list-disc space-y-1.5 pl-5 text-muted-foreground">
                   <li>Installs OpenFOAM 14, numpy, matplotlib, PIL and ParaView, then builds Mesh Doctor&apos;s OpenFOAM utilities (<code className="text-foreground">./Allwmake</code>).</li>
                   <li>Makes OpenFOAM load in every new terminal.</li>
+                  <li>Puts the <code className="text-foreground">meshdoctor</code> command in every new terminal too: a link in <code className="text-foreground">~/.local/bin</code>.</li>
                   <li>Ends with <code className="text-foreground">tools/toolkit_check.py</code>, which says what works.</li>
                 </ul>
               </div>
@@ -156,7 +157,8 @@ export function Install() {
                   ))}
                 </div>
                 <p className="mt-4 text-[13px] text-muted-foreground">
-                  To type just <code>meshdoctor</code>, add the clone&apos;s <code>bin/</code> folder to your PATH. With
+                  To type just <code>meshdoctor</code>, add the clone&apos;s <code>bin/</code> folder to your PATH, or
+                  link <code>bin/meshdoctor</code> into <code>~/.local/bin</code> as the setup script does. With
                   pip instead: <code className="whitespace-nowrap">pip install &quot;.[map]&quot;</code> in a virtual
                   environment (or <code className="whitespace-nowrap">pipx install .</code>); <code>./Allwmake</code> is
                   still needed for the OpenFOAM utilities.
