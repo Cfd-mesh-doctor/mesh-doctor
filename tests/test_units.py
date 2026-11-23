@@ -169,6 +169,90 @@ class AbCopyTest(unittest.TestCase):
         self.assertEqual(self.copy("fixed"), "numberOfSubdomains 6; decomposer hierarchical;")
 
 
+class AbFollowUpTest(unittest.TestCase):
+    """The A/B test that ab extend and ab hotspots work on: its folder, or the repaired run's name, from any folder."""
+
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp(prefix="md_abdir_"))
+        self.addCleanup(shutil.rmtree, self.tmp)
+        self.work = os.path.join(self.tmp, "work")
+        self.top = os.path.join(self.work, "wing-fix_ab")
+        for t in ("0", "200"):
+            os.makedirs(os.path.join(self.top, "fixed", "processor0", t))
+        self.result({"iters": 200, "nProcs": 2, "fixed": {"residuals": {}}})
+        self.here = os.path.join(self.tmp, "here")
+        os.makedirs(self.here)
+        cwd = os.getcwd()
+        os.chdir(self.here)
+        self.addCleanup(os.chdir, cwd)
+        root = mock.patch.object(abtest, "ROOT", self.work)
+        root.start()
+        self.addCleanup(root.stop)
+
+    def result(self, doc):
+        abtest.schema.write(os.path.join(self.top, "ab_result.json"), doc, "abtest")
+
+    def stops(self, run):
+        """The message the command stops with."""
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as e:
+                run()
+        return str(e.exception.code)
+
+    def test_the_repaired_run_s_name_from_any_folder(self):
+        for arg in ("wing-fix", "wing-fix_ab"):
+            with contextlib.redirect_stderr(io.StringIO()) as said:
+                self.assertEqual(abtest.ab_dir(arg), self.top)
+            self.assertEqual(said.getvalue(), f"using the A/B test wing-fix_ab in {self.work}\n")   # which one
+
+    def test_a_folder_as_given(self):
+        self.assertEqual(abtest.ab_dir(self.top), self.top)
+        os.chdir(self.work)
+        with contextlib.redirect_stderr(io.StringIO()) as said:
+            self.assertEqual(abtest.ab_dir("wing-fix_ab"), self.top)
+        self.assertEqual(said.getvalue(), "")                           # from where you are: nothing to say
+
+    def test_in_the_workspace_the_name_still_means_the_test_not_the_repaired_copy(self):
+        os.makedirs(os.path.join(self.work, "wing-fix", "constant"))
+        os.chdir(self.work)
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(abtest.ab_dir("wing-fix"), self.top)
+
+    def test_no_such_test_stops_with_a_plain_message_before_anything_runs(self):
+        for arg in ("wing", "../wing-fix_ab", "sub/wing-fix"):
+            self.assertIn(f"no A/B test result for {arg!r}: it is not an A/B test's folder here, nor a repaired run "
+                          f"whose A/B test is in the workspace {self.work}", self.stops(lambda: abtest.ab_dir(arg)))
+        for cmd in (["extend", "wing", "400"], ["hotspots", "wing"]):    # before the RAM check, or any run
+            self.assertIn("no A/B test result for 'wing'", self.stops(lambda: abtest.main(cmd)))
+
+    def test_extend_needs_a_whole_iteration_past_the_run_s_own(self):
+        said = ("extend to which iteration? The repaired run is at iteration 200: give a whole number past it, "
+                "e.g. meshdoctor ab extend wing-fix 400")
+        for end in (["200"], ["100"], [], ["300.5"], ["more"]):
+            self.assertEqual(self.stops(lambda: abtest.main(["extend", "wing-fix"] + end)), said)
+
+    def test_extend_stops_on_a_test_that_has_not_finished_or_kept_no_fields(self):
+        self.result({"iters": 200, "nProcs": 2})                            # its repaired run is still going
+        self.assertEqual(self.stops(lambda: abtest.main(["extend", "wing-fix", "400"])),
+                         f"the A/B test in {self.top} has not finished its repaired run yet: let it finish, then "
+                         "extend it")
+        self.result({"iters": 200, "nProcs": 2, "fixed": {"residuals": {}}})
+        shutil.rmtree(os.path.join(self.top, "fixed", "processor0"))
+        self.assertEqual(self.stops(lambda: abtest.main(["extend", "wing-fix", "400"])),
+                         f"the repaired run in {self.top} has no decomposed fields (processor0/) to continue from")
+
+    def test_extend_continues_the_named_test_to_that_iteration(self):
+        calls = []
+
+        def extend(top, end, variant=None):
+            calls.append((top, end, variant))
+            return {"fixedJudge": {}}
+        with mock.patch.object(abtest, "extend", extend):
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                abtest.main(["extend", "wing-fix", "400", "--no-ram-check"])
+        self.assertEqual(calls, [(self.top, 400, None)])
+
+
 def write_steady_run(d, n, p_of, drag_of):
     """A synthetic steady run in folder d: log.foamRun with p residuals, a forces file."""
     os.makedirs(os.path.join(d, "0"), exist_ok=True)

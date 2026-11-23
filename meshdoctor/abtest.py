@@ -9,9 +9,12 @@
                                             # where the solution moves between two
                                             # written times (slow oscillation shape)
     python3 abtest.py extend <abDir> <endIter> [--variant P]
-                                            # continue the second run (optionally
-                                            # with another preset), judge it
+                                            # continue the second run to iteration
+                                            # endIter (optionally with another
+                                            # preset), judge it
     python3 abtest.py judge <case> [window|auto] [--to N]   # convergence verdict for any case
+    <abDir>               an A/B test's folder, or the name of the repaired run it
+                          tested (its test in the workspace, <name>_ab)
     --init <folder>       the case's folder both runs start from (default: 0.warm
                           when the case has one, else 0)
     --variant simplec|relax|lts   solver-setting variant on the second run
@@ -108,6 +111,40 @@ def start_fields(src, init=None):
         sys.exit(f"no start fields: {src} has no {init}/ folder. Pass --init with the folder both runs should "
                  "start from.")
     return init
+
+
+def ab_dir(arg):
+    """The A/B test a follow-up (extend, hotspots) names, as an absolute path: the folder as given (from where you
+    are), else, for a plain name, the A/B test of the repaired run of that name in the workspace (<name>_ab), so
+    `ab extend wing-fix 400` works from any folder, the workspace too (where wing-fix is the repaired copy itself).
+    Stops with a plain message when neither has a result."""
+    import repair                              # PLAIN (same folder)
+    path = os.path.abspath(os.path.expanduser(arg))
+    if os.path.isfile(os.path.join(path, "ab_result.json")):
+        return path
+    ws = os.path.abspath(ROOT)
+    if repair.PLAIN.fullmatch(arg):
+        named = os.path.join(ws, arg if arg.endswith("_ab") else arg + "_ab")
+        if os.path.isfile(os.path.join(named, "ab_result.json")):
+            print(f"using the A/B test {os.path.basename(named)} in {ws}", file=sys.stderr, flush=True)
+            return named
+    sys.exit(f"no A/B test result for {arg!r}: it is not an A/B test's folder here, nor a repaired run whose A/B "
+             f"test is in the workspace {ws} (meshdoctor config shows that folder). Start one with meshdoctor ab "
+             "<case> <name>.")
+
+
+def extend_to(top, arg, end):
+    """The iteration `ab extend` continues the repaired run to, checked before anything runs: the test has finished
+    that run and kept its decomposed fields, and end is a whole number past the iteration the run is at now."""
+    if not schema.read(os.path.join(top, "ab_result.json"), "abtest").get("fixed"):
+        sys.exit(f"the A/B test in {top} has not finished its repaired run yet: let it finish, then extend it")
+    if not os.path.isdir(os.path.join(top, "fixed", "processor0")):
+        sys.exit(f"the repaired run in {top} has no decomposed fields (processor0/) to continue from")
+    now = float(latest_time(os.path.join(top, "fixed")))
+    if not re.fullmatch(r"[0-9]+", end) or int(end) <= now:
+        sys.exit(f"extend to which iteration? The repaired run is at iteration {now:g}: give a whole number past "
+                 f"it, e.g. meshdoctor ab extend {arg} {int(now) + 200}")
+    return int(end)
 
 
 def parse_residuals(case, logs=None):
@@ -670,20 +707,22 @@ def main(a):
                                avg_from=float(a[3]) if len(a) > 3 else None, logs=logs, to=to), indent=1))
         return
     if a[0] == "extend":
-        # abtest.py extend <abDir> <endIter>
+        # abtest.py extend <abDir or the repaired run's name> <endIter>
         v = a[a.index("--variant") + 1] if "--variant" in a else None
         if v and v not in PRESETS:
             sys.exit("unknown variant " + v)
+        top = ab_dir(a[1])
+        end = extend_to(top, a[1], a[2] if len(a) > 2 else "")
         if "--no-ram-check" not in a:
-            ok, msg = ramguard.check(os.path.join(os.path.abspath(os.path.expanduser(a[1])), "fixed"), "solve")
+            ok, msg = ramguard.check(os.path.join(top, "fixed"), "solve")
             print(msg, flush=True)
             if not ok:
                 sys.exit(4)
-        r = extend(os.path.abspath(os.path.expanduser(a[1])), int(a[2]), variant=v)
+        r = extend(top, end, variant=v)
         print(json.dumps({k: v for k, v in r["fixedJudge"].items() if k != "pBlocks"}, indent=1))
         return
     if a[0] == "hotspots":
-        r = hot_both(os.path.abspath(os.path.expanduser(a[1])))
+        r = hot_both(ab_dir(a[1]))
         print(json.dumps({t: r.get(t + "Hotspots", {}).get("summary") for t in ("base", "fixed")}, indent=1))
         return
     if a[0] == "mode":

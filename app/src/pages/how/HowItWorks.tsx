@@ -260,7 +260,10 @@ export function HowItWorks() {
                   <code>--variant simplec|simplec2|relax|lts</code> changes a solver setting on the second run
                   instead. With <code>-</code> as the name, it compares a setting on the original mesh only.
                 </li>
-                <li><code>ab extend &lt;abDir&gt; &lt;endIter&gt;</code> continues the second run further.</li>
+                <li>
+                  <code>ab extend &lt;name&gt; &lt;endIter&gt;</code> continues the second run to iteration{" "}
+                  <code>&lt;endIter&gt;</code>; give it the same <code>&lt;name&gt;</code>, or the A/B test's folder.
+                </li>
               </ul>
               <p>
                 See one: <Link to="/report?sample=ahmed25-medium-fix" className={link}>the 25° sample</Link> in the

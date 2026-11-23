@@ -68,5 +68,5 @@ cancel). Asymmetric cars need a full model.
 Run `meshdoctor full <case> <name>` before solving; if it reports regressions it rolls them back. The repair works
 on a copy in the workspace, so `./Allrun <ranks> <iterations>` in your case solves the original mesh. To solve the
 repaired one, run the A/B test, `meshdoctor ab <case> <name>`: it solves both meshes with the same setup and
-compares them, and `meshdoctor ab extend <workspace>/<name>_ab <iterations>` continues the repaired run. Judge the
+compares them, and `meshdoctor ab extend <name> <iteration>` continues the repaired run to that iteration. Judge the
 result with the cfd-results skill (last-window means, drift).
