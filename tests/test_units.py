@@ -1234,6 +1234,27 @@ class ServeStopTest(unittest.TestCase):
         self.assertTrue(out.endswith("\n\nMesh Doctor stopped.\n"), out[-160:])
 
 
+class SetupEndingTest(unittest.TestCase):
+    """setup_linux.sh ends with what to run next, as meshdoctor check and the Install page do (pass 171)."""
+
+    def test_it_names_check_serve_and_pair(self):
+        import subprocess
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(repo, "tools", "setup_linux.sh"), encoding="utf-8") as f:
+            script = f.read()
+        ending = script[script.index("\n# 6. "):]                  # its last step: a folder for cases, and the check
+        tmp = tempfile.mkdtemp(prefix="md_setup_")
+        self.addCleanup(shutil.rmtree, tmp, True)
+        stubs = 'DRY=0; ROOT=/repo; FOAM_RUN="$1/run"; load_foam() { :; }; python3() { :; }\n'
+        out = subprocess.run(["bash", "-c", stubs + ending, "setup", tmp], capture_output=True, text=True,
+                             check=True).stdout
+        for command in ("meshdoctor check", "meshdoctor serve", "meshdoctor pair --open"):
+            with self.subTest(command):
+                self.assertRegex(out, rf"\n  {re.escape(command)}  +\S")   # one a line, with what it does
+        self.assertIn("http://localhost:8765", out)
+        self.assertIn("cp -r /repo/examples/ahmed-body $FOAM_RUN/ahmed", out)
+
+
 class SelfCheckTest(unittest.TestCase):
     """meshdoctor check: one line per check, then what to do next (item 161)."""
 

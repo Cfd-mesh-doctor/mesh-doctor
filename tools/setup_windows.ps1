@@ -52,5 +52,7 @@ Say "Running setup_linux.sh inside $Distro (asks for your Linux password for sud
 if ($LASTEXITCODE -ne 0) { Say "setup_linux.sh failed (exit $LASTEXITCODE): see the messages above."; exit $LASTEXITCODE }
 
 Say ""
-Say "Ready. Open 'Ubuntu 22.04' from the Start menu for an OpenFOAM terminal. The dashboard (meshdoctor serve) is"
-Say "then at http://localhost:8765 in your Windows browser. Keep cases in the Linux home (~), not under /mnt/c."
+if ($DryRun) { Say "Dry run: nothing was changed. Run it again without -DryRun to install."; exit 0 }
+Say "Ready. Open 'Ubuntu 22.04' from the Start menu and run the meshdoctor commands above in it. Your Windows"
+Say "browser reaches the engine at http://localhost:8765, for its dashboard and for the web app. Keep cases in the"
+Say "Linux home (~), not under /mnt/c."

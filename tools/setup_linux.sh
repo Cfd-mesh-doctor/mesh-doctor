@@ -117,7 +117,11 @@ if [ "$DRY" = 0 ]; then
     echo
     python3 "$ROOT/tools/toolkit_check.py"
     echo
-    echo "Done. Open a new terminal (or run: . ~/.bashrc), then try the worked example:"
+    echo "Done. Open a new terminal (or run: . ~/.bashrc) so the meshdoctor command is found, then:"
+    echo "  meshdoctor check           is this machine ready?"
+    echo "  meshdoctor serve           start the engine and its dashboard, at http://localhost:8765"
+    echo "  meshdoctor pair --open     in a second terminal: pair the web app with the engine"
+    echo "Then a first run: OpenFOAM's motorBike tutorial (the README's \"First run\"), or the worked example:"
     echo "  cp -r $ROOT/examples/ahmed-body \$FOAM_RUN/ahmed && cd \$FOAM_RUN/ahmed && ./Allmesh"
-    echo "In Claude Code with the cfd-toolkit plugin, /testrun does all of it."
+    echo "In Claude Code with the cfd-toolkit plugin, /testrun runs the worked example for you, end to end."
 fi
