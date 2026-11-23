@@ -1299,6 +1299,237 @@ printf 'FoamFile\\n{\\n    note "nPoints:900 nCells:480 nFaces:2000 nInternalFac
         self.assertIn("no template nope", str(e.exception.code))
 
 
+class SolveTest(unittest.TestCase):
+    """solve.py: a solve job's checks, and solving, continuing and stopping with stand-in OpenFOAM programs, so
+    neither OpenFOAM nor a mesh is needed."""
+
+    PROGRAMS = {
+        "decomposePar": """#!/bin/sh
+n=$(sed -n 's/^numberOfSubdomains[ \\t]*\\([0-9]*\\);.*/\\1/p' system/decomposeParDict)
+i=0; while [ "$i" -lt "$n" ]; do mkdir -p "processor$i/0"; i=$((i+1)); done
+""",
+        "mpirun": """#!/bin/sh
+while [ "$1" = "--oversubscribe" ] || [ "$1" = "-np" ]; do [ "$1" = "-np" ] && shift; shift; done
+exec "$@"
+""",
+        "potentialFoam": "#!/bin/sh\necho potentialFoam\n",
+        "reconstructPar": "#!/bin/sh\necho reconstructPar\n",
+        # From the latest written time to endTime; a Stop (stopAt writeNow) ends it after the iteration it is at.
+        "foamRun": """#!/bin/sh
+end=$(sed -n 's/^endTime[ \\t]*\\([0-9]*\\);.*/\\1/p' system/controlDict)
+where=.; [ -d processor0 ] && where=processor0
+i=$(ls "$where" | grep -E '^[0-9]+$' | sort -n | tail -1)
+while [ "$i" -lt "$end" ]; do
+    i=$((i+1)); echo "Time = $i"; echo
+    [ -n "$MD_TEST_SLOW" ] && sleep 0.05
+    [ "$i" = "$MD_TEST_STOP_AT" ] && sed -i 's/^stopAt .*/stopAt writeNow;/' system/controlDict
+    grep -q '^stopAt[ \\t]*writeNow' system/controlDict && break
+done
+for d in processor*; do [ -d "$d" ] && mkdir -p "$d/$i"; done
+[ -d processor0 ] || mkdir -p "$i"
+[ -n "$MD_TEST_FAIL" ] && { echo "--> FOAM FATAL ERROR: stand-in"; exit 1; }
+echo End
+""",
+    }
+    CONTROL = ("application     foamRun;\nstartFrom       startTime;\nstopAt          endTime;\nendTime         2000;\n"
+               "writeControl    timeStep;\nwriteInterval   500;\npurgeWrite      2;\nfunctions\n{\n    writeInterval 1;\n}\n")
+
+    def setUp(self):
+        import api_v1, jobs, solve
+        self.api, self.jobs, self.s = api_v1, jobs, solve
+        self.d = tempfile.mkdtemp(prefix="solve_test_")
+        self.addCleanup(shutil.rmtree, self.d, True)
+        self.cases = os.path.join(self.d, "cases")
+        os.makedirs(self.cases)
+        bin_ = os.path.join(self.d, "bin")
+        os.makedirs(bin_)
+        for name, text in self.PROGRAMS.items():
+            with open(os.path.join(bin_, name), "w") as f:
+                f.write(text)
+            os.chmod(os.path.join(bin_, name), 0o755)
+        bashrc = os.path.join(self.d, "bashrc")
+        with open(bashrc, "w") as f:
+            f.write(f"export WM_PROJECT_DIR=/nowhere\nexport PATH={bin_}:$PATH\n")
+        env = mock.patch.dict(os.environ, {"MESHDOCTOR_CASES": self.cases, "MD_TEST_FAIL": "", "MD_TEST_STOP_AT": "",
+                                           "MESHDOCTOR_WORKSPACE": os.path.join(self.d, "work"),
+                                           "MESHDOCTOR_FOAM_BASHRC": bashrc})
+        env.start()
+        self.addCleanup(env.stop)
+        self.launched = []
+        for obj, attr, value in ((jobs, "_spawn", lambda argv: self.launched.append(argv) or 2 ** 22 + 7),
+                                 (jobs, "solver_running", lambda: False), (solve, "POLL_S", 0.05)):
+            patcher = mock.patch.object(obj, attr, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.case("made", {"state": "done", "template": "ahmed-body"})
+        self.case("mine", None)
+        self.case("half", {"state": "failed"})
+
+    def case(self, name, marker):
+        c = os.path.join(self.cases, name)
+        for sub in ("system", "0", "constant/polyMesh"):
+            os.makedirs(os.path.join(c, sub))
+        with open(os.path.join(c, "system", "controlDict"), "w") as f:
+            f.write(self.CONTROL)
+        with open(os.path.join(c, "system", "decomposeParDict"), "w") as f:
+            f.write("numberOfSubdomains 4;\ndecomposer      hierarchical;\n")
+        with open(os.path.join(c, "constant", "polyMesh", "owner"), "w") as f:
+            f.write('FoamFile\n{\n    note "nPoints:900 nCells:480 nFaces:2000 nInternalFaces:1500";\n}\n')
+        if marker is not None:
+            with open(os.path.join(c, self.jobs.CASE_MARKER), "w") as f:
+                json.dump(marker, f)
+
+    def post(self, params):
+        return self.api.handle("POST", "/api/v1/jobs", {}, json.dumps({"kind": "solve", "params": params}).encode(),
+                               "application/json")
+
+    def assertRefused(self, answer, status, code, text):
+        got, doc, _ = answer
+        self.assertEqual((got, doc["error"]["code"]), (status, code), doc)
+        self.assertIn(text, doc["error"]["message"])
+        self.assertNotIn(self.d, doc["error"]["message"])                   # never this machine's folders
+
+    def solve(self, *args):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = self.s.run(*args)
+        return rc, out.getvalue().strip().splitlines()
+
+    def status(self):
+        with open(os.path.join(self.cases, "made", self.jobs.SOLVE_STATUS)) as f:
+            return json.load(f)
+
+    def control(self):
+        with open(os.path.join(self.cases, "made", "system", "controlDict")) as f:
+            return f.read()
+
+    def test_a_solve_job_takes_only_a_case_mesh_doctor_made_and_starts_its_solve(self):
+        self.assertRefused(self.post({"name": "mine"}), 422, "unsupported", "never changes")
+        self.assertRefused(self.post({"name": "half"}), 409, "not-ready", "no mesh yet")
+        self.assertRefused(self.post({"name": "nope"}), 404, "not-found", "no case nope")
+        self.assertRefused(self.post({"name": "../x"}), 400, "bad-request", "name")
+        with mock.patch.object(self.s.os, "cpu_count", lambda: 8):
+            self.assertRefused(self.post({"name": "made", "np": 9}), 400, "bad-request", "8 processors")
+        st, doc, _ = self.post({"name": "made", "to": 40, "np": 2})
+        self.assertEqual(st, 202, doc)
+        self.assertEqual((doc["kind"], doc["params"], doc["log"]), ("solve", {"name": "made", "to": 40, "np": 2},
+                                                                    ".runs/made_to_40.log"))
+        self.assertEqual(doc["links"]["run"], "/api/v1/runs/made")
+        argv = self.launched[0]
+        cmd = argv[argv.index("--") + 1:]
+        self.assertTrue(cmd[1].endswith("solve.py"), cmd)
+        self.assertEqual(cmd[2:], ["run", "made", "--to", "40", "--np", "2"])
+        self.assertTrue(os.path.isdir(os.path.join(self.d, "work", ".runs")))    # where its log goes
+
+    def test_the_first_solve_splits_the_case_and_a_later_one_continues_on_its_split(self):
+        rc, lines = self.solve("made", 40, 2)
+        self.assertEqual(rc, 0, lines)
+        self.assertEqual(lines[-1], "made: solved to iteration 40")
+        st = self.status()
+        self.assertEqual((st["state"], st["iteration"], st["nProcs"], st["stretches"], st["fraction"]),
+                         ("done", 40, 2, [{"from": 0, "to": 40}], 1.0))
+        text = self.control()
+        for line in ("endTime         40;", "writeInterval   10;", "startFrom       latestTime;", "stopAt          endTime;"):
+            self.assertIn(line, text)
+        self.assertIn("    writeInterval 1;", text)                        # a function object's own is left alone
+        self.assertEqual(sorted(n for n in os.listdir(os.path.join(self.cases, "made")) if n.startswith("processor")),
+                         ["processor0", "processor1"])
+        doc = self.api.handle("GET", "/api/v1/runs/made", {})[1]
+        self.assertEqual((doc["state"], doc["written"], doc["links"]["judge"]), ("done", 40, "/api/v1/judge?case=made"))
+        self.assertRefused(self.post({"name": "made", "to": 40}), 400, "bad-request", "solved to iteration 40 already")
+        rc, lines = self.solve("made", 60, 8)                                  # continues on the run's own 2
+        self.assertEqual(rc, 0, lines)
+        self.assertEqual(lines[0], "made: continuing from iteration 40 to 60 on 2 processes")
+        st = self.status()
+        self.assertEqual((st["start"], st["iteration"], st["nProcs"], st["stretches"]),
+                         (40, 60, 2, [{"from": 0, "to": 40}, {"from": 40, "to": 60}]))
+        self.assertTrue(os.path.isfile(os.path.join(self.cases, "made", "log.foamRun_to_60")))
+        items = self.api.handle("GET", "/api/v1/runs", {})[1]["items"]
+        self.assertEqual([(r["name"], r["state"], r["iteration"]) for r in items], [("made", "done", 60)])
+
+    def test_stop_ends_the_run_at_a_written_iteration_and_it_continues_from_there(self):
+        st, doc, _ = self.api.handle("POST", "/api/v1/runs/made/stop", {})
+        self.assertEqual((st, doc["error"]["code"]), (404, "not-found"))       # no run yet
+        self.assertEqual(self.solve("made", 30, 1)[0], 0)                      # 1 process: not split
+        st, doc, _ = self.api.handle("POST", "/api/v1/runs/made/stop", {})
+        self.assertEqual((st, doc["error"]["code"]), (409, "not-ready"))       # not solving now
+        with mock.patch.object(self.s, "solving", lambda name: True):
+            st, doc, _ = self.api.handle("POST", "/api/v1/runs/made/stop", {})
+        self.assertEqual((st, doc["name"]), (200, "made"))
+        self.assertRegex(self.control(), r"(?m)^stopAt\s+writeNow;")
+        with mock.patch.dict(os.environ, {"MD_TEST_STOP_AT": "45"}):          # a Stop while it solves
+            rc, lines = self.solve("made", 100, 1)
+        self.assertEqual((rc, lines[-1]), (0, "made: solved to iteration 45, stopped before 100"))
+        st = self.status()
+        self.assertEqual((st["state"], st["iteration"], st["stretches"][-1]), ("stopped", 45, {"from": 30, "to": 45}))
+        self.assertRegex(self.control(), r"(?m)^stopAt\s+endTime;")             # the next solve runs to its end
+        self.assertEqual(self.s.latest(os.path.join(self.cases, "made")), 45)
+        self.assertEqual(self.solve("made", 50, 1)[1][0], "made: continuing from iteration 45 to 50")
+
+    def test_a_failed_solve_says_where_and_a_run_whose_job_is_gone_says_interrupted(self):
+        with mock.patch.dict(os.environ, {"MD_TEST_FAIL": "1"}):
+            rc, lines = self.solve("made", 20, 2)
+        self.assertEqual((rc, lines[-1]), (1, "the solve failed at foamRun: see log.foamRun in the case's folder"))
+        run = self.api.handle("GET", "/api/v1/runs/made", {})[1]
+        self.assertEqual((run["state"], run["error"]), ("failed", lines[-1]))
+        self.assertEqual((run["iteration"], run["written"], run["stretches"]), (20, 20, [{"from": 0, "to": 20}]))
+        doc = self.status()
+        doc["state"] = "running"
+        with open(os.path.join(self.cases, "made", self.jobs.SOLVE_STATUS), "w") as f:
+            json.dump(doc, f)
+        self.assertEqual(self.s.describe("made")["state"], "interrupted")
+        job = {"kind": "solve", "name": "made", "created": "2000-01-01T00:00:00Z"}
+        doc.update(step="solving", fraction=0.42)
+        with open(os.path.join(self.cases, "made", self.jobs.SOLVE_STATUS), "w") as f:
+            json.dump(doc, f)
+        self.assertEqual(self.jobs.progress(job, os.path.join(self.d, "work"))["fraction"], 0.42)
+        self.assertIsNone(self.jobs.progress(dict(job, state="queued"), os.path.join(self.d, "work")))
+
+    def test_a_cancelled_solve_says_so_and_continues_later(self):
+        import signal
+        env = dict(os.environ, MD_TEST_SLOW="1")                # as a job's cancel: SIGTERM to the whole group
+        p = subprocess.Popen([sys.executable, os.path.join(self.s.PKG, "solve.py"), "run", "made", "--to", "1000",
+                              "--np", "2"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+        try:
+            log = os.path.join(self.cases, "made", "log.foamRun")
+            for _ in range(400):
+                if os.path.isfile(log) and os.path.getsize(log) > 20:
+                    break
+                time.sleep(0.05)
+            os.killpg(p.pid, signal.SIGTERM)
+            self.assertEqual(p.wait(timeout=20), 128 + signal.SIGTERM)
+        finally:
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+            p.wait()
+        st = self.status()
+        self.assertEqual((st["state"], st["stretches"], st["nProcs"]), ("cancelled", [], 2))
+        self.assertEqual(self.s.describe("made")["state"], "cancelled")
+        case = os.path.join(self.cases, "made")
+        self.assertEqual(self.s.split(case), 2)                 # split, but nothing written past iteration 0
+        rc, lines = self.solve("made", 10, 1)                   # so it starts again, on the one process asked for
+        self.assertEqual((rc, lines[0]), (0, "made: solving from iteration 0 to 10"))
+        self.assertEqual((self.s.split(case), self.s.latest(case), self.status()["nProcs"]), (0, 10, 1))
+        self.assertTrue(os.path.isfile(os.path.join(case, "log.potentialFoam")))
+
+    def test_the_command_refuses_a_case_you_made_and_continues_one_solved_by_hand(self):
+        with self.assertRaises(SystemExit) as e:
+            self.s.main(["mine", "--to", "10"])
+        self.assertIn("never changes", str(e.exception))
+        case = os.path.join(self.cases, "made")                 # ./Allrun 2 30 by hand: split, written to 30
+        for n in ("processor0/0", "processor0/30", "processor1/0", "processor1/30"):
+            os.makedirs(os.path.join(case, n))
+        self.assertRefused(self.post({"name": "made", "to": 30}), 400, "bad-request", "solved to iteration 30 already")
+        rc, lines = self.solve("made", 40, 4)
+        self.assertEqual((rc, lines[0]), (0, "made: continuing from iteration 30 to 40 on 2 processes"))
+        self.assertEqual(self.status()["stretches"], [{"from": 30, "to": 40}])
+        self.assertEqual(self.s.write_interval(0, 2000), 500)
+        self.assertEqual(self.s.write_interval(2000, 2300), 50)       # 2300's largest divisor <= 75
+
+
 class MachineTest(unittest.TestCase):
     """GET /api/v1/machine: what the app's size estimator fills in (ramguard.machine)."""
 

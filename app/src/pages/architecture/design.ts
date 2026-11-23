@@ -345,7 +345,7 @@ export const DESIGN: DocSection[] = [
             [
               "`POST /jobs`",
               "`/api/md/start`, `abstart`, `abextend`",
-              "start a repair, A/B test, A/B extension or new case (202 Accepted, the job document)"
+              "start a repair, A/B test, A/B extension, new case or solve (202 Accepted, the job document)"
             ],
             [
               "`GET /jobs?state=&limit=`, `GET /jobs/{job}`",
@@ -356,6 +356,16 @@ export const DESIGN: DocSection[] = [
               "`POST /jobs/{job}/cancel`",
               "",
               "stop a job and everything it started (`409 finished` if it already ended)"
+            ],
+            [
+              "`GET /runs`, `GET /runs/{name}`",
+              "(new)",
+              "solves of cases Mesh Doctor made (`solve` jobs), newest first: each run's state (`running`, `done`, `stopped` at a written iteration, `failed`, `cancelled`, or `interrupted` when its job is gone), the iteration it is at, the latest one written and the stretches solved so far; one run adds its links, its judge (`GET /judge?case=`) among them (API 1.6)"
+            ],
+            [
+              "`POST /runs/{name}/stop`",
+              "",
+              "Stop: the run writes the iteration it is at and ends (`stopAt writeNow`), so a later solve job continues from there (`409 not-ready` if it isn't solving)"
             ]
           ]
         }
@@ -364,11 +374,11 @@ export const DESIGN: DocSection[] = [
         "text": "A job request names its kind and its parameters, which are checked against a schema (also in the OpenAPI document) before anything starts. Unknown parameters are refused:"
       },
       {
-        "code": "{\"kind\": \"repair\", \"params\": {\"source\": \"motorBike\", \"name\": \"mb\", \"profile\": \"openfoam\"}}\n{\"kind\": \"abtest\", \"params\": {\"name\": \"mb\", \"iters\": 200, \"init\": \"0.warm\", \"variant\": \"\"}}\n{\"kind\": \"abextend\", \"params\": {\"name\": \"mb\", \"to\": 1000}}\n{\"kind\": \"case\", \"params\": {\"template\": \"ahmed-body\", \"size\": \"coarse\", \"name\": \"ahmed\"}}",
+        "code": "{\"kind\": \"repair\", \"params\": {\"source\": \"motorBike\", \"name\": \"mb\", \"profile\": \"openfoam\"}}\n{\"kind\": \"abtest\", \"params\": {\"name\": \"mb\", \"iters\": 200, \"init\": \"0.warm\", \"variant\": \"\"}}\n{\"kind\": \"abextend\", \"params\": {\"name\": \"mb\", \"to\": 1000}}\n{\"kind\": \"case\", \"params\": {\"template\": \"ahmed-body\", \"size\": \"coarse\", \"name\": \"ahmed\"}}\n{\"kind\": \"solve\", \"params\": {\"name\": \"ahmed\", \"to\": 2000, \"np\": 4}}",
         "lang": "json"
       },
       {
-        "text": "A new repair or A/B test refuses to replace an existing run of the same name (`409 exists`) unless the request says `\"replace\": true`, because the copy step deletes the old run. A new case refuses a name that is taken in the cases folder; there `\"replace\": true` makes again only a case that an earlier case job made (it holds a `.meshdoctor-case.json`), never one you made. The old routes keep their old behaviour."
+        "text": "A new repair or A/B test refuses to replace an existing run of the same name (`409 exists`) unless the request says `\"replace\": true`, because the copy step deletes the old run. A new case refuses a name that is taken in the cases folder; there `\"replace\": true` makes again only a case that an earlier case job made (it holds a `.meshdoctor-case.json`), never one you made. A solve runs only in a case a case job made, once its mesh is made (`422 unsupported` for a case you made): while no iteration is written it splits the case and starts the flow with `potentialFoam`, and once one is written it continues from the latest, on the same split. The old routes keep their old behaviour."
       },
       {
         "table": {
@@ -482,7 +492,7 @@ export const DESIGN: DocSection[] = [
             "after": "The command comes from the wrapper's own arguments, never from the job file. While a job is live, only the wrapper writes its file, so no update is lost."
           },
           "**Cancel** sends SIGTERM to the wrapper. The wrapper stops the whole process group (mpirun ranks included), sends SIGKILL after 30 s, and records `cancelled`.",
-          "**Progress** is read when a job is read, from the tool's own `status.json` / `ab_status.json`, or a new case's `.meshdoctor-case.json`, which follows its `Allmesh` and snappyHexMesh's phases. It holds the current step, and a rough fraction where the step is known.",
+          "**Progress** is read when a job is read, from the tool's own `status.json` / `ab_status.json`, a new case's `.meshdoctor-case.json` (which follows its `Allmesh` and snappyHexMesh's phases) or a solve's `.meshdoctor-solve.json` (whose fraction follows the iterations). It holds the current step, and a rough fraction where the step is known.",
           "**Lost jobs:** a `running` job whose wrapper is gone (machine restarted, process killed) is marked `failed` with a reason the next time it is read. So is a `queued` job that never started within a minute.",
           "**Errors** are the last line of the job's log, with the workspace's and the cases folder's paths removed, because they may be shown on a web page.",
           "`md_api` (and so the old dashboard routes and `/api/v1/jobs`) starts work only through `jobs.submit`. `meshdoctor jobs [list | show <id> | cancel <id>]` follows jobs from the shell. The CLI commands (`full`, `ab`, ...) still run in the foreground without a job file.",

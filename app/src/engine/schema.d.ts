@@ -130,7 +130,7 @@ export interface paths {
         /** Jobs on this worker, newest first, with their progress */
         get: operations["list_jobs"];
         put?: never;
-        /** Start a repair, A/B test, A/B extension or new case.  Needs the launch token (X-MD-Token) or the pairing key (X-MD-Key). */
+        /** Start a repair, A/B test, A/B extension, new case or solve.  Needs the launch token (X-MD-Token) or the pairing key (X-MD-Key). */
         post: operations["start_job"];
         delete?: never;
         options?: never;
@@ -393,6 +393,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Solves of cases Mesh Doctor made (`solve` jobs), the newest first (API 1.6) */
+        get: operations["list_runs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One run: its state, the iteration it is at, the stretches solved, and its links (API 1.6) */
+        get: operations["get_run"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs/{name}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop a run at a written iteration: it writes the iteration it is at and ends, so a later solve job continues from there.  Needs the token or pairing key (API 1.6) */
+        post: operations["stop_run"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/schemas/{kind}": {
         parameters: {
             query?: never;
@@ -555,7 +606,7 @@ export interface components {
             /** @description local start time (yyyymmdd-hhmmss), kind, run name and a random suffix */
             id: string;
             /** @enum {unknown} */
-            kind: "repair" | "abtest" | "abextend" | "case";
+            kind: "repair" | "abtest" | "abextend" | "case" | "solve";
             /** @description added by the API: where to follow the job and its run */
             links?: Record<string, unknown>;
             log: string;
@@ -1432,6 +1483,23 @@ export interface operations {
                         /** @description a template (GET /templates) */
                         template: string;
                     };
+                } | {
+                    /** @enum {unknown} */
+                    kind: "solve";
+                    params: {
+                        /** @description a case in the cases folder that Mesh Doctor made (a case job's); a case you made is never changed */
+                        name: string;
+                        /**
+                         * @description processes for a solve from iteration 0 (1: not split); a continuation keeps the run's own
+                         * @default 4
+                         */
+                        np?: number;
+                        /**
+                         * @description the iteration to solve to; past the latest written one
+                         * @default 2000
+                         */
+                        to?: number;
+                    };
                 };
             };
         };
@@ -2048,6 +2116,202 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Report"];
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_runs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: {
+                            /** @description the iteration the latest stretch runs to (endTime) */
+                            end: number | null;
+                            /** @description why it failed (state failed), naming no folders */
+                            error: string | null;
+                            /** @description when the latest stretch ended (UTC); null while it runs */
+                            finished: string | null;
+                            /** @description the last iteration in its solver log */
+                            iteration: number | null;
+                            /** @description the case it solves: a case in the cases folder that Mesh Doctor made */
+                            name: string;
+                            /** @description the processes it runs on; 1: the case isn't split */
+                            nProcs: number | null;
+                            /** @description the iteration the latest stretch started from */
+                            start: number;
+                            /** @description when the latest stretch started (UTC) */
+                            started: string | null;
+                            /**
+                             * @description stopped: ended at a written iteration before its end (Stop); interrupted: its status says running but its job is gone (the computer restarted, or the job was killed)
+                             * @enum {unknown}
+                             */
+                            state: "running" | "done" | "stopped" | "failed" | "cancelled" | "interrupted";
+                            /** @description decomposing, potentialFoam, solving, reconstructing or done */
+                            step: string;
+                            /** @description the stretches solved so far, oldest first */
+                            stretches: {
+                                from: number;
+                                to: number;
+                            }[];
+                            /** @description when its status last changed (UTC) */
+                            updated: string | null;
+                            /** @description the latest iteration written, which a continuation starts from */
+                            written: number;
+                        }[];
+                    };
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description the iteration the latest stretch runs to (endTime) */
+                        end: number | null;
+                        /** @description why it failed (state failed), naming no folders */
+                        error: string | null;
+                        /** @description when the latest stretch ended (UTC); null while it runs */
+                        finished: string | null;
+                        /** @description the last iteration in its solver log */
+                        iteration: number | null;
+                        /** @description itself, Stop, and its convergence judge (GET /judge?case=) */
+                        links?: Record<string, unknown>;
+                        /** @description the case it solves: a case in the cases folder that Mesh Doctor made */
+                        name: string;
+                        /** @description the processes it runs on; 1: the case isn't split */
+                        nProcs: number | null;
+                        /** @description the iteration the latest stretch started from */
+                        start: number;
+                        /** @description when the latest stretch started (UTC) */
+                        started: string | null;
+                        /**
+                         * @description stopped: ended at a written iteration before its end (Stop); interrupted: its status says running but its job is gone (the computer restarted, or the job was killed)
+                         * @enum {unknown}
+                         */
+                        state: "running" | "done" | "stopped" | "failed" | "cancelled" | "interrupted";
+                        /** @description decomposing, potentialFoam, solving, reconstructing or done */
+                        step: string;
+                        /** @description the stretches solved so far, oldest first */
+                        stretches: {
+                            from: number;
+                            to: number;
+                        }[];
+                        /** @description when its status last changed (UTC) */
+                        updated: string | null;
+                        /** @description the latest iteration written, which a continuation starts from */
+                        written: number;
+                    };
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    stop_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description the iteration the latest stretch runs to (endTime) */
+                        end: number | null;
+                        /** @description why it failed (state failed), naming no folders */
+                        error: string | null;
+                        /** @description when the latest stretch ended (UTC); null while it runs */
+                        finished: string | null;
+                        /** @description the last iteration in its solver log */
+                        iteration: number | null;
+                        /** @description itself, Stop, and its convergence judge (GET /judge?case=) */
+                        links?: Record<string, unknown>;
+                        /** @description the case it solves: a case in the cases folder that Mesh Doctor made */
+                        name: string;
+                        /** @description the processes it runs on; 1: the case isn't split */
+                        nProcs: number | null;
+                        /** @description the iteration the latest stretch started from */
+                        start: number;
+                        /** @description when the latest stretch started (UTC) */
+                        started: string | null;
+                        /**
+                         * @description stopped: ended at a written iteration before its end (Stop); interrupted: its status says running but its job is gone (the computer restarted, or the job was killed)
+                         * @enum {unknown}
+                         */
+                        state: "running" | "done" | "stopped" | "failed" | "cancelled" | "interrupted";
+                        /** @description decomposing, potentialFoam, solving, reconstructing or done */
+                        step: string;
+                        /** @description the stretches solved so far, oldest first */
+                        stretches: {
+                            from: number;
+                            to: number;
+                        }[];
+                        /** @description when its status last changed (UTC) */
+                        updated: string | null;
+                        /** @description the latest iteration written, which a continuation starts from */
+                        written: number;
+                    };
                 };
             };
             /** @description Error (the code says which; see STATUS in api_v1.py) */

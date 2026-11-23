@@ -73,6 +73,7 @@ TOKEN = m.group(1) if m else ""
 JOB = "/api/md/start?src=example_case&name=..&profile=openfoam"
 V1JOB = b'{"kind": "repair", "params": {"source": "example_case", "name": ".."}}'
 CASEJOB = b'{"kind": "case", "params": {"template": "ahmed-body", "name": ".."}}'
+SOLVEJOB = b'{"kind": "solve", "params": {"name": ".."}}'
 JSON = "application/json"
 PAGES = ("/", "/run", "/meshdoctor", "/meshmap", "/report")
 APP_KEY = ""
@@ -111,6 +112,7 @@ CHECKS = [
     ("v1 machine works", "GET", "/api/v1/machine", {}, 200, '"memoryMb"'),
     ("v1 readiness check works", "GET", "/api/v1/check", {}, 200, '"checks"'),
     ("v1 templates list works", "GET", "/api/v1/templates", {}, 200, '"sizes"'),
+    ("v1 runs list works", "GET", "/api/v1/runs", {}, 200, '"items"'),
     ("v1 readiness check takes no POST", "POST", "/api/v1/check", {"X-MD-Token": TOKEN, "Content-Type": JSON}, 405,
      '"code": "method-not-allowed"', b"{}"),
     ("v1 unknown host refused", "GET", "/api/v1/cases", {"Host": f"evil.example:{PORT}"}, 403, '"code": "forbidden"'),
@@ -126,6 +128,12 @@ CHECKS = [
     ("v1 job without token refused", "POST", "/api/v1/jobs", {"Content-Type": JSON}, 403, "token", V1JOB),
     ("v1 cancel without token refused", "POST", "/api/v1/jobs/20260101-000000-repair-x-abcd/cancel", {}, 403,
      "token"),
+    ("v1 Stop without token refused", "POST", "/api/v1/runs/x/stop", {}, 403, "token"),
+    ("v1 Stop with wrong token refused", "POST", "/api/v1/runs/x/stop", {"X-MD-Token": "wrong"}, 403, "token"),
+    ("v1 Stop from another site refused, even with token", "POST", "/api/v1/runs/x/stop",
+     {"X-MD-Token": TOKEN, "Origin": "http://evil.example"}, 403, "cross-site"),
+    ("v1 Stop with token reaches the API: no such run", "POST", "/api/v1/runs/nope/stop",
+     {"X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 404, '"code": "not-found"'),
     ("v1 job with wrong token refused", "POST", "/api/v1/jobs", {"Content-Type": JSON, "X-MD-Token": "wrong"},
      403, "token", V1JOB),
     ("v1 job from another site refused, even with token", "POST", "/api/v1/jobs",
@@ -139,6 +147,9 @@ CHECKS = [
     ("v1 new case without token refused", "POST", "/api/v1/jobs", {"Content-Type": JSON}, 403, "token", CASEJOB),
     ("v1 new case with token reaches the API, which refuses '..'", "POST", "/api/v1/jobs",
      {"Content-Type": JSON, "X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 400, '"code": "bad-request"', CASEJOB),
+    ("v1 solve without token refused", "POST", "/api/v1/jobs", {"Content-Type": JSON}, 403, "token", SOLVEJOB),
+    ("v1 solve with token reaches the API, which refuses '..'", "POST", "/api/v1/jobs",
+     {"Content-Type": JSON, "X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 400, '"code": "bad-request"', SOLVEJOB),
     # page scripts: only plain names from web/js/
     ("shared page script is served", "GET", "/js/md.js", {}, 200, "MD.render"),
     ("unknown script is not served", "GET", "/js/nope.js", {}, 404, ""),

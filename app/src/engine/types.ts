@@ -58,4 +58,5 @@ export const JOB_KIND_LABEL: Record<JobKind, string> = {
   abtest: "A/B test",
   abextend: "A/B extension",
   case: "New case",
+  solve: "Solve",
 };

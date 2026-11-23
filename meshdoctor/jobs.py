@@ -33,6 +33,8 @@ SOLVERS = ("foamRun", "snappyHexMesh", "foamMeshDoctor")
 ACTIVE = ("queued", "running")
 # In a new case a case job makes (templates.py): its template, its size, and how far the making is.
 CASE_MARKER = ".meshdoctor-case.json"
+# In a case a solve job solves (solve.py): the run's state, iteration and the stretches solved so far.
+SOLVE_STATUS = ".meshdoctor-solve.json"
 ID = re.compile(r"^[0-9]{8}-[0-9]{6}-[a-z]+-[A-Za-z0-9_.-]{1,80}-[0-9a-f]{4}$")
 START_GRACE = 60          # seconds a queued job may wait for its wrapper before it counts as lost
 SPAWN_TIMEOUT = 30        # seconds the wrapper has to say its pid (jobrun.detach)
@@ -140,13 +142,17 @@ PROGRESS = {
         ("copying", 0.01), ("geometry", 0.02), ("surfaceFeatures", 0.03), ("blockMesh", 0.04),
         ("snappyHexMesh: refining", 0.05), ("snappyHexMesh: snapping", 0.25), ("snappyHexMesh: adding layers", 0.6),
         ("checkMesh", 0.9), ("done", 1.0)]),
+    # solve.py's status file in the case; while solving, its own fraction follows the iterations
+    "solve": ("{cases}/{name}/" + SOLVE_STATUS, [
+        ("decomposing", 0.01), ("potentialFoam", 0.03), ("solving", 0.05), ("reconstructing", 0.97), ("done", 1.0)]),
 }
 
 
 def progress(job, ws):
-    """{"step", "fraction", "updated"} from the tool's own status file, or None."""
+    """{"step", "fraction", "updated"} from the tool's own status file, or None.  A queued job has none yet: a status
+    file then is an earlier job's (a solve's last stretch, say)."""
     rel, steps = PROGRESS.get(job.get("kind"), (None, []))
-    if not rel:
+    if not rel or job.get("state") == "queued":
         return None
     try:
         with open(os.path.join(ws, rel.format(name=job["name"], cases=config.settings()["cases"])),
@@ -157,7 +163,9 @@ def progress(job, ws):
     except (OSError, ValueError, KeyError):
         return None
     step = str(st.get("step", ""))
-    frac = next((x for p, x in steps if step.startswith(p)), None)
+    frac = st.get("fraction")               # a tool that knows its own fraction (a solve: its iterations)
+    if not isinstance(frac, (int, float)) or isinstance(frac, bool):
+        frac = next((x for p, x in steps if step.startswith(p)), None)
     return {"step": step, "fraction": frac, "updated": st.get("time")}
 
 

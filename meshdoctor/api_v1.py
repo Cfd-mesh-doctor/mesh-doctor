@@ -21,10 +21,11 @@ import jobs
 import md_api
 import ramguard
 import schema
+import solve
 import templates
 import version
 
-API_VERSION = "1.5"
+API_VERSION = "1.6"
 PREFIX = "/api/v1"
 MAX_BODY = 64 * 1024
 
@@ -499,6 +500,55 @@ def list_templates(p, q, b):
     return {"items": templates.listing()}
 
 
+_INT_OR_NULL = {"type": ["integer", "null"]}
+RUN = {"type": "object", "required": ["name", "state", "step", "iteration", "start", "end", "written", "nProcs",
+                                       "stretches", "started", "updated", "finished", "error"], "properties": {
+    "name": {"type": "string", "description": "the case it solves: a case in the cases folder that Mesh Doctor made"},
+    "state": {"enum": ["running", "done", "stopped", "failed", "cancelled", "interrupted"],
+              "description": "stopped: ended at a written iteration before its end (Stop); interrupted: its status "
+                             "says running but its job is gone (the computer restarted, or the job was killed)"},
+    "step": {"type": "string", "description": "decomposing, potentialFoam, solving, reconstructing or done"},
+    "iteration": dict(_INT_OR_NULL, description="the last iteration in its solver log"),
+    "start": {"type": "integer", "description": "the iteration the latest stretch started from"},
+    "end": dict(_INT_OR_NULL, description="the iteration the latest stretch runs to (endTime)"),
+    "written": {"type": "integer", "description": "the latest iteration written, which a continuation starts from"},
+    "nProcs": dict(_INT_OR_NULL, description="the processes it runs on; 1: the case isn't split"),
+    "stretches": {"type": "array", "description": "the stretches solved so far, oldest first", "items": {
+        "type": "object", "required": ["from", "to"],
+        "properties": {"from": {"type": "integer"}, "to": {"type": "integer"}}}},
+    "started": dict(_TEXT, description="when the latest stretch started (UTC)"),
+    "updated": dict(_TEXT, description="when its status last changed (UTC)"),
+    "finished": dict(_TEXT, description="when the latest stretch ended (UTC); null while it runs"),
+    "error": dict(_TEXT, description="why it failed (state failed), naming no folders")}}
+RUN_ONE = dict(RUN, properties=dict(RUN["properties"], links={
+    "type": "object", "description": "itself, Stop, and its convergence judge (GET /judge?case=)"}))
+
+
+def _run_out(run):
+    me = f"{PREFIX}/runs/{run['name']}"
+    return dict(run, links={"self": me, "stop": me + "/stop", "judge": f"{PREFIX}/judge?case={run['name']}"})
+
+
+@route("GET", "/runs", "Solves of cases Mesh Doctor made (`solve` jobs), the newest first (API 1.6)", ok=_items(RUN))
+def list_runs(p, q, b):
+    return {"items": solve.runs()}
+
+
+@route("GET", "/runs/{name}", "One run: its state, the iteration it is at, the stretches solved, and its links "
+       "(API 1.6)", ok=RUN_ONE)
+def get_run(p, q, b):
+    return _run_out(_found(solve.describe(_name(p["name"])), "run " + p["name"]))
+
+
+@route("POST", "/runs/{name}/stop", "Stop a run at a written iteration: it writes the iteration it is at and ends, "
+       "so a later solve job continues from there.  Needs the token or pairing key (API 1.6)", ok=RUN_ONE)
+def stop_run(p, q, b):
+    run, why = solve.stop(_name(p["name"]))
+    if why:
+        raise ApiError(*why)
+    return _run_out(run)
+
+
 @route("GET", "/variants", "Solver-setting variants an A/B second run can use",
        ok=_items({"type": "object", "required": ["name", "label"],
                   "properties": {"name": {"type": "string"}, "label": {"type": "string"}}}))
@@ -562,6 +612,19 @@ JOBS = {
                                                       "Doctor didn't make is never replaced"}}, ["template", "name"]),
         "start": lambda a: templates.start(a["template"], a["size"], a["name"], replace=a["replace"]),
         "links": lambda n: {"cases": f"{PREFIX}/cases"},
+    },
+    "solve": {
+        "summary": "solve a case Mesh Doctor made to an iteration: while none is written it splits the case, starts "
+                   "the flow with potentialFoam and runs foamRun; once one is written it continues from the latest",
+        "params": _params({"name": dict(NAME, description="a case in the cases folder that Mesh Doctor made (a case "
+                                                          "job's); a case you made is never changed"),
+                           "to": {"type": "integer", "minimum": 1, "maximum": solve.MAX_ITERS, "default": 2000,
+                                  "description": "the iteration to solve to; past the latest written one"},
+                           "np": {"type": "integer", "minimum": 1, "maximum": 64, "default": 4,
+                                  "description": "processes for a solve from iteration 0 (1: not split); a "
+                                                 "continuation keeps the run's own"}}, ["name"]),
+        "start": lambda a: solve.start(a["name"], a["to"], a["np"]),
+        "links": lambda n: {"run": f"{PREFIX}/runs/{n}"},
     },
 }
 JOB_REQUEST = {"oneOf": [
@@ -668,7 +731,8 @@ def cancel_job(p, q, b):
 
 
 @route("POST", "/jobs",
-       "Start a repair, A/B test, A/B extension or new case.  Needs the launch token (X-MD-Token) or the pairing key "
+       "Start a repair, A/B test, A/B extension, new case or solve.  Needs the launch token (X-MD-Token) or the "
+       "pairing key "
        "(X-MD-Key).", body=JOB_REQUEST, ok=_ref("job"), status=202)
 def start_job(p, q, b):
     if not isinstance(b, dict) or b.get("kind") not in JOBS:

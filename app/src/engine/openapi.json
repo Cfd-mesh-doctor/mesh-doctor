@@ -411,7 +411,8 @@
               "repair",
               "abtest",
               "abextend",
-              "case"
+              "case",
+              "solve"
             ]
           },
           "params": {
@@ -1670,7 +1671,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.5"
+    "version": "1.6"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -2892,6 +2893,50 @@
                       "params"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "description": "solve a case Mesh Doctor made to an iteration: while none is written it splits the case, starts the flow with potentialFoam and runs foamRun; once one is written it continues from the latest",
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "solve"
+                        ]
+                      },
+                      "params": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "description": "a case in the cases folder that Mesh Doctor made (a case job's); a case you made is never changed",
+                            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+                            "type": "string"
+                          },
+                          "np": {
+                            "default": 4,
+                            "description": "processes for a solve from iteration 0 (1: not split); a continuation keeps the run's own",
+                            "maximum": 64,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "to": {
+                            "default": 2000,
+                            "description": "the iteration to solve to; past the latest written one",
+                            "maximum": 100000,
+                            "minimum": 1,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "params"
+                    ],
+                    "type": "object"
                   }
                 ]
               }
@@ -2929,7 +2974,7 @@
             "pairingKey": []
           }
         ],
-        "summary": "Start a repair, A/B test, A/B extension or new case.  Needs the launch token (X-MD-Token) or the pairing key (X-MD-Key)."
+        "summary": "Start a repair, A/B test, A/B extension, new case or solve.  Needs the launch token (X-MD-Token) or the pairing key (X-MD-Key)."
       }
     },
     "/jobs/{job}": {
@@ -3985,6 +4030,469 @@
           }
         },
         "summary": "Portable report: the repair, its map and its A/B test in one file, worker paths replaced (open it in /report)"
+      }
+    },
+    "/runs": {
+      "get": {
+        "operationId": "list_runs",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "end": {
+                            "description": "the iteration the latest stretch runs to (endTime)",
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "error": {
+                            "description": "why it failed (state failed), naming no folders",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "finished": {
+                            "description": "when the latest stretch ended (UTC); null while it runs",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "iteration": {
+                            "description": "the last iteration in its solver log",
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "nProcs": {
+                            "description": "the processes it runs on; 1: the case isn't split",
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "name": {
+                            "description": "the case it solves: a case in the cases folder that Mesh Doctor made",
+                            "type": "string"
+                          },
+                          "start": {
+                            "description": "the iteration the latest stretch started from",
+                            "type": "integer"
+                          },
+                          "started": {
+                            "description": "when the latest stretch started (UTC)",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "state": {
+                            "description": "stopped: ended at a written iteration before its end (Stop); interrupted: its status says running but its job is gone (the computer restarted, or the job was killed)",
+                            "enum": [
+                              "running",
+                              "done",
+                              "stopped",
+                              "failed",
+                              "cancelled",
+                              "interrupted"
+                            ]
+                          },
+                          "step": {
+                            "description": "decomposing, potentialFoam, solving, reconstructing or done",
+                            "type": "string"
+                          },
+                          "stretches": {
+                            "description": "the stretches solved so far, oldest first",
+                            "items": {
+                              "properties": {
+                                "from": {
+                                  "type": "integer"
+                                },
+                                "to": {
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "from",
+                                "to"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "updated": {
+                            "description": "when its status last changed (UTC)",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "written": {
+                            "description": "the latest iteration written, which a continuation starts from",
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "state",
+                          "step",
+                          "iteration",
+                          "start",
+                          "end",
+                          "written",
+                          "nProcs",
+                          "stretches",
+                          "started",
+                          "updated",
+                          "finished",
+                          "error"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "Solves of cases Mesh Doctor made (`solve` jobs), the newest first (API 1.6)"
+      }
+    },
+    "/runs/{name}": {
+      "get": {
+        "operationId": "get_run",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "end": {
+                      "description": "the iteration the latest stretch runs to (endTime)",
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "description": "why it failed (state failed), naming no folders",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "finished": {
+                      "description": "when the latest stretch ended (UTC); null while it runs",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "iteration": {
+                      "description": "the last iteration in its solver log",
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "links": {
+                      "description": "itself, Stop, and its convergence judge (GET /judge?case=)",
+                      "type": "object"
+                    },
+                    "nProcs": {
+                      "description": "the processes it runs on; 1: the case isn't split",
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "name": {
+                      "description": "the case it solves: a case in the cases folder that Mesh Doctor made",
+                      "type": "string"
+                    },
+                    "start": {
+                      "description": "the iteration the latest stretch started from",
+                      "type": "integer"
+                    },
+                    "started": {
+                      "description": "when the latest stretch started (UTC)",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "state": {
+                      "description": "stopped: ended at a written iteration before its end (Stop); interrupted: its status says running but its job is gone (the computer restarted, or the job was killed)",
+                      "enum": [
+                        "running",
+                        "done",
+                        "stopped",
+                        "failed",
+                        "cancelled",
+                        "interrupted"
+                      ]
+                    },
+                    "step": {
+                      "description": "decomposing, potentialFoam, solving, reconstructing or done",
+                      "type": "string"
+                    },
+                    "stretches": {
+                      "description": "the stretches solved so far, oldest first",
+                      "items": {
+                        "properties": {
+                          "from": {
+                            "type": "integer"
+                          },
+                          "to": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "from",
+                          "to"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "updated": {
+                      "description": "when its status last changed (UTC)",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "written": {
+                      "description": "the latest iteration written, which a continuation starts from",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "state",
+                    "step",
+                    "iteration",
+                    "start",
+                    "end",
+                    "written",
+                    "nProcs",
+                    "stretches",
+                    "started",
+                    "updated",
+                    "finished",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "One run: its state, the iteration it is at, the stretches solved, and its links (API 1.6)"
+      }
+    },
+    "/runs/{name}/stop": {
+      "post": {
+        "operationId": "stop_run",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "end": {
+                      "description": "the iteration the latest stretch runs to (endTime)",
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "description": "why it failed (state failed), naming no folders",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "finished": {
+                      "description": "when the latest stretch ended (UTC); null while it runs",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "iteration": {
+                      "description": "the last iteration in its solver log",
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "links": {
+                      "description": "itself, Stop, and its convergence judge (GET /judge?case=)",
+                      "type": "object"
+                    },
+                    "nProcs": {
+                      "description": "the processes it runs on; 1: the case isn't split",
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "name": {
+                      "description": "the case it solves: a case in the cases folder that Mesh Doctor made",
+                      "type": "string"
+                    },
+                    "start": {
+                      "description": "the iteration the latest stretch started from",
+                      "type": "integer"
+                    },
+                    "started": {
+                      "description": "when the latest stretch started (UTC)",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "state": {
+                      "description": "stopped: ended at a written iteration before its end (Stop); interrupted: its status says running but its job is gone (the computer restarted, or the job was killed)",
+                      "enum": [
+                        "running",
+                        "done",
+                        "stopped",
+                        "failed",
+                        "cancelled",
+                        "interrupted"
+                      ]
+                    },
+                    "step": {
+                      "description": "decomposing, potentialFoam, solving, reconstructing or done",
+                      "type": "string"
+                    },
+                    "stretches": {
+                      "description": "the stretches solved so far, oldest first",
+                      "items": {
+                        "properties": {
+                          "from": {
+                            "type": "integer"
+                          },
+                          "to": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "from",
+                          "to"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "updated": {
+                      "description": "when its status last changed (UTC)",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "written": {
+                      "description": "the latest iteration written, which a continuation starts from",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "state",
+                    "step",
+                    "iteration",
+                    "start",
+                    "end",
+                    "written",
+                    "nProcs",
+                    "stretches",
+                    "started",
+                    "updated",
+                    "finished",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "Stop a run at a written iteration: it writes the iteration it is at and ends, so a later solve job continues from there.  Needs the token or pairing key (API 1.6)"
       }
     },
     "/schemas/{kind}": {

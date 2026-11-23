@@ -31,7 +31,8 @@
     "repair",
     "abtest",
     "abextend",
-    "case"
+    "case",
+    "solve"
    ]
   },
   "params": {

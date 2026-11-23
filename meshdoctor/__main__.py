@@ -4,6 +4,7 @@
 
     python3 -m meshdoctor serve  [--port 8765] [--case <live case>]   dashboard
     python3 -m meshdoctor new    [<template> <name> [--size S]]       new case from a template, meshed
+    python3 -m meshdoctor solve  <case> [--to N] [--np P]            solve a case made here, or continue it
     python3 -m meshdoctor full   <srcCase> <name> [--profile P]       copy, check, repair, check
     python3 -m meshdoctor copy | inspect | fix ...                    single repair steps
     python3 -m meshdoctor ab     <srcCase> <name> [--iters N] ...     A/B solver test
@@ -32,6 +33,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = {
     "serve": "server.py",
     "new": "templates.py",
+    "solve": "solve.py",
     "full": "repair.py", "copy": "repair.py", "inspect": "repair.py", "fix": "repair.py",
     "ab": "abtest.py",
     "judge": "abtest.py",
