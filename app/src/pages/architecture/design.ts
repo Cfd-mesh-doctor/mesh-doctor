@@ -333,6 +333,11 @@ export const DESIGN: DocSection[] = [
               "the computer the engine runs on, as Linux sees it (inside WSL, what WSL was given): processors, physical cores, memory and the RAM guard's `ram_limit_mb`; the app's size estimator fills in its memory and solver ranks from it (API 1.1)"
             ],
             [
+              "`GET /check`",
+              "(CLI only)",
+              "is this computer ready: `meshdoctor check` as JSON. Python, numpy, the cases folder and the workspace, OpenFOAM 14, the programs a repair, an A/B test and a solve run (`mpirun` among them) and the memory, each `ok`, `warn` or `fail` with what was found, the fix and a command for it, never this machine's folders; and the largest mesh a repair or a solve could take in the memory free now, by the RAM guard. The app's Solve screen opens with it. Each answer runs the checks (a second or two), one at a time (API 1.4)"
+            ],
+            [
               "`POST /jobs`",
               "`/api/md/start`, `abstart`, `abextend`",
               "start a repair, A/B test or A/B extension (202 Accepted, the job document)"

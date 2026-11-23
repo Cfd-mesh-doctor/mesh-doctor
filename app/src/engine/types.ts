@@ -37,6 +37,10 @@ export type JudgeAnswer = Json<operations["abtest_judge"]["responses"][200]>;
 /** The solver-setting presets an A/B test's second run can use in place of the case's own (GET /variants). */
 export type VariantList = Json<operations["variants"]["responses"][200]>;
 export type Variant = VariantList["items"][number];
+/** Is the engine's computer ready (API 1.4)? Its self check: each check's state, what it found and the fix, and the
+ *  largest mesh a repair or a solve could take in the memory free now. */
+export type Readiness = Json<operations["readiness"]["responses"][200]>;
+export type ReadinessCheck = Readiness["checks"][number];
 
 /** The API major version this app speaks; the engine reports major.minor and any 1.x works. */
 export const API_MAJOR = 1;

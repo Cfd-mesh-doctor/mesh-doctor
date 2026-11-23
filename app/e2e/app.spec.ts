@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { ENGINE, KEY, mockEngine, pairingLink } from "./engine";
+import { ENGINE, KEY, mockEngine, pairingLink, readiness } from "./engine";
 
 /** Fails the test on any console error or failed page script. */
 function watchErrors(page: Page): string[] {
@@ -375,6 +375,43 @@ test("the Cases screen gives each case its own repair command to copy, naming th
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("meshdoctor full wing wing-fix-2");
 });
 
+test("the Solve screen says whether the engine's computer is ready, gives a problem's fix to copy, and checks again", async ({ page }) => {
+  const engine = await mockEngine(page, {
+    check: readiness({
+      foamCourantCells: {
+        state: "fail", found: "not built", fix: "run ./Allwmake in the repository, with OpenFOAM 14 loaded", command: "./Allwmake",
+      },
+    }),
+  });
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  await page.getByRole("complementary").getByRole("link", { name: "Solve", exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/solve$/);
+  const card = page.locator("section", { has: page.getByRole("heading", { name: "Ready to solve?" }) });
+  await expect(card.getByText("1 problem to fix")).toBeVisible();
+  await expect(card.getByText("Run ./Allwmake in the repository, with OpenFOAM 14 loaded")).toBeVisible();
+  await expect(card.getByRole("button", { name: "Copy “./Allwmake”" })).toBeVisible();
+  await expect(card.getByText("7 of 8 found")).toBeVisible();
+  await expect(card.getByText(/repair a mesh of up to about 8\.3 M cells, or to solve one of up to about 9\.3 M/)).toBeVisible();
+  const asked = () => engine.requests.filter((r) => new URL(r.url()).pathname === "/api/v1/check").length;
+  const before = asked();
+  await card.getByRole("button", { name: "Check again" }).click();
+  await expect.poll(asked).toBeGreaterThan(before);
+  await expect(card.getByRole("button", { name: "Check again" })).toBeEnabled();
+});
+
+test("an engine older than the readiness check is told to update, with the same checks to run in a terminal", async ({ page }) => {
+  await mockEngine(page, { check: null });
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  await page.goto("/app/solve");
+  await expect(page.getByText("Not checked")).toBeVisible();
+  await expect(page.getByText(/Your engine is older than this page/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Copy “meshdoctor check”" })).toBeVisible();
+});
+
 test("a list the engine fails to give says it didn't load, with the reason above it, on the Overview and on Cases", async ({ page }) => {
   await mockEngine(page, { broken: ["/cases"] });
   await page.goto(pairingLink());
@@ -483,7 +520,7 @@ test("the app without a pairing goes to Connect", async ({ page }) => {
 });
 
 test("every page runs under the site's Content-Security-Policy", async ({ page }) => {
-  // 22 pages, each waited on until it goes quiet: about 15 s alone, and up to 30 s, the default limit, beside the
+  // 23 pages, each waited on until it goes quiet: about 15 s alone, and up to 30 s, the default limit, beside the
   // other tests on a busy PC.
   test.slow();
   const res = await page.goto("/");
@@ -496,7 +533,7 @@ test("every page runs under the site's Content-Security-Policy", async ({ page }
   });
   for (const path of [
     "/", "/connect", "/install", "/report", "/estimate", "/how-it-works", "/accuracy", "/gallery", "/docs", "/troubleshooting",
-    "/limits", "/safety", "/your-own-case", "/claude-code", "/dashboard-tour", "/architecture", "/demo", "/demo/cases", "/demo/repairs", "/demo/jobs", "/demo/settings", "/demo/estimate", "/demo/repairs/ahmed35-medium-fix/report",
+    "/limits", "/safety", "/your-own-case", "/claude-code", "/dashboard-tour", "/architecture", "/demo", "/demo/cases", "/demo/solve", "/demo/repairs", "/demo/jobs", "/demo/settings", "/demo/estimate", "/demo/repairs/ahmed35-medium-fix/report",
   ]) {
     await page.goto(path);
     await page.waitForLoadState("networkidle");

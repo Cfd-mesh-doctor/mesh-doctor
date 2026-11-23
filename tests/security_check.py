@@ -107,6 +107,9 @@ CHECKS = [
     ("v1 OpenAPI document is served", "GET", "/api/v1/openapi.json", {}, 200, '"openapi": "3.1.0"'),
     ("v1 list works", "GET", "/api/v1/cases", {}, 200, '"items"'),
     ("v1 machine works", "GET", "/api/v1/machine", {}, 200, '"memoryMb"'),
+    ("v1 readiness check works", "GET", "/api/v1/check", {}, 200, '"checks"'),
+    ("v1 readiness check takes no POST", "POST", "/api/v1/check", {"X-MD-Token": TOKEN, "Content-Type": JSON}, 405,
+     '"code": "method-not-allowed"', b"{}"),
     ("v1 unknown host refused", "GET", "/api/v1/cases", {"Host": f"evil.example:{PORT}"}, 403, '"code": "forbidden"'),
     ("v1 cross-site read refused", "GET", "/api/v1/cases", {"Origin": "http://evil.example"}, 403, "cross-site"),
     ("v1 unknown route", "GET", "/api/v1/nowhere", {}, 404, '"code": "not-found"'),
@@ -223,6 +226,9 @@ if START:
                                       {"Origin": APP, "Access-Control-Request-Method": "POST"})
          and header("/api/v1/jobs", "Access-Control-Max-Age", "OPTIONS",
                     {"Origin": APP, "Access-Control-Request-Method": "POST"}) == "600"),
+        ("v1 readiness check names none of this machine's folders",
+         lambda: "md_sec_" not in req("GET", "/api/v1/check")[1]
+         and '"cases"' in req("GET", "/api/v1/check", {"Origin": APP, "X-MD-Key": APP_KEY})[1]),
         ("app: no cookies or credentials are ever allowed",
          lambda: header("/api/v1/cases", "Access-Control-Allow-Credentials",
                         headers={"Origin": APP, "X-MD-Key": APP_KEY}) == ""),

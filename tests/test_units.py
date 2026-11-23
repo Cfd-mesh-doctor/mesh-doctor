@@ -1388,32 +1388,43 @@ class SetupEndingTest(unittest.TestCase):
 
 
 class SelfCheckTest(unittest.TestCase):
-    """meshdoctor check: one line per check, then what to do next (item 161)."""
+    """meshdoctor check: one line per check, then what to do next (item 161); and the same checks as GET
+    /api/v1/check, worded without this machine's folders (app item 216)."""
 
-    PROGS = ("foamRun checkMesh decomposePar foamDictionary foamMeshDoctor foamResidualHotspots "
-             "foamCourantCells").split()
+    @staticmethod
+    def foam(missing=()):
+        import selfcheck
+        return {"project": "OpenFOAM", "version": "14", "appbin": "/opt/x/bin",
+                "progs": {p: "" if p in missing else "/opt/x/bin/" + p for p in selfcheck.PROGRAMS}}
 
-    def run_check(self, foam):
+    @contextlib.contextmanager
+    def checking(self, foam, cases=True, free=8192):
+        """selfcheck with a temporary cases folder (or none), workspace and bashrc, the given OpenFOAM environment
+        and free memory; yields (selfcheck, the temporary folder)."""
         import selfcheck
         tmp = tempfile.mkdtemp(prefix="md_check_")
         self.addCleanup(shutil.rmtree, tmp, True)
-        cases, ws, bashrc = (os.path.join(tmp, d) for d in ("cases", "work", "bashrc"))
-        os.mkdir(cases)
+        folder, ws, bashrc = (os.path.join(tmp, d) for d in ("cases", "work", "bashrc"))
+        if cases:
+            os.mkdir(folder)
         open(bashrc, "w").close()
-        resolved = {"cases": (cases, "test"), "workspace": (ws, "test"), "bashrc": (bashrc, "test"),
+        resolved = {"cases": (folder, "test"), "workspace": (ws, "test"), "bashrc": (bashrc, "test"),
                     "live_case": ("", "default")}
-        out = io.StringIO()
         with mock.patch.object(selfcheck.config, "resolve", return_value=resolved), \
                 mock.patch.object(selfcheck, "foam_env", return_value=foam), \
-                mock.patch.object(selfcheck.ramguard, "available_mb", return_value=8192), \
-                mock.patch.dict(os.environ, {"MESHDOCTOR_PROG": "meshdoctor"}), contextlib.redirect_stdout(out):
+                mock.patch.object(selfcheck.ramguard, "available_mb", return_value=free), \
+                mock.patch.object(selfcheck.ramguard, "limit_mb", return_value=None), \
+                mock.patch.dict(os.environ, {"MESHDOCTOR_PROG": "meshdoctor"}):
+            yield selfcheck, tmp
+
+    def run_check(self, foam):
+        out = io.StringIO()
+        with self.checking(foam) as (selfcheck, _), contextlib.redirect_stdout(out):
             code = selfcheck.main([])
         return code, out.getvalue()
 
     def test_ready_says_what_to_do_next(self):
-        foam = {"project": "OpenFOAM", "version": "14", "appbin": "/opt/x/bin",
-                "progs": {p: "/opt/x/bin/" + p for p in self.PROGS}}
-        code, out = self.run_check(foam)
+        code, out = self.run_check(self.foam())
         self.assertEqual(code, 0, out)
         self.assertIn("\nready\nNext: try a repair on OpenFOAM's motorBike tutorial (the README's \"First run\")", out)
         self.assertIn("its dashboard with meshdoctor serve; for the web app, run meshdoctor pair --open in a second "
@@ -1426,6 +1437,81 @@ class SelfCheckTest(unittest.TestCase):
         self.assertIn("FAIL  OpenFOAM", out)
         self.assertIn("\n1 problem(s) to fix before using Mesh Doctor; then run meshdoctor check again\n", out)
         self.assertNotIn("Next:", out)
+
+    def test_each_missing_program_says_who_makes_it(self):
+        # foamCourantCells is Mesh Doctor's own (./Allwmake builds it), mpirun is MPI's, checkMesh OpenFOAM's
+        code, out = self.run_check(self.foam(missing=("foamCourantCells", "mpirun", "checkMesh")))
+        self.assertEqual(code, 1)
+        self.assertRegex(out, r"FAIL  foamCourantCells +not built; run \./Allwmake in the repository, with OpenFOAM "
+                              r"14 loaded\n")
+        self.assertRegex(out, r"FAIL  mpirun +not found; A/B tests and solves need it to run on several cores: "
+                              r"sudo apt install openmpi-bin\n")
+        self.assertRegex(out, r"FAIL  checkMesh +not found in the OpenFOAM environment; it comes with OpenFOAM 14")
+        self.assertIn("\n3 problem(s) to fix", out)
+        self.assertRegex(out, r"ok    foamRun +/opt/x/bin/foamRun\n")       # the command says where each one is
+
+    def test_the_api_answer_names_no_folders(self):
+        import api_v1
+        for foam, cases in ((None, False), (self.foam(missing=("foamMeshDoctor",)), True), (self.foam(), True)):
+            with self.subTest(openfoam=bool(foam), cases=cases), self.checking(foam, cases) as (selfcheck, tmp):
+                doc = selfcheck.report()
+                self.assertEqual(self.schema_problems(doc, api_v1.READINESS), [])
+                self.assertNotIn(tmp, json.dumps(doc))
+                self.assertNotIn("/opt/x", json.dumps(doc))
+                self.assertNotIn(os.path.basename(tmp), json.dumps(doc))
+                by = {c["id"]: c for c in doc["checks"]}
+                self.assertEqual(doc["ready"], all(c["state"] != "fail" for c in doc["checks"]))
+                self.assertEqual(by["cases"]["state"], "ok" if cases else "warn")
+                if not foam:
+                    self.assertFalse(doc["ready"])
+                    self.assertEqual((by["openfoam"]["state"], by["openfoam"]["found"]),
+                                     ("fail", "no OpenFOAM environment"))
+                    self.assertEqual(by["openfoam"]["command"], "meshdoctor config")
+                    self.assertEqual(by["cases"]["command"], "meshdoctor config")
+                    self.assertNotIn("foamRun", by)                 # no programs without an environment
+                else:
+                    self.assertEqual(by["foamRun"], {"id": "foamRun", "label": "foamRun", "group": "programs",
+                                                     "state": "ok", "found": "found", "fix": None, "command": None})
+                self.assertEqual(by["memory"]["found"], "8.0 GB available")
+
+    @staticmethod
+    def schema_problems(doc, sch):
+        import schema
+        return schema.check(doc, sch)
+
+    def test_the_cells_that_fit_are_what_the_ram_guard_lets_through(self):
+        import ramguard
+        with self.checking(self.foam(), free=8192) as (selfcheck, _):
+            doc = selfcheck.report()
+        self.assertEqual(doc["memory"]["availableMb"], 8192)
+        for kind in ("repair", "solve"):
+            n = doc["memory"]["cells"][kind]
+            self.assertEqual(n, ramguard.max_cells(kind, 8192))
+            with mock.patch.object(ramguard, "available_mb", return_value=8192):
+                for cells, fits in ((n, True), (n + 1000, False)):
+                    with mock.patch.object(ramguard, "mesh_cells", return_value=cells):
+                        self.assertEqual(ramguard.check("case", kind)[0], fits, (kind, cells))
+        self.assertEqual(ramguard.max_cells("repair", 100), 0)              # less than the headroom
+        with self.checking(self.foam(), free=None) as (selfcheck, _):
+            doc = selfcheck.report()
+        self.assertEqual(doc["memory"]["cells"], {"repair": None, "solve": None})
+        self.assertEqual({c["id"]: c["state"] for c in doc["checks"]}["memory"], "warn")
+        self.assertTrue(doc["ready"])                                        # a warning doesn't stop a job
+
+    def test_the_route_runs_one_check_at_a_time(self):
+        import api_v1, selfcheck
+        api_v1._check.update(doc=None, at=-1e9)
+        self.addCleanup(api_v1._check.update, doc=None, at=-1e9)
+        answers = iter([{"ready": True, "n": 1}, {"ready": True, "n": 2}])
+        with mock.patch.object(selfcheck, "report", side_effect=lambda: next(answers)) as report:
+            first = api_v1.handle("GET", "/api/v1/check", {})
+            again = api_v1.handle("GET", "/api/v1/check", {})          # just after: the same answer
+            self.assertEqual((first[0], first[1]["n"], again[1]["n"], report.call_count), (200, 1, 1, 1))
+            api_v1._check["at"] -= api_v1.CHECK_REUSE_S + 1                 # later on: checked again
+            self.assertEqual(api_v1.handle("GET", "/api/v1/check", {})[1]["n"], 2)
+        op = api_v1.openapi()["paths"]["/check"]["get"]
+        self.assertEqual(op["operationId"], "readiness")
+        self.assertEqual(api_v1.handle("POST", "/api/v1/check", {}, b"{}", "application/json")[0], 405)
 
 
 class CommandHelpTest(unittest.TestCase):

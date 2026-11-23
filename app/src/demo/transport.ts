@@ -3,7 +3,7 @@
 // "_about"), served without any engine. It can cancel its own jobs; it cannot start anything.
 import type { Method, Transport } from "@/engine/client";
 import { EngineError } from "@/engine/errors";
-import type { AbtestDetail, CaseList, Job, JobList, MachineInfo, RepairList, VariantList } from "@/engine/types";
+import type { AbtestDetail, CaseList, Job, JobList, MachineInfo, Readiness, RepairList, VariantList } from "@/engine/types";
 import { caseName } from "@/engine/verdict";
 import { toMillis } from "@/lib/format";
 import { RECORDED } from "@/report/samples";
@@ -16,6 +16,27 @@ type Answers = Record<string, unknown>;
 /** The demo engine's computer, written by hand (the recording's engine predates GET /machine): a laptop that
  *  gives WSL 25 GB and 8 cores. */
 export const DEMO_MACHINE: MachineInfo = { cpus: 8, cores: 8, memoryMb: 25_600, ramLimitMb: null };
+
+const found = (group: Readiness["checks"][number]["group"], id: string, label: string, what: string) =>
+  ({ id, label, group, state: "ok" as const, found: what, fix: null, command: null });
+
+/** The demo engine's self check (GET /check), written by hand as its computer is (the recording's engine predates
+ *  it): ready, on Ubuntu 22.04's Python and numpy, with 20.8 GB of the laptop's 25 GB free. The cells that fit are
+ *  the engine's RAM guard's for that memory. The demo answers it as checked at the time it's asked. */
+export const DEMO_READINESS: Omit<Readiness, "checked"> = {
+  ready: true,
+  checks: [
+    found("python", "python", "Python", "3.10.12"),
+    found("python", "numpy", "numpy", "1.21.5"),
+    found("folders", "cases", "Cases folder", "found"),
+    found("folders", "workspace", "Workspace", "private (700)"),
+    found("openfoam", "openfoam", "OpenFOAM", "OpenFOAM 14"),
+    ...["foamRun", "checkMesh", "decomposePar", "foamDictionary", "mpirun", "foamMeshDoctor", "foamResidualHotspots",
+      "foamCourantCells"].map((p) => found("programs", p, p, "found")),
+    found("memory", "memory", "Memory", "20.8 GB available"),
+  ],
+  memory: { availableMb: 21_300, limitMb: null, cells: { repair: 14_191_274, solve: 15_768_082 } },
+};
 
 /** The solver-setting presets for an A/B test's second run (GET /variants), which the recording's engine predates:
  *  Mesh Doctor's own, as it names them. */
@@ -222,6 +243,7 @@ export function demoTransport(answers: Answers = DEMO_ANSWERS, delayMs = DELAY_M
         doc.created = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
         return doc as T;
       }
+      if (route === "/check") return { ...structuredClone(DEMO_READINESS), checked: new Date().toISOString() } as T;
       if (route === "/abtests") {
         const tests = await abtests();
         const items = [...tests.keys()].sort();

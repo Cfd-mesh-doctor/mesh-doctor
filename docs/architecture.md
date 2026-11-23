@@ -113,6 +113,7 @@ All routes live under `/api/v1` (`meshdoctor/api_v1.py`). The routes are a table
 | `GET /live` | `/api/status` | the live (transient) case: forces, averaging window, time step, processes, memory |
 | `GET /variants` | `/api/md/variants` | solver-setting variants for an A/B second run |
 | `GET /machine` | | the computer the engine runs on, as Linux sees it (inside WSL, what WSL was given): processors, physical cores, memory and the RAM guard's `ram_limit_mb`; the app's size estimator fills in its memory and solver ranks from it (API 1.1) |
+| `GET /check` | (CLI only) | is this computer ready: `meshdoctor check` as JSON. Python, numpy, the cases folder and the workspace, OpenFOAM 14, the programs a repair, an A/B test and a solve run (`mpirun` among them) and the memory, each `ok`, `warn` or `fail` with what was found, the fix and a command for it, never this machine's folders; and the largest mesh a repair or a solve could take in the memory free now, by the RAM guard. The app's Solve screen opens with it. Each answer runs the checks (a second or two), one at a time (API 1.4) |
 | `POST /jobs` | `/api/md/start`, `abstart`, `abextend` | start a repair, A/B test or A/B extension (202 Accepted, the job document) |
 | `GET /jobs?state=&limit=`, `GET /jobs/{job}` | | jobs, newest first, with progress and links to their runs (job schema) |
 | `POST /jobs/{job}/cancel` | | stop a job and everything it started (`409 finished` if it already ended) |

@@ -5,7 +5,7 @@ import { NOT_THE_ENGINE, EngineError, isEngineCode } from "./errors";
 import { localAccessState } from "./permission";
 import type {
   AbtestDetail, AbtestList, AbtestLive, CaseList, ClusterShape, EngineInfo, Job, JobList, JobRequest, JudgeAnswer, MachineInfo,
-  RepairList, VariantList,
+  Readiness, RepairList, VariantList,
 } from "./types";
 import { API_MAJOR } from "./types";
 import type { Report } from "@/report/read";
@@ -122,4 +122,6 @@ export const api = {
   variants: (t: Transport, signal?: AbortSignal) => t.request<VariantList>("GET", "/variants", undefined, signal),
   /** The computer the engine runs on (API 1.1); an older engine answers not-found. */
   machine: (t: Transport, signal?: AbortSignal) => t.request<MachineInfo>("GET", "/machine", undefined, signal),
+  /** The engine's self check (API 1.4), run for this answer; an older engine answers not-found. */
+  readiness: (t: Transport, signal?: AbortSignal) => t.request<Readiness>("GET", "/check", undefined, signal),
 };

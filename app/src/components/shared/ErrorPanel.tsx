@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // What went wrong, in plain words, with the fix, a way to try again, and the problem's page in Troubleshooting.
 import { CircleExclamationPoint, ExternalLink, RefreshCw } from "lucide-react";
-import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { explain } from "@/engine/errors";
-import { attached } from "@/lib/attached";
 import { cn } from "@/lib/utils";
 import { CopyCommand } from "./CopyCommand";
-import { InlineCode } from "./InlineCode";
+import { TextWithCode } from "./InlineCode";
 
 export function ErrorPanel({ error, onRetry, retrying, className, compact }: {
   error: unknown; onRetry?: () => void; retrying?: boolean; className?: string; compact?: boolean;
@@ -19,7 +17,7 @@ export function ErrorPanel({ error, onRetry, retrying, className, compact }: {
         <CircleExclamationPoint className="mt-0.5 size-5 shrink-0 text-danger" aria-hidden />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground">{e.title}</p>
-          <p className="mt-1 text-sm text-muted-foreground"><Hint text={e.hint} /></p>
+          <p className="mt-1 text-sm text-muted-foreground"><TextWithCode text={e.hint} /></p>
           {e.command && <CopyCommand command={e.command} className="mt-3 max-w-md bg-surface" />}
           {(onRetry || e.troubleshooting) && (
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -47,23 +45,4 @@ export function ErrorPanel({ error, onRetry, retrying, className, compact }: {
       </div>
     </div>
   );
-}
-
-/** The hint, with the commands, settings and file names it names (in backticks) as code, as the docs show them, each
- *  kept whole on a line where it fits (index.css): split over two lines ("meshdoctor pair", then "--new"), a command
- *  wouldn't read as one. */
-function Hint({ text }: { text: string }) {
-  // Split at a pair of backticks, keeping what they hold: that comes at the odd places. What's written against a
-  // command with no space ("(", "),") stays on its line with it.
-  const parts = text.split(/`([^`]+)`/);
-  const out: ReactNode[] = [];
-  let rest = parts[0] ?? "";
-  for (let i = 1; i < parts.length; i += 2) {
-    const near = attached(rest, parts[i + 1] ?? "");
-    if (near.before) out.push(near.before);
-    out.push(<InlineCode key={i} text={parts[i] ?? ""} lead={near.lead} trail={near.trail} />);
-    rest = near.after;
-  }
-  if (rest) out.push(rest);
-  return <>{out}</>;
 }

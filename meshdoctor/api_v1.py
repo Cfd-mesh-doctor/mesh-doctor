@@ -15,7 +15,7 @@ same table.  Every answer is JSON.  Errors always look like
 with the HTTP status from STATUS.  The OpenAPI description is built from the
 same table (GET /api/v1/openapi.json), so it cannot drift from the code.
 """
-import json, math, os, re
+import json, math, os, re, threading, time
 
 import jobs
 import md_api
@@ -23,7 +23,7 @@ import ramguard
 import schema
 import version
 
-API_VERSION = "1.3"
+API_VERSION = "1.4"
 PREFIX = "/api/v1"
 MAX_BODY = 64 * 1024
 
@@ -561,6 +561,53 @@ def _job(job_id):
                           "description": "the ram_limit_mb setting: the most memory a job may use; null if none"}}})
 def machine(p, q, b):
     return ramguard.machine()
+
+
+NULL_TEXT = {"type": ["string", "null"]}
+CELLS = {"type": ["integer", "null"], "minimum": 0}
+READINESS = {"type": "object", "required": ["ready", "checks", "memory", "checked"], "properties": {
+    "ready": {"type": "boolean",
+              "description": "no check failed: a repair, an A/B test and a solve can run here (a warning doesn't "
+                             "stop them)"},
+    "checks": {"type": "array", "items": {
+        "type": "object", "required": ["id", "label", "group", "state", "found", "fix", "command"], "properties": {
+            "id": {"type": "string",
+                   "description": "python, numpy, cases, workspace, openfoam, memory, or a program's name"},
+            "label": {"type": "string"},
+            "group": {"enum": ["python", "folders", "openfoam", "programs", "memory"],
+                      "description": "programs are checked only once an OpenFOAM environment is found"},
+            "state": {"enum": ["ok", "warn", "fail"]},
+            "found": {"type": "string", "description": "what the check found"},
+            "fix": dict(NULL_TEXT, description="what to do about a warning or a failure; a command, setting or "
+                                               "file name in it is in backticks"),
+            "command": dict(NULL_TEXT, description="the command for the fix, to copy: one that does it, or one "
+                                                   "that shows what it needs")}}},
+    "memory": {"type": "object", "required": ["availableMb", "limitMb", "cells"], "properties": {
+        "availableMb": {"type": ["integer", "null"],
+                        "description": "the memory free now (MemAvailable), at most ram_limit_mb: what the RAM "
+                                       "guard checks a job against; null when it is unknown"},
+        "limitMb": {"type": ["integer", "null"], "description": "the ram_limit_mb setting; null if none"},
+        "cells": {"type": "object", "required": ["repair", "solve"],
+                  "properties": {"repair": CELLS, "solve": CELLS},
+                  "description": "the largest mesh, in cells, that the RAM guard lets a repair or a solve take in "
+                                 "that memory; null when it is unknown"}}},
+    "checked": {"type": "string", "description": "when the checks ran (UTC)"}}}
+# One check at a time: a request that comes while one runs gets its answer, and one just after reuses it.
+_check = {"lock": threading.Lock(), "at": -1e9, "doc": None}
+CHECK_REUSE_S = 2.0
+
+
+@route("GET", "/check", "Is this computer ready?  `meshdoctor check` as JSON: Python, numpy, the folders, "
+       "OpenFOAM 14, the programs a repair, an A/B test and a solve run, and the memory, each with what was found "
+       "and the fix, never this machine's folders (API 1.4)", ok=READINESS)
+def readiness(p, q, b):
+    asked = time.monotonic()
+    with _check["lock"]:
+        if _check["doc"] is None or _check["at"] < asked - CHECK_REUSE_S:
+            import selfcheck                # sources OpenFOAM's bashrc in a shell: a second or two
+            _check["doc"] = selfcheck.report()
+            _check["at"] = time.monotonic()
+        return _check["doc"]
 
 
 @route("GET", "/jobs", "Jobs on this worker, newest first, with their progress",

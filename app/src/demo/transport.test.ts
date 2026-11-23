@@ -99,6 +99,18 @@ describe("demo transport", () => {
     }
   });
 
+  it("checks its computer as ready just now, with the meshes the engine's RAM guard would let it take", async () => {
+    const before = Date.now() - 1000;
+    const doc = await api.readiness(demoTransport(answers(), 0));
+    expect(doc.ready).toBe(true);
+    expect(doc.checks.every((c) => c.state === "ok" && c.fix === null && c.command === null)).toBe(true);
+    expect(Date.parse(doc.checked)).toBeGreaterThanOrEqual(before);
+    // As ramguard.max_cells works them out: the free memory less 512 MB of headroom, over each job's KB per cell.
+    const free = doc.memory.availableMb!;
+    expect(doc.memory.cells).toEqual({ repair: Math.floor((free - 512) * 1024 / 1.5), solve: Math.floor((free - 512) * 1024 / 1.35) });
+    expect(doc.checks.find((c) => c.id === "memory")?.found).toBe(`${(free / 1024).toFixed(1)} GB available`);
+  });
+
   it("ships no paths from the recording machine", () => {
     expect(JSON.stringify(clusters)).not.toMatch(/\/home\/|\/mnt\/|\/tmp\/|[A-Z]:\\\\|Users[\\/]/);
     const text = JSON.stringify(recorded);

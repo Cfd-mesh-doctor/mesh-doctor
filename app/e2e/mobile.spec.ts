@@ -118,7 +118,7 @@ test("on the smallest phones your own app's screens don't scroll sideways", asyn
   for (const width of [360, 320]) {
     await page.setViewportSize({ width, height: 800 });
     for (const [path, part] of [
-      ["/app", "Getting started"], ["/app/jobs", "wing-fix"], ["/app/cases", "motorBike"],
+      ["/app", "Getting started"], ["/app/jobs", "wing-fix"], ["/app/cases", "motorBike"], ["/app/solve", "Ready to solve?"],
       ["/app/estimate?cells=31.1", "Size estimator"], ["/app/settings", "Appearance"],
     ] as const) {
       await page.goto(path);

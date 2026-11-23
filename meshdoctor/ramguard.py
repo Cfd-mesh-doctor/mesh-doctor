@@ -105,6 +105,11 @@ def machine():
     return {"cpus": os.cpu_count(), "cores": cores, "memoryMb": _meminfo().get("MemTotal"), "ramLimitMb": limit_mb()}
 
 
+def max_cells(kind, free_mb):
+    """The largest mesh, in cells, that check() lets a job of this kind take in free_mb of memory (0 if none)."""
+    return max(0, int((free_mb - HEADROOM_MB) * 1024 / KB_PER_CELL[kind]))
+
+
 def check(case, kind):
     """(ok, message).  kind: "repair", "solve" or "post".  Unknown sizes are let through."""
     cells = mesh_cells(case)

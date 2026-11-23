@@ -25,6 +25,27 @@ export interface MockEngine {
   started: unknown[];
 }
 
+const check = (group: string, id: string, label: string, found: string, more: Record<string, unknown> = {}) =>
+  ({ id, label, group, state: "ok", found, fix: null, command: null, ...more });
+
+/** GET /check (API 1.4) on a 16 GB laptop where everything is in place, the programs as `meshdoctor check` lists them.
+ *  `change` swaps a check (by id) for what's given. */
+export function readiness(change: Record<string, Record<string, unknown>> = {}) {
+  const programs = ["foamRun", "checkMesh", "decomposePar", "foamDictionary", "mpirun", "foamMeshDoctor",
+    "foamResidualHotspots", "foamCourantCells"];
+  const checks = [
+    check("python", "python", "Python", "3.10.12"), check("python", "numpy", "numpy", "1.21.5"),
+    check("folders", "cases", "Cases folder", "found"), check("folders", "workspace", "Workspace", "private (700)"),
+    check("openfoam", "openfoam", "OpenFOAM", "OpenFOAM 14"),
+    ...programs.map((p) => check("programs", p, p, "found")),
+    check("memory", "memory", "Memory", "12.5 GB available"),
+  ].map((c) => ({ ...c, ...change[c.id] }));
+  return {
+    ready: !checks.some((c) => c.state === "fail"), checks, checked: new Date().toISOString(),
+    memory: { availableMb: 12_800, limitMb: null, cells: { repair: 8_388_608, solve: 9_320_675 } },
+  };
+}
+
 /** An A/B test as GET /abtests/{name} answers it. */
 interface AbDetail {
   status?: { step?: string; time?: string } | null;
@@ -40,6 +61,8 @@ export async function mockEngine(
   opts: {
     down?: boolean; wrongKey?: boolean; repairs?: unknown[]; noJobs?: boolean; broken?: string[];
     refuse?: { code: string; message: string }; abtests?: Record<string, AbDetail>;
+    /** GET /check's answer (everything in place by default); null: none, as from an engine before API 1.4. */
+    check?: unknown;
   } = {},
 ): Promise<MockEngine> {
   const state: MockEngine = {
@@ -76,6 +99,7 @@ export async function mockEngine(
     if (path === "/repairs") return json(200, { items: opts.repairs ?? [] });
     // A 16 GB laptop with no RAM limit (API 1.1).
     if (path === "/machine") return json(200, { cpus: 8, cores: 4, memoryMb: 16_000, ramLimitMb: null });
+    if (path === "/check" && opts.check !== null) return json(200, opts.check ?? readiness());
     // Its A/B tests (API 1.3): none unless asked, and one solver-setting variant for a test's second run.
     const tests = opts.abtests ?? {};
     if (path === "/abtests") {

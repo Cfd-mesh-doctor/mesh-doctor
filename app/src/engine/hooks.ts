@@ -128,6 +128,18 @@ export function useMachine(enabled = true) {
   });
 }
 
+/** Is the engine's computer ready to repair, test and solve (API 1.4)? The engine runs its self check for each answer
+ * (it loads OpenFOAM's settings in a shell: a second or two), so it isn't asked on a timer: once the page opens, when
+ * Check again says so, and when the page is come back to after a while, as after fixing something in a terminal. */
+export function useReadiness() {
+  const { transport } = useEngine();
+  return useQuery({
+    queryKey: [transport?.scope, "check"],
+    queryFn: transport ? ({ signal }) => api.readiness(transport, signal) : skipToken,
+    staleTime: 10_000,
+  });
+}
+
 /** The solver-setting presets an A/B test's second run can use. They change only with Mesh Doctor itself, so they
  * are asked for once, while `enabled` (the A/B test dialog is open). */
 export function useVariants(enabled = true) {

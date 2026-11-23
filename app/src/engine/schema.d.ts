@@ -103,6 +103,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Is this computer ready?  `meshdoctor check` as JSON: Python, numpy, the folders, OpenFOAM 14, the programs a repair, an A/B test and a solve run, and the memory, each with what was found and the fix, never this machine's folders (API 1.4) */
+        get: operations["readiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/jobs": {
         parameters: {
             query?: never;
@@ -1204,6 +1221,69 @@ export interface operations {
                             [key: string]: number | null;
                         };
                         items: string[];
+                    };
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    readiness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description when the checks ran (UTC) */
+                        checked: string;
+                        checks: {
+                            /** @description the command for the fix, to copy: one that does it, or one that shows what it needs */
+                            command: string | null;
+                            /** @description what to do about a warning or a failure; a command, setting or file name in it is in backticks */
+                            fix: string | null;
+                            /** @description what the check found */
+                            found: string;
+                            /**
+                             * @description programs are checked only once an OpenFOAM environment is found
+                             * @enum {unknown}
+                             */
+                            group: "python" | "folders" | "openfoam" | "programs" | "memory";
+                            /** @description python, numpy, cases, workspace, openfoam, memory, or a program's name */
+                            id: string;
+                            label: string;
+                            /** @enum {unknown} */
+                            state: "ok" | "warn" | "fail";
+                        }[];
+                        memory: {
+                            /** @description the memory free now (MemAvailable), at most ram_limit_mb: what the RAM guard checks a job against; null when it is unknown */
+                            availableMb: number | null;
+                            /** @description the largest mesh, in cells, that the RAM guard lets a repair or a solve take in that memory; null when it is unknown */
+                            cells: {
+                                repair: number | null;
+                                solve: number | null;
+                            };
+                            /** @description the ram_limit_mb setting; null if none */
+                            limitMb: number | null;
+                        };
+                        /** @description no check failed: a repair, an A/B test and a solve can run here (a warning doesn't stop them) */
+                        ready: boolean;
                     };
                 };
             };

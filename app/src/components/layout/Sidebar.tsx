@@ -26,9 +26,12 @@ interface Item {
   soon?: string;
 }
 
+// Solve sets cases up and runs them, so it comes after Cases, before what's done to a case (a repair, then an A/B
+// test of it).
 const MAIN: Item[] = [
   { label: "Overview", icon: LayoutDashboard, path: "" },
   { label: "Cases", icon: FolderOpen, path: "/cases" },
+  { label: "Solve", icon: Play, path: "/solve" },
   { label: "Repairs", icon: Wrench, path: "/repairs" },
   { label: "A/B tests", icon: FlaskConical, path: "/abtests" },
   { label: "Jobs", icon: ListChecks, path: "/jobs" },
@@ -36,7 +39,6 @@ const MAIN: Item[] = [
 ];
 
 const NEXT: Item[] = [
-  { label: "Solve", icon: Play, soon: "Set up and run a case on this PC" },
   { label: "Pictures", icon: Image, soon: "ParaView renders of the flow" },
   { label: "Results", icon: ChartLine, soon: "Forces, convergence and comparisons" },
   { label: "Local tools", icon: Toolbox, soon: "Zone repair, full-car pipeline, workbooks" },
@@ -129,7 +131,7 @@ export function Sidebar({ onNavigate, onTour }: { onNavigate?: () => void; onTou
           ))}
         </div>
         <div>
-          {/* Said as "Coming next 4 screens": the count is how many are coming. */}
+          {/* Said as "Coming next 3 screens": the count is how many are coming. */}
           <button
             type="button"
             aria-expanded={nextOpen}
