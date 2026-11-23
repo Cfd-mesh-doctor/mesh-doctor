@@ -133,6 +133,7 @@ export function explain(err: unknown, origin = globalThis.location?.origin ?? ""
       if (e.status > 0 && e.message.endsWith(NOT_THE_ENGINE)) {
         return {
           title: "Unexpected answer",
+          troubleshooting: true,
           hint: "Something answered at the engine's address, but not the way Mesh Doctor's engine does: another "
             + "program may be using its port. When it starts, `meshdoctor serve` prints the address it uses, and "
             + `Settings shows the one this browser uses. (${e.message})`,

@@ -9,6 +9,8 @@ import { Troubleshooting } from "./Troubleshooting";
 /** The problems shown: the items of each group's list (the page's "On this page" list is a list too). */
 const problems = () => screen.queryAllByRole("region").flatMap((g) => within(g).queryAllByRole("listitem"));
 const contents = () => screen.queryByRole("navigation", { name: "On this page" });
+/** How many problems the doc has (problems.test.ts holds the page's list to the doc). */
+const ALL = GROUPS.flatMap((g) => g.table.rows).length;
 
 describe("Troubleshooting", () => {
   it("shows every problem of the doc, group by group, with its cause and fix", () => {
@@ -16,8 +18,8 @@ describe("Troubleshooting", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Troubleshooting" })).toBeInTheDocument();
     expect(document.title).toBe("Troubleshooting · Mesh Doctor");
     expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(GROUPS.map((g) => g.title));
-    expect(problems()).toHaveLength(36);
-    expect(screen.getByText("36 problems, in 7 groups.")).toBeInTheDocument();
+    expect(problems()).toHaveLength(ALL);
+    expect(screen.getByText(`${ALL} problems, in ${GROUPS.length} groups.`)).toBeInTheDocument();
 
     const first = within(screen.getByRole("region", { name: "Web app" })).getAllByRole("listitem")[0];
     expect(first).toHaveTextContent("You see: \"The engine isn't answering\"");
@@ -44,7 +46,7 @@ describe("Troubleshooting", () => {
     const { router } = renderScreen(<Troubleshooting />, { path: "/troubleshooting" });
     await userEvent.type(screen.getByRole("searchbox", { name: "Search for the message you see" }), "patchField");
     expect(problems()).toHaveLength(1);
-    expect(screen.getByText("1 of 36 problems matches. Enter goes to it.")).toBeInTheDocument();
+    expect(screen.getByText(`1 of ${ALL} problems matches. Enter goes to it.`)).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["OpenFOAM runs"]);
     expect(router.state.location.search).toBe("?q=patchField");
   });
@@ -64,7 +66,7 @@ describe("Troubleshooting", () => {
       expect(box).toHaveFocus();
 
       await user.type(box, "meshdoctor serve");
-      expect(screen.getByText(/^\d+ of 36 problems match\. Enter goes to the first\.$/)).toBeInTheDocument();
+      expect(screen.getByText(new RegExp(`^\\d+ of ${ALL} problems match\\. Enter goes to the first\\.$`))).toBeInTheDocument();
       await user.keyboard("{Enter}");
       const group = screen.getAllByRole("region")[0]!;
       const first = within(group).getAllByRole("listitem")[0]!;
@@ -89,7 +91,7 @@ describe("Troubleshooting", () => {
     expect(screen.getByText("Nothing here matches “quantum flux”.")).toBeInTheDocument();
     expect(problems()).toHaveLength(0);
     await userEvent.click(screen.getByRole("button", { name: "Show all problems" }));
-    expect(problems()).toHaveLength(36);
+    expect(problems()).toHaveLength(ALL);
     expect(search).toHaveValue("");
   });
 

@@ -30,7 +30,7 @@ describe("finding a problem", () => {
 
   it("finds a web app error, and only it, by the title its error panel links with", () => {
     const quoted = GROUPS.find((g) => g.id === "web-app")!.table.rows.map((r) => r[0] ?? "").filter((s) => /^".+"$/.test(s));
-    expect(quoted).toHaveLength(4);
+    expect(quoted).toHaveLength(5);
     for (const seen of quoted) expect(found(seen.slice(1, -1))).toEqual([seen]);
   });
 

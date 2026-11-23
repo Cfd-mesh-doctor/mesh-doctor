@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { EngineError } from "@/engine/errors";
+import { EngineError, NOT_THE_ENGINE } from "@/engine/errors";
 import { ErrorPanel } from "./ErrorPanel";
 
 describe("the error panel", () => {
@@ -20,6 +20,16 @@ describe("the error panel", () => {
     expect(screen.getByRole("link", { name: "How to fix this" }))
       .toHaveAttribute("href", "/troubleshooting?q=This+browser+needs+pairing+again");
     expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+  });
+
+  it("links an answer that isn't the engine's (another program on its port), and no other unexpected answer", () => {
+    const { unmount } = render(<ErrorPanel error={new EngineError("bad-response", `HTTP 200 ${NOT_THE_ENGINE}`, 200)} />);
+    expect(screen.getByRole("link", { name: "How to fix this" }))
+      .toHaveAttribute("href", "/troubleshooting?q=Unexpected+answer");
+    unmount();
+    render(<ErrorPanel error={new EngineError("bad-response", "a newer engine's words", 400)} />);
+    expect(screen.getByText("Unexpected answer")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "How to fix this" })).not.toBeInTheDocument();
   });
 
   it("shows the commands a hint names as code, a short one on one line, and no backticks", () => {

@@ -150,6 +150,11 @@ export const GROUPS: ProblemGroup[] = [
           "`git pull` in the repository, then restart `meshdoctor serve`",
         ],
         [
+          "\"Unexpected answer\"",
+          "another program uses the engine's port (8765, unless `--port` or `MESHDOCTOR_PORT` sets another), so it answers instead of the engine",
+          "start the engine on a free port (`meshdoctor serve --port 8766`), then pair again for it: `meshdoctor pair --open --port 8766` in a second WSL or Linux terminal; or stop the other program (`ss -ltnp` in WSL or Linux, or `netstat -ano` in a Windows terminal, shows what holds the port)",
+        ],
+        [
           "Safari never connects",
           "Safari doesn't let websites reach this computer",
           "use Chrome or Edge",

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The Troubleshooting page states the doc's problems and fixes: they must match the doc they come from.
 import { describe, expect, it } from "vitest";
-import { EngineError, explain, type ErrorCode } from "@/engine/errors";
+import { EngineError, explain, NOT_THE_ENGINE, type ErrorCode } from "@/engine/errors";
 import { column } from "@/lib/docTable";
 import { BROWSERS } from "@/lib/site";
 import { markdownTables, readDoc } from "@/test/markdown";
@@ -31,10 +31,11 @@ describe("the Troubleshooting page's problems", () => {
   it("quote the web app's messages as the app words them: the errors whose panel links here, and no others", () => {
     const web = GROUPS.find((g) => g.id === "web-app");
     const quoted = column(web!.table, "You see").flatMap((seen) => /^"(.+)"$/.exec(seen)?.slice(1) ?? []);
-    expect(quoted).toHaveLength(4);
+    expect(quoted).toHaveLength(5);
     const errors = [
       ...Object.keys(CODES).map((code) => new EngineError(code as ErrorCode, "what the engine said")),
       new EngineError("forbidden", "forbidden: missing or wrong pairing key (pair again: meshdoctor pair)", 403),
+      new EngineError("bad-response", `HTTP 200 ${NOT_THE_ENGINE}`, 200),
     ];
     const linked = errors.map((e) => explain(e)).filter((x) => x.troubleshooting).map((x) => x.title);
     expect(linked.sort()).toEqual(quoted.sort());
@@ -44,6 +45,15 @@ describe("the Troubleshooting page's problems", () => {
     const web = GROUPS.find((g) => g.id === "web-app");
     const down = web!.table.rows.find((row) => row[0] === "\"The engine isn't answering\"");
     expect(down?.[2]).toMatch(/^start it with `meshdoctor serve` in WSL or a Linux terminal, then \*\*Try again\*\*; /);
+  });
+
+  it("say how to move the engine off a port another program holds, and pair this browser with it there", () => {
+    const web = GROUPS.find((g) => g.id === "web-app");
+    const taken = web!.table.rows.find((row) => row[0] === "\"Unexpected answer\"");
+    // The same free port for both, or the browser would still go to the other program.
+    const ports = [...(taken?.[2] ?? "").matchAll(/`meshdoctor (serve|pair --open) --port (\d+)`/g)];
+    expect(ports.map((m) => m[1])).toEqual(["serve", "pair --open"]);
+    expect(new Set(ports.map((m) => m[2])).size).toBe(1);
   });
 
   it("send Safari users to the browsers the site names (the pairing page, the home page)", () => {
