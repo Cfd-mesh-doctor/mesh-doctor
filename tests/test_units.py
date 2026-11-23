@@ -1363,24 +1363,37 @@ class PairingTest(unittest.TestCase):
 
     def test_pair_says_whether_the_engine_is_running(self):
         out, seen = self.pair([], "running")
-        seen.assert_called_once_with(8765)
+        port, origin, key = seen.call_args[0]
+        self.assertEqual((port, origin), (8765, "https://mesh-doctor.vercel.app"))   # asked as the web app would
+        with open(os.environ["MESHDOCTOR_KEY_FILE"]) as f:
+            self.assertEqual(key, f.read().strip())                                    # with this key
         self.assertIn("The engine is running on port 8765, so the link works now.\n", out)
         out, seen = self.pair(["--port", "8770"], "none")
-        seen.assert_called_once_with(8770)
+        self.assertEqual(seen.call_args[0][0], 8770)
         self.assertIn("No engine is running on port 8770 yet: start it first, in another terminal: "
                       "meshdoctor serve --port 8770\n", out)
         out, _ = self.pair([], "unknown")
         self.assertIn("If the engine isn't running yet, start it first, in another terminal: meshdoctor serve\n", out)
-        out, _ = self.pair(["--new"], "running")
+        out, _ = self.pair(["--new"], "old-key")
         self.assertIn("The engine running on port 8765 still has the old key: restart it (Ctrl+C in its terminal, "
-                      "then meshdoctor serve) for the new link to work.\n", out)
+                      "then meshdoctor serve) for this link to work.\n", out)
+        out, _ = self.pair([], "old-key")                                  # a pair --new made earlier
+        self.assertIn("The engine running on port 8765 has another key (from before a pair --new?): restart it "
+                      "(Ctrl+C in its terminal, then meshdoctor serve) for this link to work.\n", out)
 
-    def serve_stub(self, status, body):
-        """A throwaway HTTP server on a free port of this machine, answering every GET with status and body."""
+    def serve_stub(self, status, body, key=None):
+        """A throwaway HTTP server on a free port of this machine, answering every GET with status and body
+        (with a key: as the engine does, a 403 about the pairing key to any other X-MD-Key)."""
         import http.server, threading
 
         class Stub(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
+                if key is not None and self.headers.get("X-MD-Key") != key:
+                    self.send_response(403)
+                    self.end_headers()
+                    self.wfile.write(b'{"error": {"code": "forbidden", "message": "forbidden: missing or wrong '
+                                     b'pairing key (pair again: meshdoctor pair)"}}')
+                    return
                 self.send_response(status)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
@@ -1399,6 +1412,10 @@ class PairingTest(unittest.TestCase):
         import pairing, socket
         api = json.dumps({"apiVersion": "1.2", "openapi": "/api/v1/openapi.json"}).encode()
         self.assertEqual(pairing.engine_state(self.serve_stub(200, api)), "running")
+        engine = self.serve_stub(200, api, key="K" * 43)
+        self.assertEqual(pairing.engine_state(engine, "https://mesh-doctor.vercel.app", "K" * 43), "running")
+        self.assertEqual(pairing.engine_state(engine, "https://mesh-doctor.vercel.app", "N" * 43), "old-key")
+        self.assertEqual(pairing.engine_state(self.serve_stub(403, b"forbidden: cross-site request")), "unknown")
         self.assertEqual(pairing.engine_state(self.serve_stub(404, b"<html>not here</html>")), "unknown")
         self.assertEqual(pairing.engine_state(self.serve_stub(200, b"<html>another app</html>")), "unknown")
         s = socket.socket()

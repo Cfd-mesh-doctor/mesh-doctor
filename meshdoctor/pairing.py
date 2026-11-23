@@ -113,13 +113,22 @@ def open_url(url):
     return False
 
 
-def engine_state(port, timeout=2.0):
-    """Is the engine running on this machine's port?  'running' when a Mesh Doctor engine answers there
-    (GET /api/v1/), 'none' when nothing listens there, 'unknown' when something else answers or none in time."""
+def engine_state(port, origin="", key="", timeout=2.0):
+    """Is the engine running on this machine's port, with this key?  Asked as the web app at origin would
+    (GET /api/v1/ with the key): 'running' when a Mesh Doctor engine answers, 'old-key' when it runs with
+    another key, 'none' when nothing listens there, 'unknown' when something else answers or none in time."""
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))      # this machine: never a proxy
+    req = urllib.request.Request(f"http://127.0.0.1:{port}/api/v1/",
+                                 headers={"Origin": origin, "X-MD-Key": key} if origin else {})
     try:
-        with opener.open(f"http://127.0.0.1:{port}/api/v1/", timeout=timeout) as r:
+        with opener.open(req, timeout=timeout) as r:
             doc = json.loads(r.read(65536).decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        try:
+            said = e.read(65536).decode("utf-8", "replace")
+        except OSError:
+            said = ""
+        return "old-key" if e.code == 403 and "pairing key" in said else "unknown"
     except urllib.error.URLError as e:
         return "none" if isinstance(e.reason, ConnectionRefusedError) else "unknown"
     except (OSError, ValueError):
@@ -145,10 +154,11 @@ def main(argv=None):
         print("New pairing key made: every browser paired before must pair again.")
     print("Open this link in the browser you use for the app (it holds the key: treat it like a password).")
     serve = prog.name() + " serve" + (f" --port {a.port}" if a.port != 8765 else "")
-    state = engine_state(a.port)
-    if state == "running" and a.new:        # the engine read the key when it started: the new one isn't in it
-        print(f"The engine running on port {a.port} still has the old key: restart it (Ctrl+C in its terminal, "
-              f"then {serve}) for the new link to work.")
+    state = engine_state(a.port, good[0], key)
+    if state == "old-key":                  # the engine read the key when it started: a newer one isn't in it
+        print(f"The engine running on port {a.port} " + ("still has the old key" if a.new else
+              "has another key (from before a pair --new?)") + f": restart it (Ctrl+C in its terminal, then "
+              f"{serve}) for this link to work.")
     elif state == "running":
         print(f"The engine is running on port {a.port}, so the link works now.")
     elif state == "none":
