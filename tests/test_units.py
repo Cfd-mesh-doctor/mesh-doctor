@@ -1201,6 +1201,39 @@ class ServePortTest(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(tmp, "app.key")))
 
 
+class ServeStopTest(unittest.TestCase):
+    """Ctrl+C on meshdoctor serve: it says it stopped and how to start it again, not a traceback (pass 170)."""
+
+    def serve_until_ctrl_c(self, args):
+        import server
+        saved = {k: getattr(server, k) for k in ("CASE", "PORT", "HOSTS", "ORIGINS", "APP_ORIGINS", "APP_KEY")}
+        self.addCleanup(lambda: [setattr(server, k, v) for k, v in saved.items()])
+        tmp = tempfile.mkdtemp(prefix="md_stop_")
+        self.addCleanup(shutil.rmtree, tmp, True)
+        fake = mock.MagicMock()                                    # a server stopped with Ctrl+C at once
+        fake.serve_forever.side_effect = KeyboardInterrupt
+        out = io.StringIO()
+        env = {"MESHDOCTOR_PROG": "meshdoctor", "MESHDOCTOR_CONFIG": os.devnull,
+               "MESHDOCTOR_WORKSPACE": os.path.join(tmp, "work"), "MESHDOCTOR_KEY_FILE": os.path.join(tmp, "app.key")}
+        with mock.patch.dict(os.environ, env), contextlib.redirect_stdout(out), \
+                mock.patch.object(server.http.server, "ThreadingHTTPServer", return_value=fake):
+            server.main(args)                                      # no KeyboardInterrupt comes out
+        fake.server_close.assert_called_once()
+        return out.getvalue()
+
+    def test_ctrl_c_stops_it_plainly(self):
+        out = self.serve_until_ctrl_c(["--port", "8799"])
+        self.assertIn("\nLeave this window open while you use Mesh Doctor; Ctrl+C here stops it.\n", out)
+        self.assertTrue(out.endswith("\n\nMesh Doctor stopped. Jobs it started keep running; to see them again, "
+                                     "start it with: meshdoctor serve --port 8799\n"), out[-160:])
+
+    def test_in_a_container_its_jobs_stop_too(self):
+        real = os.path.exists                                      # as if inside Docker (serve checks /.dockerenv)
+        with mock.patch("os.path.exists", side_effect=lambda path: path == "/.dockerenv" or real(path)):
+            out = self.serve_until_ctrl_c(["--port", "8799", "--container"])
+        self.assertTrue(out.endswith("\n\nMesh Doctor stopped.\n"), out[-160:])
+
+
 class SelfCheckTest(unittest.TestCase):
     """meshdoctor check: one line per check, then what to do next (item 161)."""
 

@@ -910,7 +910,18 @@ def main(argv=None):
         if a.open_app and not pairing.open_url(url):
             print("  could not open a browser here; copy the link instead", flush=True)
     print(f"Another machine? Use an SSH tunnel: ssh -L {PORT}:localhost:{PORT} <you>@<this host>", flush=True)
-    httpd.serve_forever()
+    print("Leave this window open while you use Mesh Doctor; Ctrl+C here stops it.", flush=True)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:              # Ctrl+C: say it stopped, not a traceback that looks like a crash
+        if a.container:                    # the container stops with it, and its jobs too
+            print("\nMesh Doctor stopped.", flush=True)
+        else:                              # each job runs in its own session (jobs._spawn), so it carries on
+            again = prog.name() + " serve" + (f" --port {PORT}" if PORT != 8765 else "")
+            print(f"\nMesh Doctor stopped. Jobs it started keep running; to see them again, start it with: {again}",
+                  flush=True)
+    finally:
+        httpd.server_close()
 
 
 if __name__ == "__main__":
