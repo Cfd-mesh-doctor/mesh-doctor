@@ -154,6 +154,45 @@ test("on a phone a card's description runs across the card, under its title and 
   }
 });
 
+test("on a phone Settings' buttons line up on the left when they wrap; on a wider screen Forget this engine is apart", async ({ page }) => {
+  await mockEngine(page);
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  for (const width of [320, 412, 800]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/app/settings");
+    const footer = page.getByRole("button", { name: "Forget this engine" }).locator("..");
+    const { left, right, buttons } = await footer.evaluate((f) => {
+      const cs = getComputedStyle(f);
+      const r = f.getBoundingClientRect();
+      return {
+        left: r.left + parseFloat(cs.paddingLeft),
+        right: r.right - parseFloat(cs.paddingRight),
+        buttons: [...f.children].map((b) => {
+          const box = b.getBoundingClientRect();
+          return { name: (b.textContent ?? "").trim(), left: box.left, right: box.right, middle: (box.top + box.bottom) / 2 };
+        }),
+      };
+    });
+    expect(buttons.map((b) => b.name)).toEqual(["Test connection", "Pair again", "Forget this engine"]);
+    const lines = new Set(buttons.map((b) => Math.round(b.middle)));
+    if (width < 640) {
+      expect(lines.size, `${width} px: the buttons wrap`).toBeGreaterThan(1);
+      // Each line starts at the left: one that starts further in is a button left on its own at the right.
+      for (const [i, b] of buttons.entries()) {
+        const before = buttons[i - 1];
+        if (!before || Math.abs(before.middle - b.middle) > 4) {
+          expect(b.left, `${width} px: ${b.name} starts its line at the left`).toBeLessThan(left + 1);
+        }
+      }
+    } else {
+      expect(lines.size, `${width} px: the buttons share a line`).toBe(1);
+      expect(buttons[2]!.right, `${width} px: Forget this engine is at the right`).toBeGreaterThan(right - 1);
+    }
+  }
+});
+
 test("on a small phone an open report fits the screen", async ({ page }) => {
   // Six A/B fields with long numbers, as a real k-omega run has: the table once widened the page. With a
   // repair map, whose canvas has to fit too.

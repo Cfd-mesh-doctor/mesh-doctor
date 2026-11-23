@@ -66,6 +66,8 @@ function EngineCard() {
         </dl>
         {info.isError && <ErrorPanel compact className="mt-4" error={info.error} />}
       </CardContent>
+      {/* On a phone the three take a line each, or two, lined up on the left; from 640 px they share one, with
+          Forget this engine apart at the right. */}
       <CardFooter className="flex-wrap">
         <Button variant="secondary" size="sm" onClick={() => info.refetch()} disabled={info.isFetching}>
           <RefreshCw className={cn(info.isFetching && "animate-spin")} /> Test connection
@@ -73,7 +75,7 @@ function EngineCard() {
         <Button variant="secondary" size="sm" asChild>
           <Link to="/connect"><PlugZap /> Pair again</Link>
         </Button>
-        <Button ref={forgetButton} variant="danger-ghost" size="sm" className="ml-auto" onClick={() => setConfirm(true)}>
+        <Button ref={forgetButton} variant="danger-ghost" size="sm" className="sm:ml-auto" onClick={() => setConfirm(true)}>
           <Unplug /> Forget this engine
         </Button>
       </CardFooter>
