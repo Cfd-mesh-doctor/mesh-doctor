@@ -73,7 +73,9 @@ describe("Connect", () => {
     const step = (title: string) => screen.getByText(title, { selector: "p" }).closest("li")!;
     expect(await screen.findByText("Start Mesh Doctor in WSL")).toBeInTheDocument();
     // meshdoctor serve keeps its window busy: a command typed there next would wait for it to stop.
-    expect(within(step("Start Mesh Doctor in WSL")).getByText("Leave that window open while you use the app: Mesh Doctor runs in it."))
+    // ...and that Ctrl+C there stops it, as its own banner says (the way to restart it after a new key).
+    expect(within(step("Start Mesh Doctor in WSL")).getByText("Leave that window open while you use the app: Mesh "
+      + "Doctor runs in it, and Ctrl+C there stops it."))
       .toBeInTheDocument();
     expect(step("Open the pairing link it prints"))
       .toHaveTextContent("It starts with this site's address. Or have it open the link for you, from a second WSL window:");

@@ -229,7 +229,7 @@ export function Connect() {
           {/* The engine keeps its window busy: a command typed there next would wait for it to stop. */}
           <Step n={1} title="Start Mesh Doctor in WSL">
             <CopyCommand command="meshdoctor serve" />
-            <p className="mt-2">Leave that window open while you use the app: Mesh Doctor runs in it.</p>
+            <p className="mt-2">Leave that window open while you use the app: Mesh Doctor runs in it, and Ctrl+C there stops it.</p>
           </Step>
           <Step n={2} title="Open the pairing link it prints">
             It starts with this site's address. Or have it open the link for you, from a second WSL window:
