@@ -27,9 +27,9 @@ describe("Troubleshooting", () => {
     expect(within(first!).getByText("Try again").tagName).toBe("STRONG");
     expect(within(first!).getAllByText("meshdoctor serve").map((e) => e.tagName)).toEqual(["CODE", "CODE"]);
 
-    // A short flag never splits at its hyphen; code too long for a phone's column may break anywhere.
-    expect(screen.getByText("-copyZero")).toHaveClass("whitespace-nowrap");
-    expect(screen.getByText("#includeEtc \"caseDicts/setConstraintTypes\"")).not.toHaveClass("whitespace-nowrap");
+    // Code as the doc writes it, each whole: index.css keeps it on a line where it fits (a phone test checks that).
+    expect(screen.getByText("-copyZero").tagName).toBe("CODE");
+    expect(screen.getByText("#includeEtc \"caseDicts/setConstraintTypes\"").tagName).toBe("CODE");
   });
 
   it("puts the cursor in its search box on “/”, as the Docs page does", async () => {

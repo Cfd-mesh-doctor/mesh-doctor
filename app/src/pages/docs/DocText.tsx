@@ -5,6 +5,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { InlineCode } from "@/components/shared/InlineCode";
+import { attached } from "@/lib/attached";
 import { docHref } from "./entries";
 
 // Italics start at a "*" with a letter after it and never reach into code, so the star of a glob in code
@@ -25,12 +26,20 @@ export function DocText({ text }: { text: string }) {
   for (const m of text.matchAll(TOKEN)) {
     const [whole, doubled, single, bold, italic, label, target] = m;
     const code = doubled?.trim() ?? single;
-    if (m.index > at) out.push(text.slice(at, m.index));
-    if (code != null) out.push(<InlineCode key={m.index} text={code} />);
-    else if (bold != null) out.push(<strong key={m.index} className="font-semibold"><DocText text={bold} /></strong>);
-    else if (italic != null) out.push(<em key={m.index}><DocText text={italic} /></em>);
-    else out.push(<DocLink key={m.index} target={target ?? ""}><DocText text={label ?? ""} /></DocLink>);
+    let before = text.slice(at, m.index);
     at = m.index + whole.length;
+    let node: ReactNode;
+    if (code != null) {
+      // What's written against the code with no space ("(" before it, ")," after it) stays on its line with it.
+      const near = attached(before, text.slice(at));
+      before = near.before;
+      at += near.trail.length;
+      node = <InlineCode key={m.index} text={code} lead={near.lead} trail={near.trail} />;
+    } else if (bold != null) node = <strong key={m.index} className="font-semibold"><DocText text={bold} /></strong>;
+    else if (italic != null) node = <em key={m.index}><DocText text={italic} /></em>;
+    else node = <DocLink key={m.index} target={target ?? ""}><DocText text={label ?? ""} /></DocLink>;
+    if (before) out.push(before);
+    out.push(node);
   }
   if (at < text.length) out.push(text.slice(at));
   return <>{out}</>;

@@ -32,12 +32,16 @@ describe("the error panel", () => {
     expect(screen.queryByRole("link", { name: "How to fix this" })).not.toBeInTheDocument();
   });
 
-  it("shows the commands a hint names as code, a short one on one line, and no backticks", () => {
+  it("shows the commands a hint names as code, and no backticks", () => {
     render(<ErrorPanel compact error={new EngineError("forbidden", "forbidden: missing or wrong pairing key", 403)} />);
-    // A command split over two lines ("meshdoctor pair", then "--new") wouldn't read as one.
+    // Each command whole, so it reads as one (index.css keeps it on a line where it fits; a phone test checks that).
     const code = screen.getByText("meshdoctor pair --new", { selector: "code" });
-    expect(code).toHaveClass("whitespace-nowrap");
-    expect(screen.getByText("meshdoctor serve", { selector: "code" })).toHaveClass("whitespace-nowrap");
+    expect(screen.getByText("meshdoctor serve", { selector: "code" })).toBeInTheDocument();
+    // What's written against a command goes with it ("meshdoctor serve):"); one between spaces stands alone.
+    const serve = screen.getByText("meshdoctor serve", { selector: "code" }).parentElement;
+    expect(serve).toHaveClass("code-box");
+    expect(serve).toHaveTextContent(/^meshdoctor serve\):$/);
+    expect(code.parentElement?.tagName).toBe("P");
     const hint = code.closest("p");
     expect(hint).toHaveTextContent(/^The engine has a different pairing key, or none was sent\. Ran meshdoctor pair --new /);
     expect(hint?.textContent).not.toContain("`");

@@ -23,8 +23,17 @@ describe("text as the docs write it", () => {
     expect(serve.tagName).toBe("CODE");
     expect(serve.parentElement?.tagName).toBe("STRONG");
     expect(screen.getByText("Try again").tagName).toBe("STRONG");
-    expect(screen.getByText("-copyZero")).toHaveClass("whitespace-nowrap");
+    expect(screen.getByText("-copyZero").tagName).toBe("CODE");
     expect(screen.getByText(/^Run/)).toHaveTextContent("Run meshdoctor serve, then Try again (no -copyZero).");
+  });
+
+  it("keeps what's written against code with it, so a line doesn't break between them", () => {
+    renderScreen(<p><DocText text="Start it (`meshdoctor serve`), then **Try again**; or `pair`'s link. A `b` c." /></p>);
+    expect(screen.getByText("meshdoctor serve").parentElement).toHaveTextContent(/^\(meshdoctor serve\),$/);
+    expect(screen.getByText("meshdoctor serve").parentElement).toHaveClass("code-box");
+    expect(screen.getByText("pair").parentElement).toHaveTextContent(/^pair's$/);
+    expect(screen.getByText("b").parentElement?.tagName).toBe("P"); // spaces on both sides: nothing to keep
+    expect(screen.getByText(/^Start it/)).toHaveTextContent("Start it (meshdoctor serve), then Try again; or pair's link. A b c.");
   });
 
   it("shows code written in double backticks, which may hold a backtick", () => {

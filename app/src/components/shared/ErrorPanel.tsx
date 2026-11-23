@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // What went wrong, in plain words, with the fix, a way to try again, and the problem's page in Troubleshooting.
 import { CircleExclamationPoint, ExternalLink, RefreshCw } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { explain } from "@/engine/errors";
+import { attached } from "@/lib/attached";
 import { cn } from "@/lib/utils";
 import { CopyCommand } from "./CopyCommand";
 import { InlineCode } from "./InlineCode";
@@ -47,9 +49,21 @@ export function ErrorPanel({ error, onRetry, retrying, className, compact }: {
   );
 }
 
-/** The hint, with the commands, settings and file names it names (in backticks) as code, as the docs show them: a
- *  command split over two lines ("meshdoctor pair", then "--new") wouldn't read as one. */
+/** The hint, with the commands, settings and file names it names (in backticks) as code, as the docs show them, each
+ *  kept whole on a line where it fits (index.css): split over two lines ("meshdoctor pair", then "--new"), a command
+ *  wouldn't read as one. */
 function Hint({ text }: { text: string }) {
-  // Split at a pair of backticks, keeping what they hold: that comes at the odd places.
-  return <>{text.split(/`([^`]+)`/).map((part, i) => (i % 2 ? <InlineCode key={i} text={part} /> : part))}</>;
+  // Split at a pair of backticks, keeping what they hold: that comes at the odd places. What's written against a
+  // command with no space ("(", "),") stays on its line with it.
+  const parts = text.split(/`([^`]+)`/);
+  const out: ReactNode[] = [];
+  let rest = parts[0] ?? "";
+  for (let i = 1; i < parts.length; i += 2) {
+    const near = attached(rest, parts[i + 1] ?? "");
+    if (near.before) out.push(near.before);
+    out.push(<InlineCode key={i} text={parts[i] ?? ""} lead={near.lead} trail={near.trail} />);
+    rest = near.after;
+  }
+  if (rest) out.push(rest);
+  return <>{out}</>;
 }

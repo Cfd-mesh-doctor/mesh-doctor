@@ -6,11 +6,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, CircleCheck, KeyRound, Laptop, Link2, LoaderCircle, Lock, PlugZap, ShieldCheck, TriangleExclamationPoint } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
+import { InlineCode } from "@/components/shared/InlineCode";
 import { Logo } from "@/components/brand/Logo";
 import { ThemeMenu } from "@/components/layout/ThemeMenu";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
-import { InlineCode } from "@/components/shared/InlineCode";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/misc";
@@ -175,7 +175,7 @@ export function Connect() {
           {phase.kind === "ok"
             ? "Opening the app…"
             : <>This browser is paired. Make sure Mesh Doctor is running in WSL or a Linux terminal (start it with{" "}
-              <InlineCode text="meshdoctor serve" />), then connect.</>}
+              <InlineCode text="meshdoctor serve" trail="),"/> then connect.</>}
         </p>
         <div className="mt-5 flex items-center gap-3 rounded-lg border border-border bg-surface-2 px-3 py-2.5">
           <span className="grid size-8 shrink-0 place-items-center rounded-md bg-surface ring-1 ring-border">

@@ -122,6 +122,22 @@
   main[tabindex="-1"]:focus-visible { outline: none; }
   ::selection { background: var(--primary-soft); }
   code, kbd, samp, pre { font-family: var(--font-mono); font-size: 0.92em; }
+  /* Code in running text (InlineCode: a command, a flag, a file name) stays whole on a line whenever the line can hold
+     it: as an inline box at most as wide as the line, it goes to the next line whole rather than split at a space or a
+     hyphen ("meshdoctor" at a line's end and "serve" on the next doesn't read as one command). Code longer than the
+     line wraps inside its box, at a space where it can and anywhere where it must, so a phone never scrolls sideways.
+     What's written against the code ("(", "),") is in the box with it: a line may break on either side of a box, even
+     next to a bracket. A link's underline reaches into the box too. A phone test (e2e/mobile.spec.ts) checks it. */
+  .code-box {
+    display: inline-block;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    text-decoration-line: inherit;
+  }
+  /* In a table, a code's longest word counts toward its column's narrowest width (break-word, unlike anywhere, leaves
+     that as it is), so the table doesn't squeeze a column into breaking a code mid-word: a table too wide for the
+     screen scrolls in its own box. */
+  :is(td, th) .code-box { overflow-wrap: break-word; }
 }
 
 /* Short entrances for dialogs and menus; none when the system asks for less motion. */

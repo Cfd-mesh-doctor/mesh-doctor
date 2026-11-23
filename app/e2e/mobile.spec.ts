@@ -130,6 +130,82 @@ test("on the smallest phones your own app's screens don't scroll sideways", asyn
   }
 });
 
+test("on a phone a command or file name in running text stays whole on a line whenever the line can hold it, with what's written against it", async ({ page }) => {
+  test.slow(); // every page at three widths
+  // Split at a line's end ("meshdoctor", then "serve --port 8766" on the next line), a command doesn't read as one.
+  const wrong: string[] = [];
+  let checked = 0;
+  for (const path of [
+    "/", "/connect", "/install", "/report", "/estimate?cells=31.1", "/how-it-works", "/accuracy", "/gallery", "/docs",
+    "/troubleshooting", "/limits", "/safety", "/your-own-case", "/claude-code", "/dashboard-tour", "/architecture", "/demo", "/demo/jobs", "/demo/cases", "/demo/settings", "/demo/estimate?cells=31.1",
+    "/demo/repairs/ahmed25-medium-fix/report",
+  ]) {
+    await page.setViewportSize({ width: 412, height: 800 });
+    await page.goto(path);
+    await page.waitForLoadState("networkidle");
+    for (const width of [412, 360, 320]) {
+      await page.setViewportSize({ width, height: 800 });
+      const [found, boxes] = await page.evaluate(() => {
+        const out: string[] = [];
+        const range = document.createRange();
+        // Code in running text as InlineCode shows it: a box, with what's written against the code in it.
+        for (const box of document.querySelectorAll("main .code-box")) {
+          const code = box.matches("code") ? box : box.querySelector("code")!;
+          const parent = box.parentElement!;
+          const text = code.firstChild;
+          if (!(text instanceof Text) || code.childNodes.length !== 1 || !box.getClientRects().length) continue; // hidden
+          // The block its lines are in, and how wide those are.
+          let block = parent;
+          while (getComputedStyle(block).display.startsWith("inline")) block = block.parentElement!;
+          const style = getComputedStyle(block);
+          if (/auto|scroll/.test(style.overflowX)) continue; // a block that scrolls sideways on purpose
+          const left = block.getBoundingClientRect().left + block.clientLeft + parseFloat(style.paddingLeft);
+          const line = block.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+          // How wide the box is on one line.
+          const probe = box.cloneNode(true) as HTMLElement;
+          Object.assign(probe.style, { position: "absolute", visibility: "hidden", whiteSpace: "nowrap", maxWidth: "none" });
+          parent.append(probe);
+          const width = probe.getBoundingClientRect().width;
+          probe.remove();
+          // The lines it is on: its characters' tops.
+          const tops = new Set<number>();
+          for (let i = 0; i < text.length; i++) {
+            range.setStart(text, i);
+            range.setEnd(text, i + 1);
+            const r = range.getBoundingClientRect();
+            if (r.height) tops.add(Math.round(r.top));
+          }
+          const name = code.textContent;
+          if (width + 1 < line && tops.size > 1) { // a pixel to spare, for rounding
+            out.push(`${name}: on ${tops.size} lines, though one line holds it (${Math.round(width)} of ${Math.round(line)} px)`);
+          }
+          if (box.getBoundingClientRect().right > left + line + 0.5) out.push(`${name}: sticks out of its line`);
+          // What's written against it with no space stays on its line: a "(" left at a line's end reads badly.
+          const middle = (t: Text, i: number) => {
+            range.setStart(t, i);
+            range.setEnd(t, i + 1);
+            const r = range.getBoundingClientRect();
+            return r.top + r.height / 2;
+          };
+          const prev = box.previousSibling;
+          const next = box.nextSibling;
+          if (prev instanceof Text && /\S$/.test(prev.data) && Math.abs(middle(prev, prev.length - 1) - middle(text, 0)) > 6) {
+            out.push(`${name}: the ${prev.data.slice(-1)} before it is on another line`);
+          }
+          if (next instanceof Text && /^\S/.test(next.data) && Math.abs(middle(next, 0) - middle(text, text.length - 1)) > 6) {
+            out.push(`${name}: the ${next.data[0]} after it is on another line`);
+          }
+        }
+        return [out, document.querySelectorAll("main .code-box").length] as const;
+      });
+      checked += boxes;
+      wrong.push(...found.map((what) => `${path} at ${width} px: ${what}`));
+    }
+  }
+  expect(wrong).toEqual([]);
+  expect(checked, "code checked").toBeGreaterThan(300);
+});
+
 test("on a phone a card's description runs across the card, under its title and what's beside it", async ({ page }) => {
   await mockEngine(page);
   await page.goto(pairingLink());
