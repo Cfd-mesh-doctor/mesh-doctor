@@ -54,8 +54,10 @@ export function EmptyState({ icon: Icon, title, children, action, className, hea
         <Icon className="size-5 text-muted-foreground" aria-hidden />
       </div>
       <Heading className="mt-4 text-sm font-semibold">{title}</Heading>
-      {children && <div className="mt-1 max-w-md text-sm text-muted-foreground">{children}</div>}
-      {action && <div className="mt-5">{action}</div>}
+      {/* Neither is wider than the empty state, so a command or a block of code in it scrolls inside, rather than
+          the page on a phone. */}
+      {children && <div className="mt-1 w-full max-w-md text-sm text-muted-foreground">{children}</div>}
+      {action && <div className="mt-5 max-w-full">{action}</div>}
     </div>
   );
 }

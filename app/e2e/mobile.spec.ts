@@ -42,6 +42,26 @@ test("on a phone nothing scrolls sideways, and the menu works", async ({ page })
   await expect(page.getByRole("dialog")).toBeHidden();
 });
 
+test("on a phone your own app before its first case doesn't scroll sideways: the set-up lines scroll in their block", async ({ page }) => {
+  const engine = await mockEngine(page, { noJobs: true });
+  engine.cases = [];
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  for (const width of [page.viewportSize()?.width ?? 412, 360]) {
+    await page.setViewportSize({ width, height: 800 });
+    // Getting started and the empty Cases list each give the First run's set-up lines, longer than a phone is wide.
+    for (const [path, part] of [["/app", "Getting started"], ["/app/cases", "No cases found"]] as const) {
+      await page.goto(path);
+      await expect(page.getByRole("main").getByText(part, { exact: true })).toBeVisible();
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow, `${path} is wider than a ${width} px screen`).toBeLessThanOrEqual(1);
+      const block = page.getByRole("main").locator("pre", { hasText: "cp -r $FOAM_TUTORIALS/" });
+      expect(await block.evaluate((el) => el.scrollWidth > el.clientWidth), `${path}: the block scrolls`).toBe(true);
+    }
+  }
+});
+
 test("on a small phone an open report fits the screen", async ({ page }) => {
   // Six A/B fields with long numbers, as a real k-omega run has: the table once widened the page. With a
   // repair map, whose canvas has to fit too.

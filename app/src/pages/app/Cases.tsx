@@ -5,6 +5,7 @@
 import { Check, Copy, FolderOpen, Search } from "lucide-react";
 import { useMemo } from "react";
 import { Link, useSearchParams } from "react-router";
+import { CopyBlock } from "@/components/shared/CopyBlock";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { DashboardLink } from "@/components/shared/DashboardLink";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
@@ -26,6 +27,7 @@ import { DOCS } from "@/lib/site";
 import { useCopy } from "@/lib/useCopy";
 import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
+import { FIRST_RUN_SETUP } from "@/pages/install/commands";
 
 interface Row {
   name: string;
@@ -166,18 +168,25 @@ export function Cases() {
           // A list that didn't load isn't empty: the message above says why, and the filter has nothing to match.
           <EmptyState icon={FolderOpen} title="The cases didn't load" />
         ) : rows.length === 0 ? (
-          <EmptyState icon={FolderOpen} title="No cases found">
+          <EmptyState
+            icon={FolderOpen}
+            title="No cases found"
+            // Wider than the text above it, so its longest line shows whole on a computer's screen; a phone scrolls it.
+            action={<CopyBlock code={FIRST_RUN_SETUP.join("\n")} className="max-w-full text-left" />}
+          >
             <p>
               The engine lists folders with a mesh (constant/polyMesh) in its cases folder, by default $FOAM_RUN. To use
               another folder, set it and restart the engine:
             </p>
             <CopyCommand command="MESHDOCTOR_CASES=~/cases meshdoctor serve" className="mx-auto mt-3 max-w-sm text-left" />
-            {/* A newcomer's first case: the README's First run meshes OpenFOAM's motorBike tutorial in $FOAM_RUN. */}
+            {/* A newcomer's first case: the README's First run, its set-up below to copy, as Getting started gives it. */}
             <p className="mt-4">
-              No case yet? The README&apos;s{" "}
+              No case yet? To try Mesh Doctor on OpenFOAM&apos;s motorBike tutorial, run these in a WSL or Linux
+              terminal: they copy it into $FOAM_RUN, where the engine looks, and mesh it, which takes a few minutes. The
+              README&apos;s{" "}
               <a href={DOCS.firstRun} target="_blank" rel="noreferrer"
                 className="font-medium text-primary underline-offset-4 hover:underline">First run</a>{" "}
-              sets up OpenFOAM&apos;s motorBike tutorial in $FOAM_RUN, where the engine finds it.
+              has the rest.
             </p>
           </EmptyState>
         ) : shown.length === 0 ? (

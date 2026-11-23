@@ -7,6 +7,7 @@ import type { Transport } from "@/engine/client";
 import { EngineError } from "@/engine/errors";
 import { savePairing } from "@/engine/pairing";
 import { DOCS } from "@/lib/site";
+import { FIRST_RUN_SETUP } from "@/pages/install/commands";
 import { renderScreen } from "@/test/render";
 import { Cases } from "./Cases";
 
@@ -83,7 +84,12 @@ describe("the Cases screen of your own engine", () => {
     expect(firstRun).toHaveAttribute("href", DOCS.firstRun);
     expect(firstRun).toHaveAttribute("target", "_blank");
     expect(firstRun.closest("p")).toHaveTextContent(
-      "No case yet? The README's First run sets up OpenFOAM's motorBike tutorial in $FOAM_RUN, where the engine finds it.");
+      "No case yet? To try Mesh Doctor on OpenFOAM's motorBike tutorial, run these in a WSL or Linux terminal: they " +
+      "copy it into $FOAM_RUN, where the engine looks, and mesh it, which takes a few minutes. The README's First run " +
+      "has the rest.");
+    // ...with its set-up lines to copy, as Getting started gives them: the README's own (commands.test.ts).
+    const setup = screen.getByText((_, el) => el?.tagName === "CODE" && el.textContent === FIRST_RUN_SETUP.join("\n"));
+    expect(within(setup.closest("div")!).getByRole("button", { name: /^Copy/ })).toBeInTheDocument();
   });
 
   it("whose cases didn't load says so under the message that says why, not that nothing matches the filter", async () => {
