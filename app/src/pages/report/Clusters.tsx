@@ -60,11 +60,13 @@ export function ClustersCard({ clusters, source }: {
   return (
     <Card className="mt-4">
       <CardHeader>
-        <CardTitle>Problem clusters</CardTitle>
-        <CardDescription>
-          Faces that fail the profile's limits, grouped where they touch, worst first. A face's badness is its worst
-          measure divided by that measure's limit, so above 1 fails.
-        </CardDescription>
+        <div>
+          <CardTitle>Problem clusters</CardTitle>
+          <CardDescription>
+            Faces that fail the profile's limits, grouped where they touch, worst first. A face's badness is its worst
+            measure divided by that measure's limit, so above 1 fails.
+          </CardDescription>
+        </div>
       </CardHeader>
       <CardContent>
         <Segmented
