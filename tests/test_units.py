@@ -623,9 +623,13 @@ class BoundaryParserTest(unittest.TestCase):
 
     def test_names_with_any_characters_and_any_order(self):
         try:
-            import numpy  # noqa: F401  (a real one must not be shadowed for the tests after this one)
+            import numpy  # noqa: F401  (a real one is used as it is)
         except ImportError:
-            sys.modules.setdefault("numpy", type(sys)("numpy"))  # mapdata imports numpy at the top
+            # mapdata imports numpy at the top, though patches() doesn't use it. The stand-in is for this test
+            # only: a later test (meshdoctor check) must find numpy missing, as it is.
+            sys.modules["numpy"] = type(sys)("numpy")
+            self.addCleanup(sys.modules.pop, "mapdata", None)
+            self.addCleanup(sys.modules.pop, "numpy", None)
         import mapdata
         self.assertEqual(mapdata.patches(self.TEXT), [
             ("inlet", "patch", 10, 100), ("motorBike_frt-fairing:001%1", "wall", 42, 110),
