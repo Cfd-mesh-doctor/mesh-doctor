@@ -23,6 +23,7 @@ import argparse, os, re, secrets, shutil, stat, subprocess, sys
 from urllib.parse import quote
 
 import config
+import prog
 
 KEY_FILE = os.path.join(os.path.expanduser("~"), ".config", "meshdoctor", "app.key")
 KEY = re.compile(r"^[A-Za-z0-9_-]{32,128}$")
@@ -123,12 +124,13 @@ def main(argv=None):
     for b in bad:
         print(f"ignored app address {b!r}: use https://host[:port], or http://localhost:port", file=sys.stderr)
     if not good:
-        sys.exit("no app address is set; set app_origins in the config file (see: python3 -m meshdoctor config)")
+        sys.exit(f"no app address is set; set app_origins in the config file (see: {prog.name()} config)")
     key = new_key() if a.new else load_key()
     if a.new:
         print("New pairing key made: every browser paired before must pair again.")
     print("Open this link in the browser you use for the app (it holds the key: treat it like a password).")
-    print("Start the engine first: python3 -m meshdoctor serve" + (f" --port {a.port}" if a.port != 8765 else ""))
+    print("If the engine isn't running yet, start it first, in another terminal: " + prog.name() + " serve"
+          + (f" --port {a.port}" if a.port != 8765 else ""))
     for o in good:
         print("  " + link(o, a.port, key))
     if a.open and not open_url(link(good[0], a.port, key)):

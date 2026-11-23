@@ -18,10 +18,12 @@
     python3 -m meshdoctor pair   [--new] [--open]                     pair the web app with this engine
     python3 -m meshdoctor experimental polish | ratchet ...           experimental skills
 
-Run it from the folder that holds `meshdoctor/` (or after installing it).
+New here? python3 -m meshdoctor check says whether this machine is ready. Then python3 -m meshdoctor serve
+starts the engine and its dashboard; to use the web app too, run python3 -m meshdoctor pair --open in a
+second terminal while it runs.
 Each command's own help: python3 -m meshdoctor <command> --help
 Source cases are only ever read; every job works on a copy in the workspace.
-A <srcCase> is a folder, or the name of a case in the cases folder (meshdoctor config).
+A <srcCase> is a folder, or the name of a case in the cases folder (python3 -m meshdoctor config).
 """
 import os, runpy, sys
 
@@ -41,12 +43,26 @@ SCRIPTS = {
     "pair": "pairing.py",
 }
 EXPERIMENTAL = {"polish": "polish.py", "ratchet": "ratchet.py"}
+# Only when the help gives python3 -m meshdoctor: where that works, and how to get the short command
+FROM_CLONE = ("Run it from the folder that holds meshdoctor/. To type just meshdoctor in any folder, link\n"
+              "bin/meshdoctor into ~/.local/bin, as the setup scripts do.\n")
+
+
+def usage():
+    """The help above, giving each command as it is typed here (prog.py)."""
+    import prog
+    if prog.name() == prog.MODULE:
+        return __doc__ + FROM_CLONE
+    return prog.text(__doc__)
 
 
 def main(argv=None):
+    sys.path.insert(0, HERE)                 # the tools import each other by module name
+    import prog
+    os.environ["MESHDOCTOR_PROG"] = prog.name()          # so the tools' own messages give commands the same way
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv or argv[0] in ("-h", "--help", "help"):
-        print(__doc__)
+        print(usage())
         return 0
     cmd, rest = argv[0], argv[1:]
     if cmd == "experimental":
@@ -58,10 +74,9 @@ def main(argv=None):
         # repair.py and abtest.py take their sub-command as the first argument
         args = [cmd] + rest if cmd in ("full", "copy", "inspect", "fix", "judge") else rest
     else:
-        sys.exit(f"unknown command {cmd!r}; try: python3 -m meshdoctor help")
+        sys.exit(f"unknown command {cmd!r}; try: {prog.name()} help")
     if os.name == "nt":
         sys.exit("Mesh Doctor runs on Linux. On Windows, run it inside WSL: wsl python3 -m meshdoctor " + cmd)
-    sys.path.insert(0, HERE)                 # the tools import each other by module name
     sys.argv = [script] + args
     runpy.run_path(script, run_name="__main__")
     return 0

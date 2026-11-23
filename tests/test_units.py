@@ -1089,6 +1089,89 @@ class PagesTest(unittest.TestCase):
         self.assertEqual(server.SCRIPT.match("/js/md.js").group(1), "md.js")
 
 
+class CommandNameTest(unittest.TestCase):
+    """prog.py and the main help: commands are given as they are typed here (item 159)."""
+
+    HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    MAIN = os.path.join(HERE, "meshdoctor", "__main__.py")
+
+    def run_main(self, argv, argv0, told=None):
+        """(output, MESHDOCTOR_PROG as main left it) for __main__.main(argv) started as argv0."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("md_main_for_test", self.MAIN)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        out = io.StringIO()
+        with mock.patch.dict(os.environ), mock.patch.object(sys, "argv", [argv0]), contextlib.redirect_stdout(out):
+            os.environ.pop("MESHDOCTOR_PROG", None)
+            if told is not None:
+                os.environ["MESHDOCTOR_PROG"] = told
+            self.assertEqual(mod.main(argv), 0)
+            left = os.environ.get("MESHDOCTOR_PROG")
+        return out.getvalue(), left
+
+    def test_name(self):
+        import prog
+        with mock.patch.dict(os.environ), mock.patch.object(sys, "argv", [self.MAIN]):
+            os.environ.pop("MESHDOCTOR_PROG", None)
+            self.assertEqual(prog.name(), "python3 -m meshdoctor")
+            os.environ["MESHDOCTOR_PROG"] = "  "
+            self.assertEqual(prog.name(), "python3 -m meshdoctor")             # blank: not a name
+            os.environ["MESHDOCTOR_PROG"] = "/opt/md/bin/meshdoctor"
+            self.assertEqual(prog.name(), "/opt/md/bin/meshdoctor")
+            self.assertEqual(prog.text("try: python3 -m meshdoctor check"), "try: /opt/md/bin/meshdoctor check")
+        with mock.patch.dict(os.environ), mock.patch.object(sys, "argv", ["/usr/local/bin/meshdoctor"]):
+            os.environ.pop("MESHDOCTOR_PROG", None)
+            self.assertEqual(prog.name(), "meshdoctor")                        # pip's command
+            self.assertEqual(prog.text("python3 -m meshdoctor serve"), "meshdoctor serve")
+
+    def test_help_from_the_meshdoctor_command(self):
+        out, left = self.run_main([], self.MAIN, told="meshdoctor")
+        self.assertIn("\n    meshdoctor serve  [--port 8765]", out)
+        self.assertIn("New here? meshdoctor check says whether this machine is ready. Then meshdoctor serve", out)
+        self.assertIn("run meshdoctor pair --open in a", out)
+        self.assertIn("(meshdoctor config)", out)
+        self.assertNotIn("python3 -m", out)
+        self.assertNotIn("Run it from the folder", out)
+        self.assertEqual(left, "meshdoctor")
+        out, left = self.run_main(["help"], "/usr/local/bin/meshdoctor")          # pip's command
+        self.assertIn("\n    meshdoctor full   <srcCase> <name>", out)
+        self.assertNotIn("python3 -m", out)
+        self.assertEqual(left, "meshdoctor")                                    # what the tools are told
+
+    def test_help_from_the_clone(self):
+        out, left = self.run_main(["--help"], self.MAIN)
+        self.assertIn("\n    python3 -m meshdoctor serve  [--port 8765]", out)
+        self.assertIn("New here? python3 -m meshdoctor check", out)
+        self.assertIn("Run it from the folder that holds meshdoctor/. To type just meshdoctor in any folder", out)
+        self.assertEqual(left, "python3 -m meshdoctor")
+
+    def test_unknown_command(self):
+        with self.assertRaises(SystemExit) as e:
+            self.run_main(["serv"], self.MAIN, told="meshdoctor")
+        self.assertEqual(str(e.exception.code), "unknown command 'serv'; try: meshdoctor help")
+
+    @unittest.skipUnless(os.name == "posix" and shutil.which("sh") and shutil.which("readlink"), "needs sh")
+    def test_launcher_says_how_it_was_started(self):
+        import subprocess
+        launcher = os.path.abspath(os.path.join(self.HERE, "bin", "meshdoctor"))
+        tmp = tempfile.mkdtemp(prefix="md_prog_")
+        try:
+            os.symlink(launcher, os.path.join(tmp, "meshdoctor"))
+            env = {k: v for k, v in os.environ.items() if k not in ("MESHDOCTOR_PROG", "PYTHONPATH")}
+
+            def first_line(path_dirs, script):
+                env["PATH"] = os.pathsep.join(path_dirs + [os.path.dirname(sys.executable), "/usr/bin", "/bin"])
+                r = subprocess.run(["sh", script, "help"], env=env, capture_output=True, text=True, timeout=60)
+                self.assertEqual(r.returncode, 0, r.stderr)
+                return next(line for line in r.stdout.splitlines() if " serve  [--port" in line).strip()
+
+            self.assertTrue(first_line([tmp], os.path.join(tmp, "meshdoctor")).startswith("meshdoctor serve "))
+            self.assertTrue(first_line([], launcher).startswith(launcher + " serve "))   # not on PATH: its path
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 class PairingTest(unittest.TestCase):
     """pairing.py: which app addresses count, the key file, and the pairing link."""
 
@@ -1144,6 +1227,17 @@ class PairingTest(unittest.TestCase):
         before, after = url.split("#", 1)
         self.assertEqual(before, "https://mesh-doctor.vercel.app/connect")
         self.assertEqual(after, f"key={key}&engine=http%3A%2F%2Flocalhost%3A8768")
+
+    def test_pair_says_how_to_start_the_engine(self):
+        import pairing
+        for argv, want in [([], "meshdoctor serve"), (["--port", "8770"], "meshdoctor serve --port 8770")]:
+            out = io.StringIO()
+            with mock.patch.dict(os.environ, {"MESHDOCTOR_PROG": "meshdoctor", "MESHDOCTOR_PORT": "8765"}), \
+                    contextlib.redirect_stdout(out):
+                self.assertEqual(pairing.main(argv), 0)
+            self.assertIn("If the engine isn't running yet, start it first, in another terminal: " + want + "\n",
+                          out.getvalue())
+            self.assertNotIn("python3 -m", out.getvalue())
 
     def test_server_compare(self):
         import server

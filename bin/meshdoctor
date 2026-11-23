@@ -2,7 +2,14 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 The Mesh Doctor authors
 #
-# Run Mesh Doctor from a clone without installing it.  Put this folder on PATH
-# (or link this file into ~/bin):   meshdoctor help
+# Run Mesh Doctor from a clone without installing it.  Link this file into ~/.local/bin
+# (the setup scripts do) or put this folder on PATH:   meshdoctor help
 here=$(dirname "$(readlink -f "$0")")
+# Help and messages give commands as you can type them: meshdoctor when that runs this file, else how you ran it
+if [ "$(readlink -f "$(command -v meshdoctor 2>/dev/null)" 2>/dev/null)" = "$(readlink -f "$0")" ]; then
+    MESHDOCTOR_PROG=meshdoctor
+else
+    MESHDOCTOR_PROG=$0
+fi
+export MESHDOCTOR_PROG
 PYTHONPATH="$(cd "$here/.." && pwd)${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m meshdoctor "$@"
