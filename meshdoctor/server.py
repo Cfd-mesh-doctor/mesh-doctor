@@ -906,7 +906,9 @@ def main(argv=None):
         print(f"Web app: {', '.join(good)} may use /api/v1 with the pairing key. Pair a browser once with:",
               flush=True)
         print(f"  {url}", flush=True)
-        print(f"  (the link holds the key: treat it like a password; a new key: {prog.name()} pair --new)", flush=True)
+        # The key is read here, once: a pair --new while this runs takes effect only after a restart.
+        print(f"  (the link holds the key: treat it like a password; a new key: {prog.name()} pair --new, then restart "
+              "Mesh Doctor)", flush=True)
         if a.open_app and not pairing.open_url(url):
             print("  could not open a browser here; copy the link instead", flush=True)
     print(f"Another machine? Use an SSH tunnel: ssh -L {PORT}:localhost:{PORT} <you>@<this host>", flush=True)

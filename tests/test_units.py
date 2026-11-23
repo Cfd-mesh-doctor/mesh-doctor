@@ -1202,7 +1202,8 @@ class ServePortTest(unittest.TestCase):
 
 
 class ServeStopTest(unittest.TestCase):
-    """Ctrl+C on meshdoctor serve: it says it stopped and how to start it again, not a traceback (pass 170)."""
+    """Ctrl+C on meshdoctor serve: it says it stopped and how to start it again, not a traceback (pass 170).
+    And its banner (pass 179)."""
 
     def serve_until_ctrl_c(self, args):
         import server
@@ -1226,6 +1227,12 @@ class ServeStopTest(unittest.TestCase):
         self.assertIn("\nLeave this window open while you use Mesh Doctor; Ctrl+C here stops it.\n", out)
         self.assertTrue(out.endswith("\n\nMesh Doctor stopped. Jobs it started keep running; to see them again, "
                                      "start it with: meshdoctor serve --port 8799\n"), out[-160:])
+
+    def test_the_banner_says_a_new_key_needs_a_restart(self):
+        out = self.serve_until_ctrl_c(["--port", "8799"])          # the web app's own address: a pairing link
+        # serve reads the key when it starts: a key made later works only once it restarts (pair --new's help says so).
+        self.assertIn("\n  (the link holds the key: treat it like a password; a new key: meshdoctor pair --new, then "
+                      "restart Mesh Doctor)\n", out)
 
     def test_in_a_container_its_jobs_stop_too(self):
         real = os.path.exists                                      # as if inside Docker (serve checks /.dockerenv)
