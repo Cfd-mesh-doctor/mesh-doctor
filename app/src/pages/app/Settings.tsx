@@ -186,7 +186,9 @@ export function Settings() {
   return (
     <>
       <PageHeader title="Settings" description="This browser's connection to Mesh Doctor, and how the app looks." />
-      <div className="grid gap-6">
+      {/* One column that narrows to the screen: a plain grid's column grows to its widest line that can't break,
+          such as Pair again's command on a 320 px phone, and takes every card past the screen's edge. */}
+      <div className="grid grid-cols-1 gap-6">
         <EngineCard />
         <AppearanceCard />
         <AboutCard />

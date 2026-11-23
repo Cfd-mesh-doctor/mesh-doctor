@@ -16,6 +16,11 @@ export interface MockEngine {
   requests: Request[];
   /** Answers with this many cases from now on. */
   cases: string[];
+  /** From now on: answers nothing, as when it isn't running (`down`), turns the pairing key down (`wrongKey`), or
+   * reports this API version (`apiVersion`, 1.0 to begin with). */
+  down: boolean;
+  wrongKey: boolean;
+  apiVersion: string;
 }
 
 /** `repairs`: the repair runs it lists (none by default). `noJobs`: it lists no jobs (two by default). `broken`: the
@@ -24,7 +29,10 @@ export async function mockEngine(
   page: Page,
   opts: { down?: boolean; wrongKey?: boolean; repairs?: unknown[]; noJobs?: boolean; broken?: string[] } = {},
 ): Promise<MockEngine> {
-  const state: MockEngine = { requests: [], cases: ["wing", "ahmed-25-coarse", "motorBike"] };
+  const state: MockEngine = {
+    requests: [], cases: ["wing", "ahmed-25-coarse", "motorBike"],
+    down: opts.down ?? false, wrongKey: opts.wrongKey ?? false, apiVersion: "1.0",
+  };
   const jobs = opts.noJobs ? [] : [
     job("20261121-130610-repair-wing-fix-13c2", "wing-fix", "running", { progress: { step: "fixing", fraction: 0.62 } }),
     job("20261121-120000-repair-old-fix-0001", "old-fix", "done", { finished: new Date(Date.now() - 300_000).toISOString() }),
@@ -32,7 +40,7 @@ export async function mockEngine(
   await page.route(`${ENGINE}/**`, async (route) => {
     const req = route.request();
     state.requests.push(req);
-    if (opts.down) return route.abort("connectionrefused");
+    if (state.down) return route.abort("connectionrefused");
     const cors = { "Access-Control-Allow-Origin": "http://localhost:4173", Vary: "Origin" };
     if (req.method() === "OPTIONS") {
       return route.fulfill({
@@ -42,14 +50,14 @@ export async function mockEngine(
     }
     const json = (status: number, doc: unknown) =>
       route.fulfill({ status, headers: { ...cors, "Content-Type": "application/json" }, body: JSON.stringify(doc) });
-    if (opts.wrongKey || req.headers()["x-md-key"] !== KEY) {
+    if (state.wrongKey || req.headers()["x-md-key"] !== KEY) {
       return json(403, { error: { code: "forbidden", message: "forbidden: missing or wrong pairing key (pair again: meshdoctor pair)" } });
     }
     const path = new URL(req.url()).pathname.replace(/^\/api\/v1/, "") || "/";
     if (opts.broken?.includes(path)) {
       return json(500, { error: { code: "internal", message: "internal error; details are in the server window" } });
     }
-    if (path === "/") return json(200, { apiVersion: "1.0", version: "0.1.0", schemas: { repair: "1.0", job: "1.0" }, jobKinds: ["repair"] });
+    if (path === "/") return json(200, { apiVersion: state.apiVersion, version: "0.1.0", schemas: { repair: "1.0", job: "1.0" }, jobKinds: ["repair"] });
     if (path === "/cases") return json(200, { items: state.cases });
     if (path === "/jobs") return json(200, { items: jobs });
     if (path === "/repairs") return json(200, { items: opts.repairs ?? [] });

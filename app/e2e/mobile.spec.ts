@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { expect, test } from "@playwright/test";
 import { testReport } from "../src/report/testReport";
-import { mockEngine, pairingLink } from "./engine";
+import { ENGINE, mockEngine, pairingLink } from "./engine";
 import { lineBreaks } from "./text";
 
 test.describe("in a browser that hasn't seen the tour", () => {
@@ -48,7 +48,7 @@ test("on a phone your own app before its first case doesn't scroll sideways: the
   await page.goto(pairingLink());
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
-  for (const width of [page.viewportSize()?.width ?? 412, 360]) {
+  for (const width of [page.viewportSize()?.width ?? 412, 360, 320]) {
     await page.setViewportSize({ width, height: 800 });
     // Getting started and the empty Cases list each give the First run's set-up lines, longer than a phone is wide.
     for (const [path, part] of [["/app", "Getting started"], ["/app/cases", "No cases found"]] as const) {
@@ -58,6 +58,66 @@ test("on a phone your own app before its first case doesn't scroll sideways: the
       expect(overflow, `${path} is wider than a ${width} px screen`).toBeLessThanOrEqual(1);
       const block = page.getByRole("main").locator("pre", { hasText: "cp -r $FOAM_TUTORIALS/" });
       expect(await block.evaluate((el) => el.scrollWidth > el.clientWidth), `${path}: the block scrolls`).toBe(true);
+    }
+  }
+});
+
+test("on a phone your own app's top bar fits down to 320 px, whatever the engine says", async ({ page }) => {
+  test.slow(); // five states at five widths, and the engine that isn't running is asked three times
+  const engine = await mockEngine(page, { noJobs: true });
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  const header = page.locator("header").first();
+  // Each state, and the short word it says under 400 px; under 360 px the colour theme gives way (it's in Settings
+  // too). At 320 px "Connected" once left no room for the theme button, so every screen scrolled sideways.
+  const states: [string, string, () => Promise<unknown> | void][] = [
+    ["Connected", "Connected", () => {}],
+    ["Engine offline", "Offline", () => { engine.down = true; }],
+    ["Pair again", "Pair again", () => { engine.down = false; engine.wrongKey = true; }],
+    ["Version mismatch", "Mismatch", () => { engine.wrongKey = false; engine.apiVersion = "2.0"; }],
+    // The engine's first answer has yet to come.
+    ["Connecting…", "Waiting…", () => page.route(`${ENGINE}/api/v1/`, () => {})],
+  ];
+  for (const [label, short, set] of states) {
+    await set();
+    await page.setViewportSize({ width: 412, height: 800 });
+    await page.goto("/app/settings");
+    await expect(header.getByRole("link", { name: label, exact: true })).toBeVisible({ timeout: 10_000 });
+    for (const width of [412, 400, 375, 360, 320]) {
+      await page.setViewportSize({ width, height: 800 });
+      await expect(header.getByRole("link", { name: width < 400 ? short : label, exact: true })).toBeVisible();
+      await expect(header.getByRole("button", { name: "Colour theme" })).toBeVisible({ visible: width >= 360 });
+      expect((await header.getByText("Mesh Doctor").boundingBox())?.height, `${width} px`).toBeLessThan(24);
+      // The last button ends inside the bar's margin, the same as the menu button's on the left.
+      const room = await header.evaluate((h) => {
+        const ends = [...h.querySelectorAll("a, button")].filter((e) => e.getClientRects().length > 0)
+          .map((e) => e.getBoundingClientRect().right);
+        return h.getBoundingClientRect().left + h.clientWidth - parseFloat(getComputedStyle(h).paddingRight) - Math.max(...ends);
+      });
+      expect(room, `${label} at ${width} px runs into the top bar's margin`).toBeGreaterThanOrEqual(-0.5);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow, `${label}: Settings is wider than a ${width} px screen`).toBeLessThanOrEqual(1);
+    }
+  }
+});
+
+test("on the smallest phones your own app's screens don't scroll sideways", async ({ page }) => {
+  await mockEngine(page);
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  for (const width of [360, 320]) {
+    await page.setViewportSize({ width, height: 800 });
+    for (const [path, part] of [
+      ["/app", "Getting started"], ["/app/jobs", "wing-fix"], ["/app/cases", "motorBike"],
+      ["/app/estimate?cells=31.1", "Size estimator"], ["/app/settings", "Appearance"],
+    ] as const) {
+      await page.goto(path);
+      await expect(page.getByRole("main").getByText(part).first()).toBeVisible();
+      await expect(page.getByText("Asking the engine about its computer…")).toHaveCount(0); // the estimator's answer
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow, `${path} is wider than a ${width} px screen`).toBeLessThanOrEqual(1);
     }
   }
 });

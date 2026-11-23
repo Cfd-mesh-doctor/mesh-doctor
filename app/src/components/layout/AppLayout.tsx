@@ -127,7 +127,10 @@ export function AppLayout() {
       <AppTour open={tour} onClose={() => setTour(false)} steps={steps} />
       <div className="flex min-w-0 flex-1 flex-col">
         {mode === "demo" && <DemoNotice onTour={onTour} />}
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur sm:px-6 print:hidden">
+        {/* On a phone the menu button, the logo and the engine's state share the bar (the state in short under
+            400 px), down to 320 px wide: so the gaps are 8 px until there's room, and under 360 px the colour theme
+            gives way, as it's in Settings too. */}
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/85 px-4 backdrop-blur sm:gap-3 sm:px-6 print:hidden">
           <Button variant="ghost" size="icon-sm" className="lg:hidden" aria-label="Open navigation" onClick={() => setOpen(true)}>
             <MenuIcon />
           </Button>
@@ -137,7 +140,7 @@ export function AppLayout() {
           {title && <span className="hidden text-sm font-medium text-muted-foreground lg:inline">{title}</span>}
           <div className="ml-auto flex items-center gap-1.5">
             <ConnectionPill />
-            <ThemeMenu />
+            <ThemeMenu className="max-[360px]:hidden" />
             <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
               <a href={REPO_URL} target="_blank" rel="noreferrer">GitHub</a>
             </Button>

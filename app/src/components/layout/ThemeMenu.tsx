@@ -4,13 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Menu, MenuContent, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "@/components/ui/menu";
 import { useTheme, type Theme } from "@/lib/theme";
 
-export function ThemeMenu() {
+/** The colour theme, in a menu; `className` goes on its button. */
+export function ThemeMenu({ className }: { className?: string }) {
   const [theme, setTheme] = useTheme();
   const Icon = theme === "dark" ? Moon : theme === "light" ? Sun : Monitor;
   return (
     <Menu>
       <MenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label="Colour theme">
+        <Button variant="ghost" size="icon-sm" aria-label="Colour theme" className={className}>
           <Icon />
         </Button>
       </MenuTrigger>
