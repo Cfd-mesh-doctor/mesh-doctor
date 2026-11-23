@@ -19,7 +19,7 @@ import { repairCommand } from "@/engine/commands";
 import { useAppPath, useEngine, usePairing } from "@/engine/context";
 import { useCases, useEngineInfo, useJobs, useRepairs } from "@/engine/hooks";
 import { JOB_KIND_LABEL, isActive } from "@/engine/types";
-import { caseName, improvedCleanly, madeWorse, runStep, runUpdated } from "@/engine/verdict";
+import { caseName, improvedCleanly, madeWorse, newestFirst, runStep, runUpdated } from "@/engine/verdict";
 import { formatCells, formatCount, formatRelative } from "@/lib/format";
 import { DOCS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
@@ -37,6 +37,8 @@ const BLANKS = (
 );
 
 const LINK = "font-medium text-primary underline-offset-4 hover:underline";
+/** How many repair runs the Overview lists: the newest. */
+const RUNS_SHOWN = 6;
 
 /** Where a Getting started step is: ticked off, the one to do now, under way (a repair job is waiting or running), or
  * waiting for the steps before it. */
@@ -350,7 +352,7 @@ export function Overview() {
           <CardHeader>
             <div>
               <CardTitle>Repair runs</CardTitle>
-              <CardDescription>The verdict compares checkMesh before and after</CardDescription>
+              <CardDescription>Newest first. The verdict compares checkMesh before and after</CardDescription>
             </div>
           </CardHeader>
           {repairs.isPending ? (
@@ -375,7 +377,7 @@ export function Overview() {
             </EmptyState>
           ) : (
             <ul className="divide-y divide-border border-t border-border">
-              {repairItems.slice(0, 6).map((r) => (
+              {newestFirst(repairItems).slice(0, RUNS_SHOWN).map((r) => (
                 <li key={r.name} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-3">
                   {/* The whole name and case, wrapping rather than cut off (a long name breaks at its hyphens first).
                       On phones the verdict and Report go under them, so the name has the card's width. */}
@@ -400,6 +402,13 @@ export function Overview() {
                 </li>
               ))}
             </ul>
+          )}
+          {/* The list keeps to the newest: it says there are more, and where each case's latest is. */}
+          {repairItems.length > RUNS_SHOWN && (
+            <p className="border-t border-border px-5 py-3 text-[13px] text-muted-foreground">
+              The {RUNS_SHOWN} newest of {formatCount(repairItems.length, "run")}. Each case&apos;s latest is on the{" "}
+              <Link to={to("/cases")} className={LINK}>Cases screen</Link>.
+            </p>
           )}
         </Card>
       </div>

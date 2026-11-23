@@ -176,6 +176,31 @@ describe("the Overview before anything has run", () => {
     expect(within(run).queryByRole("link", { name: "Report of wing-fix" })).toBeNull(); // nothing to report
   });
 
+  it("lists the six newest runs, one under way first, and says how many there are and where each case's latest is", async () => {
+    const run = (name: string, finished: string | null, time = finished) => ({
+      name, finished, nCells: 1000, profile: "medium", source: finished ? "/cases/wing" : null,
+      status: { step: finished ? "done" : "checkMesh (before)", time }, verdict: null,
+    });
+    // As the engine gives them: by name.
+    ownEngine([], [
+      run("a-oldest", "2026-11-20 10:00:00"), run("b", "2026-11-21 08:00:00"), run("c", "2026-11-21 09:00:00"),
+      run("d", "2026-11-21 10:00:00"), run("e-newest", "2026-11-22 09:00:00"), run("f", "2026-11-21 11:00:00"),
+      run("g", "2026-11-21 12:00:00"), run("z-under-way", null, "2026-11-22 10:00:00"),
+    ]);
+    const list = (await screen.findByText("z-under-way")).closest("ul")!;
+    expect(within(list).getAllByRole("listitem").map((li) => li.querySelector(":scope > div > div")!.textContent))
+      .toEqual(["z-under-way", "e-newest", "g", "f", "d", "c"]);
+    const more = screen.getByText((_, el) => el?.tagName === "P" && (el.textContent ?? "").startsWith("The 6 newest of"));
+    expect(more).toHaveTextContent("The 6 newest of 8 runs. Each case's latest is on the Cases screen.");
+    expect(within(more).getByRole("link", { name: "Cases screen" })).toHaveAttribute("href", "/app/cases");
+  });
+
+  it("says nothing of more runs when it lists them all", async () => {
+    ownEngine([], [{ name: "wing-fix", finished: "2026-11-21 12:05:00", nCells: 1000, profile: "medium", source: "wing", status: {}, verdict: null }]);
+    expect(await screen.findByText("wing-fix")).toBeInTheDocument();
+    expect(screen.queryByText(/newest of/)).toBeNull();
+  });
+
   it("keeps the command in its card at the bottom once there are repair runs", async () => {
     open();
     expect(await screen.findByRole("heading", { name: "Start a repair" })).toBeInTheDocument();

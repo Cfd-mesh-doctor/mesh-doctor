@@ -5,7 +5,7 @@ import { EngineError, explain } from "./errors";
 import { ACTIVE_POLL_MS, IDLE_POLL_MS, jobsPollInterval } from "./hooks";
 import { browserCantReachLocal } from "./permission";
 import type { Job, JobList, RepairSummary } from "./types";
-import { caseName, improvedCleanly, latestFinished, madeWorse, runStep, runUpdated, verdictText } from "./verdict";
+import { caseName, improvedCleanly, latestFinished, madeWorse, newestFirst, runStep, runUpdated, verdictText } from "./verdict";
 
 const job = (state: Job["state"]): Job => ({
   schemaVersion: "1.0", id: `20261121-120000-repair-x-${state.slice(0, 4).padEnd(4, "0")}`, kind: "repair",
@@ -130,5 +130,27 @@ describe("the latest finished repair run", () => {
     expect(latestFinished([run("running", null)])).toBeNull();
     expect(latestFinished([])).toBeNull();
     expect(latestFinished()).toBeNull();
+  });
+});
+
+describe("the repair runs, newest first", () => {
+  const run = (name: string, finished: string | null, time?: string): RepairSummary =>
+    ({ name, finished, nCells: null, profile: null, source: null, status: time ? { step: "x", time } : {}, verdict: null });
+
+  it("puts each run by when it last moved: when it finished, or, under way, its status's last time", () => {
+    const runs = [
+      run("a", "2026-11-20 10:00:00"),
+      run("b", "2026-11-22 09:00:00"),
+      run("under-way", null, "2026-11-22 09:30:00"),
+      run("stuck", null, "2026-11-19 08:00:00"), // stopped long ago, never finished
+      run("c", "2026-11-21 23:59:59"),
+    ];
+    expect(newestFirst(runs).map((r) => r.name)).toEqual(["under-way", "b", "c", "a", "stuck"]);
+    expect(runs.map((r) => r.name)).toEqual(["a", "b", "under-way", "stuck", "c"]); // the list itself is left as it was
+  });
+
+  it("puts a run that says neither last, and keeps the engine's order (by name) between runs that moved together", () => {
+    const runs = [run("x", null), run("m", "2026-11-21 10:00:00"), run("k", "2026-11-21 10:00:00")];
+    expect(newestFirst(runs).map((r) => r.name)).toEqual(["m", "k", "x"]);
   });
 });

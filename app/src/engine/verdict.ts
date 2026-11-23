@@ -57,6 +57,21 @@ export function runUpdated(r: RepairSummary): string | null {
   return typeof time === "string" && time ? time : null;
 }
 
+/** When a run last moved: when it finished or, while it runs, when it last wrote its status.json (the worker's times,
+ * which sort as text); "" when it says neither. */
+function lastMoved(r: RepairSummary): string {
+  return r.finished ?? runUpdated(r) ?? "";
+}
+
+/** The runs newest first, by when each last moved: a run under way comes before the runs that finished before its
+ * last step. Runs that moved at the same time keep the engine's order (by name). */
+export function newestFirst(runs: readonly RepairSummary[]): RepairSummary[] {
+  return [...runs].sort((a, b) => {
+    const [x, y] = [lastMoved(a), lastMoved(b)];
+    return x < y ? 1 : x > y ? -1 : 0;
+  });
+}
+
 /** The name of the run that finished last (the worker's times, yyyy-mm-dd hh:mm:ss, sort as text), or null before one
  * has. */
 export function latestFinished(runs: readonly RepairSummary[] = []): string | null {
