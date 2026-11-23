@@ -252,7 +252,8 @@ export function HowItWorks() {
               <ul className={list}>
                 <li>
                   <code>--init 0</code> starts both from the case's <code>0/</code> fields; <code>--init 0.warm</code>{" "}
-                  or another folder starts from a solution you already have.
+                  or another folder starts from a solution you already have. Without <code>--init</code>, they start
+                  from <code>0.warm</code> when the case has one, else from <code>0/</code>.
                 </li>
                 <li>
                   <code>--variant simplec|simplec2|relax|lts</code> changes a solver setting on the second run

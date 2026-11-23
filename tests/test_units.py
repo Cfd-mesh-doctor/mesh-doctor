@@ -100,6 +100,43 @@ class SourceCaseTest(unittest.TestCase):
         self.assertEqual(sorted(os.listdir(work)), ["case7-copy"])
 
 
+
+class StartFieldsTest(unittest.TestCase):
+    """The folder of the source case both runs of an A/B test start from."""
+
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp(prefix="md_init_"))
+        self.addCleanup(shutil.rmtree, self.tmp)
+        self.src = os.path.join(self.tmp, "case")
+        os.makedirs(os.path.join(self.src, "0"))
+
+    def stops(self, run):
+        """The message the A/B test stops with."""
+        with self.assertRaises(SystemExit) as e, contextlib.redirect_stdout(io.StringIO()):
+            run()
+        return str(e.exception.code)
+
+    def test_a_solution_you_already_have_else_the_case_s_own_0(self):
+        self.assertEqual(abtest.start_fields(self.src), "0")
+        os.makedirs(os.path.join(self.src, "0.warm"))
+        self.assertEqual(abtest.start_fields(self.src), "0.warm")
+
+    def test_init_as_given(self):
+        os.makedirs(os.path.join(self.src, "0.warm"))
+        self.assertEqual(abtest.start_fields(self.src, "0"), "0")
+
+    def test_no_such_folder_stops_with_a_plain_message_before_anything_is_made(self):
+        self.assertEqual(self.stops(lambda: abtest.start_fields(self.src, "0.cold")),
+                         f"no start fields: {self.src} has no 0.cold/ folder. Pass --init with the folder both runs "
+                         "should start from.")
+        os.rmdir(os.path.join(self.src, "0"))
+        work = os.path.join(self.tmp, "work")
+        with mock.patch.object(abtest, "ROOT", work):
+            said = self.stops(lambda: abtest.main([self.src, "x", "--no-ram-check"]))
+        self.assertIn(f"{self.src} has no 0/ folder", said)
+        self.assertFalse(os.path.exists(work))
+
+
 def write_steady_run(d, n, p_of, drag_of):
     """A synthetic steady run in folder d: log.foamRun with p residuals, a forces file."""
     os.makedirs(os.path.join(d, "0"), exist_ok=True)

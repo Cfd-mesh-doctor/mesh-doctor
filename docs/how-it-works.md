@@ -64,7 +64,7 @@ It writes `<workspace>/<name>_ab/ab_result.json` with, for both runs:
 - the residual hotspots (next section).
 
 Options:
-- `--init 0` starts both from the case's `0/` fields; `--init 0.warm` or another folder starts from a solution you already have.
+- `--init 0` starts both from the case's `0/` fields; `--init 0.warm` or another folder starts from a solution you already have. Without `--init`, they start from `0.warm` when the case has one, else from `0/`.
 - `--variant simplec|simplec2|relax|lts` changes a solver setting on the second run instead. With `-` as the name, it compares a setting on the original mesh only.
 - `ab extend <abDir> <endIter>` continues the second run further.
 

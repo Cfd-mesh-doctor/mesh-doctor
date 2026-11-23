@@ -3,7 +3,7 @@
 # Copyright (C) 2026 The Mesh Doctor authors
 """A/B solver test: does the repaired mesh converge better than the original?
 
-    python3 abtest.py <srcCase> <fixedName> [--iters 200] [--np 6] [--init 0.warm]
+    python3 abtest.py <srcCase> <fixedName> [--iters 200] [--np 6] [--init <folder>]
     python3 abtest.py hotspots <abDir>      # residual hotspot map for both runs
     python3 abtest.py mode <case> <t1> <t2> [--defects <mdCase>]
                                             # where the solution moves between two
@@ -12,6 +12,8 @@
                                             # continue the second run (optionally
                                             # with another preset), judge it
     python3 abtest.py judge <case> [window|auto] [--to N]   # convergence verdict for any case
+    --init <folder>       the case's folder both runs start from (default: 0.warm
+                          when the case has one, else 0)
     --variant simplec|relax|lts   solver-setting variant on the second run
     --extend <N>          after the A/B, continue the second run to N iterations
     --base-from <abDir>   reuse the original-mesh run of an earlier A/B
@@ -72,6 +74,18 @@ def make_case(src, dst, init, points=None):
     if points:
         shutil.copy2(points, os.path.join(dst, "constant/polyMesh/points"))
     open(os.path.join(dst, ".meshDoctorCopy"), "w").write(src + "\n")
+
+
+def start_fields(src, init=None):
+    """The folder of the source case both runs start from: --init as given, else 0.warm when the case has one (a
+    solution you already have), else its own 0. Stops with a plain message, before anything is copied or solved,
+    when the case has no such folder."""
+    if init is None:
+        init = "0.warm" if os.path.isdir(os.path.join(src, "0.warm")) else "0"
+    if not os.path.isdir(os.path.join(src, init)):
+        sys.exit(f"no start fields: {src} has no {init}/ folder. Pass --init with the folder both runs should "
+                 "start from.")
+    return init
 
 
 def parse_residuals(case, logs=None):
@@ -679,7 +693,8 @@ def main(a):
     if fixed_name != "-":
         repair.plain_name(fixed_name, "repaired run name")
     opt = lambda k, d: a[a.index(k) + 1] if k in a else d
-    iters, nproc, init = int(opt("--iters", 200)), int(opt("--np", 6)), opt("--init", "0.warm")
+    iters, nproc = int(opt("--iters", 200)), int(opt("--np", 6))
+    init = start_fields(src, opt("--init", None))
     variant = opt("--variant", None)
     if variant and variant not in PRESETS:
         sys.exit("unknown variant " + variant)
