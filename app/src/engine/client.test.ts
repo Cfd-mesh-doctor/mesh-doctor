@@ -44,6 +44,22 @@ describe("httpTransport", () => {
     expect(fetch.mock.calls[0]?.[0]).toBe(`${ENGINE}/api/v1/repairs/wing%20fix/clusters/3?tag=after`);
   });
 
+  it("asks for an A/B test, its live monitor and the judge on one of its runs by the test's name", async () => {
+    const fetch = vi.fn().mockImplementation(() => Promise.resolve(answer(200, {})));
+    vi.stubGlobal("fetch", fetch);
+    const t = httpTransport(ENGINE, KEY);
+    await api.abtests(t);
+    await api.abtest(t, "wing fix");
+    await api.abtestLive(t, "wing fix");
+    await api.abtestJudge(t, "wing fix", "base");
+    expect(fetch.mock.calls.map((c) => c[0])).toEqual([
+      `${ENGINE}/api/v1/abtests`,
+      `${ENGINE}/api/v1/abtests/wing%20fix`,
+      `${ENGINE}/api/v1/abtests/wing%20fix/live`,
+      `${ENGINE}/api/v1/abtests/wing%20fix/judge?side=base`,
+    ]);
+  });
+
   it("posts JSON only when there is a body", async () => {
     const fetch = vi.fn().mockResolvedValue(answer(200, { id: "x", state: "cancelled" }));
     vi.stubGlobal("fetch", fetch);

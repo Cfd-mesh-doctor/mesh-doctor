@@ -3,10 +3,11 @@
 // "_about"), served without any engine. It can cancel its own jobs; it cannot start anything.
 import type { Method, Transport } from "@/engine/client";
 import { EngineError } from "@/engine/errors";
-import type { CaseList, Job, JobList, MachineInfo, RepairList } from "@/engine/types";
+import type { AbtestDetail, CaseList, Job, JobList, MachineInfo, RepairList } from "@/engine/types";
 import { caseName } from "@/engine/verdict";
 import { toMillis } from "@/lib/format";
 import { RECORDED } from "@/report/samples";
+import { DEMO_JUDGE_NOTE, DEMO_LIVE_NOTE, RECORDED_ABTESTS, briefOf, demoAbtest, recordedJudge } from "./abtests";
 import { DEMO_CLUSTERS_NOTE, recordedCluster } from "./clusters";
 import recorded from "./fixtures.json";
 
@@ -150,6 +151,37 @@ export function demoTransport(answers: Answers = DEMO_ANSWERS, delayMs = DELAY_M
   // A private copy, so cancelling a demo job lasts until the page is reloaded and never touches the import.
   const data: Answers = { "/machine": DEMO_MACHINE, ...structuredClone(answers) };
   const by = shiftTimes(data);
+  const jobs = () => data["/jobs"] as JobList | undefined;
+
+  /** A recorded report as the engine would send it now: its times moved with the rest of the demo, and without its
+   *  A/B test while the job list has that test running (unless `withAbtest`, for the A/B tests' own answers). */
+  async function recordedReport(name: string, withAbtest = false): Promise<RecordedReport | null> {
+    const sample = RECORDED.find((s) => s.name === name);
+    if (!sample) return null;
+    const doc = structuredClone((await sample.load()).default) as RecordedReport;
+    if (!withAbtest && !abTestFinished(jobs(), name)) withoutDocument(doc, "abtest");
+    // The repairs list's times are already moved; the report's are not yet.
+    const run = (data["/repairs"] as RepairList | undefined)?.items.find((r) => r.name === name);
+    const toUtc = recordingToUtc(doc, run?.finished ? new Date(toMillis(run.finished) - by).toISOString() : null);
+    if (toUtc != null) zonelessToUtc(doc, toUtc);
+    moveTimes(doc, by);
+    return doc;
+  }
+
+  /** The demo's A/B tests, each as GET /abtests/{name} answers: a test whose job still runs is at that job's step. */
+  async function abtests(): Promise<Map<string, AbtestDetail>> {
+    const out = new Map<string, AbtestDetail>();
+    for (const name of RECORDED_ABTESTS) {
+      const ab = (await recordedReport(name, true))?.documents?.abtest;
+      if (!ab || typeof ab !== "object") continue;
+      const job = jobs()?.items.find((j) => j.kind === "abtest" && j.name === name);
+      const solving = abTestFinished(jobs(), name) ? null
+        : { step: job?.progress?.step || "solving fixed", time: job?.progress?.updated ?? job?.started ?? null };
+      out.set(name, demoAbtest(ab as Record<string, unknown>, solving));
+    }
+    return out;
+  }
+
   return {
     kind: "demo",
     scope: "demo",
@@ -171,20 +203,32 @@ export function demoTransport(answers: Answers = DEMO_ANSWERS, delayMs = DELAY_M
       }
       if (route.startsWith("/repairs/") && route.endsWith("/report")) {
         const name = decodeURIComponent(route.slice("/repairs/".length, -"/report".length));
-        const sample = RECORDED.find((s) => s.name === name);
-        if (!sample) {
+        const doc = await recordedReport(name);
+        if (!doc) {
           throw new EngineError("not-found", `The demo has no recorded report of ${name}: only its finished repairs have one`, 404);
         }
-        const doc = structuredClone((await sample.load()).default) as RecordedReport;
-        if (!abTestFinished(data["/jobs"] as JobList | undefined, name)) withoutDocument(doc, "abtest");
-        // The repairs list's times are already moved; the report's are not yet.
-        const run = (data["/repairs"] as RepairList | undefined)?.items.find((r) => r.name === name);
-        const toUtc = recordingToUtc(doc, run?.finished ? new Date(toMillis(run.finished) - by).toISOString() : null);
-        if (toUtc != null) zonelessToUtc(doc, toUtc);
-        moveTimes(doc, by);
         // The engine builds a report when it's asked for one (meshdoctor report.build stamps the time), so it is new.
         doc.created = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
         return doc as T;
+      }
+      if (route === "/abtests") {
+        const tests = await abtests();
+        const items = [...tests.keys()].sort();
+        return { items, tests: Object.fromEntries(items.map((n) => [n, briefOf(tests.get(n)!)])) } as T;
+      }
+      const ab = /^\/abtests\/([^/]+)(\/live|\/judge)?$/.exec(route);
+      if (ab) {
+        const name = decodeURIComponent(ab[1] ?? "");
+        const test = (await abtests()).get(name);
+        if (!test) throw new EngineError("not-found", `no A/B test ${name}`, 404);
+        if (ab[2] === "/live") throw new EngineError("unavailable", DEMO_LIVE_NOTE, 503);
+        if (ab[2] === "/judge") {
+          const side = new URLSearchParams(path.split("?")[1] ?? "").get("side") ?? "";
+          const judge = await recordedJudge(name, side);
+          if (!judge) throw new EngineError("not-found", DEMO_JUDGE_NOTE, 404);
+          return judge as T;
+        }
+        return test as T;
       }
       const cluster = /^\/repairs\/([^/]+)\/clusters\/(\d{1,9})$/.exec(route);
       if (cluster) {

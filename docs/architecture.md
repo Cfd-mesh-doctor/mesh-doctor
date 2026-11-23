@@ -103,7 +103,7 @@ All routes live under `/api/v1` (`meshdoctor/api_v1.py`). The routes are a table
 | `GET /repairs`, `GET /repairs/{name}` | `/api/md/results`, `/api/md/result` | repair runs, and a finished run's result (repair schema) |
 | `GET /repairs/{name}/clusters/{id}?tag=before\|after\|report` | `/api/md/cluster` | geometry of one defect cluster |
 | `GET /repairs/{name}/log` | `/api/md/log` | the repair sweeps from the log |
-| `GET /abtests`, `GET /abtests/{name}` | `/api/md/ablist`, `/api/md/ab` | A/B tests: status, result (abtest schema), residuals, oscillation maps |
+| `GET /abtests`, `GET /abtests/{name}` | `/api/md/ablist`, `/api/md/ab` | A/B tests, with each one's last step and, once both runs have ended, its residual ratios and the verdict `ab extend` saved (API 1.3); one test: its step, result (abtest schema), each run's residuals and oscillation maps |
 | `GET /abtests/{name}/live` | `/api/run?label=` | the steady-run page: stages, forces, residuals, live judge |
 | `GET /live/abtest` | `/api/run` (no label) | the same, for the A/B test running now (or else the one updated last); its name is in `label` |
 | `GET /live/judge?window=&avgFrom=` | (new) | the transient judge on the live case's transient log (`log.ddes*`, else `log.foamRun*`): force means stationary, each time step converged, Courant number, bounded fields. Kept until a log changes size or time, since it reads the whole log; the live page asks at most once a minute. 503 when the server has no live monitor, 404 when there is no live case or log |

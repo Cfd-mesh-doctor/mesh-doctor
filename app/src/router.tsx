@@ -17,6 +17,7 @@ function screens(home: string): RouteObject[] {
     { index: true, handle: h("Overview"), lazy: async () => ({ Component: (await import("@/pages/app/Overview")).Overview }) },
     { path: "cases", handle: h("Cases"), lazy: async () => ({ Component: (await import("@/pages/app/Cases")).Cases }) },
     { path: "repairs", handle: h("Repairs"), lazy: async () => ({ Component: (await import("@/pages/app/Repairs")).Repairs }) },
+    { path: "abtests", handle: h("A/B tests"), lazy: async () => ({ Component: (await import("@/pages/app/AbTests")).AbTests }) },
     { path: "jobs", handle: h("Jobs"), lazy: async () => ({ Component: (await import("@/pages/app/Jobs")).Jobs }) },
     {
       path: "estimate",
@@ -28,6 +29,11 @@ function screens(home: string): RouteObject[] {
       path: "repairs/:name/report",
       handle: h("Report"),
       lazy: async () => ({ Component: (await import("@/pages/app/RepairReport")).RepairReport }),
+    },
+    {
+      path: "abtests/:name",
+      handle: h("A/B test"),
+      lazy: async () => ({ Component: (await import("@/pages/app/AbTest")).AbTest }),
     },
     { path: "*", handle: h("Not found"), element: <NotFound home={home} /> },
   ];

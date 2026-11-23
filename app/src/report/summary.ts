@@ -170,7 +170,8 @@ function historyRun(run: unknown): HistoryRun | null {
   return { x: time.map((t) => num(t) ?? NaN), y };
 }
 
-function abSummary(abDoc: unknown): ReportSummary["ab"] {
+/** An abtest document as the A/B card and the residual chart show it. */
+export function abSummary(abDoc: unknown): ReportSummary["ab"] {
   if (!abDoc) return null;
   const ab = obj(abDoc), base = obj(ab.base), fixed = obj(ab.fixed);
   const rows: AbRow[] = Object.entries(obj(ab.residualRatioFixedOverBase))
@@ -207,13 +208,15 @@ function abSummary(abDoc: unknown): ReportSummary["ab"] {
   };
 }
 
-function judgeSummary(abDoc: unknown): JudgeSummary | null {
-  const j = obj(obj(abDoc).fixedJudge);
+/** A judge's answer as its card shows it: the judge document (abtest.judge, as `ab extend` saves it or the judge
+ * route answers), or the live monitor's judge, which names the force group it averages `total`. */
+export function judgeOf(doc: unknown): JudgeSummary | null {
+  const j = obj(doc);
   if (!Object.keys(j).length) return null;
   const axes = obj(j.axes);
   return {
     verdict: str(j.verdict) ?? "–",
-    group: str(j.group) ?? "all",
+    group: str(j.group) ?? str(j.total) ?? "all",
     averages: Object.entries(obj(j.average)).flatMap(([name, v]) => {
       const mean = num(obj(v).mean);
       return mean == null ? [] : [{ name, mean, u: num(obj(v).u) }];
@@ -224,6 +227,10 @@ function judgeSummary(abDoc: unknown): JudgeSummary | null {
     flow: str(axes.flow),
     up: str(axes.up),
   };
+}
+
+function judgeSummary(abDoc: unknown): JudgeSummary | null {
+  return judgeOf(obj(abDoc).fixedJudge);
 }
 
 const DOCUMENT_LABEL: Record<string, string> = { repair: "Repair result", map: "Repair map", abtest: "Solver A/B test" };

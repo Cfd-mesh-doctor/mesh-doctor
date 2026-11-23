@@ -23,7 +23,7 @@ import ramguard
 import schema
 import version
 
-API_VERSION = "1.2"
+API_VERSION = "1.3"
 PREFIX = "/api/v1"
 MAX_BODY = 64 * 1024
 
@@ -219,13 +219,71 @@ def repair_report(p, q, b):
         raise ApiError("schema-version", getattr(e, "why", "newer file version"))
 
 
-@route("GET", "/abtests", "A/B solver tests in the workspace", ok=_items({"type": "string"}))
+_TEXT = {"type": ["string", "null"]}
+AB_BRIEF = {"type": "object", "required": ["step", "updated", "finished", "ratios", "verdict"], "properties": {
+    "step": dict(_TEXT, description="its last step (ab_status.json): copying base, solving base, copying fixed, "
+                                    "solving fixed, hotspots base or fixed, extending fixed <from> -> <to>, or done "
+                                    "(done, but the SOURCE CASE CHANGED during the run: the case changed meanwhile); "
+                                    "null when it has none"),
+    "updated": dict(_TEXT, description="when that step began: the worker's local time, yyyy-mm-dd hh:mm:ss"),
+    "finished": dict(_TEXT, description="when both runs had ended (ab_result.json): the worker's local time"),
+    "ratios": {"type": "object", "additionalProperties": {"type": "number"},
+               "description": "each field's median initial residual over the test's window, repaired ÷ original "
+                              "mesh: below 1 the repaired mesh converges further (empty until both runs have ended)"},
+    "verdict": dict(_TEXT, description="the judge's verdict on the repaired-mesh run, saved when `ab extend` "
+                                       "continued the test; null otherwise (GET /abtests/{name}/judge judges any run)")}}
+
+
+@route("GET", "/abtests", "A/B solver tests in the workspace, with each one's last step and outcome",
+       ok={"type": "object", "required": ["items", "tests"], "properties": {
+           "items": {"type": "array", "items": {"type": "string"}},
+           "tests": {"type": "object", "additionalProperties": AB_BRIEF,
+                     "description": "each test in items: its last step and, once both runs have ended, its outcome "
+                                    "(API 1.3)"}}})
 def abtests(p, q, b):
-    return {"items": md_api.ab_list()}
+    names = md_api.ab_list()
+    return {"items": names, "tests": {n: md_api.ab_brief(n) for n in names}}
 
 
-@route("GET", "/abtests/{name}", "An A/B test: status, result (abtest schema), residual histories, oscillation maps",
-       ok={"type": "object", "required": ["status", "result", "live", "modes"]})
+_NUMBER = {"type": ["number", "null"]}
+RESIDUALS = {"type": ["object", "null"], "required": ["cols", "rows"],
+             "description": "a run's initial residuals: from its residuals function object, else from its solver "
+                            "logs, thinned evenly to at most 400 rows and the last; null before the run has any",
+             "properties": {
+                 "cols": {"type": "array", "items": {"type": "string"}, "description": "Time, then each field"},
+                 "rows": {"type": "array", "items": {"type": "array", "items": _NUMBER},
+                          "description": "one row per iteration, in the order of cols (null: not solved then)"}}}
+_MODE = {"type": "object", "required": ["from", "to", "summary", "nearDefects", "top"], "properties": {
+    "from": {"type": ["string", "number", "null"], "description": "the earlier written time"},
+    "to": {"type": ["string", "number", "null"], "description": "the later written time"},
+    "summary": {"type": "object", "description": "the map's own numbers (foamResidualHotspots' summary)"},
+    "nearDefects": dict(_NUMBER, description="the share of the change that lies near the mesh's defects, 0 to 1"),
+    "top": {"type": "array", "description": "where the solution moves most, largest share first (at most 8)",
+            "items": {"type": "object", "required": ["share", "nCells", "centroid"], "properties": {
+                "share": {"type": "number", "description": "this group's share of the change, 0 to 1"},
+                "nCells": {"type": "number", "description": "cells in the group"},
+                "centroid": {"type": "array", "items": {"type": "number"}, "description": "x y z, in metres"},
+                "h": dict(_NUMBER, description="the cells' typical size there, in metres"),
+                "maxNonOrtho": dict(_NUMBER, description="the worst non-orthogonality there, in degrees")}}}}}
+ABTEST = {"type": "object", "required": ["status", "result", "live", "modes"], "properties": {
+    "status": {"type": ["object", "null"], "description": "the test's own ab_status.json: its last step and when "
+               "that began, the worker's local time (see the steps in GET /abtests); null when it has none",
+               "properties": {"step": {"type": "string"}, "time": {"type": "string"}}},
+    "result": {"anyOf": [_ref("abtest"), {"type": "null"}],
+               "description": "ab_result.json without the runs' residual histories (live has them). It is written "
+                              "as each run ends, so while the repaired-mesh run solves it holds the original-mesh "
+                              "run alone; null before that"},
+    "live": {"type": "object", "required": ["base", "fixed"],
+             "description": "each run's residuals as they are now: the original mesh (base) and the repaired one "
+                            "(fixed), its continuations included",
+             "properties": {"base": RESIDUALS, "fixed": RESIDUALS}},
+    "modes": {"type": "array", "items": _MODE,
+              "description": "slow-oscillation maps (abtest.py mode): where the repaired-mesh run's solution moves "
+                             "between two written times a few hundred iterations apart"}}}
+
+
+@route("GET", "/abtests/{name}", "An A/B test: its step, result (abtest schema), each run's residuals as they are "
+       "now, and oscillation maps", ok=ABTEST)
 def abtest(p, q, b):
     d = md_api.ab(_name(p["name"]))
     if not d or not d.pop("exists", False):
@@ -235,8 +293,50 @@ def abtest(p, q, b):
     return d
 
 
-@route("GET", "/abtests/{name}/live", "The steady-run page data: stages, residuals, forces, live judge",
-       ok={"type": "object"})
+_STAGE = {"type": "object", "required": ["name", "from", "to"], "properties": {
+    "name": {"type": "string", "description": "the settings of this stretch: the A/B run, or a continuation"},
+    "from": {"type": "number"}, "to": {"type": "number"}}}
+_TABLE = {"type": "object", "properties": RESIDUALS["properties"],
+          "description": "initial residuals ({cols, rows} as in GET /abtests/{name}); {} before the run has any"}
+LIVE = {"type": "object", "required": ["label", "status", "stages", "current", "solver", "residuals",
+                                       "baseResiduals", "judge", "now"], "properties": {
+    "label": {"type": "string", "description": "the A/B test"},
+    "status": {"type": "object", "description": "its ab_status.json, as in GET /abtests/{name}; {} when it has none"},
+    "stages": {"type": "array", "items": _STAGE,
+               "description": "the repaired-mesh run's stretches: the A/B run, then each continuation"},
+    "current": dict(_STAGE, description="the stretch the run is in now"),
+    "solver": {"type": "object", "required": ["state", "end"],
+               "description": "the repaired-mesh run's newest solver log", "properties": {
+                   "state": {"enum": ["pending", "running", "done", "error", "stopped"],
+                             "description": "pending: no log yet; stopped: running, but its log has not changed for "
+                                            "5 minutes"},
+                   "iteration": {"type": "number", "description": "the last iteration in the log"},
+                   "end": {"type": "number", "description": "the iteration it runs to (endTime)"},
+                   "wall_per_it": {"type": "number", "description": "seconds per iteration, the median of the last 40"},
+                   "eta": {"type": "number", "description": "seconds left at that pace (while running)"},
+                   "clock": {"type": "number"}, "log": {"type": "string"},
+                   "error": {"type": "string", "description": "the log's FOAM FATAL message (state error)"},
+                   "idle_s": {"type": "number", "description": "seconds since the log changed (state stopped)"}}},
+    "residuals": dict(_TABLE, description="the repaired-mesh run's residuals, at most 1500 rows; {} before it has any"),
+    "baseResiduals": dict(_TABLE, description="the original-mesh run's residuals, at most 400 rows; {} if none"),
+    "forces": {"type": "object", "description": "each force group's [iteration, drag, vertical] rows"},
+    "forceInfo": {"type": "object", "description": "how to read them: total, groups, vertical, flow, up, source"},
+    "judge": {"type": "object", "required": ["window"],
+              "description": "the live judge, on the stretch the run is in (the same limits as abtest.judge)",
+              "properties": {
+                  "window": {"type": "integer", "description": "iterations judged"},
+                  "verdict": {"type": "string", "description": "collecting: ... until the stretch has 40 iterations"},
+                  "level": {"enum": ["ok", "warn", "err"]},
+                  "average": {"type": "object", "description": "averaged forces with their uncertainty (batch means)"},
+                  "avgFrom": {"type": "number"}}},
+    "savedJudge": {"type": ["object", "null"], "description": "the verdict `ab extend` saved (fixedJudge)"},
+    "settings": {"type": "object"}, "proc": {"type": "object"},
+    "source": dict(_TEXT, description="the source case"), "variant": dict(_TEXT, description="second-run settings"),
+    "labels": {"type": "array", "items": {"type": "string"}, "description": "every A/B test, as GET /abtests"},
+    "now": {"type": "number", "description": "the worker's clock, seconds since 1970"}}}
+
+
+@route("GET", "/abtests/{name}/live", "The steady-run page data: stages, residuals, forces, live judge", ok=LIVE)
 def abtest_live(p, q, b):
     if not os.path.isdir(os.path.join(md_api.md_dir(), _name(p["name"]) + "_ab")):
         raise ApiError("not-found", "no A/B test " + p["name"])
@@ -246,7 +346,7 @@ def abtest_live(p, q, b):
 
 
 @route("GET", "/live/abtest", "The A/B test running now, or else the one updated last: the same steady-run page "
-       "data as /abtests/{name}/live, with its name in `label`", ok={"type": "object", "required": ["label"]})
+       "data as /abtests/{name}/live, with its name in `label`", ok=LIVE)
 def live_abtest(p, q, b):
     if "abtest_live" not in _live:
         raise ApiError("unavailable", "the live monitor is not running in this server")

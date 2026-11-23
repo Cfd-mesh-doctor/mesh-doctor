@@ -3,7 +3,7 @@
 // Checked like an opened file first, so a wrong answer reads as an error, not as a broken page. Save report keeps
 // it as the file `meshdoctor report` makes, to share: it opens in the report viewer without the app or the engine.
 import { skipToken, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Download } from "lucide-react";
+import { ArrowLeft, Download, FlaskConical } from "lucide-react";
 import { useMemo } from "react";
 import { Link, useParams } from "react-router";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
@@ -53,6 +53,11 @@ export function RepairReport() {
     const actions = (
       <div className="flex flex-wrap gap-2">
         {back}
+        {summary.ab && (
+          <Button variant="secondary" asChild>
+            <Link to={to(`/abtests/${encodeURIComponent(name)}`)}><FlaskConical />A/B test</Link>
+          </Button>
+        )}
         <Button onClick={() => saveReport(doc)}><Download />Save report</Button>
       </div>
     );

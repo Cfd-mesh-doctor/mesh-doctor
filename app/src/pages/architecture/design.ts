@@ -285,7 +285,7 @@ export const DESIGN: DocSection[] = [
             [
               "`GET /abtests`, `GET /abtests/{name}`",
               "`/api/md/ablist`, `/api/md/ab`",
-              "A/B tests: status, result (abtest schema), residuals, oscillation maps"
+              "A/B tests, with each one's last step and, once both runs have ended, its residual ratios and the verdict `ab extend` saved (API 1.3); one test: its step, result (abtest schema), each run's residuals and oscillation maps"
             ],
             [
               "`GET /abtests/{name}/live`",

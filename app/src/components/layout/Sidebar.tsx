@@ -30,12 +30,12 @@ const MAIN: Item[] = [
   { label: "Overview", icon: LayoutDashboard, path: "" },
   { label: "Cases", icon: FolderOpen, path: "/cases" },
   { label: "Repairs", icon: Wrench, path: "/repairs" },
+  { label: "A/B tests", icon: FlaskConical, path: "/abtests" },
   { label: "Jobs", icon: ListChecks, path: "/jobs" },
   { label: "Size estimator", icon: Calculator, path: "/estimate" },
 ];
 
 const NEXT: Item[] = [
-  { label: "A/B tests", icon: FlaskConical, soon: "Did the repair help the solver?" },
   { label: "Solve", icon: Play, soon: "Set up and run a case on this PC" },
   { label: "Pictures", icon: Image, soon: "ParaView renders of the flow" },
   { label: "Results", icon: ChartLine, soon: "Forces, convergence and comparisons" },
@@ -129,7 +129,7 @@ export function Sidebar({ onNavigate, onTour }: { onNavigate?: () => void; onTou
           ))}
         </div>
         <div>
-          {/* Said as "Coming next 5 screens": the count is how many are coming. */}
+          {/* Said as "Coming next 4 screens": the count is how many are coming. */}
           <button
             type="button"
             aria-expanded={nextOpen}

@@ -245,9 +245,10 @@ def read_lines(case, tag, fname, prefix):
         p = os.path.join(base, "meshDoctor", tag, fname)
         if not os.path.isfile(p):
             continue
-        for line in open(p):
-            if line.startswith(prefix):
-                rows.append((proc, line.split()))
+        with open(p) as f:
+            for line in f:
+                if line.startswith(prefix):
+                    rows.append((proc, line.split()))
     return rows
 
 

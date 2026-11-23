@@ -699,6 +699,96 @@ class ApiV1Test(unittest.TestCase):
         self.assertEqual((st, rep["kind"], rep["documents"]["repair"]["source"]), (200, "meshdoctor-report", "cases/c1"))
         self.assertError(self.get("/repairs/nope/report"), 404, "not-found")
 
+    def test_abtests_list_and_one_test(self):
+        top = os.path.join(self.d, "work", "wing-fix_ab")
+        for side in ("base", "fixed"):                 # each run's residuals function object
+            rd = os.path.join(top, side, "postProcessing", "residuals", "0")
+            os.makedirs(rd)
+            with open(os.path.join(rd, "residuals.dat"), "w") as f:
+                f.write("# Residuals\n# Time p Ux\n" + "".join(f"{t} {0.01 / t} N/A\n" for t in range(1, 6)))
+        os.makedirs(os.path.join(top, "fixed", "meshDoctor"))          # a slow-oscillation map
+        with open(os.path.join(top, "fixed", "meshDoctor", "mode_300_600.json"), "w") as f:
+            json.dump({"from": "300", "to": "600", "summary": {"rmsDp": 1.5}, "shareOfTopChangeNearMeshDefects": 0.25,
+                       "clusters": [{"sumScore2": 3.0, "nCells": 12, "centroid": [0.1, 0, 0.2], "h": 0.004,
+                                     "maxNonOrtho": 71.0},
+                                    {"sumScore2": 1.0, "nCells": 4, "centroid": [0.3, 0, 0.2]}]}, f)
+        hist = {"Time": [1, 2], "p": [0.1, 0.05]}
+        self.schema.write(os.path.join(top, "ab_result.json"), {
+            "source": self.src, "label": "wing-fix", "iters": 5, "nProcs": 1, "init": "0", "window": 2,
+            "started": "2026-11-23 10:00:00", "finished": "2026-11-23 10:05:00",
+            "base": {"iterations": 5, "residualHistory": hist}, "fixed": {"iterations": 5, "residualHistory": hist},
+            "fixedFull": {"residualHistory": hist}, "residualRatioFixedOverBase": {"p": 0.5, "Ux": None},
+            "fixedJudge": {"verdict": "converged"}}, "abtest")
+        with open(os.path.join(top, "ab_status.json"), "w") as f:
+            json.dump({"step": "done", "time": "2026-11-23 10:05:01"}, f)
+        duct = os.path.join(self.d, "work", "duct-fix_ab")          # still solving its first run: no result yet
+        os.makedirs(duct)
+        with open(os.path.join(duct, "ab_status.json"), "w") as f:
+            json.dump({"step": "solving base", "time": "2026-11-23 11:00:00", "case": duct + "/base"}, f)
+
+        st, doc, _ = self.get("/abtests")
+        self.assertEqual(st, 200, doc)
+        op = self.api.openapi()["paths"]["/abtests"]["get"]["responses"]["200"]["content"]["application/json"]
+        self.assertEqual(self.schema.check(doc, op["schema"]), [])
+        self.assertEqual(doc["items"], ["duct-fix", "wing-fix"])
+        self.assertEqual(doc["tests"], {
+            "duct-fix": {"step": "solving base", "updated": "2026-11-23 11:00:00", "finished": None, "ratios": {},
+                         "verdict": None},
+            "wing-fix": {"step": "done", "updated": "2026-11-23 10:05:01", "finished": "2026-11-23 10:05:00",
+                         "ratios": {"p": 0.5}, "verdict": "converged"}})
+
+        st, one, _ = self.get("/abtests/wing-fix")
+        self.assertEqual(st, 200, one)
+        self.assertEqual(self.schema.check(one, self.api.ABTEST), [])
+        self.assertEqual(self.schema.validate(one["result"], "abtest"), [])
+        self.assertNotIn("residualHistory", one["result"]["base"])        # live has the residuals instead
+        self.assertNotIn("fixedFull", one["result"])
+        rows = [[float(t), 0.01 / t, None] for t in range(1, 6)]
+        self.assertEqual(one["live"], {"base": {"cols": ["Time", "p", "Ux"], "rows": rows},
+                                       "fixed": {"cols": ["Time", "p", "Ux"], "rows": rows}})
+        self.assertEqual(one["modes"], [{"from": "300", "to": "600", "summary": {"rmsDp": 1.5}, "nearDefects": 0.25,
+                                         "top": [{"share": 0.75, "nCells": 12, "centroid": [0.1, 0, 0.2], "h": 0.004,
+                                                  "maxNonOrtho": 71.0},
+                                                 {"share": 0.25, "nCells": 4, "centroid": [0.3, 0, 0.2], "h": None,
+                                                  "maxNonOrtho": None}]}])
+        st, two, _ = self.get("/abtests/duct-fix")
+        self.assertEqual((st, two["result"], two["live"], two["modes"]), (200, None, {"base": None, "fixed": None}, []))
+        self.assertEqual(self.schema.check(two, self.api.ABTEST), [])
+        self.assertError(self.get("/abtests/none"), 404, "not-found", "no A/B test none")
+        paths = self.api.openapi()["paths"]
+        self.assertIs(paths["/abtests/{name}"]["get"]["responses"]["200"]["content"]["application/json"]["schema"],
+                      self.api.ABTEST)
+
+    def test_abtest_live_answer(self):
+        saved = dict(self.api._live)
+        import server
+        self.api.provide(abtest_live=server.run_status)
+        self.addCleanup(lambda: (self.api._live.clear(), self.api._live.update(saved)))
+        top = os.path.join(self.d, "work", "wing-fix_ab")
+        for side in ("base", "fixed"):
+            case = os.path.join(top, side)
+            os.makedirs(os.path.join(case, "system"))
+            with open(os.path.join(case, "system", "controlDict"), "w") as f:
+                f.write("endTime 300;\n")
+            write_steady_run(case, 120, lambda t: 1e-3 / t, lambda t: 50.0)
+        self.schema.write(os.path.join(top, "ab_result.json"), {
+            "source": self.src, "label": "wing-fix", "iters": 300, "nProcs": 1, "init": "0", "window": 50,
+            "started": "2026-11-23 10:00:00"}, "abtest")
+        with open(os.path.join(top, "ab_status.json"), "w") as f:
+            json.dump({"step": "solving fixed", "time": "2026-11-23 10:02:00"}, f)
+        st, doc, _ = self.get("/abtests/wing-fix/live")
+        self.assertEqual(st, 200, doc)
+        self.assertEqual(self.schema.check(doc, self.api.LIVE), [])
+        solver = doc["solver"]
+        self.assertEqual((doc["label"], solver["state"], solver["iteration"], solver["end"]),
+                         ("wing-fix", "running", 120.0, 300.0))
+        self.assertEqual(doc["stages"], [{"name": "Repaired mesh run", "from": 0, "to": 300}])
+        self.assertEqual((doc["residuals"]["cols"], len(doc["residuals"]["rows"])), (["Time", "p"], 120))
+        self.assertIn("verdict", doc["judge"])
+        st, active, _ = self.get("/live/abtest")                  # the test running now
+        self.assertEqual((st, active["label"]), (200, "wing-fix"))
+        self.assertEqual(self.schema.check(active, self.api.LIVE), [])
+
     def test_a_cluster_as_the_repair_writes_it(self):
         # foamMeshDoctor's text files for one failing face (7, between cells 3 and 4) and a wall nearby, through
         # repair.cluster, then the route: its answer must match the shape the OpenAPI document gives the app.

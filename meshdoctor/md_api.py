@@ -171,7 +171,8 @@ def _residuals(case, maxpts=400):
         cols, rows = None, []
         for td in tds:
             try:
-                lines = open(os.path.join(pp, d, td, "residuals.dat"), encoding="utf-8", errors="replace").read().splitlines()
+                with open(os.path.join(pp, d, td, "residuals.dat"), encoding="utf-8", errors="replace") as f:
+                    lines = f.read().splitlines()
             except OSError:
                 continue
             try:   # a restart from an earlier time supersedes the rows it repeats
@@ -331,6 +332,25 @@ def ab_list():
                       if d.endswith("_ab") and os.path.isdir(os.path.join(md_dir(), d)))
     except OSError:
         return []
+
+
+def ab_brief(name):
+    """What the A/B tests list says of one test: its last step and when that began (ab_status.json), and once both
+    runs have ended, when, each field's residual ratio and the judge's verdict on the repaired-mesh run (only a test
+    that `ab extend` continued has one).  A result from a newer Mesh Doctor counts as none here; the test's own
+    answer (ab()) says why."""
+    top = os.path.join(md_dir(), name + "_ab")
+    st = _read_json(os.path.join(top, "ab_status.json"))
+    st = st if isinstance(st, dict) else {}
+    res = _read_json(os.path.join(top, "ab_result.json"), "abtest")
+    res = res if isinstance(res, dict) and "error" not in res else {}
+    text = lambda v: v if isinstance(v, str) else None
+    ratios = res.get("residualRatioFixedOverBase")
+    judge = res.get("fixedJudge")
+    return {"step": text(st.get("step")), "updated": text(st.get("time")), "finished": text(res.get("finished")),
+            "ratios": {k: v for k, v in ratios.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
+            if isinstance(ratios, dict) else {},
+            "verdict": text(judge.get("verdict")) if isinstance(judge, dict) else None}
 
 
 def mapdata(name):

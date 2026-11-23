@@ -20,6 +20,7 @@ describe("a repair's report", () => {
     expect(screen.getByRole("heading", { level: 1, name: "ahmed25-coarse-fix" })).toBeInTheDocument();
     expect(await screen.findByRole("img", { name: /Initial residual of p per iteration/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute("href", "/demo");
+    expect(screen.getByRole("link", { name: "A/B test" })).toHaveAttribute("href", "/demo/abtests/ahmed25-coarse-fix");
     expect(document.title).toBe("Report of ahmed25-coarse-fix · Mesh Doctor");
   });
 
@@ -27,6 +28,7 @@ describe("a repair's report", () => {
     renderScreen(<RepairReport />, { path, at: "/demo/repairs/ahmed25-medium-fix/report", transport: demoTransport(undefined, 0) });
     expect(await screen.findByText(/There is no solver A\/B test in this report\./)).toBeInTheDocument();
     expect(screen.queryByText("Did it help the solver?")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "A/B test" })).not.toBeInTheDocument();
     expect(screen.queryByRole("img", { name: /Initial residual of/ })).not.toBeInTheDocument();
   });
 

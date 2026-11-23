@@ -8,9 +8,8 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { skipToken, useQuery } from "@tanstack/react-query";
-import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { LineChart, type LineSeries } from "@/components/charts/LineChart";
 import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { PageHeader, StatTile } from "@/components/shared/page";
@@ -25,10 +24,13 @@ import { aboutPage } from "@/pages/docs/entries";
 import { cn } from "@/lib/utils";
 import { HEAT, viewHeading, type MapSummary, type MapViewName } from "@/report/map";
 import { ReportError, checkReport, fileBytes, readReport } from "@/report/read";
-import { judgeTone, measureLabel, ratioChange, summarize, type Change, type ReportSummary } from "@/report/summary";
+import { measureLabel, ratioChange, summarize, type ReportSummary } from "@/report/summary";
 import { SAMPLES } from "@/report/samples";
+import { AbCard, JudgeCard, ResidualCard } from "./AbCards";
 import { ClustersCard, type ClusterSource } from "./Clusters";
 import { MapMarks } from "./MapMarks";
+import { Section } from "./Section";
+import { changeText } from "./tone";
 import { RepairMap } from "./RepairMap";
 
 type State =
@@ -39,7 +41,6 @@ type State =
 
 const ACCEPT = ".json,.gz,.html,.htm,application/json,application/gzip,text/html";
 
-const changeText = (c: Change) => (c === "better" ? "text-success font-medium" : c === "worse" ? "text-danger font-medium" : "");
 
 const SAMPLE_FROM = "the public Ahmed-body example (a sample)";
 const SAMPLE_NAMES = SAMPLES.map((s) => s.name).join(" and ");
@@ -226,25 +227,6 @@ export function Report() {
   );
 }
 
-/** One card of the report. A damaged part of the file costs that card, not the page. */
-class Section extends Component<{ title: string; children: ReactNode }, { error: Error | null }> {
-  state = { error: null as Error | null };
-
-  static getDerivedStateFromError(error: Error) {
-    return { error };
-  }
-
-  render() {
-    if (!this.state.error) return this.props.children;
-    return (
-      <Card className="p-5 text-sm">
-        <p className="font-semibold">{this.props.title}</p>
-        <p className="mt-1 text-danger">This part of the report couldn't be shown: {this.state.error.message}</p>
-      </Card>
-    );
-  }
-}
-
 /** An open report. The app shows a repair's report from the engine with it too (pages/app/RepairReport). */
 export function ReportView({ summary: s, from, action, abCommand, clusterSource }: {
   summary: ReportSummary;
@@ -404,20 +386,6 @@ function CheckMeshCard({ rows }: { rows: ReportSummary["checkMesh"] }) {
   );
 }
 
-function RatioBar({ ratio }: { ratio: number }) {
-  const w = Math.min(50, Math.abs(ratio - 1) * 100);
-  const c = ratioChange(ratio);
-  return (
-    <span className="relative ml-2 inline-block h-2 w-20 rounded-full bg-surface-2 align-middle ring-1 ring-border ring-inset sm:w-24" aria-hidden>
-      <span
-        className={cn("absolute inset-y-0 rounded-full", c === "better" ? "bg-success" : c === "worse" ? "bg-danger" : "bg-muted-foreground")}
-        style={{ left: `${ratio < 1 ? 50 - w : 50}%`, width: `${w}%` }}
-      />
-      <span className="absolute -inset-y-0.5 left-1/2 w-px bg-muted-foreground" />
-    </span>
-  );
-}
-
 /** The next step for a run of your own engine that has no A/B test yet: the command, with the names filled in. */
 function AbNextCard({ command }: { command: string }) {
   return (
@@ -437,64 +405,6 @@ function AbNextCard({ command }: { command: string }) {
         <CopyCommand command={command} className="mt-3" />
       </CardContent>
     </Card>
-  );
-}
-
-function AbCard({ ab }: { ab: NonNullable<ReportSummary["ab"]> }) {
-  const spi = ab.secondsPerIteration;
-  return (
-    <Card>
-      <CardHeader>
-        <div>
-          <CardTitle>Did it help the solver?</CardTitle>
-          <CardDescription>
-            {[...ab.meta, ab.finished && `finished ${formatDateTime(ab.finished)}`].filter(Boolean).join(" · ")}
-          </CardDescription>
-        </div>
-      </CardHeader>
-      {ab.rows.length === 0 ? (
-        <p className="px-5 pb-5 text-sm text-muted-foreground">The A/B test has no residuals to compare yet.</p>
-      ) : (
-        <Table>
-          <THead>
-            <TR className="hover:bg-transparent">
-              <TH>Field</TH>
-              <TH className="text-right">Original</TH>
-              <TH className="text-right">Repaired</TH>
-              <TH className="text-right">Repaired ÷ original</TH>
-            </TR>
-          </THead>
-          <TBody>
-            {ab.rows.map((row) => (
-              <TR key={row.field}>
-                <TD className="font-mono text-[13px]">{row.field}</TD>
-                <TD className="text-right tabular-nums">{formatNumber(row.original, 3)}</TD>
-                <TD className="text-right tabular-nums">{formatNumber(row.repaired, 3)}</TD>
-                <TD className={cn("text-right whitespace-nowrap tabular-nums", changeText(row.change))}>
-                  {row.ratio.toFixed(2)}×<RatioBar ratio={row.ratio} />
-                </TD>
-              </TR>
-            ))}
-          </TBody>
-        </Table>
-      )}
-      <p className="border-t border-border px-5 py-3 text-xs text-muted-foreground">
-        Mean initial residual over {ab.window ? `the last ${formatInt(ab.window)} iterations` : "the end of each run"}, with
-        the same case, settings and start on both meshes. Below 1× the repaired mesh converges further.
-        {spi && ` Time per iteration: ${spi.original.toFixed(2)} s original, ${spi.repaired.toFixed(2)} s repaired.`}
-      </p>
-    </Card>
-  );
-}
-
-function LegendLine({ dashed, className, children }: { dashed?: boolean; className: string; children: ReactNode }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <svg width="18" height="4" aria-hidden>
-        <line x1="0" y1="2" x2="18" y2="2" strokeWidth="2" className={className} strokeDasharray={dashed ? "4 3" : undefined} />
-      </svg>
-      {children}
-    </span>
   );
 }
 
@@ -554,85 +464,6 @@ function MapCard({ map }: { map: MapSummary }) {
         {map.notes.length > 0 && <p className="mt-3 text-xs text-muted-foreground">{map.notes.join(" ")}</p>}
         <MapMarks map={map} />
       </CardContent>
-    </Card>
-  );
-}
-
-function ResidualCard({ history }: { history: NonNullable<ReportSummary["ab"]>["history"] }) {
-  const { fields, original, repaired } = history;
-  const [field, setField] = useState(() => (fields.includes("p") ? "p" : fields.includes("p_rgh") ? "p_rgh" : (fields[0] ?? "")));
-  // The original mesh is the reference: dark ink, dashed, as the accuracy chart's wind-tunnel tick. Against the
-  // repaired mesh's teal, the grey it had was too close to tell apart (OKLab difference 8.3, and 3.2 with red-green
-  // colour blindness, against a floor of 15); ink is 32 in the light theme and 21 in the dark one.
-  const series = useMemo(() => {
-    const out: LineSeries[] = [];
-    if (original) out.push({ name: "original mesh", stroke: "stroke-foreground", swatch: "bg-foreground", dashed: true, x: original.x, y: original.y[field] ?? [] });
-    if (repaired) out.push({ name: "repaired mesh", stroke: "stroke-primary", swatch: "bg-primary", x: repaired.x, y: repaired.y[field] ?? [] });
-    return out;
-  }, [original, repaired, field]);
-  return (
-    <Card className="mt-4">
-      <CardHeader className="flex-wrap">
-        <div>
-          <CardTitle>Residuals, original vs repaired mesh</CardTitle>
-          <CardDescription>Initial residual per iteration, log scale: lower and still falling is better.</CardDescription>
-        </div>
-        {fields.length > 1 && (
-          <Segmented label="Field" value={field} onChange={setField}
-            options={fields.map((f) => ({ value: f, label: <span className="font-mono">{f}</span> }))} />
-        )}
-      </CardHeader>
-      <CardContent>
-        <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          {original && <LegendLine dashed className="stroke-foreground">original mesh</LegendLine>}
-          {repaired && <LegendLine className="stroke-primary">repaired mesh</LegendLine>}
-        </div>
-        <LineChart series={series} log xLabel="iteration" empty="No residuals for this field"
-          label={`Initial residual of ${field} per iteration on the original and the repaired mesh, log scale`} />
-      </CardContent>
-    </Card>
-  );
-}
-
-function JudgeCard({ judge }: { judge: NonNullable<ReportSummary["judge"]> }) {
-  const over = judge.window == null ? null : `${formatInt(judge.window)} ${judge.transient ? "time steps" : "iterations"}`;
-  return (
-    <Card className="mt-4">
-      <CardHeader className="flex-wrap">
-        <div>
-          <CardTitle>Is the repaired-mesh run converged?</CardTitle>
-          <CardDescription>
-            {[over && `Judged over the last ${over}`, judge.flow && `flow along ${judge.flow}`, judge.up && `${judge.up} up`]
-              .filter(Boolean).join(", ")}
-          </CardDescription>
-        </div>
-        <Badge tone={judgeTone(judge.verdict)} className="whitespace-normal">{judge.verdict}</Badge>
-      </CardHeader>
-      {judge.averages.length > 0 && (
-        <Table>
-          <THead>
-            <TR className="hover:bg-transparent">
-              <TH>Average ({judge.group})</TH>
-              <TH className="text-right">Mean</TH>
-              <TH className="text-right">Uncertainty</TH>
-            </TR>
-          </THead>
-          <TBody>
-            {judge.averages.map((a) => (
-              <TR key={a.name}>
-                <TD className="font-mono text-[13px]">{a.name}</TD>
-                <TD className="text-right tabular-nums">{formatNumber(a.mean)}</TD>
-                <TD className="text-right tabular-nums">{a.u == null ? "–" : `± ${formatNumber(a.u, 2)}`}</TD>
-              </TR>
-            ))}
-          </TBody>
-        </Table>
-      )}
-      {judge.flags.length > 0 && (
-        <ul className="list-disc space-y-1 border-t border-border py-3 pr-5 pl-9 text-[13px] text-muted-foreground">
-          {judge.flags.map((f, i) => <li key={i}>{f}</li>)}
-        </ul>
-      )}
     </Card>
   );
 }

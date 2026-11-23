@@ -25,7 +25,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A/B solver tests in the workspace */
+        /** A/B solver tests in the workspace, with each one's last step and outcome */
         get: operations["abtests"];
         put?: never;
         post?: never;
@@ -42,7 +42,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** An A/B test: status, result (abtest schema), residual histories, oscillation maps */
+        /** An A/B test: its step, result (abtest schema), each run's residuals as they are now, and oscillation maps */
         get: operations["abtest"];
         put?: never;
         post?: never;
@@ -918,6 +918,23 @@ export interface operations {
                 content: {
                     "application/json": {
                         items: string[];
+                        /** @description each test in items: its last step and, once both runs have ended, its outcome (API 1.3) */
+                        tests: {
+                            [key: string]: {
+                                /** @description when both runs had ended (ab_result.json): the worker's local time */
+                                finished: string | null;
+                                /** @description each field's median initial residual over the test's window, repaired ÷ original mesh: below 1 the repaired mesh converges further (empty until both runs have ended) */
+                                ratios: {
+                                    [key: string]: number;
+                                };
+                                /** @description its last step (ab_status.json): copying base, solving base, copying fixed, solving fixed, hotspots base or fixed, extending fixed <from> -> <to>, or done (done, but the SOURCE CASE CHANGED during the run: the case changed meanwhile); null when it has none */
+                                step: string | null;
+                                /** @description when that step began: the worker's local time, yyyy-mm-dd hh:mm:ss */
+                                updated: string | null;
+                                /** @description the judge's verdict on the repaired-mesh run, saved when `ab extend` continued the test; null otherwise (GET /abtests/{name}/judge judges any run) */
+                                verdict: string | null;
+                            };
+                        };
                     };
                 };
             };
@@ -949,7 +966,56 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, unknown>;
+                    "application/json": {
+                        /** @description each run's residuals as they are now: the original mesh (base) and the repaired one (fixed), its continuations included */
+                        live: {
+                            /** @description a run's initial residuals: from its residuals function object, else from its solver logs, thinned evenly to at most 400 rows and the last; null before the run has any */
+                            base: {
+                                /** @description Time, then each field */
+                                cols: string[];
+                                /** @description one row per iteration, in the order of cols (null: not solved then) */
+                                rows: (number | null)[][];
+                            } | null;
+                            /** @description a run's initial residuals: from its residuals function object, else from its solver logs, thinned evenly to at most 400 rows and the last; null before the run has any */
+                            fixed: {
+                                /** @description Time, then each field */
+                                cols: string[];
+                                /** @description one row per iteration, in the order of cols (null: not solved then) */
+                                rows: (number | null)[][];
+                            } | null;
+                        };
+                        /** @description slow-oscillation maps (abtest.py mode): where the repaired-mesh run's solution moves between two written times a few hundred iterations apart */
+                        modes: {
+                            /** @description the earlier written time */
+                            from: string | number | null;
+                            /** @description the share of the change that lies near the mesh's defects, 0 to 1 */
+                            nearDefects: number | null;
+                            /** @description the map's own numbers (foamResidualHotspots' summary) */
+                            summary: Record<string, unknown>;
+                            /** @description the later written time */
+                            to: string | number | null;
+                            /** @description where the solution moves most, largest share first (at most 8) */
+                            top: {
+                                /** @description x y z, in metres */
+                                centroid: number[];
+                                /** @description the cells' typical size there, in metres */
+                                h?: number | null;
+                                /** @description the worst non-orthogonality there, in degrees */
+                                maxNonOrtho?: number | null;
+                                /** @description cells in the group */
+                                nCells: number;
+                                /** @description this group's share of the change, 0 to 1 */
+                                share: number;
+                            }[];
+                        }[];
+                        /** @description ab_result.json without the runs' residual histories (live has them). It is written as each run ends, so while the repaired-mesh run solves it holds the original-mesh run alone; null before that */
+                        result: components["schemas"]["Abtest"] | null;
+                        /** @description the test's own ab_status.json: its last step and when that began, the worker's local time (see the steps in GET /abtests); null when it has none */
+                        status: {
+                            step?: string;
+                            time?: string;
+                        } | null;
+                    };
                 };
             };
             /** @description Error (the code says which; see STATUS in api_v1.py) */
@@ -1020,7 +1086,90 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, unknown>;
+                    "application/json": {
+                        /** @description the original-mesh run's residuals, at most 400 rows; {} if none */
+                        baseResiduals: {
+                            /** @description Time, then each field */
+                            cols?: string[];
+                            /** @description one row per iteration, in the order of cols (null: not solved then) */
+                            rows?: (number | null)[][];
+                        };
+                        /** @description the stretch the run is in now */
+                        current: {
+                            from: number;
+                            /** @description the settings of this stretch: the A/B run, or a continuation */
+                            name: string;
+                            to: number;
+                        };
+                        /** @description how to read them: total, groups, vertical, flow, up, source */
+                        forceInfo?: Record<string, unknown>;
+                        /** @description each force group's [iteration, drag, vertical] rows */
+                        forces?: Record<string, unknown>;
+                        /** @description the live judge, on the stretch the run is in (the same limits as abtest.judge) */
+                        judge: {
+                            /** @description averaged forces with their uncertainty (batch means) */
+                            average?: Record<string, unknown>;
+                            avgFrom?: number;
+                            /** @enum {unknown} */
+                            level?: "ok" | "warn" | "err";
+                            /** @description collecting: ... until the stretch has 40 iterations */
+                            verdict?: string;
+                            /** @description iterations judged */
+                            window: number;
+                        };
+                        /** @description the A/B test */
+                        label: string;
+                        /** @description every A/B test, as GET /abtests */
+                        labels?: string[];
+                        /** @description the worker's clock, seconds since 1970 */
+                        now: number;
+                        proc?: Record<string, unknown>;
+                        /** @description the repaired-mesh run's residuals, at most 1500 rows; {} before it has any */
+                        residuals: {
+                            /** @description Time, then each field */
+                            cols?: string[];
+                            /** @description one row per iteration, in the order of cols (null: not solved then) */
+                            rows?: (number | null)[][];
+                        };
+                        /** @description the verdict `ab extend` saved (fixedJudge) */
+                        savedJudge?: Record<string, unknown> | null;
+                        settings?: Record<string, unknown>;
+                        /** @description the repaired-mesh run's newest solver log */
+                        solver: {
+                            clock?: number;
+                            /** @description the iteration it runs to (endTime) */
+                            end: number;
+                            /** @description the log's FOAM FATAL message (state error) */
+                            error?: string;
+                            /** @description seconds left at that pace (while running) */
+                            eta?: number;
+                            /** @description seconds since the log changed (state stopped) */
+                            idle_s?: number;
+                            /** @description the last iteration in the log */
+                            iteration?: number;
+                            log?: string;
+                            /**
+                             * @description pending: no log yet; stopped: running, but its log has not changed for 5 minutes
+                             * @enum {unknown}
+                             */
+                            state: "pending" | "running" | "done" | "error" | "stopped";
+                            /** @description seconds per iteration, the median of the last 40 */
+                            wall_per_it?: number;
+                        };
+                        /** @description the source case */
+                        source?: string | null;
+                        /** @description the repaired-mesh run's stretches: the A/B run, then each continuation */
+                        stages: {
+                            from: number;
+                            /** @description the settings of this stretch: the A/B run, or a continuation */
+                            name: string;
+                            to: number;
+                        }[];
+                        /** @description its ab_status.json, as in GET /abtests/{name}; {} when it has none */
+                        status: Record<string, unknown>;
+                        /** @description second-run settings */
+                        variant?: string | null;
+                    };
                 };
             };
             /** @description Error (the code says which; see STATUS in api_v1.py) */
@@ -1334,7 +1483,90 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, unknown>;
+                    "application/json": {
+                        /** @description the original-mesh run's residuals, at most 400 rows; {} if none */
+                        baseResiduals: {
+                            /** @description Time, then each field */
+                            cols?: string[];
+                            /** @description one row per iteration, in the order of cols (null: not solved then) */
+                            rows?: (number | null)[][];
+                        };
+                        /** @description the stretch the run is in now */
+                        current: {
+                            from: number;
+                            /** @description the settings of this stretch: the A/B run, or a continuation */
+                            name: string;
+                            to: number;
+                        };
+                        /** @description how to read them: total, groups, vertical, flow, up, source */
+                        forceInfo?: Record<string, unknown>;
+                        /** @description each force group's [iteration, drag, vertical] rows */
+                        forces?: Record<string, unknown>;
+                        /** @description the live judge, on the stretch the run is in (the same limits as abtest.judge) */
+                        judge: {
+                            /** @description averaged forces with their uncertainty (batch means) */
+                            average?: Record<string, unknown>;
+                            avgFrom?: number;
+                            /** @enum {unknown} */
+                            level?: "ok" | "warn" | "err";
+                            /** @description collecting: ... until the stretch has 40 iterations */
+                            verdict?: string;
+                            /** @description iterations judged */
+                            window: number;
+                        };
+                        /** @description the A/B test */
+                        label: string;
+                        /** @description every A/B test, as GET /abtests */
+                        labels?: string[];
+                        /** @description the worker's clock, seconds since 1970 */
+                        now: number;
+                        proc?: Record<string, unknown>;
+                        /** @description the repaired-mesh run's residuals, at most 1500 rows; {} before it has any */
+                        residuals: {
+                            /** @description Time, then each field */
+                            cols?: string[];
+                            /** @description one row per iteration, in the order of cols (null: not solved then) */
+                            rows?: (number | null)[][];
+                        };
+                        /** @description the verdict `ab extend` saved (fixedJudge) */
+                        savedJudge?: Record<string, unknown> | null;
+                        settings?: Record<string, unknown>;
+                        /** @description the repaired-mesh run's newest solver log */
+                        solver: {
+                            clock?: number;
+                            /** @description the iteration it runs to (endTime) */
+                            end: number;
+                            /** @description the log's FOAM FATAL message (state error) */
+                            error?: string;
+                            /** @description seconds left at that pace (while running) */
+                            eta?: number;
+                            /** @description seconds since the log changed (state stopped) */
+                            idle_s?: number;
+                            /** @description the last iteration in the log */
+                            iteration?: number;
+                            log?: string;
+                            /**
+                             * @description pending: no log yet; stopped: running, but its log has not changed for 5 minutes
+                             * @enum {unknown}
+                             */
+                            state: "pending" | "running" | "done" | "error" | "stopped";
+                            /** @description seconds per iteration, the median of the last 40 */
+                            wall_per_it?: number;
+                        };
+                        /** @description the source case */
+                        source?: string | null;
+                        /** @description the repaired-mesh run's stretches: the A/B run, then each continuation */
+                        stages: {
+                            from: number;
+                            /** @description the settings of this stretch: the A/B run, or a continuation */
+                            name: string;
+                            to: number;
+                        }[];
+                        /** @description its ab_status.json, as in GET /abtests/{name}; {} when it has none */
+                        status: Record<string, unknown>;
+                        /** @description second-run settings */
+                        variant?: string | null;
+                    };
                 };
             };
             /** @description Error (the code says which; see STATUS in api_v1.py) */

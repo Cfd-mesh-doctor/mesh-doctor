@@ -1669,7 +1669,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.2"
+    "version": "1.3"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -1745,10 +1745,62 @@
                         "type": "string"
                       },
                       "type": "array"
+                    },
+                    "tests": {
+                      "additionalProperties": {
+                        "properties": {
+                          "finished": {
+                            "description": "when both runs had ended (ab_result.json): the worker's local time",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "ratios": {
+                            "additionalProperties": {
+                              "type": "number"
+                            },
+                            "description": "each field's median initial residual over the test's window, repaired ÷ original mesh: below 1 the repaired mesh converges further (empty until both runs have ended)",
+                            "type": "object"
+                          },
+                          "step": {
+                            "description": "its last step (ab_status.json): copying base, solving base, copying fixed, solving fixed, hotspots base or fixed, extending fixed <from> -> <to>, or done (done, but the SOURCE CASE CHANGED during the run: the case changed meanwhile); null when it has none",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "updated": {
+                            "description": "when that step began: the worker's local time, yyyy-mm-dd hh:mm:ss",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "verdict": {
+                            "description": "the judge's verdict on the repaired-mesh run, saved when `ab extend` continued the test; null otherwise (GET /abtests/{name}/judge judges any run)",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "step",
+                          "updated",
+                          "finished",
+                          "ratios",
+                          "verdict"
+                        ],
+                        "type": "object"
+                      },
+                      "description": "each test in items: its last step and, once both runs have ended, its outcome (API 1.3)",
+                      "type": "object"
                     }
                   },
                   "required": [
-                    "items"
+                    "items",
+                    "tests"
                   ],
                   "type": "object"
                 }
@@ -1767,7 +1819,7 @@
             "description": "Error (the code says which; see STATUS in api_v1.py)"
           }
         },
-        "summary": "A/B solver tests in the workspace"
+        "summary": "A/B solver tests in the workspace, with each one's last step and outcome"
       }
     },
     "/abtests/{name}": {
@@ -1790,6 +1842,196 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "properties": {
+                    "live": {
+                      "description": "each run's residuals as they are now: the original mesh (base) and the repaired one (fixed), its continuations included",
+                      "properties": {
+                        "base": {
+                          "description": "a run's initial residuals: from its residuals function object, else from its solver logs, thinned evenly to at most 400 rows and the last; null before the run has any",
+                          "properties": {
+                            "cols": {
+                              "description": "Time, then each field",
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "rows": {
+                              "description": "one row per iteration, in the order of cols (null: not solved then)",
+                              "items": {
+                                "items": {
+                                  "type": [
+                                    "number",
+                                    "null"
+                                  ]
+                                },
+                                "type": "array"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "cols",
+                            "rows"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "fixed": {
+                          "description": "a run's initial residuals: from its residuals function object, else from its solver logs, thinned evenly to at most 400 rows and the last; null before the run has any",
+                          "properties": {
+                            "cols": {
+                              "description": "Time, then each field",
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "rows": {
+                              "description": "one row per iteration, in the order of cols (null: not solved then)",
+                              "items": {
+                                "items": {
+                                  "type": [
+                                    "number",
+                                    "null"
+                                  ]
+                                },
+                                "type": "array"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "cols",
+                            "rows"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "base",
+                        "fixed"
+                      ],
+                      "type": "object"
+                    },
+                    "modes": {
+                      "description": "slow-oscillation maps (abtest.py mode): where the repaired-mesh run's solution moves between two written times a few hundred iterations apart",
+                      "items": {
+                        "properties": {
+                          "from": {
+                            "description": "the earlier written time",
+                            "type": [
+                              "string",
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "nearDefects": {
+                            "description": "the share of the change that lies near the mesh's defects, 0 to 1",
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "summary": {
+                            "description": "the map's own numbers (foamResidualHotspots' summary)",
+                            "type": "object"
+                          },
+                          "to": {
+                            "description": "the later written time",
+                            "type": [
+                              "string",
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "top": {
+                            "description": "where the solution moves most, largest share first (at most 8)",
+                            "items": {
+                              "properties": {
+                                "centroid": {
+                                  "description": "x y z, in metres",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "type": "array"
+                                },
+                                "h": {
+                                  "description": "the cells' typical size there, in metres",
+                                  "type": [
+                                    "number",
+                                    "null"
+                                  ]
+                                },
+                                "maxNonOrtho": {
+                                  "description": "the worst non-orthogonality there, in degrees",
+                                  "type": [
+                                    "number",
+                                    "null"
+                                  ]
+                                },
+                                "nCells": {
+                                  "description": "cells in the group",
+                                  "type": "number"
+                                },
+                                "share": {
+                                  "description": "this group's share of the change, 0 to 1",
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "share",
+                                "nCells",
+                                "centroid"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "from",
+                          "to",
+                          "summary",
+                          "nearDefects",
+                          "top"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "result": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/Abtest"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "ab_result.json without the runs' residual histories (live has them). It is written as each run ends, so while the repaired-mesh run solves it holds the original-mesh run alone; null before that"
+                    },
+                    "status": {
+                      "description": "the test's own ab_status.json: its last step and when that began, the worker's local time (see the steps in GET /abtests); null when it has none",
+                      "properties": {
+                        "step": {
+                          "type": "string"
+                        },
+                        "time": {
+                          "type": "string"
+                        }
+                      },
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    }
+                  },
                   "required": [
                     "status",
                     "result",
@@ -1813,7 +2055,7 @@
             "description": "Error (the code says which; see STATUS in api_v1.py)"
           }
         },
-        "summary": "An A/B test: status, result (abtest schema), residual histories, oscillation maps"
+        "summary": "An A/B test: its step, result (abtest schema), each run's residuals as they are now, and oscillation maps"
       }
     },
     "/abtests/{name}/judge": {
@@ -1919,6 +2161,251 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "properties": {
+                    "baseResiduals": {
+                      "description": "the original-mesh run's residuals, at most 400 rows; {} if none",
+                      "properties": {
+                        "cols": {
+                          "description": "Time, then each field",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "rows": {
+                          "description": "one row per iteration, in the order of cols (null: not solved then)",
+                          "items": {
+                            "items": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "type": "array"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "current": {
+                      "description": "the stretch the run is in now",
+                      "properties": {
+                        "from": {
+                          "type": "number"
+                        },
+                        "name": {
+                          "description": "the settings of this stretch: the A/B run, or a continuation",
+                          "type": "string"
+                        },
+                        "to": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "from",
+                        "to"
+                      ],
+                      "type": "object"
+                    },
+                    "forceInfo": {
+                      "description": "how to read them: total, groups, vertical, flow, up, source",
+                      "type": "object"
+                    },
+                    "forces": {
+                      "description": "each force group's [iteration, drag, vertical] rows",
+                      "type": "object"
+                    },
+                    "judge": {
+                      "description": "the live judge, on the stretch the run is in (the same limits as abtest.judge)",
+                      "properties": {
+                        "average": {
+                          "description": "averaged forces with their uncertainty (batch means)",
+                          "type": "object"
+                        },
+                        "avgFrom": {
+                          "type": "number"
+                        },
+                        "level": {
+                          "enum": [
+                            "ok",
+                            "warn",
+                            "err"
+                          ]
+                        },
+                        "verdict": {
+                          "description": "collecting: ... until the stretch has 40 iterations",
+                          "type": "string"
+                        },
+                        "window": {
+                          "description": "iterations judged",
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "window"
+                      ],
+                      "type": "object"
+                    },
+                    "label": {
+                      "description": "the A/B test",
+                      "type": "string"
+                    },
+                    "labels": {
+                      "description": "every A/B test, as GET /abtests",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "now": {
+                      "description": "the worker's clock, seconds since 1970",
+                      "type": "number"
+                    },
+                    "proc": {
+                      "type": "object"
+                    },
+                    "residuals": {
+                      "description": "the repaired-mesh run's residuals, at most 1500 rows; {} before it has any",
+                      "properties": {
+                        "cols": {
+                          "description": "Time, then each field",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "rows": {
+                          "description": "one row per iteration, in the order of cols (null: not solved then)",
+                          "items": {
+                            "items": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "type": "array"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "savedJudge": {
+                      "description": "the verdict `ab extend` saved (fixedJudge)",
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "settings": {
+                      "type": "object"
+                    },
+                    "solver": {
+                      "description": "the repaired-mesh run's newest solver log",
+                      "properties": {
+                        "clock": {
+                          "type": "number"
+                        },
+                        "end": {
+                          "description": "the iteration it runs to (endTime)",
+                          "type": "number"
+                        },
+                        "error": {
+                          "description": "the log's FOAM FATAL message (state error)",
+                          "type": "string"
+                        },
+                        "eta": {
+                          "description": "seconds left at that pace (while running)",
+                          "type": "number"
+                        },
+                        "idle_s": {
+                          "description": "seconds since the log changed (state stopped)",
+                          "type": "number"
+                        },
+                        "iteration": {
+                          "description": "the last iteration in the log",
+                          "type": "number"
+                        },
+                        "log": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "description": "pending: no log yet; stopped: running, but its log has not changed for 5 minutes",
+                          "enum": [
+                            "pending",
+                            "running",
+                            "done",
+                            "error",
+                            "stopped"
+                          ]
+                        },
+                        "wall_per_it": {
+                          "description": "seconds per iteration, the median of the last 40",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "end"
+                      ],
+                      "type": "object"
+                    },
+                    "source": {
+                      "description": "the source case",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "stages": {
+                      "description": "the repaired-mesh run's stretches: the A/B run, then each continuation",
+                      "items": {
+                        "properties": {
+                          "from": {
+                            "type": "number"
+                          },
+                          "name": {
+                            "description": "the settings of this stretch: the A/B run, or a continuation",
+                            "type": "string"
+                          },
+                          "to": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "from",
+                          "to"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "status": {
+                      "description": "its ab_status.json, as in GET /abtests/{name}; {} when it has none",
+                      "type": "object"
+                    },
+                    "variant": {
+                      "description": "second-run settings",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "status",
+                    "stages",
+                    "current",
+                    "solver",
+                    "residuals",
+                    "baseResiduals",
+                    "judge",
+                    "now"
+                  ],
                   "type": "object"
                 }
               }
@@ -2430,8 +2917,250 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "properties": {
+                    "baseResiduals": {
+                      "description": "the original-mesh run's residuals, at most 400 rows; {} if none",
+                      "properties": {
+                        "cols": {
+                          "description": "Time, then each field",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "rows": {
+                          "description": "one row per iteration, in the order of cols (null: not solved then)",
+                          "items": {
+                            "items": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "type": "array"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "current": {
+                      "description": "the stretch the run is in now",
+                      "properties": {
+                        "from": {
+                          "type": "number"
+                        },
+                        "name": {
+                          "description": "the settings of this stretch: the A/B run, or a continuation",
+                          "type": "string"
+                        },
+                        "to": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "from",
+                        "to"
+                      ],
+                      "type": "object"
+                    },
+                    "forceInfo": {
+                      "description": "how to read them: total, groups, vertical, flow, up, source",
+                      "type": "object"
+                    },
+                    "forces": {
+                      "description": "each force group's [iteration, drag, vertical] rows",
+                      "type": "object"
+                    },
+                    "judge": {
+                      "description": "the live judge, on the stretch the run is in (the same limits as abtest.judge)",
+                      "properties": {
+                        "average": {
+                          "description": "averaged forces with their uncertainty (batch means)",
+                          "type": "object"
+                        },
+                        "avgFrom": {
+                          "type": "number"
+                        },
+                        "level": {
+                          "enum": [
+                            "ok",
+                            "warn",
+                            "err"
+                          ]
+                        },
+                        "verdict": {
+                          "description": "collecting: ... until the stretch has 40 iterations",
+                          "type": "string"
+                        },
+                        "window": {
+                          "description": "iterations judged",
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "window"
+                      ],
+                      "type": "object"
+                    },
+                    "label": {
+                      "description": "the A/B test",
+                      "type": "string"
+                    },
+                    "labels": {
+                      "description": "every A/B test, as GET /abtests",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "now": {
+                      "description": "the worker's clock, seconds since 1970",
+                      "type": "number"
+                    },
+                    "proc": {
+                      "type": "object"
+                    },
+                    "residuals": {
+                      "description": "the repaired-mesh run's residuals, at most 1500 rows; {} before it has any",
+                      "properties": {
+                        "cols": {
+                          "description": "Time, then each field",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "rows": {
+                          "description": "one row per iteration, in the order of cols (null: not solved then)",
+                          "items": {
+                            "items": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "type": "array"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "savedJudge": {
+                      "description": "the verdict `ab extend` saved (fixedJudge)",
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "settings": {
+                      "type": "object"
+                    },
+                    "solver": {
+                      "description": "the repaired-mesh run's newest solver log",
+                      "properties": {
+                        "clock": {
+                          "type": "number"
+                        },
+                        "end": {
+                          "description": "the iteration it runs to (endTime)",
+                          "type": "number"
+                        },
+                        "error": {
+                          "description": "the log's FOAM FATAL message (state error)",
+                          "type": "string"
+                        },
+                        "eta": {
+                          "description": "seconds left at that pace (while running)",
+                          "type": "number"
+                        },
+                        "idle_s": {
+                          "description": "seconds since the log changed (state stopped)",
+                          "type": "number"
+                        },
+                        "iteration": {
+                          "description": "the last iteration in the log",
+                          "type": "number"
+                        },
+                        "log": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "description": "pending: no log yet; stopped: running, but its log has not changed for 5 minutes",
+                          "enum": [
+                            "pending",
+                            "running",
+                            "done",
+                            "error",
+                            "stopped"
+                          ]
+                        },
+                        "wall_per_it": {
+                          "description": "seconds per iteration, the median of the last 40",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "end"
+                      ],
+                      "type": "object"
+                    },
+                    "source": {
+                      "description": "the source case",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "stages": {
+                      "description": "the repaired-mesh run's stretches: the A/B run, then each continuation",
+                      "items": {
+                        "properties": {
+                          "from": {
+                            "type": "number"
+                          },
+                          "name": {
+                            "description": "the settings of this stretch: the A/B run, or a continuation",
+                            "type": "string"
+                          },
+                          "to": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "from",
+                          "to"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "status": {
+                      "description": "its ab_status.json, as in GET /abtests/{name}; {} when it has none",
+                      "type": "object"
+                    },
+                    "variant": {
+                      "description": "second-run settings",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
                   "required": [
-                    "label"
+                    "label",
+                    "status",
+                    "stages",
+                    "current",
+                    "solver",
+                    "residuals",
+                    "baseResiduals",
+                    "judge",
+                    "now"
                   ],
                   "type": "object"
                 }

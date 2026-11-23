@@ -23,6 +23,17 @@ export type JobRequest = Json<operations["start_job"]["requestBody"]>;
 /** One defect cluster's shapes, for its 3D view: every face of the cells beside its failing faces, and the boundary
  *  faces nearby. */
 export type ClusterShape = Json<operations["repair_cluster"]["responses"][200]>;
+/** The A/B tests; `tests` (each one's step and outcome) is new in API 1.3, so an older engine only names them. */
+export type AbtestList = Since<Json<operations["abtests"]["responses"][200]>, "tests">;
+export type AbtestBrief = NonNullable<AbtestList["tests"]>[string];
+/** One A/B test: its step, its result so far (the abtest document) and each run's residuals as they are now. */
+export type AbtestDetail = Json<operations["abtest"]["responses"][200]>;
+/** One run's residuals: Time, then each field, a row per iteration. */
+export type ResidualTable = NonNullable<AbtestDetail["live"]["base"]>;
+/** The A/B test's live monitor while its repaired-mesh run solves: the solver's iteration and pace, the live judge. */
+export type AbtestLive = Json<operations["abtest_live"]["responses"][200]>;
+/** The judge on one run of an A/B test (the judge document). */
+export type JudgeAnswer = Json<operations["abtest_judge"]["responses"][200]>;
 
 /** The API major version this app speaks; the engine reports major.minor and any 1.x works. */
 export const API_MAJOR = 1;
