@@ -43,6 +43,9 @@ export function useCases() {
     queryKey: [transport?.scope, "cases"],
     queryFn: transport ? ({ signal }) => api.cases(transport, signal) : skipToken,
     staleTime: 15_000,
+    // While the engine has none, ask again now and then: a first case (the README's First run, say) then shows by
+    // itself, and the Overview's Getting started ticks it off.
+    refetchInterval: (q) => (q.state.data?.items.length === 0 ? IDLE_POLL_MS : false),
   });
 }
 

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The engine at a glance: what it is, its cases, its repair runs (each finished one opens its report) and what is
-// running now.
-import { ArrowRight, Cpu, FolderOpen, ListChecks, Terminal, Wrench } from "lucide-react";
+// running now; on your own engine, until its first repair run, the steps to one (Getting started).
+import { ArrowRight, Check, Cpu, FolderOpen, ListChecks, Terminal, Wrench } from "lucide-react";
+import { useId, type ReactNode } from "react";
 import { Link } from "react-router";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { DashboardLink } from "@/components/shared/DashboardLink";
@@ -9,15 +10,19 @@ import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { NoJobsYet } from "@/components/shared/NoJobsYet";
 import { JobStateBadge, VerdictBadge } from "@/components/shared/badges";
 import { EmptyState, PageHeader, StatTile, TableSkeleton } from "@/components/shared/page";
+import { Badge, Dot } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/misc";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
+import { repairCommand } from "@/engine/commands";
 import { useAppPath, useEngine, usePairing } from "@/engine/context";
 import { useCases, useEngineInfo, useJobs, useRepairs } from "@/engine/hooks";
 import { JOB_KIND_LABEL, isActive } from "@/engine/types";
 import { caseName, improvedCleanly, madeWorse, runStep, runUpdated } from "@/engine/verdict";
 import { formatCells, formatCount, formatRelative } from "@/lib/format";
+import { DOCS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
+import { cn } from "@/lib/utils";
 
 /** Repairs a copy of a case, in WSL or a Linux terminal; the app can't start repairs itself yet. */
 const REPAIR_COMMAND = "meshdoctor full <case> <name>";
@@ -28,6 +33,148 @@ const BLANKS = (
     the repaired copy in place of <code className="font-mono text-[12px]">&lt;name&gt;</code>)
   </>
 );
+
+const LINK = "font-medium text-primary underline-offset-4 hover:underline";
+
+/** Where a Getting started step is: ticked off, the one to do now, under way (a repair job is waiting or running), or
+ * waiting for the steps before it. */
+type StepState = "done" | "next" | "running" | "later";
+
+interface Step {
+  title: string;
+  state: StepState;
+  text: ReactNode;
+  /** What to run, on the step to do now. */
+  command?: string;
+}
+
+/** Each state's round mark: a tick, else the step's number. */
+const MARK: Record<StepState, string> = {
+  done: "bg-success-soft text-success",
+  next: "bg-primary text-primary-foreground",
+  running: "bg-primary-soft text-primary",
+  later: "bg-surface-2 text-muted-foreground ring-1 ring-inset ring-border",
+};
+
+/** Each state in words, beside the step's title: not by colour alone. A step that waits has none. */
+function StepLabel({ state }: { state: StepState }) {
+  if (state === "done") return <Badge tone="success">Done</Badge>;
+  if (state === "next") return <Badge tone="primary">Next</Badge>;
+  if (state === "running") return <Badge tone="primary"><Dot tone="primary" pulse />Running</Badge>;
+  return null;
+}
+
+/**
+ * A newcomer's three steps to a first repair, each ticked off from what the engine lists: 1. the engine answers (it
+ * has, or this wouldn't show), 2. a case in its cases folder (else the README's First run, which sets up OpenFOAM's
+ * motorBike tutorial where the engine looks), 3. a repair of a copy (the first case's command, with the names filled
+ * in). The first step not done is the one thing to do next. `cases`: the cases the engine found; `repairing`: a repair
+ * job is waiting or running, so a first run is on its way.
+ */
+function GettingStarted({ cases, repairing }: { cases: readonly string[]; repairing: boolean }) {
+  const to = useAppPath();
+  const id = useId();
+  const casesScreen = (label: string) => <Link to={to("/cases")} className={LINK}>{label}</Link>;
+  // The first case the engine finds by its name alone, so its command needs no blanks filled in.
+  const first = cases.find((c) => repairCommand(c, []) !== null);
+  const repair: Step = !cases.length
+    ? { title: "Repair a copy", state: "later", text: "Then one command repairs a copy of it, never the case itself." }
+    : repairing
+      ? {
+          title: "Repair a copy",
+          state: "running",
+          text: (
+            <>
+              A repair is under way, and shows here when it finishes. Its progress is on the{" "}
+              <Link to={to("/jobs?show=active")} className={LINK}>Jobs screen</Link>.
+            </>
+          ),
+        }
+      : first
+        ? {
+            title: "Repair a copy",
+            state: "next",
+            command: repairCommand(first, []) ?? undefined,
+            text: (
+              <>
+                Run this in a WSL or Linux terminal. It repairs a copy of{" "}
+                <code className="font-mono text-[12px]">{first}</code>, never the case itself, and the run shows here
+                when it finishes.
+                {cases.length > 1 && <> Each other case has its own command on the {casesScreen("Cases screen")}.</>}
+              </>
+            ),
+          }
+        : {
+            // No case the engine finds by its name alone: the command with its blanks, said in words.
+            title: "Repair a copy",
+            state: "next",
+            command: REPAIR_COMMAND,
+            text: (
+              <>
+                Run this in a WSL or Linux terminal {BLANKS}. It repairs a copy, never the case itself, and the run shows
+                here when it finishes.
+              </>
+            ),
+          };
+  const steps: Step[] = [
+    {
+      title: "Connect to the engine",
+      state: "done",
+      text: "Mesh Doctor is running on this computer, and this browser is paired with it.",
+    },
+    cases.length
+      ? {
+          title: "Add a case",
+          state: "done",
+          text: <>{casesScreen(formatCount(cases.length, "case"))} in the engine's cases folder.</>,
+        }
+      : {
+          title: "Add a case",
+          state: "next",
+          text: (
+            <>
+              None found yet. The README's{" "}
+              <a href={DOCS.firstRun} target="_blank" rel="noreferrer" className={LINK}>First run</a> sets up
+              OpenFOAM's motorBike tutorial in $FOAM_RUN, where the engine looks. For cases of your own, the{" "}
+              {casesScreen("Cases screen")} says how to point the engine at their folder.
+            </>
+          ),
+        },
+    repair,
+  ];
+  const done = steps.filter((s) => s.state === "done").length;
+  return (
+    <Card className="mb-6" aria-labelledby={id}>
+      <CardHeader>
+        <div>
+          <CardTitle id={id}>Getting started</CardTitle>
+          <CardDescription>Three steps to your first repair. Each ticks itself off once the engine lists it.</CardDescription>
+        </div>
+        <span className="shrink-0 pt-0.5 text-[13px] whitespace-nowrap text-muted-foreground">
+          {done} of {steps.length} done
+        </span>
+      </CardHeader>
+      <ol className="divide-y divide-border border-t border-border">
+        {steps.map((s, i) => (
+          <li key={s.title} aria-current={s.state === "next" ? "step" : undefined} className="flex gap-3 px-5 py-3.5">
+            <span aria-hidden
+              className={cn("grid size-6 shrink-0 place-items-center rounded-full text-xs font-semibold", MARK[s.state])}>
+              {s.state === "done" ? <Check className="size-3.5" /> : i + 1}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1">
+                <h3 className={cn("text-sm font-medium", s.state === "later" && "text-muted-foreground")}>{s.title}</h3>
+                <StepLabel state={s.state} />
+              </div>
+              <p className="mt-0.5 text-[13px] text-muted-foreground">{s.text}</p>
+              {s.command && <CopyCommand command={s.command} className="mt-3 max-w-xl" />}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </Card>
+  );
+}
 
 export function Overview() {
   useTitle("Overview");
@@ -47,6 +194,9 @@ export function Overview() {
   const engineLabel = mode === "demo" ? "Recorded demo" : pairing?.engine.replace(/^http:\/\//, "");
   // The engine has answered that it has no repair runs yet (not: the list didn't load).
   const noRuns = repairs.isSuccess && repairItems.length === 0;
+  // A newcomer's steps to a first repair, at the top of your own engine's Overview (the demo has runs already) until
+  // its first repair run is listed. Not while its cases are unknown: a list that didn't load isn't empty.
+  const gettingStarted = mode === "engine" && noRuns && cases.isSuccess;
   // What didn't load, and why, at the top: the engine's own answer first, else the first list that failed. Try again
   // asks again for each one that failed.
   const queries = [info, cases, jobs, repairs];
@@ -80,6 +230,9 @@ export function Overview() {
           }}
           retrying={queries.some((q) => q.isError && q.isFetching)}
         />
+      )}
+      {gettingStarted && (
+        <GettingStarted cases={cases.data?.items ?? []} repairing={active.some((j) => j.kind === "repair")} />
       )}
 
       <div data-tour="tiles" className="grid grid-cols-1 gap-4 rounded-xl sm:grid-cols-2 xl:grid-cols-4">
@@ -197,8 +350,14 @@ export function Overview() {
             <TableSkeleton rows={4} cols={2} />
           ) : repairs.isError && repairItems.length === 0 ? (
             <EmptyState icon={Wrench} title="The repair runs didn't load" />
+          ) : noRuns && gettingStarted ? (
+            // Getting started, at the top of the page, has the steps to the first run and its command: not again here.
+            <EmptyState icon={Wrench} title="No repair runs yet">
+              Each repair shows here when it finishes, with its verdict and its report.
+            </EmptyState>
           ) : noRuns ? (
-            // The first step, where you look for your runs: the command card at the bottom of the page gives way to it.
+            // The first step, where you look for your runs, when Getting started doesn't show (the cases didn't load):
+            // the command card at the bottom of the page gives way to it.
             <EmptyState icon={Wrench} title="No repair runs yet"
               action={<CopyCommand command={REPAIR_COMMAND} className="max-w-full text-left" />}>
               Repair a copy of one of{" "}
@@ -238,8 +397,8 @@ export function Overview() {
         </Card>
       </div>
 
-      {/* Once the runs are known, or didn't load: an engine with none has the command in its empty list instead, so
-          showing the card while they load would show it and then take it away again. */}
+      {/* Once the runs are known, or didn't load: an engine with none has the command in Getting started or its empty
+          list instead, so showing the card while they load would show it and then take it away again. */}
       {!repairs.isPending && !noRuns && (
         <Card className="mt-6 flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
           <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary-soft text-primary">

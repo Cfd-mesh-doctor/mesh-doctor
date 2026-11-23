@@ -245,14 +245,16 @@ test("before anything has run, the Overview and Jobs say how to start: the engin
   await expect(main.getByText("None yet", { exact: true })).toBeVisible(); // the tile: not "0 improved, none worse"
   // and not "0 jobs on record"
   await expect(main.locator("section", { hasText: "Active jobs" }).getByText("No jobs yet", { exact: true })).toBeVisible();
-  const copy = main.getByRole("button", { name: "Copy “meshdoctor full <case> <name>”" });
-  await expect(copy).toHaveCount(1); // the card at the bottom gives way to the empty list's own
-  await expect(copy).toBeVisible();
+  // Getting started: the engine answers and has cases, so the step to do next is the first case's repair, filled in.
+  const start = main.getByRole("region", { name: "Getting started" });
+  await expect(start).toContainText("2 of 3 done");
+  await expect(main.getByRole("button", { name: /^Copy “meshdoctor full/ })).toHaveCount(1); // the others give way to it
+  await expect(start.getByRole("button", { name: "Copy “meshdoctor full wing wing-fix”" })).toBeVisible();
   await expect(main.getByRole("heading", { name: "Start a repair" })).toHaveCount(0);
   const dashboard = main.getByRole("link", { name: "Open the engine's dashboard" });
   await expect(dashboard).toHaveAttribute("href", `${ENGINE}/meshdoctor`);
   await expect(dashboard).toHaveAttribute("target", "_blank");
-  await main.getByRole("link", { name: "your cases" }).click();
+  await start.getByRole("link", { name: "3 cases" }).click();
   await expect(page).toHaveURL(/\/app\/cases$/);
   await page.getByRole("complementary").getByRole("link", { name: "Jobs", exact: true }).click();
   await expect(main.getByRole("heading", { name: "No jobs yet" })).toBeVisible();

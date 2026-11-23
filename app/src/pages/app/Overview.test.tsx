@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEMO_ANSWERS, demoTransport } from "@/demo/transport";
 import type { Transport } from "@/engine/client";
 import { EngineError } from "@/engine/errors";
+import { IDLE_POLL_MS } from "@/engine/hooks";
 import { savePairing } from "@/engine/pairing";
-import type { JobList } from "@/engine/types";
+import type { JobList, RepairList } from "@/engine/types";
+import { DOCS } from "@/lib/site";
 import { renderScreen } from "@/test/render";
 import { Overview } from "./Overview";
 
@@ -53,8 +55,10 @@ describe("the Overview's recent jobs", () => {
 });
 
 /** Opens the Overview of your own engine, paired, before anything has run on it (or with these repair runs; null: the
- * runs never come); `failing` lists the lists it fails to answer. */
-function ownEngine(failing: string[] = [], runs: unknown[] | null = []) {
+ * runs never come; and with these cases and jobs, none by default: it answers with the cases as they are then);
+ * `failing` lists the lists it fails to answer. */
+function ownEngine(failing: string[] = [], runs: unknown[] | null = [],
+  { cases = [], jobs = [] }: { cases?: string[]; jobs?: unknown[] } = {}) {
   savePairing({ engine: "http://localhost:8765", key: "TestKey_0123456789abcdefghijklmnopqrstuvwxy", paired: "2026-11-22T12:00:00Z" });
   const asked: string[] = [];
   const transport: Transport = {
@@ -66,7 +70,8 @@ function ownEngine(failing: string[] = [], runs: unknown[] | null = []) {
       if (failing.includes(route)) throw new EngineError("unreachable", "nothing answered");
       if (route === "/") return { apiVersion: "1.0", version: "0.1.0", jobKinds: ["repair"] } as T;
       if (route === "/repairs") return runs ? ({ items: runs } as T) : new Promise<T>(() => {});
-      if (route === "/jobs" || route === "/cases") return { items: [] } as T;
+      if (route === "/cases") return { items: [...cases] } as T;
+      if (route === "/jobs") return { items: jobs } as T;
       throw new EngineError("not-found", `no route ${route}`, 404);
     },
   };
@@ -80,15 +85,17 @@ const saysBlanks = (el: Element | null): boolean => (el?.textContent ?? "").incl
 const blanksSaid = () => screen.queryAllByText((_, el) => saysBlanks(el) && !Array.from(el!.children).some(saysBlanks));
 
 describe("the Overview before anything has run", () => {
-  it("says how to start: the jobs card opens the engine's own dashboard, the repair runs card gives the command", async () => {
+  it("says how to start: Getting started gives the steps, the jobs card opens the engine's own dashboard", async () => {
     ownEngine();
     const dashboard = await screen.findByRole("link", { name: "Open the engine's dashboard" });
     expect(dashboard).toHaveAttribute("href", "http://localhost:8765/meshdoctor");
     expect(dashboard).toHaveAttribute("target", "_blank");
-    expect(await screen.findByRole("heading", { name: "No repair runs yet" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "your cases" })).toHaveAttribute("href", "/app/cases");
-    // The command is on the page once: in the empty list, where the card at the bottom of the page gives way to it.
-    expect(screen.getAllByRole("button", { name: COPY_REPAIR })).toHaveLength(1);
+    expect(await screen.findByRole("region", { name: "Getting started" })).toBeInTheDocument();
+    // The empty list of runs says what will show in it: Getting started, at the top, has the steps to the first.
+    expect(screen.getByRole("heading", { name: "No repair runs yet" }).parentElement)
+      .toHaveTextContent("Each repair shows here when it finishes, with its verdict and its report.");
+    // With no case yet there is nothing to repair: no command, in the list or in a card at the bottom of the page.
+    expect(screen.queryAllByRole("button", { name: /^Copy “meshdoctor full/ })).toHaveLength(0);
     expect(screen.queryByRole("heading", { name: "Start a repair" })).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull(); // everything loaded
     expect(screen.getByText("API 1.0 · 1 job kind")).toBeInTheDocument(); // one kind of job: not "1 job kinds"
@@ -98,15 +105,27 @@ describe("the Overview before anything has run", () => {
     // No runs: the tile says so, rather than "0 improved, none worse".
     expect(screen.getByText("None yet")).toBeInTheDocument();
     expect(screen.queryByText(/improved/)).toBeNull();
+    // No jobs at all: the Active jobs tile says so too, rather than "0 jobs on record".
+    expect(within(screen.getByText("Active jobs").closest("section")!).getByText("No jobs yet")).toBeInTheDocument();
+    expect(screen.queryByText(/on record/)).toBeNull();
+  });
+
+  it("without its cases, keeps the command in the empty list of runs, saying what goes in its blanks", async () => {
+    ownEngine(["/cases"]);
+    expect(await screen.findByRole("heading", { name: "No repair runs yet" })).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toBeInTheDocument(); // the cases didn't load
+    // A list that didn't load isn't empty: Getting started can't say whether a case is there, so it doesn't show.
+    expect(screen.queryByRole("region", { name: "Getting started" })).toBeNull();
+    expect(screen.getByRole("link", { name: "your cases" })).toHaveAttribute("href", "/app/cases");
+    // The command is on the page once: in the empty list, where the card at the bottom of the page gives way to it.
+    expect(screen.getAllByRole("button", { name: COPY_REPAIR })).toHaveLength(1);
+    expect(screen.queryByRole("heading", { name: "Start a repair" })).toBeNull();
     // The empty list says what goes in the command's blanks, next to it.
     expect(blanksSaid()).toHaveLength(1);
     expect(blanksSaid()[0]).toHaveTextContent(/^Repair a copy of one of your cases with this in a WSL or Linux terminal \(putting/);
     // ...and that each case has its own command on the Cases screen, which is easier.
     expect(blanksSaid()[0]).toHaveTextContent(/On the Cases screen, each case has its own, with the names filled in\.$/);
     expect(screen.getByRole("link", { name: "Cases screen" })).toHaveAttribute("href", "/app/cases");
-    // No jobs at all: the Active jobs tile says so too, rather than "0 jobs on record".
-    expect(within(screen.getByText("Active jobs").closest("section")!).getByText("No jobs yet")).toBeInTheDocument();
-    expect(screen.queryByText(/on record/)).toBeNull();
   });
 
   it("doesn't call a list that didn't load empty, or offer first steps for it", async () => {
@@ -140,6 +159,8 @@ describe("the Overview before anything has run", () => {
     // While the runs load, neither the card nor the empty list's command shows: one of them will, once they're known.
     expect(screen.queryByRole("heading", { name: "Start a repair" })).toBeNull();
     expect(screen.queryAllByRole("button", { name: COPY_REPAIR })).toHaveLength(0);
+    // Nor Getting started, which shows only once the engine has said it has no runs.
+    expect(screen.queryByRole("region", { name: "Getting started" })).toBeNull();
   });
 
   it("says “No verdict”, in words, for a run with no verdict and no step under way", async () => {
@@ -187,5 +208,116 @@ describe("the Overview once something has run", () => {
     // With a run, the tile counts the verdicts, even when none is in yet.
     expect(screen.getByText("0 improved, none worse")).toBeInTheDocument();
     expect(screen.queryByText("None yet")).toBeNull();
+  });
+});
+
+describe("the Overview's Getting started", () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  /** The three steps, in order. */
+  const steps = async () => {
+    const list = within(await screen.findByRole("region", { name: "Getting started" })).getAllByRole("listitem");
+    expect(list).toHaveLength(3);
+    return list as [HTMLElement, HTMLElement, HTMLElement];
+  };
+  const progress = () => screen.getByRole("region", { name: "Getting started" });
+  /** A repair job, waiting its turn. */
+  const queued = { schemaVersion: "1.0", id: "20261123-060000-repair-wing-fix-0001", kind: "repair",
+    params: { source: "wing", name: "wing-fix" }, name: "wing-fix", state: "queued", runner: "local",
+    created: "2026-11-23T06:00:00Z", log: "wing-fix.log" };
+
+  it("with no case yet, ticks off the engine and gives the README's First run as the step to do next", async () => {
+    ownEngine();
+    const [engine, aCase, repair] = await steps();
+    expect(progress()).toHaveTextContent("1 of 3 done");
+    expect(within(engine).getByRole("heading", { name: "Connect to the engine" })).toBeInTheDocument();
+    expect(within(engine).getByText("Done")).toBeInTheDocument();
+    expect(engine).toHaveTextContent("Mesh Doctor is running on this computer, and this browser is paired with it.");
+    // The step to do next says so, in words and to screen readers.
+    expect(aCase).toHaveAttribute("aria-current", "step");
+    expect(within(aCase).getByText("Next")).toBeInTheDocument();
+    expect(aCase).toHaveTextContent(
+      "None found yet. The README's First run sets up OpenFOAM's motorBike tutorial in $FOAM_RUN, where the engine looks.");
+    const firstRun = within(aCase).getByRole("link", { name: "First run" });
+    expect(firstRun).toHaveAttribute("href", DOCS.firstRun);
+    expect(firstRun).toHaveAttribute("target", "_blank");
+    expect(within(aCase).getByRole("link", { name: "Cases screen" })).toHaveAttribute("href", "/app/cases");
+    // The repair waits for a case: no label, and nothing to copy yet.
+    expect(repair).not.toHaveAttribute("aria-current");
+    expect(repair).toHaveTextContent("Then one command repairs a copy of it, never the case itself.");
+    expect(within(repair).queryByText(/^(Done|Next|Running)$/)).toBeNull();
+    expect(within(progress()).queryAllByRole("button")).toHaveLength(0);
+  });
+
+  it("with a case, ticks that off too and gives its repair command, with the names filled in", async () => {
+    ownEngine([], [], { cases: ["motorBike"] });
+    const [, aCase, repair] = await steps();
+    expect(progress()).toHaveTextContent("2 of 3 done");
+    expect(within(aCase).getByText("Done")).toBeInTheDocument();
+    expect(within(aCase).getByRole("link", { name: "1 case" })).toHaveAttribute("href", "/app/cases");
+    expect(repair).toHaveAttribute("aria-current", "step");
+    expect(within(repair).getByText("Next")).toBeInTheDocument();
+    expect(within(repair).getByRole("button", { name: "Copy “meshdoctor full motorBike motorBike-fix”" })).toBeInTheDocument();
+    expect(repair).toHaveTextContent(
+      "Run this in a WSL or Linux terminal. It repairs a copy of motorBike, never the case itself, and the run shows here when it finishes.");
+    expect(within(repair).queryByRole("link", { name: "Cases screen" })).toBeNull(); // one case: no others to point to
+    // The command is on the page once: the empty list of runs doesn't give it again.
+    expect(screen.getAllByRole("button", { name: /^Copy “meshdoctor full/ })).toHaveLength(1);
+  });
+
+  it("with several cases, gives the first command that needs no blanks, and points to the others' on the Cases screen", async () => {
+    ownEngine([], [], { cases: ["my wing", "wing", "body"] });
+    const [, aCase, repair] = await steps();
+    expect(within(aCase).getByRole("link", { name: "3 cases" })).toHaveAttribute("href", "/app/cases");
+    // "my wing" isn't a plain folder name, so it has no command of its own: the next case's is given.
+    expect(within(repair).getByRole("button", { name: "Copy “meshdoctor full wing wing-fix”" })).toBeInTheDocument();
+    expect(repair).toHaveTextContent("Each other case has its own command on the Cases screen.");
+    expect(within(repair).getByRole("link", { name: "Cases screen" })).toHaveAttribute("href", "/app/cases");
+  });
+
+  it("with no case the engine finds by its name alone, gives the command with its blanks, said in words", async () => {
+    ownEngine([], [], { cases: ["my wing"] });
+    const [, , repair] = await steps();
+    expect(within(repair).getByRole("button", { name: COPY_REPAIR })).toBeInTheDocument();
+    expect(blanksSaid()).toHaveLength(1);
+    expect(repair).toContainElement(blanksSaid()[0]!);
+  });
+
+  it("says a repair is under way while one waits or runs, with no command to start another", async () => {
+    ownEngine([], [], { cases: ["wing"], jobs: [queued] });
+    const [, , repair] = await steps();
+    expect(progress()).toHaveTextContent("2 of 3 done");
+    expect(within(repair).getByText("Running")).toBeInTheDocument();
+    expect(repair).not.toHaveAttribute("aria-current");
+    expect(repair).toHaveTextContent("A repair is under way, and shows here when it finishes. Its progress is on the Jobs screen.");
+    expect(within(repair).getByRole("link", { name: "Jobs screen" })).toHaveAttribute("href", "/app/jobs?show=active");
+    expect(within(repair).queryAllByRole("button")).toHaveLength(0);
+  });
+
+  it("ticks off a first case by itself: while the engine has none, the app asks again every 15 s", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const cases: string[] = [];
+    ownEngine([], [], { cases });
+    await steps();
+    expect(progress()).toHaveTextContent("1 of 3 done");
+    cases.push("motorBike"); // the README's First run, say
+    await act(async () => { await vi.advanceTimersByTimeAsync(IDLE_POLL_MS); });
+    await waitFor(() => expect(progress()).toHaveTextContent("2 of 3 done"));
+    expect(screen.getByRole("button", { name: "Copy “meshdoctor full motorBike motorBike-fix”" })).toBeInTheDocument();
+  });
+
+  it("goes once a repair run is listed", async () => {
+    ownEngine([], [{ name: "wing-fix", finished: "2026-11-21 12:05:00", nCells: 1000, profile: "medium", source: "wing", status: {}, verdict: null }],
+      { cases: ["wing"] });
+    expect(await screen.findByText("wing-fix")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Getting started" })).toBeNull();
+  });
+
+  it("isn't in the demo, even with no runs: its engine is a recording, with no steps of yours to tick off", async () => {
+    const answers = structuredClone(DEMO_ANSWERS);
+    (answers["/repairs"] as RepairList).items = [];
+    open(answers);
+    expect(await screen.findByRole("heading", { name: "No repair runs yet" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Getting started" })).toBeNull();
   });
 });
