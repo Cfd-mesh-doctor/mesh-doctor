@@ -236,7 +236,8 @@ export function HowItWorks() {
                 <strong>same setup</strong>: one with the original mesh, one with the repaired points. It solves both
                 with <code>foamRun</code> for <code>--iters</code> iterations on <code>--np</code> cores. Both runs get
                 the same split across cores (scotch, which depends only on the mesh connectivity), so the only
-                difference is where the points are.
+                difference is where the points are. A case without a <code>system/decomposeParDict</code> (one you
+                run in serial) gets one in both copies.
               </p>
               <p>Its <code>ab_result.json</code> holds, for both runs:</p>
               <ul className={list}>

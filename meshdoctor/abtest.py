@@ -28,7 +28,8 @@ identical too; only the point positions differ.
 Writes <workspace>/<fixedName>_ab/ab_result.json with residual levels, force
 means/oscillation and seconds per iteration for both runs, plus a checksum
 proving the source case was only read.  <workspace> comes from config.py.
-Serial-mesh sources only (the root polyMesh must be the real mesh).
+Serial-mesh sources only (the root polyMesh must be the real mesh). A case without a
+system/decomposeParDict (run in serial) gets a scotch one in both copies.
 """
 import bisect, gzip, json, os, re, shutil, statistics, subprocess, sys, time
 
@@ -64,6 +65,23 @@ def status(top, **kw):
     json.dump(kw, open(os.path.join(top, "ab_status.json"), "w"))
 
 
+# The decomposition a case run in serial gets in its copies: the A/B test solves in parallel, and run_one sets the
+# rank count (scotch splits by mesh topology only, so both copies get the same split).
+DECOMPOSE_PAR_DICT = """FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      decomposeParDict;
+}
+
+// Written by Mesh Doctor's A/B test: the case has no decomposeParDict.
+
+numberOfSubdomains 1;
+decomposer      scotch;
+"""
+
+
 def make_case(src, dst, init, points=None):
     if os.path.exists(dst):
         shutil.rmtree(dst)
@@ -73,6 +91,10 @@ def make_case(src, dst, init, points=None):
     shutil.copytree(os.path.join(src, init), os.path.join(dst, "0"))
     if points:
         shutil.copy2(points, os.path.join(dst, "constant/polyMesh/points"))
+    dpd = os.path.join(dst, "system", "decomposeParDict")
+    if not os.path.isfile(dpd):                # a case run in serial has none: these runs are parallel
+        with open(dpd, "w") as f:
+            f.write(DECOMPOSE_PAR_DICT)
     open(os.path.join(dst, ".meshDoctorCopy"), "w").write(src + "\n")
 
 

@@ -55,7 +55,7 @@ Some faces cannot be fixed by moving points, typically inverted pyramids squeeze
 
 ## 4. Did it help? The A/B test
 
-`meshdoctor ab <case> <name>` makes two copies of your case with the **same setup**: one with the original mesh, one with the points from `<workspace>/<name>`. It solves both with `foamRun` for `--iters` iterations on `--np` cores. Both runs get the same split across cores (scotch, which depends only on the mesh connectivity), so the only difference is where the points are.
+`meshdoctor ab <case> <name>` makes two copies of your case with the **same setup**: one with the original mesh, one with the points from `<workspace>/<name>`. It solves both with `foamRun` for `--iters` iterations on `--np` cores. Both runs get the same split across cores (scotch, which depends only on the mesh connectivity), so the only difference is where the points are. A case without a `system/decomposeParDict` (one you run in serial) gets one in both copies.
 
 It writes `<workspace>/<name>_ab/ab_result.json` with, for both runs:
 - residual levels, and the ratio repaired / original for each field (below 1 means the repaired mesh converges further);

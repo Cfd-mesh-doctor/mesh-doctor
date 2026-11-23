@@ -137,6 +137,38 @@ class StartFieldsTest(unittest.TestCase):
         self.assertFalse(os.path.exists(work))
 
 
+
+class AbCopyTest(unittest.TestCase):
+    """The A/B test's copies of a case: a case run in serial gets a decomposeParDict, in the copies only."""
+
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp(prefix="md_abcopy_"))
+        self.addCleanup(shutil.rmtree, self.tmp)
+        self.src = os.path.join(self.tmp, "case")
+        for d in ("system", os.path.join("constant", "polyMesh"), "0"):
+            os.makedirs(os.path.join(self.src, d))
+        with open(os.path.join(self.src, "system", "controlDict"), "w") as f:
+            f.write("application foamRun;")
+
+    def copy(self, tag):
+        """The decomposeParDict of the copy made as tag."""
+        dst = os.path.join(self.tmp, tag)
+        abtest.make_case(self.src, dst, "0")
+        with open(os.path.join(dst, "system", "decomposeParDict")) as f:
+            return f.read()
+
+    def test_a_case_run_in_serial_gets_a_scotch_decomposition_in_the_copies_only(self):
+        text = self.copy("base")
+        self.assertIn("object      decomposeParDict;", text)
+        self.assertIn("decomposer      scotch;", text)
+        self.assertFalse(os.path.exists(os.path.join(self.src, "system", "decomposeParDict")))
+
+    def test_a_case_s_own_decomposition_is_kept(self):
+        with open(os.path.join(self.src, "system", "decomposeParDict"), "w") as f:
+            f.write("numberOfSubdomains 6; decomposer hierarchical;")
+        self.assertEqual(self.copy("fixed"), "numberOfSubdomains 6; decomposer hierarchical;")
+
+
 def write_steady_run(d, n, p_of, drag_of):
     """A synthetic steady run in folder d: log.foamRun with p residuals, a forces file."""
     os.makedirs(os.path.join(d, "0"), exist_ok=True)
