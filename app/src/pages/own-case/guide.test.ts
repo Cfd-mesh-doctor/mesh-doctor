@@ -21,6 +21,12 @@ describe("the Your own case page's text", () => {
     ]);
   });
 
+  it("says that ./Allrun in your case solves the original mesh, and how to solve the repaired one", () => {
+    const text = GUIDE.find((s) => s.id === "after-meshing")?.blocks.map((b) => ("text" in b ? b.text : "")).join(" ");
+    expect(text).toContain("so `./Allrun <ranks> <iterations>` in your case solves the original mesh");
+    expect(text).toContain("`meshdoctor ab extend <workspace>/<name>_ab <iterations>` continues the repaired run");
+  });
+
   it("links only to docs the repository has", () => {
     for (const [, target] of JSON.stringify(GUIDE).matchAll(/\]\(([^)#\s]+)/g)) expect(docNames()).toContain(target);
   });
