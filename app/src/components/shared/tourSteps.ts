@@ -41,7 +41,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
   },
   {
     title: "Reports: did the repair help?",
-    text: "A report opens with its verdict. Below it are the checkMesh numbers before and after the repair, and where the mesh was repaired. When the repaired mesh was also run in the solver, it says whether the solver did better.",
+    text: "A report opens with its verdict. Below it are the checkMesh numbers before and after the repair, and where the mesh was repaired. When the repaired mesh was also run in the solver, it says whether the solver did better; if not, your own engine's report gives the command for that test.",
     // A repair that made the mesh better, so its report has something to show: the numbers it improved, and where.
     page: "/repairs/ahmed35-medium-fix/report",
     spot: "verdict",

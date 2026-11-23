@@ -35,6 +35,11 @@ describe("the app tour", () => {
     expect(cases.text).toMatch(/To repair one, copy its repair command and run it in WSL\.$/);
   });
 
+  it("says, at a report, that your own engine's report gives the solver test's command when it has none", () => {
+    const reports = TOUR_STEPS.find((s) => s.spot === "verdict")!;
+    expect(reports.text).toMatch(/if not, your own engine's report gives the command for that test\.$/);
+  });
+
   it("steps through with Enter and back again, then hands the focus back when done", async () => {
     const user = userEvent.setup();
     show();
