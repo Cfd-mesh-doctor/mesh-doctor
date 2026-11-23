@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The source cases the engine may read, with what has been done to each so far, the report of each one's latest
-// finished repair, the size estimate for its mesh, and the command that repairs it. What's typed in the filter box
+// finished repair, the size estimate for its mesh, a Repair button that starts a repair of a copy of it (its dialog
+// is in StartRepair.tsx), and the command that does the same in a terminal. What's typed in the filter box
 // stays in the address (?q=), as in the site's other search boxes, so a reload or a link keeps it.
-import { Check, Copy, FolderOpen, Search } from "lucide-react";
-import { useMemo } from "react";
+import { Check, Copy, FolderOpen, Search, Wrench } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { CopyBlock } from "@/components/shared/CopyBlock";
 import { CopyCommand } from "@/components/shared/CopyCommand";
-import { DashboardLink } from "@/components/shared/DashboardLink";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { VerdictBadge } from "@/components/shared/badges";
@@ -28,6 +28,7 @@ import { useCopy } from "@/lib/useCopy";
 import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
 import { FIRST_RUN_SETUP } from "@/pages/install/commands";
+import { StartRepairDialog } from "./StartRepair";
 
 interface Row {
   name: string;
@@ -73,7 +74,7 @@ function CopyRepairCommand({ command }: { command: string }) {
         type="button"
         onClick={() => void copy(command)}
         aria-label={copied ? "Copied" : `Copy repair command: ${command}`}
-        className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-primary underline-offset-4 hover:underline"
+        className="inline-flex items-center gap-1 text-xs font-medium text-primary underline-offset-4 hover:underline"
       >
         {copied ? <Check className="size-3.5 shrink-0 text-success" aria-hidden /> : <Copy className="size-3.5 shrink-0" aria-hidden />}
         {/* Both words take the same room, so the table doesn't shift while it says "Copied". */}
@@ -90,6 +91,8 @@ export function Cases() {
   useTitle("Cases");
   const cases = useCases();
   const repairs = useRepairs();
+  // The case whose repair dialog is open, if any.
+  const [repairing, setRepairing] = useState<string | null>(null);
   const [params, setParams] = useSearchParams();
   const query = params.get("q") ?? "";
   const setQuery = (q: string) => setParams(q ? { q } : {}, ADDRESS_FIELD);
@@ -128,8 +131,8 @@ export function Cases() {
         description={
           <>
             OpenFOAM cases in the engine's cases folder. Mesh Doctor only ever reads them: every repair works on a copy.
-            To repair one, copy its repair command and run it in a WSL or Linux terminal, or start it from{" "}
-            <DashboardLink />: the run shows up here when it finishes.
+            To repair one, press Repair under its name and follow the job on the Jobs screen, or copy its repair command
+            and run it in a WSL or Linux terminal. The run shows up here when it finishes.
           </>
         }
       />
@@ -230,7 +233,20 @@ export function Cases() {
                             {cellsField(r.cells) && <> · <EstimateLink name={r.name} cells={r.cells} /></>}
                           </div>
                         )}
-                        {r.command && <CopyRepairCommand command={r.command} />}
+                        {r.command && (
+                          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <button
+                              type="button"
+                              onClick={() => setRepairing(r.name)}
+                              aria-label={`Repair ${r.name}`}
+                              className="inline-flex items-center gap-1 text-xs font-medium text-primary underline-offset-4 hover:underline"
+                            >
+                              <Wrench className="size-3.5 shrink-0" aria-hidden />
+                              Repair
+                            </button>
+                            <CopyRepairCommand command={r.command} />
+                          </div>
+                        )}
                       </div>
                     </div>
                   </TD>
@@ -263,6 +279,7 @@ export function Cases() {
           </Table>
         )}
       </Card>
+      <StartRepairDialog open={repairing !== null} onOpenChange={(o) => { if (!o) setRepairing(null); }} source={repairing} />
     </>
   );
 }

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Every repair run in the engine's workspace, newest first: its case, size, limits and verdict, its report once it
-// has finished, and the job of a run the engine is making. The filter lives in the address (?show=worse), so a
-// reload or a link keeps it.
+// has finished, and the job of a run the engine is making; New repair starts one (StartRepair.tsx). The filter lives
+// in the address (?show=worse), so a reload or a link keeps it.
 import { FolderOpen, Wrench } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { JobStateBadge, VerdictBadge } from "@/components/shared/badges";
@@ -18,27 +18,31 @@ import { caseName, newestFirst, runStep, runUpdated } from "@/engine/verdict";
 import { formatCells, formatDateTime, formatRelative } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
 import { RUN_FILTERS, jobOf, runGroup, runLink, shownJobState, type RunFilter } from "./runs";
+import { StartRepairDialog } from "./StartRepair";
 
 /** The limits a run's checkMesh used, named as the engine's dashboard names them. */
 const LIMITS: Record<string, string> = { openfoam: "OpenFOAM's", strict: "Strict" };
 
 const LINK = "font-medium text-primary underline-offset-4 hover:underline";
 
-/** No run yet: where one starts. Each case on the Cases screen has its own repair command, names filled in. */
-function NoRunsYet() {
+/** No run yet: where one starts. Each case on the Cases screen has its own Repair button and repair command. */
+function NoRunsYet({ onStart }: { onStart: () => void }) {
   const to = useAppPath();
   return (
     <EmptyState
       icon={Wrench}
       title="No repair runs yet"
       action={(
-        <Button variant="secondary" size="sm" asChild>
-          <Link to={to("/cases")}><FolderOpen aria-hidden /> Go to your cases</Link>
-        </Button>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button size="sm" onClick={onStart}><Wrench aria-hidden /> Start a repair</Button>
+          <Button variant="secondary" size="sm" asChild>
+            <Link to={to("/cases")}><FolderOpen aria-hidden /> Go to your cases</Link>
+          </Button>
+        </div>
       )}
     >
-      Each case on the Cases screen has the command that repairs a copy of it, to run in a WSL or Linux terminal. The
-      run shows here once its copy is made, and its verdict and report when it finishes.
+      Start one here, or from its case on the Cases screen, which also gives the command that does the same in a WSL
+      or Linux terminal. The run shows here once its copy is made, and its verdict and report when it finishes.
     </EmptyState>
   );
 }
@@ -48,6 +52,7 @@ export function Repairs() {
   const to = useAppPath();
   const repairs = useRepairs();
   const jobs = useJobs();
+  const [starting, setStarting] = useState(false);
   // No filter, or a word the page doesn't know, shows every run.
   const [params, setParams] = useSearchParams();
   const filter: RunFilter = RUN_FILTERS.find((f) => f === params.get("show")) ?? "all";
@@ -81,16 +86,19 @@ export function Repairs() {
         description={
           <>
             Every repair run, newest first. A repair works on a copy of a case, so the case itself is never changed;
-            its verdict compares checkMesh before and after. Each case&apos;s repair command is on the{" "}
+            its verdict compares checkMesh before and after. Start one with New repair, or from its case on the{" "}
             <Link to={to("/cases")} className={LINK}>Cases screen</Link>.
           </>
         }
         actions={
-          repairs.data && (
-            <span className="text-[13px] text-muted-foreground">
-              Updated {formatRelative(new Date(repairs.dataUpdatedAt).toISOString())}
-            </span>
-          )
+          <>
+            {repairs.data && (
+              <span className="text-[13px] text-muted-foreground">
+                Updated {formatRelative(new Date(repairs.dataUpdatedAt).toISOString())}
+              </span>
+            )}
+            <Button size="sm" onClick={() => setStarting(true)}><Wrench aria-hidden /> New repair</Button>
+          </>
         }
       />
       {repairs.isError && (
@@ -117,7 +125,7 @@ export function Repairs() {
           <TableSkeleton rows={5} cols={4} />
         ) : !items.length ? (
           // A list that didn't load isn't empty: the message above says why, and no first step is offered.
-          repairs.isError ? <EmptyState icon={Wrench} title="The repair runs didn't load" /> : <NoRunsYet />
+          repairs.isError ? <EmptyState icon={Wrench} title="The repair runs didn't load" /> : <NoRunsYet onStart={() => setStarting(true)} />
         ) : shown.length === 0 ? (
           <EmptyState icon={Wrench} title="No repair runs in this view">Pick another filter to see the rest.</EmptyState>
         ) : (
@@ -180,6 +188,7 @@ export function Repairs() {
           </Table>
         )}
       </Card>
+      <StartRepairDialog open={starting} onOpenChange={setStarting} />
     </>
   );
 }

@@ -30,9 +30,9 @@ const last = TOUR_STEPS.length - 1;
 const ringed = () => [...document.querySelectorAll("[data-tour-spot]")].map((el) => el.getAttribute("data-tour"));
 
 describe("the app tour", () => {
-  it("says, at the Cases screen, how to repair a case: copy its command and run it in a WSL or Linux terminal", () => {
+  it("says, at the Cases screen, how to repair a case: its Repair button, or its command in a WSL or Linux terminal", () => {
     const cases = TOUR_STEPS.find((s) => s.spot === "cases")!;
-    expect(cases.text).toMatch(/To repair one, copy its repair command and run it in a WSL or Linux terminal\.$/);
+    expect(cases.text).toMatch(/To repair one, press Repair under its name, or copy its repair command and run it in a WSL or Linux terminal\.$/);
   });
 
   it("says, at a report, that your own engine's report gives the solver test's command when it has none", () => {

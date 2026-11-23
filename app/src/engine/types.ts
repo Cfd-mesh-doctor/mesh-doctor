@@ -18,6 +18,8 @@ export type Job = components["schemas"]["Job"];
 export type JobState = Job["state"];
 export type JobKind = Job["kind"];
 export type ApiErrorCode = components["schemas"]["Error"]["error"]["code"];
+/** What POST /jobs takes: a repair, an A/B test or an A/B extension, with its params. */
+export type JobRequest = Json<operations["start_job"]["requestBody"]>;
 
 /** The API major version this app speaks; the engine reports major.minor and any 1.x works. */
 export const API_MAJOR = 1;

@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The size estimator inside the app: the public page's form, with the memory and the solver ranks of the computer
 // the engine runs on filled in (GET /machine). An engine too old to say keeps the example's values, and says so.
-import { skipToken, useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/shared/page";
 import { Card } from "@/components/ui/card";
-import { api } from "@/engine/client";
 import { useEngine } from "@/engine/context";
 import { asEngineError } from "@/engine/errors";
+import { useMachine } from "@/engine/hooks";
 import { DEFAULTS } from "@/estimate/estimate";
 import { machineFields } from "@/estimate/machine";
 import { formatInt } from "@/lib/format";
@@ -18,12 +17,8 @@ const KEEPS = "The address keeps your changes, and Copy link gives a link to thi
 
 export function Estimator() {
   useTitle("Size estimator");
-  const { transport, mode } = useEngine();
-  const machine = useQuery({
-    queryKey: [transport?.scope, "machine"],
-    queryFn: transport ? ({ signal }) => api.machine(transport, signal) : skipToken,
-    staleTime: 5 * 60_000,
-  });
+  const { mode } = useEngine();
+  const machine = useMachine();
   const fields = machine.data ? machineFields(machine.data) : {};
   const known = [
     fields.ram !== undefined && `${fields.ram} GB of memory${fields.limited ? " (its RAM limit)" : ""}`,

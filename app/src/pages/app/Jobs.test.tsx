@@ -182,7 +182,9 @@ describe("the Jobs screen before any job has run", () => {
   it("says where jobs start, and opens the engine's own dashboard in a new tab", async () => {
     ownEngine();
     expect(await screen.findByRole("heading", { name: "No jobs yet" })).toBeInTheDocument();
-    expect(screen.getByText(/^Repairs and A\/B tests started from the engine's own dashboard show here/)).toBeInTheDocument();
+    expect(screen.getByText(/^Repairs started with a case's Repair button, and A\/B tests started from the engine's own dashboard, show here/))
+      .toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to your cases" })).toHaveAttribute("href", "/app/cases");
     // A repair run in a terminal (as Getting started says to) isn't a job: the list says where it shows instead.
     const empty = screen.getByRole("heading", { name: "No jobs yet" }).parentElement!;
     expect(empty).toHaveTextContent("A repair run in a terminal isn't a job: it shows under Repair runs on the Overview once its copy is made.");
@@ -216,7 +218,7 @@ describe("the Jobs screen once jobs have run", () => {
   it("names the dashboard without linking it in the demo, which has no engine of its own", async () => {
     open(path);
     // The description, with the Overview's link in it.
-    expect(await screen.findByText((_, el) => el?.tagName === "P" && /They start from the engine's dashboard; a repair run in a terminal shows on the Overview instead\. Only one big job runs at a time/.test(el.textContent ?? ""))).toBeInTheDocument();
+    expect(await screen.findByText((_, el) => el?.tagName === "P" && /Repairs start from the Cases and Repairs screens, A\/B tests from the engine's dashboard for now; a repair run in a terminal shows on the Overview instead\. Only one big job runs at a time/.test(el.textContent ?? ""))).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute("href", "/demo"); // the demo's own
     expect(screen.queryByRole("link", { name: "the engine's dashboard" })).toBeNull();
   });

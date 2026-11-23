@@ -176,18 +176,16 @@ describe("the Cases screen of your own engine", () => {
     expect(within(caseRow("cyl")).getAllByRole("cell")[2]).toHaveTextContent(/^–$/);
   });
 
-  it("says how to repair a case: its command, or the engine's dashboard, linked in a new tab", async () => {
+  it("says how to repair a case: its Repair button and the Jobs screen, or its command in a terminal", async () => {
     ownEngine(["wing"]);
-    expect(await screen.findByText(/To repair one, copy its repair command and run it in a WSL or Linux terminal, or start it from/))
-      .toHaveTextContent(/start it from the engine's dashboard: the run shows up here when it finishes\.$/);
-    const dashboard = screen.getByRole("link", { name: "the engine's dashboard" });
-    expect(dashboard).toHaveAttribute("href", "http://localhost:8765/meshdoctor");
-    expect(dashboard).toHaveAttribute("target", "_blank");
+    expect(await screen.findByText(/To repair one, press Repair under its name and follow the job on the Jobs screen, or copy/))
+      .toHaveTextContent(/copy its repair command and run it in a WSL or Linux terminal\. The run shows up here when it finishes\.$/);
+    expect(await screen.findByRole("button", { name: "Repair wing" })).toBeInTheDocument();
   });
 });
 
 describe("the demo's Cases screen", () => {
-  it("gives each case its command too, and names the dashboard without linking it", async () => {
+  it("gives each case its Repair button and its command too", async () => {
     open(path);
     // The demo's runs are named ahmed25-medium-fix, pitzdaily-fix and so on: other names than these.
     expect(await screen.findByRole("button", { name: "Copy repair command: meshdoctor full pitzDaily pitzDaily-fix" }))
@@ -195,7 +193,6 @@ describe("the demo's Cases screen", () => {
     expect(within(caseRow("ahmed-25-medium")).getByRole("button", { name: COPY }))
       .toHaveAccessibleName("Copy repair command: meshdoctor full ahmed-25-medium ahmed-25-medium-fix");
     expect(screen.getAllByRole("button", { name: COPY })).toHaveLength(5);
-    expect(screen.getByText(/or start it from the engine's dashboard: the run shows up here/)).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "the engine's dashboard" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: /^Repair / })).toHaveLength(5);
   });
 });

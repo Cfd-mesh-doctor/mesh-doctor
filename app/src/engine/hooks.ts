@@ -4,7 +4,7 @@ import { QueryClient, skipToken, useMutation, useQuery, useQueryClient } from "@
 import { api } from "./client";
 import { useEngine } from "./context";
 import { asEngineError } from "./errors";
-import { isActive, type JobList } from "./types";
+import { isActive, type Job, type JobList, type JobRequest } from "./types";
 
 export function makeQueryClient(): QueryClient {
   return new QueryClient({
@@ -66,6 +66,38 @@ export function useRepairs(enabled = true) {
     queryKey: [transport?.scope, "repairs"],
     queryFn: transport && enabled ? ({ signal }) => api.repairs(transport, signal) : skipToken,
     refetchInterval: IDLE_POLL_MS,
+  });
+}
+
+/** The computer the engine runs on (API 1.1): its memory and cores, for the size estimator and the repair dialog's
+ * memory check. It hardly changes, so it's asked for again only every five minutes. */
+export function useMachine(enabled = true) {
+  const { transport } = useEngine();
+  return useQuery({
+    queryKey: [transport?.scope, "machine"],
+    queryFn: transport && enabled ? ({ signal }) => api.machine(transport, signal) : skipToken,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** Starts a job. The new job goes into the jobs list at once, so the Jobs screen can open it before the next refresh;
+ * then the jobs and the repair runs are asked for again. */
+export function useStartJob() {
+  const { transport } = useEngine();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: JobRequest) => {
+      if (!transport) throw new Error("not connected");
+      return api.startJob(transport, body);
+    },
+    onSuccess: (job: Job) => {
+      qc.setQueryData<JobList>([transport?.scope, "jobs"], (old) =>
+        old && { ...old, items: [job, ...old.items.filter((j) => j.id !== job.id)] });
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: [transport?.scope, "jobs"] });
+      void qc.invalidateQueries({ queryKey: [transport?.scope, "repairs"] });
+    },
   });
 }
 

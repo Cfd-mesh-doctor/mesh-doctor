@@ -3,7 +3,7 @@
 // the demo answers from recorded data. Screens only see a Transport, so both look the same to them.
 import { NOT_THE_ENGINE, EngineError, isEngineCode } from "./errors";
 import { localAccessState } from "./permission";
-import type { CaseList, EngineInfo, Job, JobList, MachineInfo, RepairList } from "./types";
+import type { CaseList, EngineInfo, Job, JobList, JobRequest, MachineInfo, RepairList } from "./types";
 import { API_MAJOR } from "./types";
 import type { Report } from "@/report/read";
 
@@ -98,6 +98,8 @@ export const api = {
   job: (t: Transport, id: string, signal?: AbortSignal) =>
     t.request<Job>("GET", `/jobs/${encodeURIComponent(id)}`, undefined, signal),
   cancelJob: (t: Transport, id: string) => t.request<Job>("POST", `/jobs/${encodeURIComponent(id)}/cancel`),
+  /** Starts a job; the engine answers with it, queued (202). Every job works on copies of a case. */
+  startJob: (t: Transport, body: JobRequest) => t.request<Job>("POST", "/jobs", body),
   repairs: (t: Transport, signal?: AbortSignal) => t.request<RepairList>("GET", "/repairs", undefined, signal),
   report: (t: Transport, name: string, signal?: AbortSignal) =>
     t.request<Report>("GET", `/repairs/${encodeURIComponent(name)}/report`, undefined, signal),

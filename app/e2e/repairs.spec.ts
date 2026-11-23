@@ -30,3 +30,28 @@ test("the Overview's Repair runs card leads to every run", async ({ page }) => {
   await expect(page).toHaveURL(/\/demo\/repairs$/);
   await expect(page.getByRole("heading", { name: "Repairs", level: 1 })).toBeVisible();
 });
+
+test("a case's Repair button opens the repair dialog, which in the demo gives the command instead of starting it", async ({ page }) => {
+  await page.goto("/demo/cases");
+  await page.getByRole("button", { name: "Repair pitzDaily" }).click();
+  const dialog = page.getByRole("dialog", { name: "Repair pitzDaily" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("combobox", { name: "Case" })).toHaveValue("pitzDaily");
+  await expect(dialog.getByRole("textbox", { name: "Name of the new run" })).toHaveValue("pitzDaily-fix");
+  await expect(dialog).toContainText("The demo can't start jobs.");
+  await dialog.getByRole("radio", { name: "Strict" }).click();
+  await expect(dialog.getByText("meshdoctor full pitzDaily pitzDaily-fix --profile strict")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Start repair" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("button", { name: "Repair pitzDaily" })).toBeFocused(); // back where it was opened
+});
+
+test("New repair on the Repairs screen opens the dialog with a case to pick", async ({ page }) => {
+  await page.goto("/demo/repairs");
+  await page.getByRole("button", { name: "New repair" }).click();
+  const dialog = page.getByRole("dialog", { name: "Start a repair" });
+  await dialog.getByRole("combobox", { name: "Case" }).selectOption("ahmed-35-medium");
+  await expect(dialog.getByRole("textbox", { name: "Name of the new run" })).toHaveValue("ahmed-35-medium-fix");
+  await expect(dialog.getByText("meshdoctor full ahmed-35-medium ahmed-35-medium-fix", { exact: true })).toBeVisible();
+});
