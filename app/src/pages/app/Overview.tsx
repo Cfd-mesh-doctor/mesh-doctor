@@ -12,7 +12,7 @@ import { NoJobsYet } from "@/components/shared/NoJobsYet";
 import { JobStateBadge, VerdictBadge } from "@/components/shared/badges";
 import { EmptyState, PageHeader, StatTile, TableSkeleton } from "@/components/shared/page";
 import { Badge, Dot } from "@/components/ui/badge";
-import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardTitleRow, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/misc";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
 import { repairCommand } from "@/engine/commands";
@@ -153,14 +153,14 @@ function GettingStarted({ cases, repairing }: { cases: readonly string[]; repair
   const done = steps.filter((s) => s.state === "done").length;
   return (
     <Card className="mb-6" aria-labelledby={id} data-tour="start">
-      <CardHeader>
-        <div>
+      <CardHeader className="block">
+        <CardTitleRow>
           <CardTitle id={id}>Getting started</CardTitle>
-          <CardDescription>Three steps to your first repair. Each ticks itself off once the engine lists it.</CardDescription>
-        </div>
-        <span className="shrink-0 pt-0.5 text-[13px] whitespace-nowrap text-muted-foreground">
-          {done} of {steps.length} done
-        </span>
+          <span className="shrink-0 text-[13px] whitespace-nowrap text-muted-foreground">
+            {done} of {steps.length} done
+          </span>
+        </CardTitleRow>
+        <CardDescription>Three steps to your first repair. Each ticks itself off once the engine lists it.</CardDescription>
       </CardHeader>
       <ol className="divide-y divide-border border-t border-border">
         {steps.map((s, i) => (
@@ -299,14 +299,17 @@ export function Overview() {
 
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-5">
         <Card className="xl:col-span-3">
-          <CardHeader>
-            <div>
+          <CardHeader className="block">
+            <CardTitleRow>
               <CardTitle>Recent jobs</CardTitle>
-              <CardDescription>Repairs and A/B tests, newest first</CardDescription>
-            </div>
-            <Link to={to("/jobs")} className="inline-flex items-center gap-1 text-[13px] font-medium text-primary hover:underline">
-              All jobs <ArrowRight className="size-3.5" />
-            </Link>
+              <Link
+                to={to("/jobs")}
+                className="inline-flex shrink-0 items-center gap-1 text-[13px] font-medium whitespace-nowrap text-primary hover:underline"
+              >
+                All jobs <ArrowRight className="size-3.5" />
+              </Link>
+            </CardTitleRow>
+            <CardDescription>Repairs and A/B tests, newest first</CardDescription>
           </CardHeader>
           {jobs.isPending ? (
             <TableSkeleton rows={4} cols={3} />

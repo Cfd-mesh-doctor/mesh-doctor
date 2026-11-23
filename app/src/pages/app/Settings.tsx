@@ -8,7 +8,7 @@ import { Field, PageHeader } from "@/components/shared/page";
 import { useConnection } from "@/components/layout/connection";
 import { Badge, Dot } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, CardTitleRow } from "@/components/ui/card";
 import { Dialog, DialogActions, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Segmented } from "@/components/ui/misc";
 import { useEngine, usePairing } from "@/engine/context";
@@ -33,12 +33,12 @@ function EngineCard() {
   if (mode === "demo" || !pairing) {
     return (
       <Card>
-        <CardHeader>
-          <div>
+        <CardHeader className="block">
+          <CardTitleRow>
             <CardTitle>Engine</CardTitle>
-            <CardDescription>The demo shows data recorded from a real engine. Nothing here runs.</CardDescription>
-          </div>
-          <Badge tone="info">Demo data</Badge>
+            <Badge tone="info">Demo data</Badge>
+          </CardTitleRow>
+          <CardDescription>The demo shows data recorded from a real engine. Nothing here runs.</CardDescription>
         </CardHeader>
         <CardFooter>
           <Button size="sm" asChild>
@@ -51,12 +51,12 @@ function EngineCard() {
 
   return (
     <Card>
-      <CardHeader>
-        <div>
+      <CardHeader className="block">
+        <CardTitleRow>
           <CardTitle>Engine</CardTitle>
-          <CardDescription>Mesh Doctor on this computer. This browser talks to it directly; nothing passes through the website.</CardDescription>
-        </div>
-        <Badge tone={conn.tone}><Dot tone={conn.tone} /> {conn.label}</Badge>
+          <Badge tone={conn.tone}><Dot tone={conn.tone} /> {conn.label}</Badge>
+        </CardTitleRow>
+        <CardDescription>Mesh Doctor on this computer. This browser talks to it directly; nothing passes through the website.</CardDescription>
       </CardHeader>
       <CardContent>
         <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">

@@ -10,6 +10,13 @@ export function CardHeader({ className, ...props }: ComponentProps<"div">) {
   return <div className={cn("flex items-start justify-between gap-4 px-5 pt-4 pb-3", className)} {...props} />;
 }
 
+/** A card's title and what goes beside it (a state, a count, a link), on one line. It and the description go
+ * straight in a `CardHeader className="block"`, so the description runs under both, across the card: beside the
+ * badge it was a column a few words wide on a phone. */
+export function CardTitleRow({ className, ...props }: ComponentProps<"div">) {
+  return <div className={cn("flex items-center justify-between gap-3", className)} {...props} />;
+}
+
 export function CardTitle({ className, ...props }: ComponentProps<"h2">) {
   return <h2 className={cn("text-sm font-semibold tracking-tight text-foreground", className)} {...props} />;
 }

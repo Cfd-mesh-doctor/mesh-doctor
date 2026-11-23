@@ -122,6 +122,38 @@ test("on the smallest phones your own app's screens don't scroll sideways", asyn
   }
 });
 
+test("on a phone a card's description runs across the card, under its title and what's beside it", async ({ page }) => {
+  await mockEngine(page);
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  await page.setViewportSize({ width: 320, height: 800 });
+  // Beside the state badge, Settings' Engine card once had six lines of three words or so.
+  for (const [path, title, beside, description] of [
+    ["/app/settings", "Engine", "Connected", "Mesh Doctor on this computer."],
+    ["/app", "Getting started", "of 3 done", "Three steps to your first repair."],
+    ["/app", "Recent jobs", "All jobs", "Repairs and A/B tests, newest first"],
+    ["/demo/settings", "Engine", "Demo data", "The demo shows data recorded"],
+  ] as const) {
+    await page.goto(path);
+    const card = page.locator("section", { has: page.getByRole("heading", { name: title, exact: true }) });
+    const [head, t, b, d] = await Promise.all([
+      card.locator("> div").first().evaluate((h) => {
+        const cs = getComputedStyle(h);
+        const r = h.getBoundingClientRect();
+        return { left: r.left + parseFloat(cs.paddingLeft), right: r.right - parseFloat(cs.paddingRight) };
+      }),
+      card.getByRole("heading", { name: title, exact: true }).boundingBox(),
+      card.getByText(beside).first().boundingBox(),
+      card.getByText(description).boundingBox(),
+    ]);
+    if (!t || !b || !d) throw new Error(`${title}: a part is missing`);
+    expect(Math.abs(b.y + b.height / 2 - (t.y + t.height / 2)), `${title}: "${beside}" is beside the title`).toBeLessThan(4);
+    expect(d.y, `${title}: the description is under both`).toBeGreaterThanOrEqual(Math.max(t.y + t.height, b.y + b.height) - 1);
+    expect(d.width, `${title}: the description has the card's width`).toBeGreaterThanOrEqual(head.right - head.left - 1);
+  }
+});
+
 test("on a small phone an open report fits the screen", async ({ page }) => {
   // Six A/B fields with long numbers, as a real k-omega run has: the table once widened the page. With a
   // repair map, whose canvas has to fit too.
