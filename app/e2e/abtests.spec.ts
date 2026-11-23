@@ -83,6 +83,46 @@ test("a finished test's Run longer continues its second run: in the demo, with t
   await expect(dialog.getByText("meshdoctor ab extend ahmed25-coarse-fix 1000", { exact: true })).toBeVisible();
 });
 
+/** A finished A/B test of solver settings on case wing, 200 iterations a run: the original mesh with the case's
+ * settings, then with lts'. Its residuals are made up: they fall, the second run's faster. */
+function settingsTest() {
+  const rows = (rate: number) => Array.from({ length: 200 }, (_, i) => {
+    const r = (f: number) => Number((f * Math.exp(-rate * i) * (1 + 0.2 * Math.sin(i / 4)) + 1e-5).toPrecision(4));
+    return [i + 1, r(0.6), r(0.3)];
+  });
+  return {
+    status: { step: "done", time: "2026-11-23 12:00:00" },
+    result: {
+      schemaVersion: "1.0", source: "cases/wing", fixedName: null, variant: "lts", label: "wing_lts", iters: 200, nProcs: 4,
+      init: "0", window: 50, started: "2026-11-23 11:00:00", finished: "2026-11-23 12:00:00",
+      base: { residuals: { p: { mean: 0.004, median: 0.004 }, Ux: { mean: 0.002, median: 0.002 } }, secondsPerIteration: 0.42 },
+      fixed: { residuals: { p: { mean: 0.0011, median: 0.0011 }, Ux: { mean: 0.0008, median: 0.0008 } }, secondsPerIteration: 0.47 },
+      residualRatioFixedOverBase: { p: 0.28, Ux: 0.4 },
+    },
+    live: { base: { cols: ["Time", "p", "Ux"], rows: rows(0.02) }, fixed: { cols: ["Time", "p", "Ux"], rows: rows(0.03) } },
+    modes: [],
+  };
+}
+
+test("on your own engine, a test of solver settings reads as the case's settings against the variant's", async ({ page }) => {
+  await mockEngine(page, { noJobs: true, abtests: { wing_lts: settingsTest() } });
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  await page.getByRole("complementary").getByRole("link", { name: "A/B tests" }).click();
+  const row = page.getByRole("row", { name: /wing_lts/ });
+  await expect(row).toContainText("wing · lts settings");
+  await expect(page.getByRole("columnheader", { name: "Second run ÷ first" })).toBeVisible();
+  await row.getByRole("link", { name: "wing_lts", exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/abtests\/wing_lts$/);
+  const main = page.getByRole("main");
+  await expect(main.getByRole("heading", { name: "The lts settings helped the solver" })).toBeVisible();
+  await expect(main.getByText(/^With lts settings the residuals end at 0\.33× those with the case's settings/)).toBeVisible();
+  await expect(main.getByRole("columnheader", { name: "lts ÷ case's" })).toBeVisible();
+  await expect(main.getByText("Is the run with lts settings converged?", { exact: true })).toBeVisible();
+  await expect(main.getByText(/repaired/i)).toHaveCount(0);
+});
+
 test("on your own engine, Start A/B test starts the job, whose test's page and Jobs follow it", async ({ page }) => {
   const engine = await mockEngine(page, {
     noJobs: true,

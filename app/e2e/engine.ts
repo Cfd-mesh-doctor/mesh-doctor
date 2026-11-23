@@ -25,14 +25,21 @@ export interface MockEngine {
   started: unknown[];
 }
 
+/** An A/B test as GET /abtests/{name} answers it. */
+interface AbDetail {
+  status?: { step?: string; time?: string } | null;
+  result?: { finished?: string | null; residualRatioFixedOverBase?: Record<string, number> } | null;
+}
+
 /** `repairs`: the repair runs it lists (none by default). `noJobs`: it lists no jobs (two by default). `broken`: the
  * lists it fails to give, with an error of its own (as when something goes wrong in the engine). `refuse`: the error
- * POST /jobs answers (409) instead of starting the job, as the engine's busy, memory and name checks do. */
+ * POST /jobs answers (409) instead of starting the job, as the engine's busy, memory and name checks do. `abtests`:
+ * its A/B tests (none by default), each as GET /abtests/{name} answers it; it judges each run converged. */
 export async function mockEngine(
   page: Page,
   opts: {
     down?: boolean; wrongKey?: boolean; repairs?: unknown[]; noJobs?: boolean; broken?: string[];
-    refuse?: { code: string; message: string };
+    refuse?: { code: string; message: string }; abtests?: Record<string, AbDetail>;
   } = {},
 ): Promise<MockEngine> {
   const state: MockEngine = {
@@ -69,8 +76,20 @@ export async function mockEngine(
     if (path === "/repairs") return json(200, { items: opts.repairs ?? [] });
     // A 16 GB laptop with no RAM limit (API 1.1).
     if (path === "/machine") return json(200, { cpus: 8, cores: 4, memoryMb: 16_000, ramLimitMb: null });
-    // No A/B test yet (API 1.3), and one solver-setting variant for a test's second run.
-    if (path === "/abtests") return json(200, { items: [], tests: {} });
+    // Its A/B tests (API 1.3): none unless asked, and one solver-setting variant for a test's second run.
+    const tests = opts.abtests ?? {};
+    if (path === "/abtests") {
+      return json(200, {
+        items: Object.keys(tests),
+        tests: Object.fromEntries(Object.entries(tests).map(([name, t]) => [name, {
+          step: t.status?.step ?? null, updated: t.status?.time ?? null, finished: t.result?.finished ?? null,
+          ratios: t.result?.residualRatioFixedOverBase ?? {}, verdict: null,
+        }])),
+      });
+    }
+    const ab = /^\/abtests\/([^/]+)(\/judge)?$/.exec(path);
+    const test = ab && tests[decodeURIComponent(ab[1]!)];
+    if (ab && test) return json(200, ab[2] ? { verdict: "converged", window: 50 } : test);
     if (path === "/variants") return json(200, { items: [{ name: "lts", label: "pseudo-transient local time stepping (localEuler)" }] });
     if (path === "/jobs" && req.method() === "POST") {
       const body = req.postDataJSON() as { kind: string; params: { name: string } };

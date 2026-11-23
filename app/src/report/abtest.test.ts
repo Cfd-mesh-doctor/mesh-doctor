@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import type { AbtestBrief, Job } from "@/engine/types";
 import {
-  abJobOf, abRows, abState, lastIteration, liveHistory, outcome, outcomeText, stepSide, stepText, tableRun,
+  abJobOf, abRows, abState, abWords, lastIteration, liveHistory, outcome, outcomeText, settingsOf, stepSide, stepText, tableRun,
 } from "./abtest";
 
 const job = (name: string, state: Job["state"], kind: Job["kind"] = "abtest") => ({ id: `${kind}-${name}-${state}`, kind, name, state }) as Job;
@@ -53,6 +53,52 @@ describe("an A/B test's step", () => {
   });
 });
 
+describe("an A/B test of solver settings", () => {
+  const started = (kind: Job["kind"], name: string, params: Record<string, unknown>) => ({ ...job(name, "done", kind), params }) as Job;
+
+  it("is one when its result has a variant and no repaired run; a repair's test with other settings too is the repair's", () => {
+    expect(settingsOf("wing_lts", { result: { variant: "lts", fixedName: null } })).toBe("lts");
+    expect(settingsOf("wing-fix", { result: { variant: "lts", fixedName: "wing-fix" } })).toBeNull();
+    expect(settingsOf("wing-fix", { result: { variant: null, fixedName: "wing-fix" } })).toBeNull();
+  });
+
+  it("is one its A/B job started with a variant, before it has a result; a continuation's job doesn't say", () => {
+    expect(settingsOf("wing_lts", { jobs: [started("abtest", "wing_lts", { name: "wing-fix", variant: "lts" })] })).toBe("lts");
+    expect(settingsOf("wing-fix", { jobs: [started("abtest", "wing-fix", { name: "wing-fix", variant: "" })] })).toBeNull();
+    expect(settingsOf("wing_lts", { jobs: [started("abextend", "wing_lts", { name: "wing_lts", to: 400 })] })).toBeNull();
+  });
+
+  it("goes by the name the engine gives one, <case>_<variant>, when nothing else says, unless a repair run has it", () => {
+    const variants = [{ name: "simplec" }, { name: "lts" }];
+    expect(settingsOf("wing_lts", { variants, runs: new Set(["wing-fix"]) })).toBe("lts");
+    expect(settingsOf("wing_lts", { variants, runs: new Set(["wing_lts"]) })).toBeNull();
+    expect(settingsOf("_lts", { variants })).toBeNull();
+    expect(settingsOf("wing_lts", {})).toBeNull(); // the engine didn't say which variants it has
+  });
+
+  it("says its steps by the runs' settings, both on the original mesh", () => {
+    expect(stepText("copying base", "lts")).toBe("Copying the case for the run with its own settings");
+    expect(stepText("solving base", "lts")).toBe("Solving with the case's settings");
+    expect(stepText("copying fixed", "lts")).toBe("Copying the case for the run with lts settings");
+    expect(stepText("solving fixed", "lts")).toBe("Solving with lts settings");
+    expect(stepText("hotspots fixed", "lts")).toBe("Mapping where the residuals are largest with lts settings");
+    expect(stepText("extending fixed 200 -> 400", "lts")).toBe("Continuing the run with lts settings from iteration 200 to 400");
+    expect(stepText("extending fixed 200 -> 400 with lts", "lts")).toBe("Continuing the run with lts settings from iteration 200 to 400");
+    expect(stepText("extending fixed 400 -> 600 with relax", "lts"))
+      .toBe("Continuing the run with lts settings from iteration 400 to 600 with relax settings");
+    expect(stepText("done", "lts")).toBe("Finished");
+  });
+
+  it("names its runs by their settings, where a test of a repair names them by their mesh", () => {
+    expect(abWords("lts")).toEqual({
+      first: "case's settings", second: "lts settings",
+      firstRun: "the run with the case's settings", secondRun: "the run with lts settings",
+      vs: "Residuals, the case's settings vs lts", both: "with the case's settings and with lts",
+    });
+    expect(abWords(null)).toMatchObject({ first: "original mesh", second: "repaired mesh", secondRun: "the repaired-mesh run" });
+  });
+});
+
 describe("an A/B test's outcome", () => {
   it("is the geometric mean of the fields' ratios: 0.5 and 2 even out", () => {
     expect(outcome({ p: 0.5, U: 2 })).toEqual({ ratio: 1, change: null });
@@ -100,6 +146,12 @@ describe("the A/B tests list", () => {
     const rows = abRows(["fresh", "going", "old"], tests, [job("going", "running")], new Map([["old", "duct"]]));
     expect(rows.map((r) => [r.name, r.state])).toEqual([["going", "running"], ["fresh", "done"], ["old", "done"]]);
     expect(rows[2]).toMatchObject({ caseName: "duct", finished: "2026-11-20 09:59:00", outcome: { change: "better" } });
+  });
+
+  it("has a test of solver settings' variant, and its case from its name", () => {
+    const tests = { wing_lts: brief({}), "wing-fix": brief({}) };
+    const rows = abRows(["wing_lts", "wing-fix"], tests, [], new Map([["wing-fix", "wing"]]), [{ name: "lts" }]);
+    expect(rows.map((r) => [r.name, r.settings, r.caseName])).toEqual([["wing_lts", "lts", "wing"], ["wing-fix", null, "wing"]]);
   });
 
   it("has its jobs' states alone from an engine that only names its tests (before API 1.3)", () => {

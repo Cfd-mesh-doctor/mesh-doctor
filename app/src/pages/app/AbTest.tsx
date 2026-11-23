@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// One A/B test (GET /abtests/{name}): what it is doing, whether the repair helped the solver (the report viewer's
-// table and residual chart), and the judge's verdict on each run. While it runs the screen asks again every 3 s, so
-// the chart grows; while the repaired-mesh run solves, the engine's live monitor adds its iteration, pace and a
-// judge so far. A run is judged (GET /abtests/{name}/judge) once it has ended. Run longer continues the second run
-// of a test that has ended (StartAbTest.tsx); a test just started shows as waiting until its job makes its folder.
+// One A/B test (GET /abtests/{name}): what it is doing, whether its second run helped the solver (the report viewer's
+// table and residual chart), and the judge's verdict on each run. The second run solves the repaired mesh, or for a
+// test of solver settings the original mesh with a variant's settings, and the screen names the runs to suit
+// (settingsOf, abWords). While it runs the screen asks again every 3 s, so the chart grows; while the second run
+// solves, the engine's live monitor adds its iteration, pace and a judge so far. A run is judged (GET
+// /abtests/{name}/judge) once it has ended. Run longer continues the second run of a test that has ended
+// (StartAbTest.tsx); a test just started shows as waiting until its job makes its folder.
 import { ArrowLeft, FastForward, FileText, ListChecks } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
@@ -16,7 +18,9 @@ import { Progress } from "@/components/ui/misc";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
 import { useAppPath, useEngine } from "@/engine/context";
 import { asEngineError } from "@/engine/errors";
-import { ACTIVE_POLL_MS, IDLE_POLL_MS, useAbtest, useAbtestJudge, useAbtestLive, useJobs, useRepairs } from "@/engine/hooks";
+import {
+  ACTIVE_POLL_MS, IDLE_POLL_MS, useAbtest, useAbtestJudge, useAbtestLive, useJobs, useRepairs, useVariants,
+} from "@/engine/hooks";
 import { isActive, type AbtestDetail, type AbtestLive, type Job } from "@/engine/types";
 import { caseName } from "@/engine/verdict";
 import { formatCount, formatDateTime, formatDuration, formatInt, formatPercent, formatRelative } from "@/lib/format";
@@ -24,7 +28,7 @@ import { useTitle } from "@/lib/useTitle";
 import { AbCard, JudgeCard, ResidualCard } from "@/pages/report/AbCards";
 import { Section } from "@/pages/report/Section";
 import {
-  abJobOf, abState, lastIteration, liveHistory, outcome, stepSide, stepText, type AbState,
+  abJobOf, abState, abWords, lastIteration, liveHistory, outcome, settingsOf, stepSide, stepText, type AbState,
 } from "@/report/abtest";
 import { abSummary, judgeOf } from "@/report/summary";
 import { ExtendAbTestDialog, type ExtendTarget } from "./StartAbTest";
@@ -38,16 +42,26 @@ function every(state: AbState): number | false {
   return state === "running" ? ACTIVE_POLL_MS : state === "unfinished" ? IDLE_POLL_MS : false;
 }
 
-/** The outcome in a sentence, from the residual ratios. */
-function outcomeSentence(o: ReturnType<typeof outcome>, fields: number): string {
+/** The outcome in a sentence, from the residual ratios; `settings`: the variant of a test of solver settings. */
+function outcomeSentence(o: ReturnType<typeof outcome>, fields: number, settings: string | null): string {
   if (!o) return "Both runs have ended, but there are no residuals to compare.";
   const over = fields > 1 ? ` (the geometric mean over ${formatCount(fields, "field")})` : "";
-  return `On the repaired mesh the residuals end at ${o.ratio.toFixed(2)}× those on the original mesh${over}, ${
+  const ratio = `${o.ratio.toFixed(2)}×`;
+  if (settings) {
+    return `With ${settings} settings the residuals end at ${ratio} those with the case's settings${over}, ${
+      o.change === "better" ? `so the ${settings} settings helped the solver.` : o.change === "worse" ? "so the solver did not benefit."
+        : "so both settings converge about the same."
+    }`;
+  }
+  return `On the repaired mesh the residuals end at ${ratio} those on the original mesh${over}, ${
     o.change === "better" ? "so the repair helped the solver." : o.change === "worse" ? "so the solver did not benefit." : "so both meshes converge about the same."
   }`;
 }
 
-/** What the live monitor says of the repaired-mesh run: iteration, pace, time left. */
+/** A sentence's start. */
+const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** What the live monitor says of the second run: iteration, pace, time left. */
 function solverLine(live: AbtestLive | undefined): string | null {
   const s = live?.solver;
   if (!s || s.state === "pending") return null;
@@ -62,23 +76,27 @@ function solverLine(live: AbtestLive | undefined): string | null {
 }
 
 /** The status card's title: the step while it runs, else what came of it. */
-function title(state: AbState, running: boolean, step: string | null, o: ReturnType<typeof outcome>): string {
-  if (running) return stepText(step) ?? "Running";
+function title(state: AbState, running: boolean, step: string | null, o: ReturnType<typeof outcome>, settings: string | null): string {
+  if (running) return stepText(step, settings) ?? "Running";
   if (state === "done" || state === "changed") {
-    return !o ? "No residuals to compare" : o.change === "better" ? "The repair helped the solver"
-      : o.change === "worse" ? "The solver did not benefit" : "About the same on both meshes";
+    if (!o) return "No residuals to compare";
+    if (o.change === "worse") return "The solver did not benefit";
+    if (o.change === "better") return settings ? `The ${settings} settings helped the solver` : "The repair helped the solver";
+    return settings ? "About the same with both settings" : "About the same on both meshes";
   }
   if (state === "failed") return "Stopped with an error";
   if (state === "cancelled") return "Cancelled";
-  return stepText(step) ?? "Not started yet";
+  return stepText(step, settings) ?? "Not started yet";
 }
 
-function StatusCard({ state, detail, job, live, liveError }: {
+function StatusCard({ state, detail, job, live, liveError, settings }: {
   state: AbState;
   detail: AbtestDetail;
   job: Job | undefined;
   live: AbtestLive | undefined;
   liveError: unknown;
+  /** The variant of a test of solver settings (settingsOf), or null. */
+  settings: string | null;
 }) {
   const to = useAppPath();
   const step = detail.status?.step ?? job?.progress?.step ?? null;
@@ -97,7 +115,7 @@ function StatusCard({ state, detail, job, live, liveError }: {
     <Card>
       <CardHeader className="flex-wrap">
         <div>
-          <CardTitle>{title(state, running, step, o)}</CardTitle>
+          <CardTitle>{title(state, running, step, o, settings)}</CardTitle>
           <CardDescription>
             {detail.result?.finished && (state === "done" || state === "changed")
               ? `Both runs ended ${formatRelative(detail.result.finished)} (${formatDateTime(detail.result.finished)})`
@@ -115,7 +133,7 @@ function StatusCard({ state, detail, job, live, liveError }: {
             </p>
           </div>
         )}
-        {(state === "done" || state === "changed") && <p className="text-[15px] leading-relaxed">{outcomeSentence(o, fields)}</p>}
+        {(state === "done" || state === "changed") && <p className="text-[15px] leading-relaxed">{outcomeSentence(o, fields, settings)}</p>}
         {state === "changed" && (
           <p className="text-warning">
             The source case changed while the test ran, so the two runs may not have solved the same case. Run the test
@@ -130,7 +148,7 @@ function StatusCard({ state, detail, job, live, liveError }: {
         {state === "cancelled" && <p className="text-muted-foreground">Stopped by request. See {jobLink}.</p>}
         {state === "unfinished" && !running && (
           <p className="text-muted-foreground">
-            {solver ? `The repaired-mesh run: ${solver}. ` : ""}
+            {solver ? `${capital(abWords(settings).secondRun)}: ${solver}. ` : ""}
             No job in this app is making it: it may be running in a terminal, or have stopped there. This screen asks the
             engine again every 15 s.
           </p>
@@ -143,15 +161,15 @@ function StatusCard({ state, detail, job, live, liveError }: {
   );
 }
 
-function ModesCard({ modes }: { modes: AbtestDetail["modes"] }) {
+function ModesCard({ modes, secondRun }: { modes: AbtestDetail["modes"]; secondRun: string }) {
   return (
     <Card>
       <CardHeader>
         <div>
           <CardTitle>Where the solution swings</CardTitle>
           <CardDescription>
-            Where the repaired-mesh run's solution moves between two times a few hundred iterations apart: a slow swing
-            that a shorter judge window can mistake for a settled run.
+            Where the solution of {secondRun} moves between two times a few hundred iterations apart: a slow swing that
+            a shorter judge window can mistake for a settled run.
           </CardDescription>
         </div>
       </CardHeader>
@@ -195,9 +213,14 @@ export function AbTest() {
   const jobs = useJobs();
   const job = abJobOf(jobs.data?.items, name);
   const repairs = useRepairs();
+  const variants = useVariants();
+  const runs = useMemo(() => new Set(repairs.data?.items.map((r) => r.name)), [repairs.data]);
   // The test's state: its job's, and its own step's once the engine has answered.
   const first = useAbtest(name, (d) => every(abState(d?.status?.step, job)));
   const detail = first.data;
+  // What its second run changes: the mesh, or for a test of solver settings the settings, a variant's.
+  const settings = settingsOf(name, { result: detail?.result, jobs: jobs.data?.items, variants: variants.data?.items, runs });
+  const words = abWords(settings);
   const step = detail?.status?.step ?? null;
   const state = abState(step, job);
   const solving = (state === "running" || state === "unfinished") && stepSide(step) === "fixed";
@@ -222,10 +245,12 @@ export function AbTest() {
     pace: detail.result.fixed?.secondsPerIteration ?? null,
   } : null;
 
+  const second = detail?.result?.variant ?? settings;
+  const kind = settings ? "A/B test of solver settings" : "A/B test";
   const sub = [
     caseName(detail?.result?.source) && `case ${caseName(detail?.result?.source)}`,
     detail?.result?.iters != null && `${formatInt(detail.result.iters)} iterations a run`,
-    detail?.result?.variant ? `second run with ${detail.result.variant} settings` : detail?.result && "the same settings on both meshes",
+    second ? `second run with ${second} settings` : detail?.result && "the same settings on both meshes",
     mode === "demo" && "recorded demo",
   ].filter((x): x is string => typeof x === "string");
   const actions = (
@@ -255,7 +280,7 @@ export function AbTest() {
   if (!detail && job && missing) {
     return (
       <>
-        <PageHeader title={name} description="A/B test" actions={actions} />
+        <PageHeader title={name} description={kind} actions={actions} />
         <Card>
           <CardHeader className="flex-wrap">
             <div>
@@ -287,7 +312,7 @@ export function AbTest() {
   if (!detail) {
     return (
       <>
-        <PageHeader title={name} description="A/B test" actions={actions} />
+        <PageHeader title={name} description={kind} actions={actions} />
         {first.isError ? (
           <>
             <ErrorPanel error={first.error} onRetry={() => void first.refetch()} retrying={first.isFetching} />
@@ -307,13 +332,13 @@ export function AbTest() {
     );
   }
 
-  // The repaired-mesh run's judge: the engine's, once it has ended; the live monitor's while it solves.
+  // The second run's judge: the engine's, once it has ended; the live monitor's while it solves.
   const liveJudge = solving ? judgeOf(live.data?.judge) : null;
   const judges = [
-    { key: "base", title: "Is the original-mesh run converged?", judge: judgeOf(baseJudge.data), q: baseJudge },
+    { key: "base", title: `Is ${words.firstRun} converged?`, judge: judgeOf(baseJudge.data), q: baseJudge },
     {
       key: "fixed",
-      title: liveJudge ? "Is the repaired-mesh run converged so far?" : "Is the repaired-mesh run converged?",
+      title: liveJudge ? `Is ${words.secondRun} converged so far?` : `Is ${words.secondRun} converged?`,
       judge: liveJudge ?? judgeOf(fixedJudge.data),
       q: fixedJudge,
     },
@@ -324,11 +349,11 @@ export function AbTest() {
 
   return (
     <>
-      <PageHeader title={name} description={["A/B test", ...sub].join(" · ")} actions={actions} />
+      <PageHeader title={name} description={[kind, ...sub].join(" · ")} actions={actions} />
       {first.isError && (
         <ErrorPanel className="mb-4" compact error={first.error} onRetry={() => void first.refetch()} retrying={first.isFetching} />
       )}
-      <StatusCard state={state} detail={detail} job={job} live={live.data} liveError={live.error} />
+      <StatusCard state={state} detail={detail} job={job} live={live.data} liveError={live.error} settings={settings} />
 
       {ab && finished && (
         <Section title="Did it help the solver?">
@@ -337,8 +362,8 @@ export function AbTest() {
       )}
 
       {history && history.fields.length > 0 ? (
-        <Section title="Residuals, original vs repaired mesh">
-          <ResidualCard history={history} />
+        <Section title={words.vs}>
+          <ResidualCard history={history} settings={settings} />
         </Section>
       ) : (
         <Card className="mt-4 p-5">
@@ -359,7 +384,7 @@ export function AbTest() {
 
       {detail.modes.length > 0 && (
         <Section title="Where the solution swings">
-          <div className="mt-4"><ModesCard modes={detail.modes} /></div>
+          <div className="mt-4"><ModesCard modes={detail.modes} secondRun={words.secondRun} /></div>
         </Section>
       )}
     </>

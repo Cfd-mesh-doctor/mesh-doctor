@@ -155,6 +155,21 @@ describe("the Jobs screen", () => {
     expect(screen.queryByRole("columnheader", { name: "Took" })).toBeNull();
   });
 
+  it("words the step of a test of solver settings by its settings, a continuation's too, from the test's job", async () => {
+    const answers = structuredClone(DEMO_ANSWERS);
+    const items = (answers["/jobs"] as JobList).items;
+    const running = items.find((j) => j.state === "running")!; // the demo's running A/B job
+    items.unshift(
+      { ...running, id: "20261123-120000-abextend-wing_lts-0001", kind: "abextend", name: "wing_lts", params: { name: "wing_lts", to: 400 },
+        progress: { step: "extending fixed 200 -> 400", fraction: 0.5, updated: null } },
+      { ...running, id: "20261123-110000-abtest-wing_lts-0002", kind: "abtest", name: "wing_lts", state: "done",
+        params: { name: "wing-fix", iters: 200, init: "auto", variant: "lts" }, progress: null },
+    );
+    renderScreen(<Jobs />, { path, at: path, transport: demoTransport(answers, 0) });
+    expect(await screen.findAllByText("Continuing the run with lts settings from iteration 200 to 400")).not.toHaveLength(0);
+    expect(screen.getAllByText("Solving on the repaired mesh")).not.toHaveLength(0); // the demo's own test is of a repair
+  });
+
   it("links an A/B job to its test's page, to follow it while it runs, and a finished repair to its report", async () => {
     open(path);
     const follow = await screen.findByRole("link", { name: "Follow the A/B test of ahmed25-medium-fix" });

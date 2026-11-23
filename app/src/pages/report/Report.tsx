@@ -26,6 +26,7 @@ import { HEAT, viewHeading, type MapSummary, type MapViewName } from "@/report/m
 import { ReportError, checkReport, fileBytes, readReport } from "@/report/read";
 import { measureLabel, ratioChange, summarize, type ReportSummary } from "@/report/summary";
 import { SAMPLES } from "@/report/samples";
+import { abWords } from "@/report/abtest";
 import { AbCard, JudgeCard, ResidualCard } from "./AbCards";
 import { ClustersCard, type ClusterSource } from "./Clusters";
 import { MapMarks } from "./MapMarks";
@@ -331,14 +332,14 @@ export function ReportView({ summary: s, from, action, abNext, clusterSource }: 
       </div>
 
       {s.ab && s.ab.history.fields.length > 0 && (
-        <Section title="Residuals, original vs repaired mesh">
-          <ResidualCard history={s.ab.history} />
+        <Section title={abWords(s.ab.settings).vs}>
+          <ResidualCard history={s.ab.history} settings={s.ab.settings} />
         </Section>
       )}
 
       {s.judge && (
-        <Section title="Is the repaired-mesh run converged?">
-          <JudgeCard judge={s.judge} />
+        <Section title={`Is ${abWords(s.ab?.settings).secondRun} converged?`}>
+          <JudgeCard judge={s.judge} title={`Is ${abWords(s.ab?.settings).secondRun} converged?`} />
         </Section>
       )}
 

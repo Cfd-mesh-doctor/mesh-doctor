@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Every A/B test in the engine's workspace, running ones first, then newest first: what each is doing and, once
-// both its runs have ended, whether the repaired mesh's residuals ended lower. A test has the name of the repair run
-// it tests, and opens on its own screen (AbTest.tsx), live while it runs. Start an A/B test starts one from a
-// finished repair (StartAbTest.tsx). An engine older than API 1.3 only names its tests: the list then has their
-// jobs' states, and each test's own screen has the rest.
+// both its runs have ended, whether the second run's residuals ended lower: on the repaired mesh, or with other
+// solver settings. A test of a repair has the name of the repair run it tests, one of solver settings
+// `<case>_<variant>`; each opens on its own screen (AbTest.tsx), live while it runs. Start an A/B test starts one
+// from a finished repair (StartAbTest.tsx). An engine older than API 1.3 only names its tests: the list then has
+// their jobs' states, and each test's own screen has the rest.
 import { FlaskConical, Wrench } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
@@ -14,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
 import { useAppPath } from "@/engine/context";
-import { ACTIVE_POLL_MS, IDLE_POLL_MS, useAbtests, useJobs, useRepairs } from "@/engine/hooks";
+import { ACTIVE_POLL_MS, IDLE_POLL_MS, useAbtests, useJobs, useRepairs, useVariants } from "@/engine/hooks";
 import { isActive } from "@/engine/types";
 import { caseName } from "@/engine/verdict";
 import { formatDateTime, formatRelative } from "@/lib/format";
@@ -43,9 +44,9 @@ function NoTestsYet({ canStart, onStart }: { canStart: boolean; onStart: () => v
         </div>
       )}
     >
-      An A/B test solves a case twice with the same settings, on the original mesh and on its repaired copy, to see
-      whether the repair helps the solver. It starts from a finished repair{canStart ? "" : ", so repair a case first"};
-      each test shows here while it runs.
+      An A/B test solves a case twice to see what helps the solver: on the original mesh and on its repaired copy, or
+      on the original mesh with the case&apos;s settings and with other ones. It starts from a finished
+      repair{canStart ? "" : ", so repair a case first"}; each test shows here while it runs.
     </EmptyState>
   );
 }
@@ -57,12 +58,13 @@ export function AbTests() {
   const busy = jobs.data?.items.some((j) => (j.kind === "abtest" || j.kind === "abextend") && isActive(j.state)) ?? false;
   const list = useAbtests(busy ? ACTIVE_POLL_MS : IDLE_POLL_MS);
   const repairs = useRepairs();
+  const variants = useVariants();
   const cases = useMemo(() => new Map((repairs.data?.items ?? []).map((r) => [r.name, caseName(r.source)])), [repairs.data]);
   const canStart = testableRuns(repairs.data?.items).length > 0;
   const [starting, setStarting] = useState(false);
   const rows = useMemo(
-    () => abRows(list.data?.items ?? [], list.data?.tests, jobs.data?.items, cases),
-    [list.data, jobs.data, cases],
+    () => abRows(list.data?.items ?? [], list.data?.tests, jobs.data?.items, cases, variants.data?.items),
+    [list.data, jobs.data, cases, variants.data],
   );
   const old = list.data != null && list.data.tests == null;
 
@@ -72,10 +74,11 @@ export function AbTests() {
         title="A/B tests"
         description={
           <>
-            Each A/B test solves a case twice with the same settings, on the original mesh and on the repaired one, and
-            compares how far each converges: below 1× the repaired mesh&apos;s residuals end lower. A test has the name of
-            the repair it tests, on the <Link to={to("/repairs")} className={LINK}>Repairs screen</Link>: start one here,
-            or from a finished repair&apos;s report.
+            Each A/B test solves a case twice and compares how far each run converges: below 1× the second run&apos;s
+            residuals end lower. A test of a repair, on the <Link to={to("/repairs")} className={LINK}>Repairs
+            screen</Link>, solves the original mesh, then the repaired one, and has the repair&apos;s name; a test of
+            solver settings solves the original mesh with the case&apos;s settings, then with other ones, and is named
+            after the case and those settings. Start one here, or from a finished repair&apos;s report.
           </>
         }
         actions={(
@@ -115,7 +118,9 @@ export function AbTests() {
                     test's name is its link and its result goes under it. */}
                 <TH>Test</TH>
                 <TH>State</TH>
-                <TH className="hidden text-right sm:table-cell">Repaired ÷ original</TH>
+                <TH className="hidden text-right sm:table-cell">
+                  {rows.some((r) => r.settings) ? "Second run ÷ first" : "Repaired ÷ original"}
+                </TH>
                 <TH className="hidden md:table-cell">Finished</TH>
                 <TH className="hidden text-right sm:table-cell"><span className="sr-only">Open</span></TH>
               </TR>
@@ -123,13 +128,13 @@ export function AbTests() {
             <TBody>
               {rows.map((r) => {
                 const path = `/abtests/${encodeURIComponent(r.name)}`;
-                const doing = r.state === "running" || r.state === "unfinished" ? stepText(r.step ?? r.job?.progress?.step) : null;
+                const doing = r.state === "running" || r.state === "unfinished" ? stepText(r.step ?? r.job?.progress?.step, r.settings) : null;
                 return (
                   <TR key={r.name}>
                     <TD>
                       <Link to={to(path)} className="font-medium wrap-anywhere underline-offset-4 hover:underline">{r.name}</Link>
                       <div className="text-xs text-muted-foreground wrap-anywhere">
-                        {[r.caseName, doing].filter(Boolean).join(" · ") || "–"}
+                        {[r.caseName, doing ?? (r.settings && `${r.settings} settings`)].filter(Boolean).join(" · ") || "–"}
                         {r.outcome && (
                           <span className="sm:hidden"> · <span className={changeText(r.outcome.change)}>{r.outcome.ratio.toFixed(2)}×</span></span>
                         )}

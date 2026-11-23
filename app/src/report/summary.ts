@@ -96,6 +96,10 @@ export interface ReportSummary {
     meanRatio: number | null;
     /** how the test was run: iterations, start, processes, settings */
     meta: string[];
+    /** the solver settings the second run used in place of the case's own (a variant, GET /variants), if any */
+    variant: string | null;
+    /** that variant when the test is of the settings rather than of a repair: both runs on the original mesh */
+    settings: string | null;
     finished: string | null;
     window: number | null;
     secondsPerIteration: { original: number; repaired: number } | null;
@@ -202,6 +206,8 @@ export function abSummary(abDoc: unknown): ReportSummary["ab"] {
     rows,
     meanRatio: geomean(rows.map((r) => r.ratio)),
     meta,
+    variant,
+    settings: variant && !str(ab.fixedName) ? variant : null,
     finished: str(ab.finished),
     window: num(ab.window),
     secondsPerIteration: sb != null && sf != null ? { original: sb, repaired: sf } : null,

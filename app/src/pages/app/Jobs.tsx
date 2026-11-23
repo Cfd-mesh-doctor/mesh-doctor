@@ -21,7 +21,7 @@ import { ACTIVE_POLL_MS, useCancelJob, useJobs } from "@/engine/hooks";
 import { JOB_KIND_LABEL, isActive, type Job, type JobState } from "@/engine/types";
 import { elapsed, formatDateTime, formatDuration, formatPercent, formatRelative } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
-import { stepText } from "@/report/abtest";
+import { settingsOf, stepText } from "@/report/abtest";
 
 const FILTERS = ["all", "active", "done", "failed", "cancelled"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -64,12 +64,13 @@ function duration(j: Job): string {
   return formatDuration(elapsed(j.started, isActive(j.state) ? null : j.finished));
 }
 
-function ProgressCell({ job }: { job: Job }) {
+/** A job's progress. `jobs`: every job, whose A/B test job says whether a continuation's test is of solver settings. */
+function ProgressCell({ job, jobs }: { job: Job; jobs?: readonly Job[] }) {
   if (isActive(job.state)) {
     const f = job.progress?.fraction;
     // An A/B job's step reads as on its test's page ("Solving on the repaired mesh", not "solving fixed"). A long step
     // takes a second line: on one, it widened the column and took the room a job's name needs for its line.
-    const step = isAbJob(job) ? stepText(job.progress?.step) : job.progress?.step;
+    const step = isAbJob(job) ? stepText(job.progress?.step, settingsOf(job.name, { jobs: jobs ?? [job] })) : job.progress?.step;
     return (
       <div className="min-w-40">
         <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
@@ -145,8 +146,10 @@ function CancelDialog({ job, onClose, nameOf }: {
   );
 }
 
-function DetailsDialog({ job, onClose, onCancel, nameOf }: {
+function DetailsDialog({ job, jobs, onClose, onCancel, nameOf }: {
   job: Job | null;
+  /** Every job, for an A/B job's step (ProgressCell). */
+  jobs?: readonly Job[];
   onClose: () => void;
   onCancel: (j: Job) => void;
   /** The job's name in the table, if it shows there. */
@@ -187,7 +190,7 @@ function DetailsDialog({ job, onClose, onCancel, nameOf }: {
               <JobStateBadge state={job.state} />
             </div>
             <DialogDescription className="font-mono text-xs wrap-anywhere">{job.id}</DialogDescription>
-            {isActive(job.state) && <div className="mt-5"><ProgressCell job={job} /></div>}
+            {isActive(job.state) && <div className="mt-5"><ProgressCell job={job} jobs={jobs} /></div>}
             {job.state === "failed" && job.error && (
               <div className="mt-5 rounded-lg border border-danger/25 bg-danger-soft/60 p-3 text-sm">{job.error}</div>
             )}
@@ -377,10 +380,10 @@ export function Jobs() {
                     </button>
                     <div className="text-xs text-muted-foreground">{JOB_KIND_LABEL[j.kind] ?? j.kind}</div>
                     {/* Phones have no Progress column: show a running job's progress here instead. */}
-                    {isActive(j.state) && <div className="mt-2 sm:hidden"><ProgressCell job={j} /></div>}
+                    {isActive(j.state) && <div className="mt-2 sm:hidden"><ProgressCell job={j} jobs={jobs.data?.items} /></div>}
                   </TD>
                   <TD><JobStateBadge state={j.state} /></TD>
-                  <TD className="hidden sm:table-cell"><ProgressCell job={j} /></TD>
+                  <TD className="hidden sm:table-cell"><ProgressCell job={j} jobs={jobs.data?.items} /></TD>
                   <TD className="hidden text-[13px] whitespace-nowrap text-muted-foreground xl:table-cell" title={j.started ? formatDateTime(j.started) : undefined}>
                     {/* A queued job hasn't started: its creation time isn't its start. */}
                     {j.started ? formatRelative(j.started) : "–"}
@@ -413,6 +416,7 @@ export function Jobs() {
       </Card>
       <DetailsDialog
         job={details}
+        jobs={jobs.data?.items}
         nameOf={(id) => names.current.get(id)}
         onClose={() => setDetailsId(null)}
         onCancel={(j) => {

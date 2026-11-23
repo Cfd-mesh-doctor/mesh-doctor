@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The A/B test's cards, shared by the report viewer and the app's A/B tests screens: did the repair help the solver
-// (each field's residuals on both meshes), both runs' residuals per iteration, and the judge's verdict on a run.
+// The A/B test's cards, shared by the report viewer and the app's A/B tests screens: did the repair, or other solver
+// settings, help the solver (each field's residuals in both runs), both runs' residuals per iteration, and the
+// judge's verdict on a run. A test of solver settings names its runs by their settings, both on the original mesh.
 import { useMemo, useState, type ReactNode } from "react";
 import { LineChart, type LineSeries } from "@/components/charts/LineChart";
 import { Badge } from "@/components/ui/badge";
@@ -9,17 +10,19 @@ import { Segmented } from "@/components/ui/misc";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
 import { formatDateTime, formatInt, formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { abWords } from "@/report/abtest";
 import { judgeTone, ratioChange, type JudgeSummary, type ReportSummary } from "@/report/summary";
 import { changeText } from "./tone";
 
 export type AbSummary = NonNullable<ReportSummary["ab"]>;
 export type AbHistory = AbSummary["history"];
 
+/** The ratio as a bar about 1×. Narrower on a phone, where the table would otherwise scroll sideways. */
 function RatioBar({ ratio }: { ratio: number }) {
   const w = Math.min(50, Math.abs(ratio - 1) * 100);
   const c = ratioChange(ratio);
   return (
-    <span className="relative ml-2 inline-block h-2 w-20 rounded-full bg-surface-2 align-middle ring-1 ring-border ring-inset sm:w-24" aria-hidden>
+    <span className="relative ml-2 inline-block h-2 w-14 rounded-full bg-surface-2 align-middle ring-1 ring-border ring-inset sm:w-24" aria-hidden>
       <span
         className={cn("absolute inset-y-0 rounded-full", c === "better" ? "bg-success" : c === "worse" ? "bg-danger" : "bg-muted-foreground")}
         style={{ left: `${ratio < 1 ? 50 - w : 50}%`, width: `${w}%` }}
@@ -29,9 +32,18 @@ function RatioBar({ ratio }: { ratio: number }) {
   );
 }
 
-/** Did the repair help the solver: each field's mean residual on both meshes and their ratio. */
+/** The table's cells: closer together on a phone, so its four columns fit without scrolling sideways. */
+const CELL = "px-3 sm:px-4";
+
+/** Did the repair, or the other settings, help the solver: each field's mean residual in both runs and their ratio. */
 export function AbCard({ ab }: { ab: AbSummary }) {
   const spi = ab.secondsPerIteration;
+  const v = ab.settings;
+  const heads = v ? ["Case's settings", `${v} settings`, `${v} ÷ case's`] : ["Original", "Repaired", "Repaired ÷ original"];
+  // A test of a repair whose second run changes settings too, as the command allows, says so.
+  const same = v ? "with the same case, mesh and start for both settings"
+    : ab.variant ? `with the same case and start on both meshes, the second run with ${ab.variant} settings`
+      : "with the same case, settings and start on both meshes";
   return (
     <Card>
       <CardHeader>
@@ -48,19 +60,18 @@ export function AbCard({ ab }: { ab: AbSummary }) {
         <Table>
           <THead>
             <TR className="hover:bg-transparent">
-              <TH>Field</TH>
-              <TH className="text-right">Original</TH>
-              <TH className="text-right">Repaired</TH>
-              <TH className="text-right">Repaired ÷ original</TH>
+              <TH className={CELL}>Field</TH>
+              {/* A head may take two lines, so the table needs less room on a phone. */}
+              {heads.map((h) => <TH key={h} className={cn(CELL, "text-right whitespace-normal")}>{h}</TH>)}
             </TR>
           </THead>
           <TBody>
             {ab.rows.map((row) => (
               <TR key={row.field}>
-                <TD className="font-mono text-[13px]">{row.field}</TD>
-                <TD className="text-right tabular-nums">{formatNumber(row.original, 3)}</TD>
-                <TD className="text-right tabular-nums">{formatNumber(row.repaired, 3)}</TD>
-                <TD className={cn("text-right whitespace-nowrap tabular-nums", changeText(row.change))}>
+                <TD className={cn(CELL, "font-mono text-[13px]")}>{row.field}</TD>
+                <TD className={cn(CELL, "text-right whitespace-nowrap tabular-nums")}>{formatNumber(row.original, 3)}</TD>
+                <TD className={cn(CELL, "text-right whitespace-nowrap tabular-nums")}>{formatNumber(row.repaired, 3)}</TD>
+                <TD className={cn(CELL, "text-right whitespace-nowrap tabular-nums", changeText(row.change))}>
                   {row.ratio.toFixed(2)}×<RatioBar ratio={row.ratio} />
                 </TD>
               </TR>
@@ -69,9 +80,11 @@ export function AbCard({ ab }: { ab: AbSummary }) {
         </Table>
       )}
       <p className="border-t border-border px-5 py-3 text-xs text-muted-foreground">
-        Mean initial residual over {ab.window ? `the last ${formatInt(ab.window)} iterations` : "the end of each run"}, with
-        the same case, settings and start on both meshes. Below 1× the repaired mesh converges further.
-        {spi && ` Time per iteration: ${spi.original.toFixed(2)} s original, ${spi.repaired.toFixed(2)} s repaired.`}
+        Mean initial residual over {ab.window ? `the last ${formatInt(ab.window)} iterations` : "the end of each run"},{" "}
+        {same}. {v ? `Below 1× the ${v} settings converge further.` : "Below 1× the repaired mesh converges further."}
+        {spi && (v
+          ? ` Time per iteration: ${spi.original.toFixed(2)} s with the case's settings, ${spi.repaired.toFixed(2)} s with ${v}.`
+          : ` Time per iteration: ${spi.original.toFixed(2)} s original, ${spi.repaired.toFixed(2)} s repaired.`)}
       </p>
     </Card>
   );
@@ -88,24 +101,31 @@ function LegendLine({ dashed, className, children }: { dashed?: boolean; classNa
   );
 }
 
-/** Both runs' initial residuals per iteration, one field at a time. */
-export function ResidualCard({ history, className = "mt-4" }: { history: AbHistory; className?: string }) {
+/** Both runs' initial residuals per iteration, one field at a time. `settings`: the variant of a test of solver
+ * settings, whose runs are named by their settings. */
+export function ResidualCard({ history, settings, className = "mt-4" }: {
+  history: AbHistory;
+  settings?: string | null;
+  className?: string;
+}) {
   const { fields, original, repaired } = history;
+  const w = abWords(settings);
   const [field, setField] = useState(() => (fields.includes("p") ? "p" : fields.includes("p_rgh") ? "p_rgh" : (fields[0] ?? "")));
-  // The original mesh is the reference: dark ink, dashed, as the accuracy chart's wind-tunnel tick. Against the
-  // repaired mesh's teal, the grey it had was too close to tell apart (OKLab difference 8.3, and 3.2 with red-green
-  // colour blindness, against a floor of 15); ink is 32 in the light theme and 21 in the dark one.
+  // The first run (the original mesh, the case's settings) is the reference: dark ink, dashed, as the accuracy
+  // chart's wind-tunnel tick. Against the second run's teal, the grey it had was too close to tell apart (OKLab
+  // difference 8.3, and 3.2 with red-green colour blindness, against a floor of 15); ink is 32 in the light theme and
+  // 21 in the dark one.
   const series = useMemo(() => {
     const out: LineSeries[] = [];
-    if (original) out.push({ name: "original mesh", stroke: "stroke-foreground", swatch: "bg-foreground", dashed: true, x: original.x, y: original.y[field] ?? [] });
-    if (repaired) out.push({ name: "repaired mesh", stroke: "stroke-primary", swatch: "bg-primary", x: repaired.x, y: repaired.y[field] ?? [] });
+    if (original) out.push({ name: w.first, stroke: "stroke-foreground", swatch: "bg-foreground", dashed: true, x: original.x, y: original.y[field] ?? [] });
+    if (repaired) out.push({ name: w.second, stroke: "stroke-primary", swatch: "bg-primary", x: repaired.x, y: repaired.y[field] ?? [] });
     return out;
-  }, [original, repaired, field]);
+  }, [original, repaired, field, w.first, w.second]);
   return (
     <Card className={className}>
       <CardHeader className="flex-wrap">
         <div>
-          <CardTitle>Residuals, original vs repaired mesh</CardTitle>
+          <CardTitle>{w.vs}</CardTitle>
           <CardDescription>Initial residual per iteration, log scale: lower and still falling is better.</CardDescription>
         </div>
         {fields.length > 1 && (
@@ -115,11 +135,11 @@ export function ResidualCard({ history, className = "mt-4" }: { history: AbHisto
       </CardHeader>
       <CardContent>
         <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          {original && <LegendLine dashed className="stroke-foreground">original mesh</LegendLine>}
-          {repaired && <LegendLine className="stroke-primary">repaired mesh</LegendLine>}
+          {original && <LegendLine dashed className="stroke-foreground">{w.first}</LegendLine>}
+          {repaired && <LegendLine className="stroke-primary">{w.second}</LegendLine>}
         </div>
         <LineChart series={series} log xLabel="iteration" empty="No residuals for this field"
-          label={`Initial residual of ${field} per iteration on the original and the repaired mesh, log scale`} />
+          label={`Initial residual of ${field} per iteration ${w.both}, log scale`} />
       </CardContent>
     </Card>
   );
