@@ -365,6 +365,10 @@ test("a replaced pairing key says to pair again", async ({ page }) => {
   await page.goto(pairingLink());
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.getByText("This browser needs pairing again")).toBeVisible();
+  // A key made while the engine runs works only once it restarts: the panel says so, before the command.
+  const panel = page.getByRole("alert").filter({ hasText: "This browser needs pairing again" });
+  await expect(panel.getByText(/Restart it first \(Ctrl\+C in its window, then meshdoctor serve\)/)).toBeVisible();
+  await expect(panel.getByText("meshdoctor pair --open", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "How to fix this" }))
     .toHaveAttribute("href", "/troubleshooting?q=This+browser+needs+pairing+again");
 });

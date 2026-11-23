@@ -141,8 +141,8 @@ export const GROUPS: ProblemGroup[] = [
         ],
         [
           "\"This browser needs pairing again\"",
-          "the key was replaced (`meshdoctor pair --new`), or this browser's site data was cleared",
-          "`meshdoctor pair --open` in a second WSL window (the engine keeps its own busy), or paste the link it prints on the Connect page",
+          "the key was replaced (`meshdoctor pair --new`; a running engine keeps the old one until it restarts), or this browser's site data was cleared",
+          "if you ran `meshdoctor pair --new` since the engine started, restart it first (Ctrl+C in its window, then `meshdoctor serve`); then `meshdoctor pair --open` in a second WSL window (the engine keeps its own busy), or paste the link it prints on the Connect page",
         ],
         [
           "\"This engine version doesn't match the app\"",
