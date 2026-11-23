@@ -69,6 +69,12 @@ describe("httpTransport", () => {
       + "busy): it opens the pairing link.");
   });
 
+  it("says what frees memory, and names WSL's memory setting for Windows only", () => {
+    // On Linux there is no WSL: its .wslconfig is no help there.
+    expect(explain(new EngineError("not-enough-memory", "what the engine said")).hint).toBe("Close other programs or "
+      + "stop other OpenFOAM runs, then try again. On Windows, you can also give WSL more memory in `.wslconfig`.");
+  });
+
   it("says unreachable when nothing answers", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
     permissions("granted");

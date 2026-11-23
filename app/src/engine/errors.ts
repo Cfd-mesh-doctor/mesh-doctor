@@ -111,7 +111,8 @@ export function explain(err: unknown, origin = globalThis.location?.origin ?? ""
     case "not-enough-memory":
       return {
         title: "Not enough free memory",
-        hint: "Close other programs or WSL jobs, or give WSL more memory in `.wslconfig`, then try again.",
+        hint: "Close other programs or stop other OpenFOAM runs, then try again. On Windows, you can also give WSL "
+          + "more memory in `.wslconfig`.",
       };
     case "finished":
       return { title: "That job has already finished", hint: e.message };
