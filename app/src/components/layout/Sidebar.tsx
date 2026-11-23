@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Navigation. Screens that later milestones add are listed already, marked "Soon", so the shape of the
-// whole app is visible from day one.
+// whole app is visible from day one: under Coming next, folded away until it's opened, so the screens that work
+// come first.
 import {
-  BookOpen, Calculator, ChartLine, Compass, FlaskConical, FolderOpen, Image, LayoutDashboard, ListChecks, Play, Settings, Toolbox,
-  Wrench,
+  BookOpen, Calculator, ChartLine, ChevronDown, Compass, FlaskConical, FolderOpen, Image, LayoutDashboard, ListChecks, Play,
+  Settings, Toolbox, Wrench,
   type LucideIcon,
 } from "lucide-react";
+import { useEffect, useId, useState } from "react";
 import { Link, NavLink } from "react-router";
 import { Logo } from "@/components/brand/Logo";
 import { Dot } from "@/components/ui/badge";
@@ -13,6 +15,7 @@ import { useAppPath, useEngine } from "@/engine/context";
 import { useJobs } from "@/engine/hooks";
 import { isActive } from "@/engine/types";
 import { APP_VERSION } from "@/lib/site";
+import { readItem, writeItem } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 import { useConnection } from "./connection";
 
@@ -38,6 +41,28 @@ const NEXT: Item[] = [
   { label: "Results", icon: ChartLine, soon: "Forces, convergence and comparisons" },
   { label: "Local tools", icon: Toolbox, soon: "Zone repair, full-car pipeline, workbooks" },
 ];
+
+/** Kept in this browser once Coming next is opened or folded again: it stays as it was left. */
+const NEXT_OPEN = "md-coming-next";
+/** Each sidebar on the page (the wide screen's and the phone menu's), so the list opens and folds in both at once,
+ * even where the browser keeps nothing. */
+const sidebars = new Set<(open: boolean) => void>();
+
+/** Whether Coming next is open: folded away until it's opened. */
+function useComingNext(): [boolean, (open: boolean) => void] {
+  const [open, setOpen] = useState(() => readItem(NEXT_OPEN) === "open");
+  useEffect(() => {
+    sidebars.add(setOpen);
+    return () => {
+      sidebars.delete(setOpen);
+    };
+  }, []);
+  const set = (next: boolean) => {
+    writeItem(NEXT_OPEN, next ? "open" : "closed");
+    sidebars.forEach((s) => s(next));
+  };
+  return [open, set];
+}
 
 function NavItem({ item, onNavigate, active }: { item: Item; onNavigate?: () => void; active?: number }) {
   const to = useAppPath();
@@ -88,6 +113,8 @@ export function Sidebar({ onNavigate, onTour }: { onNavigate?: () => void; onTou
   const jobs = useJobs();
   const active = jobs.data?.items.filter((j) => isActive(j.state)).length ?? 0;
   const conn = useConnection();
+  const [nextOpen, setNextOpen] = useComingNext();
+  const nextId = useId();
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-14 items-center px-4">
@@ -102,8 +129,20 @@ export function Sidebar({ onNavigate, onTour }: { onNavigate?: () => void; onTou
           ))}
         </div>
         <div>
-          <p className="px-3 pb-1.5 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Coming next</p>
-          <div className="space-y-0.5">
+          {/* Said as "Coming next 6 screens": the count is how many are coming. */}
+          <button
+            type="button"
+            aria-expanded={nextOpen}
+            aria-controls={nextId}
+            onClick={() => setNextOpen(!nextOpen)}
+            className="flex h-7 w-full items-center gap-2 rounded-md px-3 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase transition-colors hover:text-foreground"
+          >
+            Coming next{" "}
+            <span className="rounded-full border border-border px-1.5 text-[10px] tabular-nums">{NEXT.length}</span>{" "}
+            <span className="sr-only">screens</span>
+            <ChevronDown className={cn("ml-auto size-3.5 shrink-0 transition-transform", nextOpen && "rotate-180")} aria-hidden />
+          </button>
+          <div id={nextId} hidden={!nextOpen} className="mt-1 space-y-0.5">
             {NEXT.map((i) => <NavItem key={i.label} item={i} />)}
           </div>
         </div>

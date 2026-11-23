@@ -162,8 +162,8 @@ function AboutCard() {
           </div>
         )}
         <p className="mt-5 text-[13px] text-muted-foreground">
-          This site keeps two things in your browser: the pairing and your theme. It has no accounts, no analytics and
-          no server of its own.
+          This site keeps four things in your browser: the pairing, your theme, whether you've seen the tour and
+          whether the sidebar's Coming next list is open. It has no accounts, no analytics and no server of its own.
         </p>
       </CardContent>
       <CardFooter className="flex-wrap gap-x-5">

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Browser storage that never throws: private windows and blocked site data just mean "nothing saved".
+// Each thing the site keeps is named in Settings' About and in docs/safety.md (with its copy in pages/safety/rules.ts):
+// name a new one there too.
 
 export function readItem(key: string): string | null {
   try {
