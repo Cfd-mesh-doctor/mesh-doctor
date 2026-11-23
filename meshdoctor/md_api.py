@@ -287,7 +287,7 @@ def ab_start(name, iters, init, variant="", replace=True):
     import abtest
     if variant and variant not in abtest.PRESETS:
         return _refuse("bad-request", "unknown variant")
-    if not SAFE.match(name) or init not in ("0.warm", "0.cold", "0"):
+    if not SAFE.match(name) or init not in ("auto", "0.warm", "0.cold", "0"):
         return _refuse("bad-request", "bad arguments")
     try:
         iters = max(20, min(int(iters), 2000))
@@ -302,7 +302,10 @@ def ab_start(name, iters, init, variant="", replace=True):
     cases, ws, _ = _paths()
     if posixpath.dirname(src) != cases.rstrip("/") or not SAFE.match(posixpath.basename(src)):
         return _refuse("unsupported", "unexpected source path")
-    if not os.path.isdir(os.path.join(run_dir(), posixpath.basename(src), init)):
+    case = os.path.join(run_dir(), posixpath.basename(src))
+    if init == "auto":                     # as the command does: a solution the case has, else its own 0
+        init = "0.warm" if os.path.isdir(os.path.join(case, "0.warm")) else "0"
+    if not os.path.isdir(os.path.join(case, init)):
         return _refuse("bad-request", f"source case has no {init} directory")
     label = f"{os.path.basename(src)}_{variant}" if variant else name
     if not replace and os.path.exists(os.path.join(md_dir(), label + "_ab")):

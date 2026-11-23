@@ -792,6 +792,20 @@ class ApiV1Test(unittest.TestCase):
         cmd = self.launched[0]
         self.assertEqual(cmd[cmd.index("--base-from") + 1], ab)
 
+    def test_abtest_starts_from_0_warm_when_the_case_has_one_else_0(self):
+        import md_api
+        self.assertError(self.post("/jobs", {"kind": "abtest", "params": {"name": "r1", "init": "0.cold"}}),
+                         400, "bad-request", "source case has no 0.cold directory")
+        st, doc, _ = self.post("/jobs", {"kind": "abtest", "params": {"name": "r1"}})
+        self.assertEqual(st, 202, doc)
+        cmd = self.launched[0]
+        self.assertEqual(cmd[cmd.index("--init") + 1], "0")             # the default: the case has no 0.warm
+        os.makedirs(os.path.join(self.src, "0.warm"))
+        for init, used in (("auto", "0.warm"), ("0", "0")):
+            with mock.patch.object(md_api, "_submit", lambda kind, params, label, cmd, **kw: (params, cmd)):
+                params, cmd = md_api.ab_start("r1", 200, init)
+            self.assertEqual((params["init"], cmd[cmd.index("--init") + 1]), (used, used))   # recorded as used
+
     def test_openapi_matches_the_table(self):
         doc = self.get("/openapi.json")[1]
         self.assertEqual(doc["openapi"], "3.1.0")

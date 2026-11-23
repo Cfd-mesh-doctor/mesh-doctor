@@ -1137,10 +1137,11 @@ export interface operations {
                     kind: "abtest";
                     params: {
                         /**
-                         * @default 0.warm
+                         * @description the case's folder both runs start from; auto: 0.warm when the case has one, else 0
+                         * @default auto
                          * @enum {unknown}
                          */
-                        init?: "0.warm" | "0.cold" | "0";
+                        init?: "auto" | "0.warm" | "0.cold" | "0";
                         /** @default 200 */
                         iters?: number;
                         /** @description a finished repair run (GET /repairs) */

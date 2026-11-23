@@ -387,7 +387,9 @@ JOBS = {
         "summary": "solve the original and the repaired mesh with the same settings and compare",
         "params": _params({"name": dict(NAME, description="a finished repair run (GET /repairs)"),
                            "iters": {"type": "integer", "minimum": 20, "maximum": 2000, "default": 200},
-                           "init": {"enum": ["0.warm", "0.cold", "0"], "default": "0.warm"},
+                           "init": {"enum": ["auto", "0.warm", "0.cold", "0"], "default": "auto",
+                                    "description": "the case's folder both runs start from; auto: 0.warm when "
+                                                   "the case has one, else 0"},
                            "variant": {"type": "string", "default": "",
                                        "description": "solver-setting variant for the second run (GET /variants)"},
                            "replace": REPLACE}, ["name"]),

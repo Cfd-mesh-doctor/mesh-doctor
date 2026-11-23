@@ -68,7 +68,7 @@ pre{white-space:pre-wrap;font-size:11.5px;margin:0;color:var(--muted);max-height
     <div class="card" id="abCard"><h2>Solver A/B: does the repaired mesh converge better?</h2>
       <div class="sub" style="margin-bottom:6px">The same case runs twice on copies, once on the original mesh and once on the repaired one. Same settings, same start fields, same decomposition; only the point positions differ.</div>
       <div class="row"><span class="sub">Show test</span><select id="abSel" style="flex:1"></select></div>
-      <div class="row"><select id="abInit"><option value="0.warm">start from 0.warm</option><option value="0.cold">start from 0.cold</option><option value="0">start from 0</option></select>
+      <div class="row"><select id="abInit"><option value="auto">start from 0.warm, else 0</option><option value="0.warm">start from 0.warm</option><option value="0.cold">start from 0.cold</option><option value="0">start from 0</option></select>
         <input id="abIters" type="number" value="200" min="20" max="2000" style="width:90px"> iterations
         <select id="abVar"><option value="">2nd run: repaired mesh</option></select>
         <button id="abGo">Run A/B</button><span id="abState" class="sub"></span></div>

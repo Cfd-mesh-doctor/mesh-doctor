@@ -763,7 +763,7 @@ class H(http.server.BaseHTTPRequestHandler):
             if u.path == "/api/md/ab":
                 return self._json(md_api.ab(q.get("name", "")))
             if u.path == "/api/md/abstart" and method == "POST":
-                return self._json(md_api.ab_start(q.get("name", ""), q.get("iters", "200"), q.get("init", "0.warm"), q.get("variant", "")))
+                return self._json(md_api.ab_start(q.get("name", ""), q.get("iters", "200"), q.get("init", "auto"), q.get("variant", "")))
             if u.path == "/api/md/abextend" and method == "POST":
                 return self._json(md_api.ab_extend(q.get("label", ""), q.get("to", "0")))
             if u.path == "/api/md/start" and method == "POST":
