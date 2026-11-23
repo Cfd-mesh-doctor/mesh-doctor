@@ -21,7 +21,9 @@ export function AppTour({ open, onClose, steps }: { open: boolean; onClose: () =
   const { title, text, spot } = steps[step]!;
   const last = step === steps.length - 1;
   // Rings the part of the screen the step means once it's there (a screen shows its data after it opens), and brings
-  // it into view when it's off the screen or low on it, where the tour stands. CSS lifts it above the tour's shade.
+  // it into view when it's off the screen or low on it, where the tour stands, or when it reaches under the tour's box
+  // and would fit above it once scrolled up (Getting started, on a laptop's screen). CSS lifts it above the tour's
+  // shade, and its scroll-margin-top keeps it clear of the header.
   useEffect(() => {
     if (!open || !spot) return;
     let lit: Element | null = null;
@@ -32,8 +34,12 @@ export function AppTour({ open, onClose, steps }: { open: boolean; onClose: () =
       lit = el;
       el.setAttribute("data-tour-spot", "");
       settle = setTimeout(() => { // after the screen has settled: opening one scrolls it to the top
-        const { top } = el.getBoundingClientRect();
-        if (top < 0 || top > window.innerHeight / 2) {
+        const { top, bottom } = el.getBoundingClientRect();
+        const box = document.querySelector("[data-tour-box]")?.getBoundingClientRect().top ?? window.innerHeight;
+        const margin = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
+        // A part that reaches under the box goes up when it would then show above it, or all but its last few pixels.
+        const under = bottom > box && bottom - top <= box - margin + 24;
+        if (top < 0 || top > window.innerHeight / 2 || (under && top > margin + 1)) {
           const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
           el.scrollIntoView({ block: "start", behavior: still ? "auto" : "smooth" });
         }
@@ -65,6 +71,7 @@ export function AppTour({ open, onClose, steps }: { open: boolean; onClose: () =
         // At the foot of the screen (bottom right from 640 px), over a light shade: the screen it describes shows, and
         // the ringed part stands out of the shade. Above that part (z 52 to its 51), should the two meet.
         overlayClassName="bg-black/25 backdrop-blur-none"
+        data-tour-box=""
         className="top-auto bottom-4 z-[52] translate-y-0 sm:right-6 sm:bottom-6 sm:left-auto sm:translate-x-0"
         onOpenAutoFocus={(e) => {
           // Radix hands the focus back only to a Dialog.Trigger, so the tour keeps what opened it and goes back there.

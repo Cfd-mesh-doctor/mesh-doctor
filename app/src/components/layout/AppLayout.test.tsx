@@ -119,8 +119,8 @@ describe("your own app's tour", () => {
     await user.click(await screen.findByRole("button", { name: "Next" }));
     const step = await screen.findByRole("dialog", { name: "Overview: where to start" });
     expect(step).toHaveTextContent("Step 2 of 5");
-    expect(step).toHaveTextContent(
-      "Until your first repair, the Overview opens with Getting started: the three steps to one. Each ticks itself off");
+    expect(step).toHaveTextContent("Until your first repair, the Overview opens with Getting started: the three steps to "
+      + "one, each ticked off once the engine lists it. The step marked Next is the one to do now.");
     expect(FIRST_STEPS_TOUR_STEP.spot).toBe("start"); // what it rings: the Overview's Getting started
     expect(router.state.location.pathname).toBe("/app");
   });

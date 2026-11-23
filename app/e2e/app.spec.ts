@@ -191,6 +191,29 @@ test("before your first repair, your own app's tour rings Getting started on the
   await expect(spot).toContainText("2 of 3 done");
 });
 
+test("on a laptop's screen, the tour's box stands clear of Getting started's command", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await mockEngine(page, { noJobs: true });
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  await expect(page.getByRole("region", { name: "Getting started" })).toContainText("2 of 3 done");
+  await page.getByRole("complementary").getByRole("button", { name: "Take the tour" }).click();
+  await expect(page.getByRole("dialog", { name: "Welcome to Mesh Doctor" })).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog", { name: "Overview: where to start" })).toBeVisible();
+  // The step's copy button (by CSS: with the tour open, the page around it is hidden from screen readers), above the
+  // tour's box or beside it, once the ringed part has been scrolled up.
+  const copy = page.locator("[data-tour-spot] button");
+  await expect(copy).toHaveCount(1);
+  await expect(async () => {
+    const c = await copy.boundingBox();
+    const box = await page.locator("[data-tour-box]").boundingBox();
+    expect(c && box && (c.y + c.height <= box.y || c.x + c.width <= box.x)).toBe(true);
+    expect(c && c.y >= 56).toBe(true); // and not under the header
+  }).toPass({ timeout: 4000 });
+});
+
 test("the body font starts loading with the page, and is fetched once", async ({ page, request }) => {
   const html = await (await request.get("/")).text();
   const link = html.match(/<link [^>]*rel="preload"[^>]*>/)?.[0] ?? "";

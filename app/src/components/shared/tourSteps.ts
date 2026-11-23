@@ -52,7 +52,8 @@ export const TOUR_STEPS: readonly TourStep[] = [
  * the steps to a first one, which the step rings. */
 export const FIRST_STEPS_TOUR_STEP: TourStep = {
   title: "Overview: where to start",
-  text: "Until your first repair, the Overview opens with Getting started: the three steps to one. Each ticks itself off once the engine lists it, and the step to do next is marked Next. Below it, the tiles show the engine, your source cases, your repair runs and the jobs running now.",
+  // Short, so the tour's box stays low enough for Getting started to show above it on a laptop's screen.
+  text: "Until your first repair, the Overview opens with Getting started: the three steps to one, each ticked off once the engine lists it. The step marked Next is the one to do now.",
   page: "",
   spot: "start",
 };
