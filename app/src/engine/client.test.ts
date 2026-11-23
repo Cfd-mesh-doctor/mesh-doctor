@@ -75,6 +75,33 @@ describe("httpTransport", () => {
       + "stop other OpenFOAM runs, then try again. On Windows, you can also give WSL more memory in `.wslconfig`.");
   });
 
+  it("gives the RAM guard's own numbers: what the job needs and what is free", () => {
+    // meshdoctor/ramguard.py's refusal, as POST /jobs answers it.
+    const said = "not enough memory: repair of 12,225 cells needs about 0.5 GB; 0.2 GB free. Close other programs "
+      + "(ParaView, another solver) or run it on a bigger machine.";
+    expect(explain(new EngineError("not-enough-memory", said, 409)).hint).toBe("It needs about 0.5 GB, and 0.2 GB is "
+      + "free. Close other programs or stop other OpenFOAM runs, then try again. On Windows, you can also give WSL more "
+      + "memory in `.wslconfig`.");
+  });
+
+  it("names the job in the way when the engine runs one already", () => {
+    // meshdoctor/jobs.py's refusals: a job of its own, or an OpenFOAM run it didn't start.
+    const job = "job 20261123-104610-repair-wing-fix-b349 (repair wing-fix) is running; one big job at a time (RAM)";
+    expect(explain(new EngineError("busy", job, 409)).hint).toBe("The repair wing-fix is running. Wait for it to "
+      + "finish, or cancel it on the Jobs page.");
+    expect(explain(new EngineError("busy", job.replace("(repair", "(abtest").replace("is running", "is queued"), 409)).hint)
+      .toMatch(/^The A\/B test wing-fix is waiting to start\. Wait/);
+    expect(explain(new EngineError("busy", "another OpenFOAM job is running; one big job at a time (RAM)", 409)).hint)
+      .toBe("Wait for it to finish, or cancel it on the Jobs page.");
+  });
+
+  it("offers only a new name for a run that exists, as the app never replaces one", () => {
+    const { title, hint } = explain(new EngineError("exists", "run wing-fix already exists; pick another name or replace it", 409));
+    expect(title).toBe("A run with that name already exists");
+    expect(hint).toMatch(/^Pick another name\./);
+    expect(hint).not.toMatch(/choose to replace/);
+  });
+
   it("says unreachable when nothing answers", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
     permissions("granted");

@@ -1,5 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+import { mockEngine, pairingLink } from "./engine";
+
+/** Pairs with the pretend engine, then opens a case's repair dialog on the Cases screen. */
+async function repairDialog(page: Page, kase: string) {
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  await page.goto("/app/cases");
+  await page.getByRole("button", { name: `Repair ${kase}` }).click();
+  return page.getByRole("dialog", { name: `Repair ${kase}` });
+}
 
 test("the sidebar's Repairs opens every repair run, and a run its report", async ({ page }) => {
   await page.goto("/demo");
@@ -54,4 +65,32 @@ test("New repair on the Repairs screen opens the dialog with a case to pick", as
   await dialog.getByRole("combobox", { name: "Case" }).selectOption("ahmed-35-medium");
   await expect(dialog.getByRole("textbox", { name: "Name of the new run" })).toHaveValue("ahmed-35-medium-fix");
   await expect(dialog.getByText("meshdoctor full ahmed-35-medium ahmed-35-medium-fix", { exact: true })).toBeVisible();
+});
+
+test("on your own engine, Start repair starts the job and opens its details on the Jobs screen", async ({ page }) => {
+  const engine = await mockEngine(page, { noJobs: true });
+  const dialog = await repairDialog(page, "wing");
+  await expect(dialog.getByRole("textbox", { name: "Name of the new run" })).toHaveValue("wing-fix");
+  await dialog.getByRole("button", { name: "Start repair" }).click();
+  await expect(page).toHaveURL(/\/app\/jobs\?job=20261123-120000-repair-wing-fix-e2e1$/);
+  await expect(page.getByRole("dialog", { name: "wing-fix" })).toBeVisible();
+  expect(engine.started).toEqual([{ kind: "repair", params: { source: "wing", name: "wing-fix", profile: "openfoam" } }]);
+});
+
+test("when the engine refuses a repair, the dialog says why, with the engine's own numbers", async ({ page }) => {
+  await mockEngine(page, {
+    noJobs: true,
+    refuse: {
+      code: "not-enough-memory",
+      message: "not enough memory: repair of 2,000,000 cells needs about 3.4 GB; 1.2 GB free. Close other programs "
+        + "(ParaView, another solver) or run it on a bigger machine.",
+    },
+  });
+  const dialog = await repairDialog(page, "wing");
+  await dialog.getByRole("button", { name: "Start repair" }).click();
+  const alert = dialog.getByRole("alert");
+  await expect(alert).toContainText("Not enough free memory");
+  await expect(alert).toContainText("It needs about 3.4 GB, and 1.2 GB is free.");
+  await expect(page).toHaveURL(/\/app\/cases$/); // nothing started: it stays open where it was
+  await expect(dialog.getByRole("button", { name: "Start repair" })).toBeEnabled();
 });

@@ -21,17 +21,23 @@ export interface MockEngine {
   down: boolean;
   wrongKey: boolean;
   apiVersion: string;
+  /** What POST /jobs was sent, in order. */
+  started: unknown[];
 }
 
 /** `repairs`: the repair runs it lists (none by default). `noJobs`: it lists no jobs (two by default). `broken`: the
- * lists it fails to give, with an error of its own (as when something goes wrong in the engine). */
+ * lists it fails to give, with an error of its own (as when something goes wrong in the engine). `refuse`: the error
+ * POST /jobs answers (409) instead of starting the job, as the engine's busy, memory and name checks do. */
 export async function mockEngine(
   page: Page,
-  opts: { down?: boolean; wrongKey?: boolean; repairs?: unknown[]; noJobs?: boolean; broken?: string[] } = {},
+  opts: {
+    down?: boolean; wrongKey?: boolean; repairs?: unknown[]; noJobs?: boolean; broken?: string[];
+    refuse?: { code: string; message: string };
+  } = {},
 ): Promise<MockEngine> {
   const state: MockEngine = {
     requests: [], cases: ["wing", "ahmed-25-coarse", "motorBike"],
-    down: opts.down ?? false, wrongKey: opts.wrongKey ?? false, apiVersion: "1.0",
+    down: opts.down ?? false, wrongKey: opts.wrongKey ?? false, apiVersion: "1.0", started: [],
   };
   const jobs = opts.noJobs ? [] : [
     job("20261121-130610-repair-wing-fix-13c2", "wing-fix", "running", { progress: { step: "fixing", fraction: 0.62 } }),
@@ -59,8 +65,19 @@ export async function mockEngine(
     }
     if (path === "/") return json(200, { apiVersion: state.apiVersion, version: "0.1.0", schemas: { repair: "1.0", job: "1.0" }, jobKinds: ["repair"] });
     if (path === "/cases") return json(200, { items: state.cases });
-    if (path === "/jobs") return json(200, { items: jobs });
+    if (path === "/jobs" && req.method() === "GET") return json(200, { items: jobs });
     if (path === "/repairs") return json(200, { items: opts.repairs ?? [] });
+    // A 16 GB laptop with no RAM limit (API 1.1).
+    if (path === "/machine") return json(200, { cpus: 8, cores: 4, memoryMb: 16_000, ramLimitMb: null });
+    if (path === "/jobs" && req.method() === "POST") {
+      const body = req.postDataJSON() as { kind: string; params: { name: string } };
+      state.started.push(body);
+      if (opts.refuse) return json(409, { error: opts.refuse });
+      const made = job(`20261123-120000-${body.kind}-${body.params.name}-e2e1`, body.params.name, "queued",
+        { kind: body.kind, params: body.params, started: null });
+      jobs.unshift(made);
+      return json(202, made);
+    }
     const cancel = /^\/jobs\/([^/]+)\/cancel$/.exec(path);
     if (cancel && req.method() === "POST") {
       const j = jobs.find((x) => x.id === cancel[1]);

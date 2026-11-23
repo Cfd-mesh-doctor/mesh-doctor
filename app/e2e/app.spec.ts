@@ -349,7 +349,11 @@ test("the Cases screen gives each case its own repair command to copy, naming th
   await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
   await page.getByRole("complementary").getByRole("link", { name: "Cases", exact: true }).click();
   const main = page.getByRole("main");
-  await expect(main.getByRole("link", { name: "the engine's dashboard" })).toHaveAttribute("href", `${ENGINE}/meshdoctor`);
+  // Wait for the Cases screen itself (it loads on demand), or the Overview's own links could answer for it. Each case
+  // starts its repair from its Repair button now, rather than from the engine's dashboard.
+  await expect(main.getByRole("heading", { name: "Cases", level: 1 })).toBeVisible();
+  await expect(main.getByRole("button", { name: "Repair wing" })).toBeVisible();
+  await expect(main.getByRole("link", { name: "the engine's dashboard" })).toHaveCount(0);
   // wing-fix is taken: a repair named so would replace it.
   const wing = main.getByRole("button", { name: "Copy repair command: meshdoctor full wing wing-fix-2" });
   await expect(main.getByRole("button", { name: "Copy repair command: meshdoctor full motorBike motorBike-fix" })).toBeVisible();

@@ -66,6 +66,23 @@ export interface Explained {
   troubleshooting?: true;
 }
 
+/** The RAM guard's numbers in its refusal ("repair of 12,225 cells needs about 0.5 GB; 0.2 GB free"), as a sentence;
+ * empty when the message doesn't have them. */
+function memoryNumbers(message: string): string {
+  const m = /needs about ([\d.,]+) GB; ([\d.,]+) GB free/.exec(message);
+  return m ? `It needs about ${m[1]} GB, and ${m[2]} GB is free. ` : "";
+}
+
+const BUSY_KIND: Record<string, string> = { repair: "The repair", abtest: "The A/B test", abextend: "The A/B extension" };
+
+/** The job in the way, from the engine's refusal ("job <id> (repair wing-fix) is running; one big job at a time"), as a
+ * sentence; empty when it names none (an OpenFOAM run started elsewhere). */
+function busyJob(message: string): string {
+  const m = /\((repair|abtest|abextend) ([^)\s]+)\) is (queued|running)/.exec(message);
+  if (!m) return "";
+  return `${BUSY_KIND[m[1]!]} ${m[2]} is ${m[3] === "queued" ? "waiting to start" : "running"}. `;
+}
+
 /** What went wrong and what to do, in plain words. */
 export function explain(err: unknown, origin = globalThis.location?.origin ?? ""): Explained {
   const e = asEngineError(err);
@@ -110,17 +127,24 @@ export function explain(err: unknown, origin = globalThis.location?.origin ?? ""
         troubleshooting: true,
       };
     case "busy":
-      return { title: "Another OpenFOAM job is running", hint: "Wait for it to finish, or cancel it on the Jobs page." };
+      return {
+        title: "Another OpenFOAM job is running",
+        hint: `${busyJob(e.message)}Wait for it to finish, or cancel it on the Jobs page.`,
+      };
     case "not-enough-memory":
       return {
         title: "Not enough free memory",
-        hint: "Close other programs or stop other OpenFOAM runs, then try again. On Windows, you can also give WSL "
-          + "more memory in `.wslconfig`.",
+        hint: `${memoryNumbers(e.message)}Close other programs or stop other OpenFOAM runs, then try again. On Windows, `
+          + "you can also give WSL more memory in `.wslconfig`.",
       };
     case "finished":
       return { title: "That job has already finished", hint: e.message };
     case "exists":
-      return { title: "A run with that name already exists", hint: "Pick another name, or choose to replace it." };
+      // The app never asks the engine to replace a run (its `replace` stays false), so the only way on is a new name.
+      return {
+        title: "A run with that name already exists",
+        hint: "Pick another name. The app never replaces a run, so the one with this name keeps its results.",
+      };
     case "not-found":
       return { title: "Not found", hint: e.message };
     case "forbidden":

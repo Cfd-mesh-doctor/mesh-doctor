@@ -149,6 +149,7 @@ describe("starting a repair from the Cases screen", () => {
     await user.click(await screen.findByRole("button", { name: "Repair wing" }));
     await user.click(startButton());
     expect(await within(dialog()).findByText("Not enough free memory")).toBeInTheDocument();
+    expect(within(dialog()).getByRole("alert")).toHaveTextContent("It needs about 0.5 GB, and 0.2 GB is free.");
     expect(startButton()).toBeEnabled(); // try again once memory is free
   });
 });
