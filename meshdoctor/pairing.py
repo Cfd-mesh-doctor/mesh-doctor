@@ -12,7 +12,8 @@ calls this machine's /api/v1 on localhost.  Two things keep every other site out
     browser never sends that part of a link to the web host.
 
     python3 -m meshdoctor pair            print the pairing link for each app address
-    python3 -m meshdoctor pair --new      make a new key: every paired browser must pair again
+    python3 -m meshdoctor pair --new      make a new key: restart the engine, then every paired browser
+                                          must pair again (the engine reads the key when it starts)
     python3 -m meshdoctor pair --open     also open the first link in the browser
 
 The key lives in ~/.config/meshdoctor/app.key (MESHDOCTOR_KEY_FILE to change it).
@@ -139,7 +140,9 @@ def engine_state(port, origin="", key="", timeout=2.0):
 def main(argv=None):
     ap = argparse.ArgumentParser(prog=prog.name() + " pair",
                                  description="Pair the Mesh Doctor web app with the engine on this machine.")
-    ap.add_argument("--new", action="store_true", help="make a new key (every paired browser must pair again)")
+    ap.add_argument("--new", action="store_true",
+                    help="make a new key; restart the engine to use it (it reads the key when it starts), and "
+                         "every paired browser must pair again")
     ap.add_argument("--open", action="store_true", help="open the first link in the browser")
     ap.add_argument("--port", type=int, default=int(os.environ.get("MESHDOCTOR_PORT", "8765")),
                     help="the engine's port (default %(default)s)")

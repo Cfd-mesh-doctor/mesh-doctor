@@ -1293,6 +1293,15 @@ class CommandHelpTest(unittest.TestCase):
                 self.assertIn("usage: python3 -m meshdoctor " + command,
                               self.help_of(lambda: module.main(["--help"]), None))
 
+    def test_pair_new_says_to_restart_the_engine(self):
+        """A new key counts only once the engine restarts: pair's help and its notes say so (item 168)."""
+        import pairing
+        flat = lambda text: " ".join(text.split())                       # argparse wraps its help
+        self.assertIn("--new make a new key; restart the engine to use it (it reads the key when it starts), and "
+                      "every paired browser must pair again", flat(self.help_of(lambda: pairing.main(["--help"]))))
+        self.assertIn("pair --new make a new key: restart the engine, then every paired browser must pair again "
+                      "(the engine reads the key when it starts)", flat(pairing.__doc__))
+
 
 class PairingTest(unittest.TestCase):
     """pairing.py: which app addresses count, the key file, and the pairing link."""
