@@ -104,7 +104,7 @@ export function AbTests() {
           to see it, or update Mesh Doctor.
         </p>
       )}
-      <Card>
+      <Card data-tour="abtests">
         {list.isPending ? (
           <TableSkeleton rows={3} cols={4} />
         ) : !rows.length ? (

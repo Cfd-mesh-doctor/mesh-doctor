@@ -145,7 +145,7 @@ export function HowItWorks() {
                 <div>
                   <CardTitle>Each step is a command</CardTitle>
                   <CardDescription>
-                    They all run on your PC: on the command line, or started from the engine's pages.
+                    They all run on your PC: on the command line, or started from the web app or the engine's dashboard.
                   </CardDescription>
                 </div>
               </CardHeader>

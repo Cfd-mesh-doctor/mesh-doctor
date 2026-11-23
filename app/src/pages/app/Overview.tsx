@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The engine at a glance: what it is, its cases, its repair runs (each finished one opens its report) and what is
-// running now; on your own engine, until its first repair run, the steps to one (Getting started).
-import { ArrowRight, Check, Cpu, FolderOpen, ListChecks, Terminal, Wrench } from "lucide-react";
-import { useId, type ReactNode } from "react";
+// running now; on your own engine, until its first repair run, the steps to one (Getting started). Both start a repair
+// here (the repair dialog), and give the command that does the same in a terminal.
+import { ArrowRight, Check, Cpu, FolderOpen, ListChecks, Wrench } from "lucide-react";
+import { useId, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { CopyBlock } from "@/components/shared/CopyBlock";
 import { CopyCommand } from "@/components/shared/CopyCommand";
@@ -12,6 +13,7 @@ import { NoJobsYet } from "@/components/shared/NoJobsYet";
 import { JobStateBadge, VerdictBadge } from "@/components/shared/badges";
 import { EmptyState, PageHeader, StatTile, TableSkeleton } from "@/components/shared/page";
 import { Badge, Dot } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardTitleRow, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/misc";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
@@ -26,8 +28,9 @@ import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
 import { FIRST_RUN_SETUP } from "@/pages/install/commands";
 import { jobOf, runLink, shownJobState } from "./runs";
+import { StartRepairDialog } from "./StartRepair";
 
-/** Repairs a copy of a case, in WSL or a Linux terminal; the app can't start repairs itself yet. */
+/** Repairs a copy of a case, in WSL or a Linux terminal: what the app's repair dialog does. */
 const REPAIR_COMMAND = "meshdoctor full <case> <name>";
 /** What the command's two blanks stand for: `<name>` could be read as your own name. */
 const BLANKS = (
@@ -49,6 +52,8 @@ interface Step {
   title: string;
   state: StepState;
   text: ReactNode;
+  /** A button that does it here, on the step to do now. */
+  action?: ReactNode;
   /** What to run, on the step to do now: one command, or a few lines. */
   command?: string;
   block?: string;
@@ -73,8 +78,8 @@ function StepLabel({ state }: { state: StepState }) {
 /**
  * A newcomer's three steps to a first repair, each ticked off from what the engine lists: 1. the engine answers (it
  * has, or this wouldn't show), 2. a case in its cases folder (else the README's First run, which sets up OpenFOAM's
- * motorBike tutorial where the engine looks), 3. a repair of a copy (the first case's command, with the names filled
- * in). The first step not done is the one thing to do next. `cases`: the cases the engine found; `repairing`: a repair
+ * motorBike tutorial where the engine looks), 3. a repair of a copy (started here, or with the first case's command,
+ * the names filled in). The first step not done is the one thing to do next. `cases`: the cases the engine found; `repairing`: a repair
  * job is waiting or running, so a first run is on its way.
  */
 function GettingStarted({ cases, repairing }: { cases: readonly string[]; repairing: boolean }) {
@@ -83,8 +88,15 @@ function GettingStarted({ cases, repairing }: { cases: readonly string[]; repair
   const casesScreen = (label: string) => <Link to={to("/cases")} className={LINK}>{label}</Link>;
   // The first case the engine finds by its name alone, so its command needs no blanks filled in.
   const first = cases.find((c) => repairCommand(c, []) !== null);
+  // The repair dialog, which offers that same case first.
+  const [starting, setStarting] = useState(false);
+  const start = <Button size="sm" onClick={() => setStarting(true)}><Wrench aria-hidden /> Start a repair</Button>;
   const repair: Step = !cases.length
-    ? { title: "Repair a copy", state: "later", text: "Then one command repairs a copy of it, never the case itself." }
+    ? {
+        title: "Repair a copy",
+        state: "later",
+        text: "Then a repair, started here or with one command, works on a copy of it, never the case itself.",
+      }
     : repairing
       ? {
           title: "Repair a copy",
@@ -100,10 +112,11 @@ function GettingStarted({ cases, repairing }: { cases: readonly string[]; repair
         ? {
             title: "Repair a copy",
             state: "next",
+            action: start,
             command: repairCommand(first, []) ?? undefined,
             text: (
               <>
-                Run this in a WSL or Linux terminal. It repairs a copy of{" "}
+                Start it here, or run this in a WSL or Linux terminal. It repairs a copy of{" "}
                 <code className="font-mono text-[12px]">{first}</code>, never the case itself. The run shows on this page
                 once the copy is made, and its verdict when it finishes.
                 {cases.length > 1 && <> Each other case has its own command on the {casesScreen("Cases screen")}.</>}
@@ -114,10 +127,11 @@ function GettingStarted({ cases, repairing }: { cases: readonly string[]; repair
             // No case the engine finds by its name alone: the command with its blanks, said in words.
             title: "Repair a copy",
             state: "next",
+            action: start,
             command: REPAIR_COMMAND,
             text: (
               <>
-                Run this in a WSL or Linux terminal {BLANKS}. It repairs a copy, never the case itself. The run shows on
+                Start it here, or run this in a WSL or Linux terminal {BLANKS}. It repairs a copy, never the case itself. The run shows on
                 this page once the copy is made, and its verdict when it finishes.
               </>
             ),
@@ -176,12 +190,21 @@ function GettingStarted({ cases, repairing }: { cases: readonly string[]; repair
                 <StepLabel state={s.state} />
               </div>
               <p className="mt-0.5 text-[13px] text-muted-foreground">{s.text}</p>
-              {s.command && <CopyCommand command={s.command} className="mt-3 max-w-xl" />}
+              {/* The way here, then the command for a terminal, as the text names them: side by side where both
+                  fit, so the step is no taller for its button (on a laptop's screen, the tour's box stays clear of
+                  the command); on a phone the command goes under it. */}
+              {(s.action || s.command) && (
+                <div className="mt-3 flex max-w-3xl flex-wrap items-center gap-2">
+                  {s.action}
+                  {s.command && <CopyCommand command={s.command} className="max-w-xl min-w-0 flex-1 basis-72" />}
+                </div>
+              )}
               {s.block && <CopyBlock code={s.block} className="mt-3 max-w-3xl" />}
             </div>
           </li>
         ))}
       </ol>
+      <StartRepairDialog open={starting} onOpenChange={setStarting} />
     </Card>
   );
 }
@@ -209,6 +232,8 @@ export function Overview() {
   const gettingStarted = mode === "engine" && noRuns && cases.isSuccess;
   // What didn't load, and why, at the top: the engine's own answer first, else the first list that failed. Try again
   // asks again for each one that failed.
+  // The Start a repair card's dialog.
+  const [starting, setStarting] = useState(false);
   const queries = [info, cases, jobs, repairs];
   const failed = queries.find((q) => q.isError);
   // Easier than filling in the command's blanks: each case's own command, on the Cases screen.
@@ -441,21 +466,25 @@ export function Overview() {
       {!repairs.isPending && !noRuns && (
         <Card className="mt-6 flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
           <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary-soft text-primary">
-            <Terminal className="size-5" />
+            <Wrench className="size-5" />
           </div>
           <div className="min-w-0 flex-1">
-            {/* Says how to start one now, rather than only that the app can't yet: this card is where the engine's
-                dashboard stays linked once the empty lists that first offer it have gone. */}
+            {/* The app's own way first. This card is also where the engine's dashboard stays linked once the empty
+                lists that first offer it have gone, and where the command for a terminal stays. */}
             <CardTitle>Start a repair</CardTitle>
             <CardDescription>
-              From <DashboardLink />, or with this command in a WSL or Linux terminal {BLANKS}: the run shows under Repair
-              runs once its copy is made.{" "}
-              {ownCommands} It works on a copy, so your case is never changed. Starting repairs from this app comes next.
+              Pick one of your cases with New repair: the engine repairs a copy of it, so the case itself is never
+              changed, and the run shows under Repair runs once the copy is made. Or start one from <DashboardLink />,
+              or with this command in a WSL or Linux terminal {BLANKS}. {ownCommands}
             </CardDescription>
           </div>
-          <CopyCommand command={REPAIR_COMMAND} className="sm:w-80" />
+          <div className="flex flex-col items-start gap-2 sm:w-80">
+            <Button size="sm" onClick={() => setStarting(true)}><Wrench aria-hidden /> New repair</Button>
+            <CopyCommand command={REPAIR_COMMAND} className="w-full" />
+          </div>
         </Card>
       )}
+      <StartRepairDialog open={starting} onOpenChange={setStarting} />
     </>
   );
 }

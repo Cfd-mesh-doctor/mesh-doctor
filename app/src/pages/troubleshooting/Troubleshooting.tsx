@@ -17,9 +17,10 @@ import { DocSource } from "@/pages/docs/DocSource";
 import { DocText } from "@/pages/docs/DocText";
 import { HeadingLink } from "@/pages/docs/HeadingLink";
 import { GROUPS } from "./problems";
-import { matches } from "./search";
+import { matcher } from "./search";
 
-const TOTAL = GROUPS.reduce((n, g) => n + g.table.rows.length, 0);
+const ROWS = GROUPS.flatMap((g) => g.table.rows);
+const TOTAL = ROWS.length;
 /** The three columns from tablet width up; on a phone each problem reads top to bottom. */
 const COLUMNS = "md:grid-cols-[minmax(0,5fr)_minmax(0,5fr)_minmax(0,6fr)] md:gap-6";
 
@@ -38,7 +39,8 @@ export function Troubleshooting() {
   const [params, setParams] = useSearchParams();
   const query = params.get("q") ?? "";
   const setQuery = (q: string) => setParams(q ? { q } : {}, ADDRESS_FIELD);
-  const shown = GROUPS.map((g) => ({ ...g, rows: g.table.rows.filter((r) => matches(r, query)) })).filter((g) => g.rows.length);
+  const match = matcher(ROWS, query);
+  const shown = GROUPS.map((g) => ({ ...g, rows: g.table.rows.filter(match) })).filter((g) => g.rows.length);
   const found = shown.reduce((n, g) => n + g.rows.length, 0);
   const source = <DocSource file="troubleshooting.md" className="max-w-none" />;
   return (

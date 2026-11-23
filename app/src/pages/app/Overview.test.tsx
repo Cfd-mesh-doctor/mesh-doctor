@@ -211,9 +211,11 @@ describe("the Overview before anything has run", () => {
     expect(screen.getByText("Only ever read, never changed")).toBeInTheDocument(); // the demo has cases
     expect(screen.queryByRole("link", { name: "Where the engine looks" })).toBeNull();
     expect(screen.getAllByRole("button", { name: COPY_REPAIR })).toHaveLength(1);
-    // The demo has no engine of its own: the card names the dashboard without linking it.
+    // The app's own way first. The demo has no engine of its own: the card names the dashboard without linking it.
     expect(screen.getByText((_, el) => el?.tagName === "P" && (el.textContent ?? "").startsWith(
-      `From the engine's dashboard, or with this command in a WSL or Linux terminal ${BLANKS}: the run shows under Repair runs once its copy is made.`)))
+      "Pick one of your cases with New repair: the engine repairs a copy of it, so the case itself is never changed, and "
+      + "the run shows under Repair runs once the copy is made. Or start one from the engine's dashboard, or with this "
+      + `command in a WSL or Linux terminal ${BLANKS}.`)))
       .toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "the engine's dashboard" })).toBeNull();
     // The Cases screen it points to is the demo's own.
@@ -237,7 +239,10 @@ describe("the Overview once something has run", () => {
     expect(card).toContainElement(blanksSaid()[0]!);
     // ...and points to each case's own command, on the Cases screen.
     expect(within(card).getByRole("link", { name: "Cases screen" })).toHaveAttribute("href", "/app/cases");
-    expect(card).toHaveTextContent("On the Cases screen, each case has its own, with the names filled in. It works on a copy");
+    expect(card).toHaveTextContent(/On the Cases screen, each case has its own, with the names filled in\.$/);
+    // ...and starts one here: New repair opens the repair dialog.
+    await userEvent.click(screen.getByRole("button", { name: "New repair" }));
+    expect(within(screen.getByRole("dialog")).getByRole("heading", { name: "Start a repair" })).toBeInTheDocument();
     // With a run, the tile counts the verdicts, even when none is in yet.
     expect(screen.getByText("0 improved, none worse")).toBeInTheDocument();
     expect(screen.queryByText("None yet")).toBeNull();
@@ -281,7 +286,7 @@ describe("the Overview's Getting started", () => {
     expect(within(aCase).getByRole("link", { name: "Cases screen" })).toHaveAttribute("href", "/app/cases");
     // The repair waits for a case: no label, and nothing to copy yet.
     expect(repair).not.toHaveAttribute("aria-current");
-    expect(repair).toHaveTextContent("Then one command repairs a copy of it, never the case itself.");
+    expect(repair).toHaveTextContent("Then a repair, started here or with one command, works on a copy of it, never the case itself.");
     expect(within(repair).queryByText(/^(Done|Next|Running)$/)).toBeNull();
     expect(within(progress()).getAllByRole("button")).toEqual([copy]); // the set-up's alone
   });
@@ -296,10 +301,15 @@ describe("the Overview's Getting started", () => {
     expect(within(repair).getByText("Next")).toBeInTheDocument();
     expect(within(repair).getByRole("button", { name: "Copy “meshdoctor full motorBike motorBike-fix”" })).toBeInTheDocument();
     expect(repair).toHaveTextContent(
-      "Run this in a WSL or Linux terminal. It repairs a copy of motorBike, never the case itself. The run shows on this page once the copy is made, and its verdict when it finishes.");
+      "Start it here, or run this in a WSL or Linux terminal. It repairs a copy of motorBike, never the case itself. The run shows on this page once the copy is made, and its verdict when it finishes.");
     expect(within(repair).queryByRole("link", { name: "Cases screen" })).toBeNull(); // one case: no others to point to
     // The command is on the page once: the empty list of runs doesn't give it again.
     expect(screen.getAllByRole("button", { name: /^Copy “meshdoctor full/ })).toHaveLength(1);
+    // Start a repair opens the repair dialog, on that same case.
+    await userEvent.click(within(repair).getByRole("button", { name: "Start a repair" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("heading", { name: "Start a repair" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("combobox", { name: "Case" })).toHaveValue("motorBike");
   });
 
   it("with several cases, gives the first command that needs no blanks, and points to the others' on the Cases screen", async () => {

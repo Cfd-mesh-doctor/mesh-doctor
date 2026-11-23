@@ -130,12 +130,14 @@ export function explain(err: unknown, origin = globalThis.location?.origin ?? ""
       return {
         title: "Another OpenFOAM job is running",
         hint: `${busyJob(e.message)}Wait for it to finish, or cancel it on the Jobs page.`,
+        troubleshooting: true,
       };
     case "not-enough-memory":
       return {
         title: "Not enough free memory",
         hint: `${memoryNumbers(e.message)}Close other programs or stop other OpenFOAM runs, then try again. On Windows, `
           + "you can also give WSL more memory in `.wslconfig`.",
+        troubleshooting: true,
       };
     case "finished":
       return { title: "That job has already finished", hint: e.message };
@@ -146,12 +148,14 @@ export function explain(err: unknown, origin = globalThis.location?.origin ?? ""
         return {
           title: "An A/B test with that name already exists",
           hint: "Tick Replace to run it again (its results are deleted), or run it longer from its own page.",
+          troubleshooting: true,
         };
       }
       // The app never asks the engine to replace a run (its `replace` stays false), so the only way on is a new name.
       return {
         title: "A run with that name already exists",
         hint: "Pick another name. The app never replaces a run, so the one with this name keeps its results.",
+        troubleshooting: true,
       };
     case "not-found":
       return { title: "Not found", hint: e.message };

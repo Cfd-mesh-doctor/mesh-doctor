@@ -104,7 +104,7 @@ export function Repairs() {
       {repairs.isError && (
         <ErrorPanel className="mb-6" error={repairs.error} onRetry={() => repairs.refetch()} retrying={repairs.isFetching} />
       )}
-      <Card>
+      <Card data-tour="repairs">
         <div className="flex items-center gap-3 border-b border-border px-3 py-3 sm:px-4">
           {/* Like the Jobs screen's: the choices that don't fit a phone's width go on to a second line. */}
           <Segmented

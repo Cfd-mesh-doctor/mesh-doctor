@@ -35,3 +35,17 @@ export function holdsMessage(row: string[], query: string): boolean {
   const q = plain(query);
   return messages(row[0] ?? "").some((m) => q.includes(m));
 }
+
+/** Whether the text is a message the problem's "You see" quotes, word for word: the title an error panel links with. */
+export function quotes(row: string[], query: string): boolean {
+  return messages(row[0] ?? "").includes(plain(query));
+}
+
+/**
+ * Which of `rows` to show for what was typed: those it matches, or, when it is a message one of them quotes word for
+ * word, only those that quote it. An error panel's link opens the page at its own problem, though every word of
+ * "A run with that name already exists" is in the A/B test's problem too.
+ */
+export function matcher(rows: string[][], query: string): (row: string[]) => boolean {
+  return rows.some((r) => quotes(r, query)) ? (r) => quotes(r, query) : (r) => matches(r, query);
+}

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { describe, expect, it } from "vitest";
 import { GROUPS } from "./problems";
-import { matches, plain } from "./search";
+import { matcher, plain } from "./search";
 
 const ALL = GROUPS.flatMap((g) => g.table.rows);
-const found = (query: string) => ALL.filter((row) => matches(row, query)).map((row) => row[0]);
+const found = (query: string) => ALL.filter(matcher(ALL, query)).map((row) => row[0]);
 
 describe("finding a problem", () => {
   it("shows every problem while nothing is typed", () => {
@@ -30,8 +30,11 @@ describe("finding a problem", () => {
 
   it("finds a web app error, and only it, by the title its error panel links with", () => {
     const quoted = GROUPS.find((g) => g.id === "web-app")!.table.rows.map((r) => r[0] ?? "").filter((s) => /^".+"$/.test(s));
-    expect(quoted).toHaveLength(5);
+    expect(quoted).toHaveLength(9);
     for (const seen of quoted) expect(found(seen.slice(1, -1))).toEqual([seen]);
+    // ...though every word of one is in another problem too: a few of them typed find both.
+    expect(found("with that name already exists")).toEqual([
+      "\"A run with that name already exists\"", "\"An A/B test with that name already exists\""]);
   });
 
   it("finds nothing for words no problem has", () => {

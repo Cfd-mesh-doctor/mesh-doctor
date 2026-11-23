@@ -460,7 +460,7 @@ test("on a phone the menu's Take the tour closes the menu and opens the tour", a
 test("on a phone the tour brings the part it means into view, clear of the top bar and above the tour", async ({ page }) => {
   await page.goto("/demo");
   await page.getByRole("button", { name: "Take the tour" }).click();
-  for (let i = 1; i < 5; i++) await page.keyboard.press("Enter");
+  for (let i = 1; i < 7; i++) await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog", { name: "Reports: did the repair help?" })).toBeVisible();
   // A report's verdict is far down a phone's screen, below its five number tiles.
   const verdict = page.locator('[data-tour="verdict"]');

@@ -8,7 +8,7 @@ import { renderScreen } from "@/test/render";
 import { AppTour } from "./AppTour";
 import { TOUR_STEPS } from "./tourSteps";
 
-const PARTS = ["tiles", "cases", "jobs", "verdict"];
+const PARTS = ["tiles", "cases", "repairs", "abtests", "jobs", "verdict"];
 
 /** The tour's button, and stand-ins for the parts of the screens it rings. */
 function Opener({ parts }: { parts: string[] }) {
@@ -35,9 +35,9 @@ describe("the app tour", () => {
     expect(cases.text).toMatch(/To repair one, press Repair under its name, or copy its repair command and run it in a WSL or Linux terminal\.$/);
   });
 
-  it("says, at a report, that your own engine's report gives the solver test's command when it has none", () => {
+  it("says, at a report, that your own engine's report offers to start the solver test when it has none", () => {
     const reports = TOUR_STEPS.find((s) => s.spot === "verdict")!;
-    expect(reports.text).toMatch(/if not, your own engine's report gives the command for that test\.$/);
+    expect(reports.text).toMatch(/if not, your own engine's report offers to start that test\.$/);
   });
 
   it("steps through with Enter and back again, then hands the focus back when done", async () => {
@@ -71,7 +71,8 @@ describe("the app tour", () => {
     const at = () => router.state.location.pathname;
     await user.click(screen.getByRole("button", { name: "Take the tour" }));
     expect(at()).toBe("/demo/jobs"); // the welcome stays where the tour was opened
-    for (const page of ["/demo", "/demo/cases", "/demo/jobs", "/demo/repairs/ahmed35-medium-fix/report"]) {
+    for (const page of ["/demo", "/demo/cases", "/demo/repairs", "/demo/abtests", "/demo/jobs",
+      "/demo/repairs/ahmed35-medium-fix/report"]) {
       await user.keyboard("{Enter}");
       await waitFor(() => expect(at()).toBe(page));
     }

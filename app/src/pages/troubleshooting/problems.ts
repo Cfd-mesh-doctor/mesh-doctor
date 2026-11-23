@@ -159,6 +159,26 @@ export const GROUPS: ProblemGroup[] = [
           "Safari doesn't let websites reach this computer",
           "use Chrome or Edge",
         ],
+        [
+          "\"Another OpenFOAM job is running\"",
+          "the engine runs one big job at a time, and a repair or an A/B test is already waiting or running, or an OpenFOAM run started outside Mesh Doctor is",
+          "wait for it to finish, or cancel it on the **Jobs** screen (a run started outside Mesh Doctor stops in its own window), then start yours again",
+        ],
+        [
+          "\"Not enough free memory\"",
+          "before it starts a job, the engine works out the memory it needs from the case's size, and the computer has less free",
+          "close other programs or stop other OpenFOAM runs, then try again; on Windows, WSL can also be given more memory in `.wslconfig`",
+        ],
+        [
+          "\"A run with that name already exists\"",
+          "the engine has a repair run of that name, which the list on screen didn't show yet",
+          "pick another name: the app never replaces a run, so the one with that name keeps its results",
+        ],
+        [
+          "\"An A/B test with that name already exists\"",
+          "an A/B test takes the name of the run it tests, and that run has been tested, which the list on screen didn't show yet",
+          "tick **Replace** to run it again (its results are deleted), or run it longer from the test's own page",
+        ],
       ],
     },
   },

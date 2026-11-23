@@ -34,14 +34,26 @@ export const TOUR_STEPS: readonly TourStep[] = [
     spot: "cases",
   },
   {
+    title: "Repairs: every repair run",
+    text: "Repairs lists every repair run, newest first, with its verdict: whether the repair made the mesh better. Each finished run opens its report, and New repair starts another, always on a copy of the case.",
+    page: "/repairs",
+    spot: "repairs",
+  },
+  {
+    title: "A/B tests: does the solver do better?",
+    text: "An A/B test solves a case twice, on the original mesh and on the repaired one, and compares how well each run converges. Start one here or from a finished repair's report; each test's page follows it while it runs.",
+    page: "/abtests",
+    spot: "abtests",
+  },
+  {
     title: "Jobs: what is running",
-    text: "Repairs and A/B tests started from the engine's dashboard run as jobs, and Jobs shows their progress live. Cancel stops a job that is running; Report opens one that has finished. A repair run in a terminal shows on the Overview instead.",
+    text: "Repairs and A/B tests run as jobs, whether started here or from the engine's dashboard, and Jobs shows their progress live. Cancel stops a job that is running; Report opens one that has finished. A repair run in a terminal shows on the Overview instead.",
     page: "/jobs",
     spot: "jobs",
   },
   {
     title: "Reports: did the repair help?",
-    text: "A report opens with its verdict. Below it are the checkMesh numbers before and after the repair, and where the mesh was repaired. When the repaired mesh was also run in the solver, it says whether the solver did better; if not, your own engine's report gives the command for that test.",
+    text: "A report opens with its verdict. Below it are the checkMesh numbers before and after the repair, and where the mesh was repaired. When the repaired mesh was also run in the solver, it says whether the solver did better; if not, your own engine's report offers to start that test.",
     // A repair that made the mesh better, so its report has something to show: the numbers it improved, and where.
     page: "/repairs/ahmed35-medium-fix/report",
     spot: "verdict",
@@ -62,14 +74,17 @@ export const FIRST_STEPS_TOUR_STEP: TourStep = {
  * repair, or stays on Jobs, where a job's report opens, before one has finished. With `noRuns` (the engine lists no repair run
  * yet), its Overview step is about Getting started, which the Overview opens with until then. */
 export function engineTourSteps(report: string | null, noRuns = false): readonly TourStep[] {
-  const [, overview, cases, jobs, reports] = TOUR_STEPS as readonly [TourStep, TourStep, TourStep, TourStep, TourStep];
+  const [, overview, cases, repairs, abtests, jobs, reports] =
+    TOUR_STEPS as readonly [TourStep, TourStep, TourStep, TourStep, TourStep, TourStep, TourStep];
   return [
     {
       title: "Welcome to Mesh Doctor",
-      text: "This browser is paired with the Mesh Doctor engine on your computer, so these screens show your own cases, repair runs and jobs, read from the engine. Your meshes stay on your computer. The tour opens each screen in turn and takes about a minute.",
+      text: "This browser is paired with the Mesh Doctor engine on your computer, so these screens show your own cases, repair runs, A/B tests and jobs, read from the engine. Your meshes stay on your computer. The tour opens each screen in turn and takes about a minute.",
     },
     noRuns ? FIRST_STEPS_TOUR_STEP : overview,
     cases,
+    repairs,
+    abtests,
     jobs,
     report === null
       ? {

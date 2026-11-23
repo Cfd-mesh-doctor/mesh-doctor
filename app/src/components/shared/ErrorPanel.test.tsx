@@ -54,8 +54,8 @@ describe("the error panel", () => {
   });
 
   it("has no link for a problem Troubleshooting doesn't have", () => {
-    render(<ErrorPanel error={new EngineError("busy", "another job is running", 409)} />);
-    expect(screen.getByText("Another OpenFOAM job is running")).toBeInTheDocument();
+    render(<ErrorPanel error={new EngineError("finished", "job 20261123-120000-repair-wing-fix-ab12 has finished", 409)} />);
+    expect(screen.getByText("That job has already finished")).toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 });
