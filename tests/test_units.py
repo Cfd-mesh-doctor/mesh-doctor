@@ -890,6 +890,24 @@ class ApiV1Test(unittest.TestCase):
                 params, cmd = md_api.ab_start("r1", 200, init)
             self.assertEqual((params["init"], cmd[cmd.index("--init") + 1]), (used, used))   # recorded as used
 
+    def test_abextend_goes_past_where_the_second_run_is(self):
+        ab = os.path.join(self.d, "work", "r1_ab")
+        os.makedirs(os.path.join(ab, "fixed"))
+        self.schema.write(os.path.join(ab, "ab_result.json"), {"source": self.src, "iters": 200, "init": "0",
+                          "fixed": {"forces": {}}, "extensions": [{"from": "200", "to": 400}]}, "abtest")
+        extend = lambda to: self.post("/jobs", {"kind": "abextend", "params": {"name": "r1", "to": to}})
+        self.assertError(extend(600), 409, "not-ready", "second run has no decomposed fields to continue from")
+        for t in ("0", "200", "400"):                                   # 200 iterations, then extended to 400
+            os.makedirs(os.path.join(ab, "fixed", "processor0", t))
+        for to in (300, 400):
+            self.assertError(extend(to), 400, "bad-request",
+                             "target must be between 401 and 5000: the second run is at iteration 400")
+        self.assertEqual(self.launched, [])                             # refused before anything starts
+        st, doc, _ = extend(600)
+        self.assertEqual(st, 202, doc)
+        cmd = self.launched[0]
+        self.assertEqual((cmd[-3], os.path.basename(cmd[-2]), cmd[-1]), ("extend", "r1_ab", "600"))
+
     def test_openapi_matches_the_table(self):
         doc = self.get("/openapi.json")[1]
         self.assertEqual(doc["openapi"], "3.1.0")

@@ -1163,7 +1163,7 @@ export interface operations {
                     params: {
                         /** @description an A/B test (GET /abtests) */
                         name: string;
-                        /** @description continue to this iteration */
+                        /** @description continue to this iteration, past the one the second run is at now (the A/B test's iterations, or where an earlier extension ended) */
                         to: number;
                     };
                 };

@@ -400,7 +400,9 @@ JOBS = {
         "summary": "continue the second run of a finished A/B test and judge it again",
         "params": _params({"name": dict(NAME, description="an A/B test (GET /abtests)"),
                            "to": {"type": "integer", "minimum": 21, "maximum": 5000,
-                                  "description": "continue to this iteration"}}, ["name", "to"]),
+                                  "description": "continue to this iteration, past the one the second run is at "
+                                                 "now (the A/B test's iterations, or where an earlier extension "
+                                                 "ended)"}}, ["name", "to"]),
         "start": lambda a: md_api.ab_extend(a["name"], a["to"]),
         "links": lambda n: {"abtest": f"{PREFIX}/abtests/{n}", "live": f"{PREFIX}/abtests/{n}/live"},
     },

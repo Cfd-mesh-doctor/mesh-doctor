@@ -2185,7 +2185,7 @@
                             "type": "string"
                           },
                           "to": {
-                            "description": "continue to this iteration",
+                            "description": "continue to this iteration, past the one the second run is at now (the A/B test's iterations, or where an earlier extension ended)",
                             "maximum": 5000,
                             "minimum": 21,
                             "type": "integer"

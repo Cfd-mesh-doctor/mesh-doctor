@@ -246,7 +246,8 @@ def ab(name):
 
 
 def ab_extend(label, to):
-    """Continue the second run of an A/B (abtest.py extend) and judge it."""
+    """Continue the second run of an A/B (abtest.py extend) and judge it.  The target must be past the iteration
+    that run is at now (the A/B test's own iterations, or where an earlier extension ended), as `ab extend` checks."""
     if not SAFE.match(label):
         return _refuse("bad-request", "bad arguments")
     top = os.path.join(md_dir(), label + "_ab")
@@ -257,10 +258,14 @@ def ab_extend(label, to):
         to = int(to)
     except ValueError:
         return _refuse("bad-request", "bad iteration count")
-    if not (r["iters"] < to <= 5000):
-        return _refuse("bad-request", f"target must be between {r['iters'] + 1} and 5000")
-    if not os.path.isdir(os.path.join(top, "fixed", "processor0")):
+    import abtest
+    try:
+        now = float(abtest.latest_time(os.path.join(top, "fixed")))
+    except (OSError, ValueError):                 # no processor0/, or no time in it
         return _refuse("not-ready", "second run has no decomposed fields to continue from")
+    if not (now < to <= 5000):
+        return _refuse("bad-request", f"target must be between {int(now) + 1} and 5000: the second run is at "
+                       f"iteration {now:g}")
     return _submit("abextend", {"name": label, "to": to}, label, [sys.executable, ABTEST, "extend", top, str(to)],
                    log=f"{label}_ab/extend.log", result=f"{label}_ab/ab_result.json",
                    ram=(os.path.join(top, "fixed"), "solve"))
