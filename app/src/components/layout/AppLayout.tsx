@@ -97,9 +97,12 @@ export function AppLayout() {
     if (tour) writeItem(TOUR_SEEN, "1");
   }, [tour]);
   // The demo's tour ends on a recorded report; your own app's on your latest finished repair's, asked of the engine
-  // while the tour is open.
+  // while the tour is open. Before the engine lists a repair run, your own app's Overview opens with Getting started,
+  // and the tour's Overview step is about that.
   const repairs = useRepairs(tour && mode === "engine");
-  const steps = mode === "demo" ? TOUR_STEPS : engineTourSteps(latestFinished(repairs.data?.items));
+  const steps = mode === "demo"
+    ? TOUR_STEPS
+    : engineTourSteps(latestFinished(repairs.data?.items), repairs.data?.items.length === 0);
   const onTour = () => {
     setOffer(false);
     setTour(true);

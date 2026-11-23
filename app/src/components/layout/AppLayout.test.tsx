@@ -2,7 +2,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { TOUR_SEEN } from "@/components/shared/tourSteps";
+import { FIRST_STEPS_TOUR_STEP, TOUR_SEEN, TOUR_STEPS } from "@/components/shared/tourSteps";
 import { demoTransport } from "@/demo/transport";
 import type { Transport } from "@/engine/client";
 import { EngineError } from "@/engine/errors";
@@ -102,9 +102,27 @@ describe("your own app's tour", () => {
     expect(await screen.findByRole("dialog", { name: "Welcome to Mesh Doctor" }))
       .toHaveTextContent("This browser is paired with the Mesh Doctor engine on your computer");
     await waitFor(() => expect(e.asked).toContain("/repairs"));
-    for (let i = 0; i < 4; i++) await user.click(screen.getByRole("button", { name: "Next" }));
+    // With repair runs, the Overview step is the demo's: the tiles and lists.
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("dialog", { name: TOUR_STEPS[1]!.title })).toHaveTextContent(TOUR_STEPS[1]!.text);
+    for (let i = 0; i < 3; i++) await user.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByRole("dialog", { name: "Reports: did the repair help?" })).toHaveTextContent("A report opens with its verdict.");
     expect(router.state.location.pathname).toBe("/app/repairs/latest-fix/report");
+  });
+
+  it("before the engine lists a repair run, has an Overview step about Getting started, which the Overview opens with then", async () => {
+    const user = userEvent.setup();
+    const e = engine([]);
+    const { router } = showApp(e);
+    await user.click(screen.getByRole("button", { name: "Take the tour" }));
+    await waitFor(() => expect(e.asked).toContain("/repairs"));
+    await user.click(await screen.findByRole("button", { name: "Next" }));
+    const step = await screen.findByRole("dialog", { name: "Overview: where to start" });
+    expect(step).toHaveTextContent("Step 2 of 5");
+    expect(step).toHaveTextContent(
+      "Until your first repair, the Overview opens with Getting started: the three steps to one. Each ticks itself off");
+    expect(FIRST_STEPS_TOUR_STEP.spot).toBe("start"); // what it rings: the Overview's Getting started
+    expect(router.state.location.pathname).toBe("/app");
   });
 
   it("stays on Jobs at its report step before a repair has finished, and says where reports open", async () => {

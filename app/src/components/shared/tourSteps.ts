@@ -48,16 +48,26 @@ export const TOUR_STEPS: readonly TourStep[] = [
   },
 ];
 
+/** Your own app's Overview step while the engine lists no repair run: the Overview then opens with Getting started,
+ * the steps to a first one, which the step rings. */
+export const FIRST_STEPS_TOUR_STEP: TourStep = {
+  title: "Overview: where to start",
+  text: "Until your first repair, the Overview opens with Getting started: the three steps to one. Each ticks itself off once the engine lists it, and the step to do next is marked Next. Below it, the tiles show the engine, your source cases, your repair runs and the jobs running now.",
+  page: "",
+  spot: "start",
+};
+
 /** Your own app's tour: its own welcome, and a report step that opens the report of `report`, your latest finished
- * repair, or stays on Jobs, where reports open, before one has finished. */
-export function engineTourSteps(report: string | null): readonly TourStep[] {
+ * repair, or stays on Jobs, where reports open, before one has finished. With `noRuns` (the engine lists no repair run
+ * yet), its Overview step is about Getting started, which the Overview opens with until then. */
+export function engineTourSteps(report: string | null, noRuns = false): readonly TourStep[] {
   const [, overview, cases, jobs, reports] = TOUR_STEPS as readonly [TourStep, TourStep, TourStep, TourStep, TourStep];
   return [
     {
       title: "Welcome to Mesh Doctor",
       text: "This browser is paired with the Mesh Doctor engine on your computer, so these screens show your own cases, repair runs and jobs, read from the engine. Your meshes stay on your computer. The tour opens each screen in turn and takes about a minute.",
     },
-    overview,
+    noRuns ? FIRST_STEPS_TOUR_STEP : overview,
     cases,
     jobs,
     report === null

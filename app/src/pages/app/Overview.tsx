@@ -144,7 +144,7 @@ function GettingStarted({ cases, repairing }: { cases: readonly string[]; repair
   ];
   const done = steps.filter((s) => s.state === "done").length;
   return (
-    <Card className="mb-6" aria-labelledby={id}>
+    <Card className="mb-6" aria-labelledby={id} data-tour="start">
       <CardHeader>
         <div>
           <CardTitle id={id}>Getting started</CardTitle>
