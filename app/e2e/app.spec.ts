@@ -304,6 +304,13 @@ test("before anything has run, the Overview and Jobs say how to start: the engin
   await expect(main.getByRole("link", { name: "Open the engine's dashboard" })).toHaveAttribute("href", `${ENGINE}/meshdoctor`);
   // Only the engine's lists were asked for: a link to its dashboard sends nothing until it's opened.
   expect(engine.requests.some((r) => new URL(r.url()).pathname === "/meshdoctor")).toBe(false);
+  // A repair run in a terminal, as Getting started says to, isn't a job: the empty list links the Overview, where it
+  // shows (the description above links it too).
+  const noJobs = main.locator("div", { has: page.getByRole("heading", { name: "No jobs yet" }) }).last();
+  await expect(noJobs).toContainText("A repair run in a terminal isn't a job: it shows under Repair runs on the Overview");
+  await noJobs.getByRole("link", { name: "Overview", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/);
+  await expect(start).toBeVisible();
 });
 
 test("once something has run, the Overview's Start a repair card (pointing to each case's own command) and the Jobs screen keep the engine's dashboard linked", async ({ page }) => {

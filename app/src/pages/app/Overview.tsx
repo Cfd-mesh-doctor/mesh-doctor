@@ -88,7 +88,7 @@ function GettingStarted({ cases, repairing }: { cases: readonly string[]; repair
           state: "running",
           text: (
             <>
-              A repair is under way, and shows here when it finishes. Its progress is on the{" "}
+              A repair is under way, and shows on this page once its copy is made. Its progress is on the{" "}
               <Link to={to("/jobs?show=active")} className={LINK}>Jobs screen</Link>.
             </>
           ),
@@ -101,8 +101,8 @@ function GettingStarted({ cases, repairing }: { cases: readonly string[]; repair
             text: (
               <>
                 Run this in a WSL or Linux terminal. It repairs a copy of{" "}
-                <code className="font-mono text-[12px]">{first}</code>, never the case itself, and the run shows here
-                when it finishes.
+                <code className="font-mono text-[12px]">{first}</code>, never the case itself. The run shows on this page
+                once the copy is made, and its verdict when it finishes.
                 {cases.length > 1 && <> Each other case has its own command on the {casesScreen("Cases screen")}.</>}
               </>
             ),
@@ -114,8 +114,8 @@ function GettingStarted({ cases, repairing }: { cases: readonly string[]; repair
             command: REPAIR_COMMAND,
             text: (
               <>
-                Run this in a WSL or Linux terminal {BLANKS}. It repairs a copy, never the case itself, and the run shows
-                here when it finishes.
+                Run this in a WSL or Linux terminal {BLANKS}. It repairs a copy, never the case itself. The run shows on
+                this page once the copy is made, and its verdict when it finishes.
               </>
             ),
           };
@@ -310,7 +310,7 @@ export function Overview() {
             <TableSkeleton rows={4} cols={3} />
           ) : jobItems.length === 0 ? (
             // A list that didn't load isn't empty: the message at the top says why, and no first steps are offered.
-            jobs.isError ? <EmptyState icon={ListChecks} title="The jobs didn't load" /> : <NoJobsYet />
+            jobs.isError ? <EmptyState icon={ListChecks} title="The jobs didn't load" /> : <NoJobsYet here />
           ) : (
             <Table>
               <THead>
@@ -360,7 +360,7 @@ export function Overview() {
           ) : noRuns && gettingStarted ? (
             // Getting started, at the top of the page, has the steps to the first run and its command: not again here.
             <EmptyState icon={Wrench} title="No repair runs yet">
-              Each repair shows here when it finishes, with its verdict and its report.
+              Each repair shows here once its copy is made, and its verdict and report when it finishes.
             </EmptyState>
           ) : noRuns ? (
             // The first step, where you look for your runs, when Getting started doesn't show (the cases didn't load):
@@ -369,8 +369,8 @@ export function Overview() {
               action={<CopyCommand command={REPAIR_COMMAND} className="max-w-full text-left" />}>
               Repair a copy of one of{" "}
               <Link to={to("/cases")} className="font-medium text-primary underline-offset-4 hover:underline">your cases</Link>{" "}
-              with this in a WSL or Linux terminal {BLANKS}, or from the engine's dashboard: the run shows here when it
-              finishes.{" "}
+              with this in a WSL or Linux terminal {BLANKS}, or from the engine's dashboard: the run shows here once its
+              copy is made.{" "}
               {ownCommands}
             </EmptyState>
           ) : (
@@ -416,8 +416,8 @@ export function Overview() {
                 dashboard stays linked once the empty lists that first offer it have gone. */}
             <CardTitle>Start a repair</CardTitle>
             <CardDescription>
-              From <DashboardLink />, or with this command in a WSL or Linux terminal {BLANKS}: the run shows up here when
-              it finishes.{" "}
+              From <DashboardLink />, or with this command in a WSL or Linux terminal {BLANKS}: the run shows under Repair
+              runs once its copy is made.{" "}
               {ownCommands} It works on a copy, so your case is never changed. Starting repairs from this app comes next.
             </CardDescription>
           </div>

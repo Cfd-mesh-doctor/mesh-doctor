@@ -94,7 +94,11 @@ describe("the Overview before anything has run", () => {
     expect(await screen.findByRole("region", { name: "Getting started" })).toBeInTheDocument();
     // The empty list of runs says what will show in it: Getting started, at the top, has the steps to the first.
     expect(screen.getByRole("heading", { name: "No repair runs yet" }).parentElement)
-      .toHaveTextContent("Each repair shows here when it finishes, with its verdict and its report.");
+      .toHaveTextContent("Each repair shows here once its copy is made, and its verdict and report when it finishes.");
+    // The empty list of jobs says a repair run in a terminal isn't a job, and shows on this page: no link to it.
+    const noJobs = screen.getByRole("heading", { name: "No jobs yet" }).parentElement!;
+    expect(noJobs).toHaveTextContent("A repair run in a terminal isn't a job: it shows under Repair runs on this page once its copy is made.");
+    expect(within(noJobs).queryByRole("link", { name: "Overview" })).toBeNull();
     // With no case yet there is nothing to repair: no command, in the list or in a card at the bottom of the page.
     expect(screen.queryAllByRole("button", { name: /^Copy “meshdoctor full/ })).toHaveLength(0);
     expect(screen.queryByRole("heading", { name: "Start a repair" })).toBeNull();
@@ -181,7 +185,7 @@ describe("the Overview before anything has run", () => {
     expect(screen.getAllByRole("button", { name: COPY_REPAIR })).toHaveLength(1);
     // The demo has no engine of its own: the card names the dashboard without linking it.
     expect(screen.getByText((_, el) => el?.tagName === "P" && (el.textContent ?? "").startsWith(
-      `From the engine's dashboard, or with this command in a WSL or Linux terminal ${BLANKS}: the run shows up here`)))
+      `From the engine's dashboard, or with this command in a WSL or Linux terminal ${BLANKS}: the run shows under Repair runs once its copy is made.`)))
       .toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "the engine's dashboard" })).toBeNull();
     // The Cases screen it points to is the demo's own.
@@ -264,7 +268,7 @@ describe("the Overview's Getting started", () => {
     expect(within(repair).getByText("Next")).toBeInTheDocument();
     expect(within(repair).getByRole("button", { name: "Copy “meshdoctor full motorBike motorBike-fix”" })).toBeInTheDocument();
     expect(repair).toHaveTextContent(
-      "Run this in a WSL or Linux terminal. It repairs a copy of motorBike, never the case itself, and the run shows here when it finishes.");
+      "Run this in a WSL or Linux terminal. It repairs a copy of motorBike, never the case itself. The run shows on this page once the copy is made, and its verdict when it finishes.");
     expect(within(repair).queryByRole("link", { name: "Cases screen" })).toBeNull(); // one case: no others to point to
     // The command is on the page once: the empty list of runs doesn't give it again.
     expect(screen.getAllByRole("button", { name: /^Copy “meshdoctor full/ })).toHaveLength(1);
@@ -294,7 +298,7 @@ describe("the Overview's Getting started", () => {
     expect(progress()).toHaveTextContent("2 of 3 done");
     expect(within(repair).getByText("Running")).toBeInTheDocument();
     expect(repair).not.toHaveAttribute("aria-current");
-    expect(repair).toHaveTextContent("A repair is under way, and shows here when it finishes. Its progress is on the Jobs screen.");
+    expect(repair).toHaveTextContent("A repair is under way, and shows on this page once its copy is made. Its progress is on the Jobs screen.");
     expect(within(repair).getByRole("link", { name: "Jobs screen" })).toHaveAttribute("href", "/app/jobs?show=active");
     expect(within(repair).queryAllByRole("button")).toHaveLength(0);
   });

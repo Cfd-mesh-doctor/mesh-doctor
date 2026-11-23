@@ -225,6 +225,7 @@ function DetailsDialog({ job, onClose, onCancel, nameOf }: {
 }
 
 export function Jobs() {
+  const to = useAppPath();
   const jobs = useJobs();
   // The filter and the job whose details are open live in the address, so a reload or a link keeps them. No
   // filter, or a word the page doesn't know, shows every job; a job that isn't on record opens nothing.
@@ -273,10 +274,13 @@ export function Jobs() {
       <PageHeader
         title="Jobs"
         description={
-          // Where jobs start stays said once there are some (the empty list says it too, with its own button).
+          // Where jobs start stays said once there are some (the empty list says it too, with its own button), and
+          // where a repair run in a terminal shows instead, as it isn't a job.
           <>
-            Repairs and A/B tests the engine has run or is running. They start from <DashboardLink />. Only one big job
-            runs at a time, to keep memory safe.
+            Repairs and A/B tests the engine has run or is running. They start from <DashboardLink />; a repair run in a
+            terminal shows on the{" "}
+            <Link to={to()} className="font-medium text-primary underline-offset-4 hover:underline">Overview</Link>{" "}
+            instead. Only one big job runs at a time, to keep memory safe.
           </>
         }
         actions={

@@ -183,6 +183,10 @@ describe("the Jobs screen before any job has run", () => {
     ownEngine();
     expect(await screen.findByRole("heading", { name: "No jobs yet" })).toBeInTheDocument();
     expect(screen.getByText(/^Repairs and A\/B tests started from the engine's own dashboard show here/)).toBeInTheDocument();
+    // A repair run in a terminal (as Getting started says to) isn't a job: the list says where it shows instead.
+    const empty = screen.getByRole("heading", { name: "No jobs yet" }).parentElement!;
+    expect(empty).toHaveTextContent("A repair run in a terminal isn't a job: it shows under Repair runs on the Overview once its copy is made.");
+    expect(within(empty).getByRole("link", { name: "Overview" })).toHaveAttribute("href", "/app");
     const dashboard = screen.getByRole("link", { name: "Open the engine's dashboard" });
     expect(dashboard).toHaveAttribute("href", "http://localhost:8765/meshdoctor");
     expect(dashboard).toHaveAttribute("target", "_blank");
@@ -211,7 +215,9 @@ describe("the Jobs screen once jobs have run", () => {
 
   it("names the dashboard without linking it in the demo, which has no engine of its own", async () => {
     open(path);
-    expect(await screen.findByText(/They start from the engine's dashboard\. Only one big job runs at a time/)).toBeInTheDocument();
+    // The description, with the Overview's link in it.
+    expect(await screen.findByText((_, el) => el?.tagName === "P" && /They start from the engine's dashboard; a repair run in a terminal shows on the Overview instead\. Only one big job runs at a time/.test(el.textContent ?? ""))).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute("href", "/demo"); // the demo's own
     expect(screen.queryByRole("link", { name: "the engine's dashboard" })).toBeNull();
   });
 });

@@ -131,7 +131,7 @@ describe("your own app's tour", () => {
     await user.click(screen.getByRole("button", { name: "Take the tour" }));
     for (let i = 0; i < 4; i++) await user.click(await screen.findByRole("button", { name: "Next" }));
     expect(screen.getByRole("dialog", { name: "Reports: did the repair help?" }))
-      .toHaveTextContent("No repair has finished yet. When one has, Report on the Jobs screen opens its report");
+      .toHaveTextContent("No repair has finished yet. When one has, Report beside it on the Overview, or beside its job here, opens its report");
     expect(router.state.location.pathname).toBe("/app/jobs");
   });
 

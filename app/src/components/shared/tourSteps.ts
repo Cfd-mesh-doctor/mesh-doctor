@@ -35,7 +35,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
   },
   {
     title: "Jobs: what is running",
-    text: "Every repair runs as a job, and Jobs shows its progress live. Cancel stops a job that is running; Report opens one that has finished.",
+    text: "Repairs and A/B tests started from the engine's dashboard run as jobs, and Jobs shows their progress live. Cancel stops a job that is running; Report opens one that has finished. A repair run in a terminal shows on the Overview instead.",
     page: "/jobs",
     spot: "jobs",
   },
@@ -59,7 +59,7 @@ export const FIRST_STEPS_TOUR_STEP: TourStep = {
 };
 
 /** Your own app's tour: its own welcome, and a report step that opens the report of `report`, your latest finished
- * repair, or stays on Jobs, where reports open, before one has finished. With `noRuns` (the engine lists no repair run
+ * repair, or stays on Jobs, where a job's report opens, before one has finished. With `noRuns` (the engine lists no repair run
  * yet), its Overview step is about Getting started, which the Overview opens with until then. */
 export function engineTourSteps(report: string | null, noRuns = false): readonly TourStep[] {
   const [, overview, cases, jobs, reports] = TOUR_STEPS as readonly [TourStep, TourStep, TourStep, TourStep, TourStep];
@@ -74,7 +74,7 @@ export function engineTourSteps(report: string | null, noRuns = false): readonly
     report === null
       ? {
           title: reports.title,
-          text: "No repair has finished yet. When one has, Report on the Jobs screen opens its report: the verdict first, then the checkMesh numbers before and after the repair, and where the mesh was repaired.",
+          text: "No repair has finished yet. When one has, Report beside it on the Overview, or beside its job here, opens its report: the verdict first, then the checkMesh numbers before and after the repair, and where the mesh was repaired.",
         }
       : { ...reports, page: `/repairs/${encodeURIComponent(report)}/report` },
   ];
