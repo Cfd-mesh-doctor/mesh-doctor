@@ -2,9 +2,10 @@
 // One A/B test (GET /abtests/{name}): what it is doing, whether the repair helped the solver (the report viewer's
 // table and residual chart), and the judge's verdict on each run. While it runs the screen asks again every 3 s, so
 // the chart grows; while the repaired-mesh run solves, the engine's live monitor adds its iteration, pace and a
-// judge so far. A run is judged (GET /abtests/{name}/judge) once it has ended.
-import { ArrowLeft, FileText, ListChecks } from "lucide-react";
-import { useMemo } from "react";
+// judge so far. A run is judged (GET /abtests/{name}/judge) once it has ended. Run longer continues the second run
+// of a test that has ended (StartAbTest.tsx); a test just started shows as waiting until its job makes its folder.
+import { ArrowLeft, FastForward, FileText, ListChecks } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 import { AbStateBadge } from "@/components/shared/badges";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
@@ -16,7 +17,7 @@ import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
 import { useAppPath, useEngine } from "@/engine/context";
 import { asEngineError } from "@/engine/errors";
 import { ACTIVE_POLL_MS, IDLE_POLL_MS, useAbtest, useAbtestJudge, useAbtestLive, useJobs, useRepairs } from "@/engine/hooks";
-import type { AbtestDetail, AbtestLive, Job } from "@/engine/types";
+import { isActive, type AbtestDetail, type AbtestLive, type Job } from "@/engine/types";
 import { caseName } from "@/engine/verdict";
 import { formatCount, formatDateTime, formatDuration, formatInt, formatPercent, formatRelative } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
@@ -26,6 +27,8 @@ import {
   abJobOf, abState, lastIteration, liveHistory, outcome, stepSide, stepText, type AbState,
 } from "@/report/abtest";
 import { abSummary, judgeOf } from "@/report/summary";
+import { ExtendAbTestDialog, type ExtendTarget } from "./StartAbTest";
+import { secondRunAt } from "./abStart";
 
 const LINK = "font-medium text-primary underline-offset-4 hover:underline";
 
@@ -207,6 +210,17 @@ export function AbTest() {
   const baseJudge = useAbtestJudge(name, "base", baseDone);
   const fixedJudge = useAbtestJudge(name, "fixed", fixedDone, fixedEnd);
   const report = repairs.data?.items.some((r) => r.name === name && r.verdict);
+  const [extending, setExtending] = useState(false);
+  // Run longer: once the second run has ended, and no job of the test is waiting or running.
+  const at = state === "running" || state === "unfinished" ? null : secondRunAt(detail?.result, fixedEnd);
+  const longer: ExtendTarget | null = at != null && detail?.result ? {
+    name,
+    at,
+    iters: detail.result.iters,
+    source: detail.result.source,
+    variant: detail.result.variant ?? null,
+    pace: detail.result.fixed?.secondsPerIteration ?? null,
+  } : null;
 
   const sub = [
     caseName(detail?.result?.source) && `case ${caseName(detail?.result?.source)}`,
@@ -229,8 +243,46 @@ export function AbTest() {
           <Link to={to(`/jobs?job=${encodeURIComponent(job.id)}`)}><ListChecks />Job details</Link>
         </Button>
       )}
+      {longer && (
+        <Button onClick={() => setExtending(true)}><FastForward />Run longer</Button>
+      )}
+      {longer && <ExtendAbTestDialog open={extending} onOpenChange={setExtending} test={longer} />}
     </div>
   );
+
+  // A test just started: its job hasn't made the test's folder yet, so the engine has none of that name for now.
+  const missing = first.isError && asEngineError(first.error).code === "not-found";
+  if (!detail && job && missing) {
+    return (
+      <>
+        <PageHeader title={name} description="A/B test" actions={actions} />
+        <Card>
+          <CardHeader className="flex-wrap">
+            <div>
+              <CardTitle>{isActive(job.state) ? "Starting" : "The test didn't start"}</CardTitle>
+              <CardDescription>
+                {isActive(job.state) ? `Its job ${job.state === "queued" ? "is waiting to start" : "has started"}` : "Its job stopped first"}
+              </CardDescription>
+            </div>
+            <AbStateBadge state={isActive(job.state) ? "running" : abState(null, job)} queued={job.state === "queued"} />
+          </CardHeader>
+          <CardContent className="text-sm">
+            {isActive(job.state) ? (
+              <p className="text-muted-foreground">
+                The engine is checking that the case fits in its memory and making the copies: the test shows here as
+                soon as its first step begins. This screen asks again every 3 s.
+              </p>
+            ) : (
+              <p className="text-danger">
+                {job.error || `It stopped with exit code ${job.exitCode ?? "?"}.`} See{" "}
+                <Link to={to(`/jobs?job=${encodeURIComponent(job.id)}`)} className={LINK}>its job</Link> for its log.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </>
+    );
+  }
 
   if (!detail) {
     return (

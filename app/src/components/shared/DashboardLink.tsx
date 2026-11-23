@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// "the engine's dashboard" in a sentence: where repairs and A/B tests start until this app can start them.
+// "the engine's dashboard" in a sentence: the engine's own page, which starts repairs and A/B tests too.
 import { ExternalLink } from "lucide-react";
 import { useEngineDashboard } from "@/engine/context";
 

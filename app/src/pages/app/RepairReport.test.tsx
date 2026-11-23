@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { demoTransport } from "@/demo/transport";
@@ -84,14 +84,29 @@ function ownEngine(name: string) {
 }
 
 describe("a repair's report on your own engine", () => {
-  it("offers the A/B test's command, with the names filled in, for a run that has none", async () => {
-    ownEngine("ahmed25-medium-fix");
+  it("starts an A/B test of a run that has none, or gives its command, with the names filled in", async () => {
+    const user = userEvent.setup();
+    ownEngine("ahmed35-medium-fix");
     expect(await screen.findByText(/from your engine/)).toBeInTheDocument();
     expect(screen.getByText("Did it help the solver?")).toBeInTheDocument();
     expect(screen.getByText("Not tested yet")).toBeInTheDocument();
-    expect(screen.getByText(/Run it in a WSL or Linux terminal: its result shows up in this report\.$/)).toBeInTheDocument();
+    expect(screen.getByText(/Start it here, or run this in a WSL or Linux terminal: its result shows up in this report\.$/)).toBeInTheDocument();
     // The source case by its folder's name, which the engine finds in the cases folder, then the run.
-    expect(screen.getByRole("button", { name: "Copy “meshdoctor ab ahmed-25-medium ahmed25-medium-fix”" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy “meshdoctor ab ahmed-35-medium ahmed35-medium-fix”" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Start an A/B test" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("heading", { name: "Start an A/B test of ahmed35-medium-fix" })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("combobox", { name: "Repair run" })).toBeNull(); // this run's, no other
+    expect(await within(dialog).findByText(/^Solves ahmed-35-medium twice, 200 iterations each/)).toBeInTheDocument();
+  });
+
+  it("follows the A/B test of a run while it runs: its result isn't in the report yet", async () => {
+    ownEngine("ahmed25-medium-fix");
+    expect(await screen.findByText("Being tested")).toBeInTheDocument();
+    expect(screen.getByText("Its A/B test is running: the result shows up in this report once both runs have ended.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Follow the A/B test" })).toHaveAttribute("href", "/app/abtests/ahmed25-medium-fix");
+    expect(screen.queryByRole("button", { name: "Start an A/B test" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Copy “meshdoctor ab / })).toBeNull();
   });
 
   it("doesn't offer it for a run that has an A/B test: the test's result is there instead", async () => {
@@ -100,5 +115,6 @@ describe("a repair's report on your own engine", () => {
     expect(screen.getByText("Did it help the solver?")).toBeInTheDocument();
     expect(screen.queryByText("Not tested yet")).toBeNull();
     expect(screen.queryByRole("button", { name: /^Copy “meshdoctor ab / })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start an A/B test" })).toBeNull();
   });
 });

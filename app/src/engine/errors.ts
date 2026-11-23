@@ -140,6 +140,14 @@ export function explain(err: unknown, origin = globalThis.location?.origin ?? ""
     case "finished":
       return { title: "That job has already finished", hint: e.message };
     case "exists":
+      // An A/B test has the name of what it tests, so it can't take another: the A/B dialog replaces it once ticked
+      // (it asks for that only when the engine's list has the test, so a refusal means the list was behind).
+      if (/^A\/B test /.test(e.message)) {
+        return {
+          title: "An A/B test with that name already exists",
+          hint: "Tick Replace to run it again (its results are deleted), or run it longer from its own page.",
+        };
+      }
       // The app never asks the engine to replace a run (its `replace` stays false), so the only way on is a new name.
       return {
         title: "A run with that name already exists",

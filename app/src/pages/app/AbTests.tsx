@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Every A/B test in the engine's workspace, running ones first, then newest first: what each is doing and, once
 // both its runs have ended, whether the repaired mesh's residuals ended lower. A test has the name of the repair run
-// it tests, and opens on its own screen (AbTest.tsx), live while it runs. An engine older than API 1.3 only names its
-// tests: the list then has their jobs' states, and each test's own screen has the rest.
-import { ExternalLink, FlaskConical, Wrench } from "lucide-react";
-import { useMemo } from "react";
+// it tests, and opens on its own screen (AbTest.tsx), live while it runs. Start an A/B test starts one from a
+// finished repair (StartAbTest.tsx). An engine older than API 1.3 only names its tests: the list then has their
+// jobs' states, and each test's own screen has the rest.
+import { FlaskConical, Wrench } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { AbStateBadge } from "@/components/shared/badges";
-import { DashboardLink } from "@/components/shared/DashboardLink";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { EmptyState, PageHeader, TableSkeleton } from "@/components/shared/page";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
-import { useAppPath, useEngineDashboard } from "@/engine/context";
+import { useAppPath } from "@/engine/context";
 import { ACTIVE_POLL_MS, IDLE_POLL_MS, useAbtests, useJobs, useRepairs } from "@/engine/hooks";
 import { isActive } from "@/engine/types";
 import { caseName } from "@/engine/verdict";
@@ -21,34 +21,31 @@ import { formatDateTime, formatRelative } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
 import { abRows, outcomeText, stepText } from "@/report/abtest";
 import { changeText } from "@/pages/report/tone";
+import { StartAbTestDialog } from "./StartAbTest";
+import { testableRuns } from "./abStart";
 
 const LINK = "font-medium text-primary underline-offset-4 hover:underline";
 
-function NoTestsYet() {
+function NoTestsYet({ canStart, onStart }: { canStart: boolean; onStart: () => void }) {
   const to = useAppPath();
-  const dashboard = useEngineDashboard();
   return (
     <EmptyState
       icon={FlaskConical}
       title="No A/B tests yet"
       action={(
         <div className="flex flex-wrap justify-center gap-2">
+          {canStart && (
+            <Button size="sm" onClick={onStart}><FlaskConical aria-hidden /> Start an A/B test</Button>
+          )}
           <Button variant="secondary" size="sm" asChild>
             <Link to={to("/repairs")}><Wrench aria-hidden /> Go to your repairs</Link>
           </Button>
-          {dashboard && (
-            <Button variant="secondary" size="sm" asChild>
-              <a href={dashboard} target="_blank" rel="noreferrer">
-                Open the engine's dashboard <ExternalLink aria-hidden />
-              </a>
-            </Button>
-          )}
         </div>
       )}
     >
       An A/B test solves a case twice with the same settings, on the original mesh and on its repaired copy, to see
-      whether the repair helps the solver. For now it starts from the engine&apos;s own dashboard, or in a WSL or Linux
-      terminal with the command a finished repair&apos;s report gives. Each test shows here while it runs.
+      whether the repair helps the solver. It starts from a finished repair{canStart ? "" : ", so repair a case first"};
+      each test shows here while it runs.
     </EmptyState>
   );
 }
@@ -61,6 +58,8 @@ export function AbTests() {
   const list = useAbtests(busy ? ACTIVE_POLL_MS : IDLE_POLL_MS);
   const repairs = useRepairs();
   const cases = useMemo(() => new Map((repairs.data?.items ?? []).map((r) => [r.name, caseName(r.source)])), [repairs.data]);
+  const canStart = testableRuns(repairs.data?.items).length > 0;
+  const [starting, setStarting] = useState(false);
   const rows = useMemo(
     () => abRows(list.data?.items ?? [], list.data?.tests, jobs.data?.items, cases),
     [list.data, jobs.data, cases],
@@ -75,16 +74,24 @@ export function AbTests() {
           <>
             Each A/B test solves a case twice with the same settings, on the original mesh and on the repaired one, and
             compares how far each converges: below 1× the repaired mesh&apos;s residuals end lower. A test has the name of
-            the repair it tests, on the <Link to={to("/repairs")} className={LINK}>Repairs screen</Link>; tests start
-            from <DashboardLink /> for now.
+            the repair it tests, on the <Link to={to("/repairs")} className={LINK}>Repairs screen</Link>: start one here,
+            or from a finished repair&apos;s report.
           </>
         }
-        actions={list.data && (
-          <span className="text-[13px] text-muted-foreground">
-            Updated {formatRelative(new Date(list.dataUpdatedAt).toISOString())}
-          </span>
+        actions={(
+          <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+            {list.data && (
+              <span className="text-[13px] text-muted-foreground">
+                Updated {formatRelative(new Date(list.dataUpdatedAt).toISOString())}
+              </span>
+            )}
+            {canStart && (rows.length > 0 || list.isError) && (
+              <Button onClick={() => setStarting(true)}><FlaskConical aria-hidden /> Start an A/B test</Button>
+            )}
+          </div>
         )}
       />
+      <StartAbTestDialog open={starting} onOpenChange={setStarting} />
       {list.isError && (
         <ErrorPanel className="mb-6" error={list.error} onRetry={() => list.refetch()} retrying={list.isFetching} />
       )}
@@ -98,7 +105,8 @@ export function AbTests() {
         {list.isPending ? (
           <TableSkeleton rows={3} cols={4} />
         ) : !rows.length ? (
-          list.isError ? <EmptyState icon={FlaskConical} title="The A/B tests didn't load" /> : <NoTestsYet />
+          list.isError ? <EmptyState icon={FlaskConical} title="The A/B tests didn't load" />
+            : <NoTestsYet canStart={canStart} onStart={() => setStarting(true)} />
         ) : (
           <Table>
             <THead>

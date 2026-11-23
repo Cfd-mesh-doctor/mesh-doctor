@@ -206,7 +206,7 @@ describe("the Jobs screen before any job has run", () => {
   it("says where jobs start, and opens the engine's own dashboard in a new tab", async () => {
     ownEngine();
     expect(await screen.findByRole("heading", { name: "No jobs yet" })).toBeInTheDocument();
-    expect(screen.getByText(/^Repairs started with a case's Repair button, and A\/B tests started from the engine's own dashboard, show here/))
+    expect(screen.getByText(/^Repairs started with a case's Repair button, and A\/B tests started from a finished repair, show here while they run, with their progress, as do those started from the engine's own dashboard\./))
       .toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Go to your cases" })).toHaveAttribute("href", "/app/cases");
     // A repair run in a terminal (as Getting started says to) isn't a job: the list says where it shows instead.
@@ -242,7 +242,7 @@ describe("the Jobs screen once jobs have run", () => {
   it("names the dashboard without linking it in the demo, which has no engine of its own", async () => {
     open(path);
     // The description, with the Overview's link in it.
-    expect(await screen.findByText((_, el) => el?.tagName === "P" && /Repairs start from the Cases and Repairs screens, A\/B tests from the engine's dashboard for now; a repair run in a terminal shows on the Overview instead\. Only one big job runs at a time/.test(el.textContent ?? ""))).toBeInTheDocument();
+    expect(await screen.findByText((_, el) => el?.tagName === "P" && /started here or from the engine's dashboard\. Repairs start from the Cases and Repairs screens, A\/B tests from the A\/B tests screen and a finished repair's report; a repair run in a terminal shows on the Overview instead\. Only one big job runs at a time/.test(el.textContent ?? ""))).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute("href", "/demo"); // the demo's own
     expect(screen.queryByRole("link", { name: "the engine's dashboard" })).toBeNull();
   });

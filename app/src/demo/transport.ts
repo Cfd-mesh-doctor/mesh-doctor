@@ -3,7 +3,7 @@
 // "_about"), served without any engine. It can cancel its own jobs; it cannot start anything.
 import type { Method, Transport } from "@/engine/client";
 import { EngineError } from "@/engine/errors";
-import type { AbtestDetail, CaseList, Job, JobList, MachineInfo, RepairList } from "@/engine/types";
+import type { AbtestDetail, CaseList, Job, JobList, MachineInfo, RepairList, VariantList } from "@/engine/types";
 import { caseName } from "@/engine/verdict";
 import { toMillis } from "@/lib/format";
 import { RECORDED } from "@/report/samples";
@@ -16,6 +16,17 @@ type Answers = Record<string, unknown>;
 /** The demo engine's computer, written by hand (the recording's engine predates GET /machine): a laptop that
  *  gives WSL 25 GB and 8 cores. */
 export const DEMO_MACHINE: MachineInfo = { cpus: 8, cores: 8, memoryMb: 25_600, ramLimitMb: null };
+
+/** The solver-setting presets for an A/B test's second run (GET /variants), which the recording's engine predates:
+ *  Mesh Doctor's own, as it names them. */
+export const DEMO_VARIANTS: VariantList = {
+  items: [
+    { name: "simplec", label: "SIMPLEC (consistent yes, U 0.9)" },
+    { name: "simplec2", label: "SIMPLEC, heavier relaxation (U 0.7, turbulence 0.5)" },
+    { name: "relax", label: "SIMPLE, low relaxation (p 0.2, U 0.5)" },
+    { name: "lts", label: "pseudo-transient local time stepping (localEuler)" },
+  ],
+};
 
 /**
  * Each case's size, which the recording's engine predates (API 1.2 added `cells` to GET /cases): the cell count
@@ -149,7 +160,7 @@ export function abTestFinished(jobs: JobList | undefined, run: string): boolean 
 
 export function demoTransport(answers: Answers = DEMO_ANSWERS, delayMs = DELAY_MS): Transport {
   // A private copy, so cancelling a demo job lasts until the page is reloaded and never touches the import.
-  const data: Answers = { "/machine": DEMO_MACHINE, ...structuredClone(answers) };
+  const data: Answers = { "/machine": DEMO_MACHINE, "/variants": DEMO_VARIANTS, ...structuredClone(answers) };
   const by = shiftTimes(data);
   const jobs = () => data["/jobs"] as JobList | undefined;
 

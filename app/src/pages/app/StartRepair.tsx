@@ -2,71 +2,37 @@
 // Starting a repair from the app: which case, the new run's name, the limits, whether it fits in the memory of the
 // engine's computer, then POST /jobs, and the new job's details on the Jobs screen. The demo can't start jobs: it
 // says so and gives the command that does the same in a terminal.
-import { CircleAlert, CircleCheck, Info, Wrench } from "lucide-react";
-import { useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { Wrench } from "lucide-react";
+import { useId, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogActions, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { DialogActions, DialogClose, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input, Segmented } from "@/components/ui/misc";
 import { fullCommand, isPlainName, repairName, type RepairProfile } from "@/engine/commands";
 import { useAppPath, useEngine } from "@/engine/context";
 import { useCases, useJobs, useMachine, useRepairs, useStartJob } from "@/engine/hooks";
 import { JOB_KIND_LABEL, isActive } from "@/engine/types";
-import { gigabytes } from "@/estimate/estimate";
 import { formatInt } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { FIELD, GB, JobDialog, Note } from "./dialogParts";
 import { PROFILES, caseCells, nameProblem, repairMemory, takenNames } from "./repairStart";
-
-const FIELD = "h-9 w-full rounded-lg border border-border bg-surface px-3 text-sm shadow-card " +
-  "focus-visible:border-primary focus-visible:outline-2 focus-visible:outline-offset-0";
-
-/** An amount of memory, kept on one line ("25.0 GB", never "25.0" and "GB" on two). */
-function GB({ value }: { value: number }) {
-  return <span className="whitespace-nowrap">{gigabytes(value)}</span>;
-}
-
-/** A line of the dialog that says how things stand, with an icon for its tone. */
-function Note({ tone, children }: { tone: "ok" | "warn" | "info"; children: ReactNode }) {
-  const Icon = tone === "ok" ? CircleCheck : tone === "warn" ? CircleAlert : Info;
-  return (
-    <p className={cn("flex gap-2 text-[13px]", tone === "warn" ? "text-foreground" : "text-muted-foreground")}>
-      <Icon aria-hidden className={cn("mt-0.5 size-4 shrink-0",
-        tone === "ok" ? "text-success" : tone === "warn" ? "text-warning" : "text-muted-foreground")} />
-      <span>{children}</span>
-    </p>
-  );
-}
 
 /**
  * The repair dialog, for case `source` or, without one, the first case the engine can repair (a list to pick
- * another from). It is made afresh each time it opens, so nothing typed last time stays.
+ * another from). It is made afresh each time it opens, so nothing typed last time stays; the focus goes back to the
+ * button that opened it (a case's Repair, or New repair).
  */
 export function StartRepairDialog({ open, onOpenChange, source = null }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   source?: string | null;
 }) {
-  // Radix gives the focus back only to a Dialog.Trigger: it goes back to the button that opened the dialog (a case's
-  // Repair, or New repair), unless that is gone, as after a start that moved on to the Jobs screen.
-  const opener = useRef<HTMLElement | null>(null);
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-w-lg"
-        onOpenAutoFocus={() => {
-          const active = document.activeElement;
-          opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
-        }}
-        onCloseAutoFocus={(e) => {
-          e.preventDefault();
-          if (opener.current?.isConnected) opener.current.focus();
-        }}
-      >
-        <StartRepairForm source={source} onDone={() => onOpenChange(false)} />
-      </DialogContent>
-    </Dialog>
+    <JobDialog open={open} onOpenChange={onOpenChange}>
+      <StartRepairForm source={source} onDone={() => onOpenChange(false)} />
+    </JobDialog>
   );
 }
 

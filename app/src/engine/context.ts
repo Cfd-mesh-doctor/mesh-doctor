@@ -36,8 +36,8 @@ export function useEngine(): EngineValue {
 }
 
 /**
- * The engine's own dashboard (its Mesh Doctor page, with Copy + detect + correct and Run A/B), where repairs and A/B
- * tests start until this app can start them. Only your own engine has one: null in the demo, or before pairing.
+ * The engine's own dashboard (its Mesh Doctor page, with Copy + detect + correct and Run A/B), which starts repairs
+ * and A/B tests too. Only your own engine has one: null in the demo, or before pairing.
  */
 export function useEngineDashboard(): string | null {
   const { mode } = useEngine();

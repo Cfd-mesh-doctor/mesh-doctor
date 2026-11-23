@@ -69,6 +69,9 @@ export async function mockEngine(
     if (path === "/repairs") return json(200, { items: opts.repairs ?? [] });
     // A 16 GB laptop with no RAM limit (API 1.1).
     if (path === "/machine") return json(200, { cpus: 8, cores: 4, memoryMb: 16_000, ramLimitMb: null });
+    // No A/B test yet (API 1.3), and one solver-setting variant for a test's second run.
+    if (path === "/abtests") return json(200, { items: [], tests: {} });
+    if (path === "/variants") return json(200, { items: [{ name: "lts", label: "pseudo-transient local time stepping (localEuler)" }] });
     if (path === "/jobs" && req.method() === "POST") {
       const body = req.postDataJSON() as { kind: string; params: { name: string } };
       state.started.push(body);

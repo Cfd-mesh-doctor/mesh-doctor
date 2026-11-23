@@ -125,6 +125,12 @@ describe("httpTransport", () => {
     expect(hint).not.toMatch(/choose to replace/);
   });
 
+  it("offers to replace an A/B test that exists, or to run it longer: its name is that of what it tests", () => {
+    const { title, hint } = explain(new EngineError("exists", "A/B test wing-fix already exists; extend it or replace it", 409));
+    expect(title).toBe("An A/B test with that name already exists");
+    expect(hint).toBe("Tick Replace to run it again (its results are deleted), or run it longer from its own page.");
+  });
+
   it("says unreachable when nothing answers", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
     permissions("granted");

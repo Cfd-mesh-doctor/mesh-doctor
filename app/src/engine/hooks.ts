@@ -128,8 +128,20 @@ export function useMachine(enabled = true) {
   });
 }
 
-/** Starts a job. The new job goes into the jobs list at once, so the Jobs screen can open it before the next refresh;
- * then the jobs and the repair runs are asked for again. */
+/** The solver-setting presets an A/B test's second run can use. They change only with Mesh Doctor itself, so they
+ * are asked for once, while `enabled` (the A/B test dialog is open). */
+export function useVariants(enabled = true) {
+  const { transport } = useEngine();
+  return useQuery({
+    queryKey: [transport?.scope, "variants"],
+    queryFn: transport && enabled ? ({ signal }) => api.variants(transport, signal) : skipToken,
+    staleTime: 30 * 60_000,
+  });
+}
+
+/** Starts a job. The new job goes into the jobs list at once, so the Jobs screen and an A/B test's page can follow it
+ * before the next refresh; then the jobs and the repair runs are asked for again, and after an A/B job the A/B
+ * tests. */
 export function useStartJob() {
   const { transport } = useEngine();
   const qc = useQueryClient();
@@ -142,9 +154,13 @@ export function useStartJob() {
       qc.setQueryData<JobList>([transport?.scope, "jobs"], (old) =>
         old && { ...old, items: [job, ...old.items.filter((j) => j.id !== job.id)] });
     },
-    onSettled: () => {
+    onSettled: (_job, _error, body) => {
       void qc.invalidateQueries({ queryKey: [transport?.scope, "jobs"] });
       void qc.invalidateQueries({ queryKey: [transport?.scope, "repairs"] });
+      if (body.kind !== "repair") {
+        void qc.invalidateQueries({ queryKey: [transport?.scope, "abtests"] });
+        void qc.invalidateQueries({ queryKey: [transport?.scope, "abtest"] });
+      }
     },
   });
 }

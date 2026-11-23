@@ -293,8 +293,9 @@ export function Jobs() {
           // Where jobs start stays said once there are some (the empty list says it too, with its own button), and
           // where a repair run in a terminal shows instead, as it isn't a job.
           <>
-            Repairs and A/B tests the engine has run or is running. Repairs start from the Cases and Repairs screens, A/B
-            tests from <DashboardLink /> for now; a repair run in a terminal shows on the{" "}
+            Repairs and A/B tests the engine has run or is running, started here or from <DashboardLink />. Repairs start
+            from the Cases and Repairs screens, A/B tests from the A/B tests screen and a finished repair&apos;s report; a
+            repair run in a terminal shows on the{" "}
             <Link to={to()} className="font-medium text-primary underline-offset-4 hover:underline">Overview</Link>{" "}
             instead. Only one big job runs at a time, to keep memory safe.
           </>

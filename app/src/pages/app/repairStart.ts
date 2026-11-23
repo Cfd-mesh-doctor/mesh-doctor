@@ -4,7 +4,7 @@
 import { isPlainName, type RepairProfile } from "@/engine/commands";
 import type { Job, MachineInfo, RepairSummary } from "@/engine/types";
 import { caseName } from "@/engine/verdict";
-import { estimate } from "@/estimate/estimate";
+import { estimate, type MemoryStep } from "@/estimate/estimate";
 import { machineFields } from "@/estimate/machine";
 
 /** The two sets of limits a repair can check the mesh against (How it works lists them), named as on Repairs. */
@@ -66,13 +66,17 @@ export interface MemoryCheck {
   fits: boolean;
 }
 
-/** Whether a repair of a case of `cells` cells fits in the memory of the engine's computer; null when either isn't
- * known (the engine still checks its free memory when the repair starts). */
-export function repairMemory(cells: number | null, machine: MachineInfo | undefined): MemoryCheck | null {
+/** Whether one of the size estimator's steps (`key`) on a case of `cells` cells fits in the memory of the engine's
+ * computer; null when either isn't known (the engine still checks its free memory when the job starts). */
+export function stepMemory(key: MemoryStep["key"], cells: number | null, machine: MachineInfo | undefined): MemoryCheck | null {
   if (cells == null || !(cells > 0) || !machine) return null;
   const { ram, limited } = machineFields(machine);
   if (ram === undefined) return null;
-  const step = estimate({ cells: cells / 1e6, iterations: 1, ram, cores: 1, price: 0 }).memory
-    .find((s) => s.key === "meshDoctor");
+  const step = estimate({ cells: cells / 1e6, iterations: 1, ram, cores: 1, price: 0 }).memory.find((s) => s.key === key);
   return step ? { need: step.gb, have: ram, limited: limited === true, fits: step.fits } : null;
+}
+
+/** Whether a repair of a case of `cells` cells fits in the memory of the engine's computer. */
+export function repairMemory(cells: number | null, machine: MachineInfo | undefined): MemoryCheck | null {
+  return stepMemory("meshDoctor", cells, machine);
 }

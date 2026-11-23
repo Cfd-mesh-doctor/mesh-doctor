@@ -228,12 +228,13 @@ export function Report() {
 }
 
 /** An open report. The app shows a repair's report from the engine with it too (pages/app/RepairReport). */
-export function ReportView({ summary: s, from, action, abCommand, clusterSource }: {
+export function ReportView({ summary: s, from, action, abNext, clusterSource }: {
   summary: ReportSummary;
   from: string;
   action: ReactNode;
-  /** A run of your own engine with no A/B test yet: the command for one, offered where its result will show. */
-  abCommand?: string | null;
+  /** A run of your own engine with no A/B test result yet: a card that starts one, or follows the one running, where
+   *  its result will show. */
+  abNext?: ReactNode;
   /** Where the run's cluster shapes come from (the app); a report file has none, so its list has no 3D view. */
   clusterSource?: ClusterSource | null;
 }) {
@@ -313,8 +314,8 @@ export function ReportView({ summary: s, from, action, abCommand, clusterSource 
         </Section>
       )}
 
-      {/* Two columns only when there is an A/B test, or the command for one, to sit beside checkMesh. */}
-      <div className={cn("mt-4 grid grid-cols-1 items-start gap-4", (s.ab || abCommand) && "lg:grid-cols-2")}>
+      {/* Two columns only when there is an A/B test, or a card to start one, to sit beside checkMesh. */}
+      <div className={cn("mt-4 grid grid-cols-1 items-start gap-4", (s.ab || abNext) && "lg:grid-cols-2")}>
         <Section title="checkMesh, before and after the repair">
           <CheckMeshCard rows={s.checkMesh} />
         </Section>
@@ -322,9 +323,9 @@ export function ReportView({ summary: s, from, action, abCommand, clusterSource 
           <Section title="Did it help the solver?">
             <AbCard ab={s.ab} />
           </Section>
-        ) : abCommand && (
+        ) : abNext && (
           <Section title="Did it help the solver?">
-            <AbNextCard command={abCommand} />
+            {abNext}
           </Section>
         )}
       </div>
@@ -387,27 +388,6 @@ function CheckMeshCard({ rows }: { rows: ReportSummary["checkMesh"] }) {
 }
 
 /** The next step for a run of your own engine that has no A/B test yet: the command, with the names filled in. */
-function AbNextCard({ command }: { command: string }) {
-  return (
-    <Card>
-      <CardHeader>
-        <div>
-          <CardTitle>Did it help the solver?</CardTitle>
-          <CardDescription>Not tested yet</CardDescription>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">
-          The A/B solver test runs your case twice, on the original mesh and on the repaired one, with the same
-          settings, and compares how they converge. Run it in a WSL or Linux terminal: its result shows up in this
-          report.
-        </p>
-        <CopyCommand command={command} className="mt-3" />
-      </CardContent>
-    </Card>
-  );
-}
-
 function MapKey({ mark, children }: { mark: ReactNode; children: ReactNode }) {
   return <span className="inline-flex items-center gap-1.5">{mark}{children}</span>;
 }

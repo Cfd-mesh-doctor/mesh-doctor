@@ -38,9 +38,29 @@ export function repairCommand(source: string, runs: Iterable<string>, profile: R
   return name && fullCommand(source, name, profile);
 }
 
+/** How an A/B test runs, where it isn't the command's default: each run's iterations (200), the case's folder both
+ * runs start from (auto: 0.warm when the case has one, else 0) and a solver-setting variant for the second run. */
+export interface AbOptions {
+  iters?: number;
+  init?: string;
+  variant?: string;
+}
+
 /** The command that runs the solver A/B test of repair run `name` against its source case `source` (its folder's
- * name, which the engine finds in the cases folder): the result lands where the run's report reads it. None when
- * either isn't a plain folder name. */
-export function abCommand(source: string | null, name: string): string | null {
-  return source && PLAIN.test(source) && PLAIN.test(name) ? `meshdoctor ab ${source} ${name}` : null;
+ * name, which the engine finds in the cases folder): the result lands where the run's report reads it. With a
+ * variant the second run is the original mesh with those settings ("-" in place of the run), as the engine starts
+ * it. None when either isn't a plain folder name. */
+export function abCommand(source: string | null, name: string, { iters, init, variant }: AbOptions = {}): string | null {
+  if (!source || !PLAIN.test(source) || !PLAIN.test(name) || (variant && !PLAIN.test(variant))) return null;
+  return [
+    `meshdoctor ab ${source} ${variant ? "-" : name}`,
+    iters != null && iters !== 200 && `--iters ${iters}`,
+    init && init !== "auto" && PLAIN.test(init) && `--init ${init}`,
+    variant && `--variant ${variant}`,
+  ].filter(Boolean).join(" ");
+}
+
+/** The command that continues the second run of A/B test `name` to iteration `to` and judges it again. */
+export function abExtendCommand(name: string, to: number): string | null {
+  return PLAIN.test(name) && Number.isInteger(to) ? `meshdoctor ab extend ${name} ${to}` : null;
 }

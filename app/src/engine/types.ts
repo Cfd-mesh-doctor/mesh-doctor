@@ -34,6 +34,9 @@ export type ResidualTable = NonNullable<AbtestDetail["live"]["base"]>;
 export type AbtestLive = Json<operations["abtest_live"]["responses"][200]>;
 /** The judge on one run of an A/B test (the judge document). */
 export type JudgeAnswer = Json<operations["abtest_judge"]["responses"][200]>;
+/** The solver-setting presets an A/B test's second run can use in place of the case's own (GET /variants). */
+export type VariantList = Json<operations["variants"]["responses"][200]>;
+export type Variant = VariantList["items"][number];
 
 /** The API major version this app speaks; the engine reports major.minor and any 1.x works. */
 export const API_MAJOR = 1;

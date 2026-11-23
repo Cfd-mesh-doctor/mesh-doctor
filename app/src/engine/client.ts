@@ -5,7 +5,7 @@ import { NOT_THE_ENGINE, EngineError, isEngineCode } from "./errors";
 import { localAccessState } from "./permission";
 import type {
   AbtestDetail, AbtestList, AbtestLive, CaseList, ClusterShape, EngineInfo, Job, JobList, JobRequest, JudgeAnswer, MachineInfo,
-  RepairList,
+  RepairList, VariantList,
 } from "./types";
 import { API_MAJOR } from "./types";
 import type { Report } from "@/report/read";
@@ -118,6 +118,8 @@ export const api = {
   /** The judge on one run of an A/B test: the original mesh's (base) or the repaired one's (fixed). */
   abtestJudge: (t: Transport, name: string, side: "base" | "fixed", signal?: AbortSignal) =>
     t.request<JudgeAnswer>("GET", `/abtests/${encodeURIComponent(name)}/judge?side=${side}`, undefined, signal),
+  /** The solver-setting presets an A/B test's second run can use: on the original mesh, in place of the case's own. */
+  variants: (t: Transport, signal?: AbortSignal) => t.request<VariantList>("GET", "/variants", undefined, signal),
   /** The computer the engine runs on (API 1.1); an older engine answers not-found. */
   machine: (t: Transport, signal?: AbortSignal) => t.request<MachineInfo>("GET", "/machine", undefined, signal),
 };
