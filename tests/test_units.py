@@ -1172,6 +1172,47 @@ class CommandNameTest(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+class SelfCheckTest(unittest.TestCase):
+    """meshdoctor check: one line per check, then what to do next (item 161)."""
+
+    PROGS = ("foamRun checkMesh decomposePar foamDictionary foamMeshDoctor foamResidualHotspots "
+             "foamCourantCells").split()
+
+    def run_check(self, foam):
+        import selfcheck
+        tmp = tempfile.mkdtemp(prefix="md_check_")
+        self.addCleanup(shutil.rmtree, tmp, True)
+        cases, ws, bashrc = (os.path.join(tmp, d) for d in ("cases", "work", "bashrc"))
+        os.mkdir(cases)
+        open(bashrc, "w").close()
+        resolved = {"cases": (cases, "test"), "workspace": (ws, "test"), "bashrc": (bashrc, "test"),
+                    "live_case": ("", "default")}
+        out = io.StringIO()
+        with mock.patch.object(selfcheck.config, "resolve", return_value=resolved), \
+                mock.patch.object(selfcheck, "foam_env", return_value=foam), \
+                mock.patch.object(selfcheck.ramguard, "available_mb", return_value=8192), \
+                mock.patch.dict(os.environ, {"MESHDOCTOR_PROG": "meshdoctor"}), contextlib.redirect_stdout(out):
+            code = selfcheck.main([])
+        return code, out.getvalue()
+
+    def test_ready_says_what_to_do_next(self):
+        foam = {"project": "OpenFOAM", "version": "14", "appbin": "/opt/x/bin",
+                "progs": {p: "/opt/x/bin/" + p for p in self.PROGS}}
+        code, out = self.run_check(foam)
+        self.assertEqual(code, 0, out)
+        self.assertIn("\nready\nNext: try a repair on OpenFOAM's motorBike tutorial (the README's \"First run\")", out)
+        self.assertIn("its dashboard with meshdoctor serve; for the web app, run meshdoctor pair --open in a second "
+                      "terminal.\n", out)
+        self.assertNotIn("problem(s)", out)
+
+    def test_a_problem_says_to_check_again(self):
+        code, out = self.run_check(None)                                   # no OpenFOAM environment
+        self.assertEqual(code, 1)
+        self.assertIn("FAIL  OpenFOAM", out)
+        self.assertIn("\n1 problem(s) to fix before using Mesh Doctor; then run meshdoctor check again\n", out)
+        self.assertNotIn("Next:", out)
+
+
 class CommandHelpTest(unittest.TestCase):
     """Each command's own help gives commands as they are typed here, as the main help does (item 160)."""
 

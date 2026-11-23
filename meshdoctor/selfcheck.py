@@ -3,12 +3,13 @@
 """Is this machine ready for Mesh Doctor?   python3 -m meshdoctor check
 
 Checks Python, numpy, the settings, OpenFOAM 14 (openfoam.org), the built
-utilities, the workspace and memory.  Prints one line per check; exits 1 if
-anything required is missing.  Reads only; changes nothing.
+utilities, the workspace and memory.  Prints one line per check, then what to
+do next; exits 1 if anything required is missing.  Reads only; changes nothing.
 """
 import os, shlex, subprocess, sys
 
 import config
+import prog
 import ramguard
 
 FAIL, WARN, OK = "FAIL", "warn", "ok"
@@ -76,8 +77,13 @@ def main(argv=None):
     for level, what, detail in rows:
         print(f"{level:4s}  {what:{w}s}  {detail}")
     bad = sum(1 for r in rows if r[0] == FAIL)
-    print("\nready" if not bad else f"\n{bad} problem(s) to fix before using Mesh Doctor")
-    return 1 if bad else 0
+    md = prog.name()
+    if bad:
+        print(f"\n{bad} problem(s) to fix before using Mesh Doctor; then run {md} check again")
+        return 1
+    print(f"\nready\nNext: try a repair on OpenFOAM's motorBike tutorial (the README's \"First run\"), or start the "
+          f"engine and\nits dashboard with {md} serve; for the web app, run {md} pair --open in a second terminal.")
+    return 0
 
 
 if __name__ == "__main__":
