@@ -1610,7 +1610,28 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, unknown>;
+                    "application/json": {
+                        /** @description every face of the cells beside the cluster's failing faces (at most 6000) */
+                        cells: {
+                            /** @description the face's badness: its worst measure divided by that measure's target, so above 1 fails the target */
+                            bad: number;
+                            /** @description the cell, numbered in its processor's mesh when the case is decomposed */
+                            cell: number;
+                            /** @description the face, numbered like the cell */
+                            face: number;
+                            /** @description one of this cluster's failing faces */
+                            hot: boolean;
+                            /** @description the polygon's corners in order, x y z after x y z, in metres */
+                            xyz: number[];
+                        }[];
+                        /** @description boundary faces near the cluster (any patch but processor boundaries), to show where it is (at most 8000) */
+                        ctx: {
+                            /** @description the patch the face is on */
+                            patch: string;
+                            /** @description the polygon's corners in order, x y z after x y z, in metres */
+                            xyz: number[];
+                        }[];
+                    };
                 };
             };
             /** @description Error (the code says which; see STATUS in api_v1.py) */

@@ -3,7 +3,7 @@
 // the demo answers from recorded data. Screens only see a Transport, so both look the same to them.
 import { NOT_THE_ENGINE, EngineError, isEngineCode } from "./errors";
 import { localAccessState } from "./permission";
-import type { CaseList, EngineInfo, Job, JobList, JobRequest, MachineInfo, RepairList } from "./types";
+import type { CaseList, ClusterShape, EngineInfo, Job, JobList, JobRequest, MachineInfo, RepairList } from "./types";
 import { API_MAJOR } from "./types";
 import type { Report } from "@/report/read";
 
@@ -103,6 +103,9 @@ export const api = {
   repairs: (t: Transport, signal?: AbortSignal) => t.request<RepairList>("GET", "/repairs", undefined, signal),
   report: (t: Transport, name: string, signal?: AbortSignal) =>
     t.request<Report>("GET", `/repairs/${encodeURIComponent(name)}/report`, undefined, signal),
+  /** One defect cluster's shapes, before or after the repair, numbered as the repair lists them (from 0). */
+  cluster: (t: Transport, name: string, id: number, tag: "before" | "after", signal?: AbortSignal) =>
+    t.request<ClusterShape>("GET", `/repairs/${encodeURIComponent(name)}/clusters/${id}?tag=${tag}`, undefined, signal),
   /** The computer the engine runs on (API 1.1); an older engine answers not-found. */
   machine: (t: Transport, signal?: AbortSignal) => t.request<MachineInfo>("GET", "/machine", undefined, signal),
 };

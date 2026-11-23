@@ -20,6 +20,9 @@ export type JobKind = Job["kind"];
 export type ApiErrorCode = components["schemas"]["Error"]["error"]["code"];
 /** What POST /jobs takes: a repair, an A/B test or an A/B extension, with its params. */
 export type JobRequest = Json<operations["start_job"]["requestBody"]>;
+/** One defect cluster's shapes, for its 3D view: every face of the cells beside its failing faces, and the boundary
+ *  faces nearby. */
+export type ClusterShape = Json<operations["repair_cluster"]["responses"][200]>;
 
 /** The API major version this app speaks; the engine reports major.minor and any 1.x works. */
 export const API_MAJOR = 1;

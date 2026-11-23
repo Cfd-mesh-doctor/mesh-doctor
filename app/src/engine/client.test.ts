@@ -37,6 +37,13 @@ describe("httpTransport", () => {
     expect(init.method).toBe("GET");
   });
 
+  it("asks for a cluster's shapes by its number, before or after the repair", async () => {
+    const fetch = vi.fn().mockResolvedValue(answer(200, { cells: [], ctx: [] }));
+    vi.stubGlobal("fetch", fetch);
+    await expect(api.cluster(httpTransport(ENGINE, KEY), "wing fix", 3, "after")).resolves.toEqual({ cells: [], ctx: [] });
+    expect(fetch.mock.calls[0]?.[0]).toBe(`${ENGINE}/api/v1/repairs/wing%20fix/clusters/3?tag=after`);
+  });
+
   it("posts JSON only when there is a body", async () => {
     const fetch = vi.fn().mockResolvedValue(answer(200, { id: "x", state: "cancelled" }));
     vi.stubGlobal("fetch", fetch);

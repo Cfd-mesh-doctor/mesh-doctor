@@ -23,7 +23,7 @@
 
 ## The map
 - It needs numpy and a model sitting on a flat ground wall. The ground is found from the geometry and is used as "up".
-- It is a 2D projection (side and top views). Use the Mesh Doctor page's 3D view, or ParaView, for detail.
+- It is a 2D projection (side and top views). For detail, view a cluster in 3D (from its report in the app, or on the engine's Mesh Doctor page), or use ParaView.
 
 ## The dashboard
 - One user per machine. Any user logged in to the same computer can reach a 127.0.0.1 port, so do not run `serve` on a shared login node (see [safety](safety.md)).

@@ -164,10 +164,33 @@ def repair(p, q, b):
     return _found(md_api.result(_name(p["name"])), "finished result for repair " + p["name"])
 
 
+# One defect cluster's shapes for a 3D view, as repair.cluster writes them (meshDoctor/clusters_<tag>/<id>.json).
+_POLYGON = {"type": "array", "items": {"type": "number"},
+            "description": "the polygon's corners in order, x y z after x y z, in metres"}
+CLUSTER = {
+    "type": "object", "required": ["cells", "ctx"],
+    "properties": {
+        "cells": {"type": "array", "description": "every face of the cells beside the cluster's failing faces "
+                                                  "(at most 6000)",
+                  "items": {"type": "object", "required": ["cell", "face", "bad", "hot", "xyz"], "properties": {
+                      "cell": {"type": "integer", "description": "the cell, numbered in its processor's mesh when "
+                                                                 "the case is decomposed"},
+                      "face": {"type": "integer", "description": "the face, numbered like the cell"},
+                      "bad": {"type": "number", "description": "the face's badness: its worst measure divided by "
+                                                               "that measure's target, so above 1 fails the target"},
+                      "hot": {"type": "boolean", "description": "one of this cluster's failing faces"},
+                      "xyz": _POLYGON}}},
+        "ctx": {"type": "array", "description": "boundary faces near the cluster (any patch but processor "
+                                                "boundaries), to show where it is (at most 8000)",
+                "items": {"type": "object", "required": ["patch", "xyz"], "properties": {
+                    "patch": {"type": "string", "description": "the patch the face is on"},
+                    "xyz": _POLYGON}}}}}
+
+
 @route("GET", "/repairs/{name}/clusters/{id}", "Geometry of one defect cluster, before or after the repair",
        query={"tag": {"schema": {"enum": ["before", "after", "report"], "default": "before"},
                       "description": "which cluster list: before or after the repair, or the report"}},
-       ok={"type": "object"})
+       ok=CLUSTER)
 def repair_cluster(p, q, b):
     if not re.fullmatch(r"[0-9]{1,9}", p["id"]):
         raise ApiError("bad-request", "cluster id must be a number")

@@ -2,6 +2,8 @@
 import { describe, expect, it } from "vitest";
 import { api } from "@/engine/client";
 import type { Job } from "@/engine/types";
+import { DEMO_CLUSTERS_NOTE, RECORDED_CLUSTERS, recordedCluster } from "./clusters";
+import clusters from "./clusters.json";
 import recorded from "./fixtures.json";
 import { demoTransport, shiftTimes, withCaseSizes } from "./transport";
 
@@ -75,7 +77,30 @@ describe("demo transport", () => {
     expect(withCaseSizes(none)).toBe(none);
   });
 
+  it("has the shapes of three recorded clusters, and says which for any other", async () => {
+    const t = demoTransport(answers(), 0);
+    const c = await api.cluster(t, "ahmed35-medium-fix", 0, "before");
+    expect([c.cells.length, c.cells.filter((f) => f.hot).length, c.ctx.length]).toEqual([30, 6, 69]);
+    for (const [run, id, tag] of [["ahmed35-medium-fix", 3, "before"], ["ahmed35-medium-fix", 0, "after"], ["pitzdaily-fix", 0, "before"]] as const) {
+      await expect(api.cluster(t, run, id, tag)).rejects.toMatchObject({ code: "not-found", message: DEMO_CLUSTERS_NOTE });
+    }
+  });
+
+  it("records clusters where the 35° report puts them: their failing faces sit at the cluster's middle", async () => {
+    const report = (await import("@/report/samples/ahmed35-medium-fix.mdreport.json")).default;
+    const listed = report.documents.repair.clustersBefore;
+    for (const id of RECORDED_CLUSTERS.ids) {
+      const shape = await recordedCluster(RECORDED_CLUSTERS.run, "before", id);
+      const corners = (shape?.cells ?? []).filter((f) => f.hot).flatMap((f) => f.xyz);
+      const middle = [0, 1, 2].map((k) => corners.filter((_, i) => i % 3 === k).reduce((a, b) => a + b, 0) / (corners.length / 3));
+      const want = listed[id];
+      expect(corners.length).toBeGreaterThan(0);
+      middle.forEach((v, k) => expect(Math.abs(v - (want?.centroid[k] ?? NaN))).toBeLessThan(3 * (want?.h ?? 0)));
+    }
+  });
+
   it("ships no paths from the recording machine", () => {
+    expect(JSON.stringify(clusters)).not.toMatch(/\/home\/|\/mnt\/|\/tmp\/|[A-Z]:\\\\|Users[\\/]/);
     const text = JSON.stringify(recorded);
     expect(text).not.toMatch(/\/home\/|\/mnt\/|\/tmp\/|[A-Z]:\\\\|Users[\\/]/);
   });

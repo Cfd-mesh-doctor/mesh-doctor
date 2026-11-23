@@ -55,7 +55,9 @@ export default defineConfig({
   plugins: [react(), tailwindcss(), linkPreviewPicture(), preloadBodyFont()],
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   define: { "import.meta.env.VITE_APP_VERSION": JSON.stringify(pkg.version) },
-  build: { target: "es2022", sourcemap: false, assetsInlineLimit: 0 },
+  // The 3D view's chunk (three.js: about 565 kB, 140 kB compressed) loads only when a cluster is opened, so the
+  // size warning starts just above it, at 600 kB.
+  build: { target: "es2022", sourcemap: false, assetsInlineLimit: 0, chunkSizeWarningLimit: 600 },
   // The gallery shows docs/images itself, outside app/ (the data guard allows pictures nowhere else).
   server: {
     port: 5173,

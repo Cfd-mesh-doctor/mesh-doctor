@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // What a report says, worked out from its documents. A report file can come from anywhere, so every
 // value is checked before it is used: a missing or odd field gives "–", never a broken page.
+import { clusterRows, type ClusterRow } from "./clusters";
 import { mapSummary, type MapSummary } from "./map";
 import type { Report } from "./read";
 import { arr, num, obj, str, strs, type Obj } from "./values";
@@ -84,6 +85,8 @@ export interface ReportSummary {
   unchanged: string[];
   clustersBefore: number;
   clustersAfter: number;
+  /** The clusters themselves, worst first. */
+  clusters: { before: ClusterRow[]; after: ClusterRow[] };
   maxMoveMm: number | null;
   /** true: the source case's fingerprint matched before and after; null: not recorded */
   sourceUnchanged: boolean | null;
@@ -269,6 +272,7 @@ export function summarize(report: Report): ReportSummary {
     profile: str(rep.profile),
     finished: str(rep.finished),
     unchanged,
+    clusters: { before: clusterRows(rep.clustersBefore), after: clusterRows(rep.clustersAfter) },
     maxMoveMm: move == null ? null : move * 1000,
     sourceUnchanged: typeof check === "boolean" ? check : null,
     checkMesh: checkMeshRows(rep, improved, regressions),

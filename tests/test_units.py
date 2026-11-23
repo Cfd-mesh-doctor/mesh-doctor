@@ -699,6 +699,34 @@ class ApiV1Test(unittest.TestCase):
         self.assertEqual((st, rep["kind"], rep["documents"]["repair"]["source"]), (200, "meshdoctor-report", "cases/c1"))
         self.assertError(self.get("/repairs/nope/report"), 404, "not-found")
 
+    def test_a_cluster_as_the_repair_writes_it(self):
+        # foamMeshDoctor's text files for one failing face (7, between cells 3 and 4) and a wall nearby, through
+        # repair.cluster, then the route: its answer must match the shape the OpenAPI document gives the app.
+        import repair
+        run = os.path.join(self.d, "work", "r1")
+        tagged = os.path.join(run, "meshDoctor", "before")
+        os.makedirs(tagged)
+        quad = lambda z: f"4 0 0 {z} 0.01 0 {z} 0.01 0.01 {z} 0 0.01 {z}"
+        with open(os.path.join(tagged, "badFaces.txt"), "w") as f:
+            f.write("B 7 internal 1.08 70 0.5 0.4 0.5 0.9 0 0 0 0.01 3 4\n")
+        with open(os.path.join(tagged, "badCells.txt"), "w") as f:
+            f.write(f"F 3 7 1.08 {quad(0)}\nF 3 8 0.2 {quad(0.01)}\nF 4 7 1.08 {quad(0)}\n"
+                    "F 4 9 0.85 3 0 0 0 0.01 0 -0.01 0 0.01 -0.01\n")
+        with open(os.path.join(tagged, "context.txt"), "w") as f:
+            f.write(f"W 100 body {quad(0.02)}\nW 101 inlet {quad(5)}\n")              # the inlet is far away
+        found = repair.cluster(run, "before", repair.PROFILES["openfoam"])
+        self.assertEqual([(c["id"], c["kinds"], c["nFaces"]) for c in found], [(0, ["non-orthogonal"], 1)])
+        st, doc, _ = self.get("/repairs/r1/clusters/0", tag="before")
+        self.assertEqual(st, 200, doc)
+        self.assertEqual(self.schema.check(doc, self.api.CLUSTER), [])
+        self.assertEqual([(c["cell"], c["face"], c["hot"], len(c["xyz"])) for c in doc["cells"]],
+                         [(3, 7, True, 12), (3, 8, False, 12), (4, 7, True, 12), (4, 9, False, 9)])
+        self.assertEqual([(w["patch"], w["xyz"][2]) for w in doc["ctx"]], [("body", 0.02)])
+        op = self.api.openapi()["paths"]["/repairs/{name}/clusters/{id}"]["get"]
+        self.assertIs(op["responses"]["200"]["content"]["application/json"]["schema"], self.api.CLUSTER)
+        self.assertError(self.get("/repairs/r1/clusters/1", tag="before"), 404, "not-found", "cluster 1 (before)")
+        self.assertError(self.get("/repairs/r1/clusters/0", tag="after"), 404, "not-found")
+
     def test_errors(self):
         self.assertError(self.get("/repairs/nope"), 404, "not-found")
         self.assertError(self.get("/repairs/.hidden"), 400, "bad-request", "bad name")

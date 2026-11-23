@@ -2868,6 +2868,75 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "properties": {
+                    "cells": {
+                      "description": "every face of the cells beside the cluster's failing faces (at most 6000)",
+                      "items": {
+                        "properties": {
+                          "bad": {
+                            "description": "the face's badness: its worst measure divided by that measure's target, so above 1 fails the target",
+                            "type": "number"
+                          },
+                          "cell": {
+                            "description": "the cell, numbered in its processor's mesh when the case is decomposed",
+                            "type": "integer"
+                          },
+                          "face": {
+                            "description": "the face, numbered like the cell",
+                            "type": "integer"
+                          },
+                          "hot": {
+                            "description": "one of this cluster's failing faces",
+                            "type": "boolean"
+                          },
+                          "xyz": {
+                            "description": "the polygon's corners in order, x y z after x y z, in metres",
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "cell",
+                          "face",
+                          "bad",
+                          "hot",
+                          "xyz"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "ctx": {
+                      "description": "boundary faces near the cluster (any patch but processor boundaries), to show where it is (at most 8000)",
+                      "items": {
+                        "properties": {
+                          "patch": {
+                            "description": "the patch the face is on",
+                            "type": "string"
+                          },
+                          "xyz": {
+                            "description": "the polygon's corners in order, x y z after x y z, in metres",
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "patch",
+                          "xyz"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "cells",
+                    "ctx"
+                  ],
                   "type": "object"
                 }
               }

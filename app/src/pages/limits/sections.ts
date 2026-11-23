@@ -64,7 +64,7 @@ export const LIMITS: DocSection[] = [
       {
         list: [
           "It needs numpy and a model sitting on a flat ground wall. The ground is found from the geometry and is used as \"up\".",
-          "It is a 2D projection (side and top views). Use the Mesh Doctor page's 3D view, or ParaView, for detail.",
+          "It is a 2D projection (side and top views). For detail, view a cluster in 3D (from its report in the app, or on the engine's Mesh Doctor page), or use ParaView.",
         ],
       },
     ],

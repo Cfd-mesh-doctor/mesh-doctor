@@ -15,6 +15,8 @@ import { abCommand } from "@/engine/commands";
 import { useAppPath, useEngine } from "@/engine/context";
 import { asEngineError } from "@/engine/errors";
 import { useTitle } from "@/lib/useTitle";
+import { DEMO_CLUSTERS_NOTE } from "@/demo/clusters";
+import type { ClusterSource } from "@/pages/report/Clusters";
 import { ReportView } from "@/pages/report/Report";
 import { checkReport } from "@/report/read";
 import { RECORDED } from "@/report/samples";
@@ -34,6 +36,12 @@ export function RepairReport() {
     staleTime: 60_000,
   });
   const summary = useMemo(() => (report.data ? summarize(report.data) : undefined), [report.data]);
+  // The 3D view of a cluster asks the same engine for its shapes (the demo has three recorded).
+  const clusters = useMemo<ClusterSource | null>(() => (transport ? {
+    key: [transport.scope, "cluster", name],
+    load: (tag, id, signal) => api.cluster(transport, name, id, tag, signal),
+    missing: mode === "demo" ? DEMO_CLUSTERS_NOTE : undefined,
+  } : null), [transport, name, mode]);
   const back = (
     <Button variant="secondary" asChild>
       <Link to={to()}><ArrowLeft />Overview</Link>
@@ -52,7 +60,7 @@ export function RepairReport() {
     // demo's runs are recordings.
     const next = mode === "demo" ? null : abCommand(summary.caseName, summary.name);
     return <ReportView summary={summary} from={mode === "demo" ? "the recorded demo" : "your engine"} action={actions}
-      abCommand={next} />;
+      abCommand={next} clusterSource={clusters} />;
   }
   return (
     <>

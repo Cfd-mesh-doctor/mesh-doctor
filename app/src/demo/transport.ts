@@ -7,6 +7,7 @@ import type { CaseList, Job, JobList, MachineInfo, RepairList } from "@/engine/t
 import { caseName } from "@/engine/verdict";
 import { toMillis } from "@/lib/format";
 import { RECORDED } from "@/report/samples";
+import { DEMO_CLUSTERS_NOTE, recordedCluster } from "./clusters";
 import recorded from "./fixtures.json";
 
 type Answers = Record<string, unknown>;
@@ -184,6 +185,13 @@ export function demoTransport(answers: Answers = DEMO_ANSWERS, delayMs = DELAY_M
         // The engine builds a report when it's asked for one (meshdoctor report.build stamps the time), so it is new.
         doc.created = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
         return doc as T;
+      }
+      const cluster = /^\/repairs\/([^/]+)\/clusters\/(\d{1,9})$/.exec(route);
+      if (cluster) {
+        const tag = new URLSearchParams(path.split("?")[1] ?? "").get("tag") ?? "before";
+        const shape = await recordedCluster(decodeURIComponent(cluster[1] ?? ""), tag, Number(cluster[2]));
+        if (!shape) throw new EngineError("not-found", DEMO_CLUSTERS_NOTE, 404);
+        return structuredClone(shape) as T;
       }
       if (!(route in data)) throw new EngineError("not-found", "Not in the demo data", 404);
       return structuredClone(data[route]) as T;

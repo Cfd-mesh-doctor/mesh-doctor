@@ -27,6 +27,7 @@ import { HEAT, viewHeading, type MapSummary, type MapViewName } from "@/report/m
 import { ReportError, checkReport, fileBytes, readReport } from "@/report/read";
 import { judgeTone, measureLabel, ratioChange, summarize, type Change, type ReportSummary } from "@/report/summary";
 import { SAMPLES } from "@/report/samples";
+import { ClustersCard, type ClusterSource } from "./Clusters";
 import { MapMarks } from "./MapMarks";
 import { RepairMap } from "./RepairMap";
 
@@ -245,12 +246,14 @@ class Section extends Component<{ title: string; children: ReactNode }, { error:
 }
 
 /** An open report. The app shows a repair's report from the engine with it too (pages/app/RepairReport). */
-export function ReportView({ summary: s, from, action, abCommand }: {
+export function ReportView({ summary: s, from, action, abCommand, clusterSource }: {
   summary: ReportSummary;
   from: string;
   action: ReactNode;
   /** A run of your own engine with no A/B test yet: the command for one, offered where its result will show. */
   abCommand?: string | null;
+  /** Where the run's cluster shapes come from (the app); a report file has none, so its list has no 3D view. */
+  clusterSource?: ClusterSource | null;
 }) {
   const sub = [
     s.caseName && `mesh ${s.caseName}`,
@@ -319,6 +322,12 @@ export function ReportView({ summary: s, from, action, abCommand }: {
       {s.map && (
         <Section title="Where the mesh was repaired">
           <MapCard map={s.map} />
+        </Section>
+      )}
+
+      {(s.clusters.before.length > 0 || s.clusters.after.length > 0) && (
+        <Section title="Problem clusters">
+          <ClustersCard clusters={s.clusters} source={clusterSource} />
         </Section>
       )}
 
