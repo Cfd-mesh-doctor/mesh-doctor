@@ -39,11 +39,12 @@ print("repair ok: improved", ", ".join(r["verdict"]["improved"]))
 PY
 
 step "A/B, 30 iterations on $NP ranks"
-python3 -m meshdoctor ab "$SRC" it_mb --iters 30 --np "$NP" --init 0
+python3 -m meshdoctor ab "$SRC" it_mb --iters 30 --np "$NP"      # no --init, as in the README's first run
 python3 - "$T/work/it_mb_ab/ab_result.json" <<'PY'
 import json, sys
 r = json.load(open(sys.argv[1]))
 assert r["sourceCheck"]["unchanged"], "source case changed"
+assert r["init"] == "0", "started from %s, not the tutorial's own 0" % r["init"]   # it has no 0.warm
 assert r["residualRatioFixedOverBase"], "no residual comparison"
 assert r["base"]["forces"] and r["fixed"]["forces"], "no forces read"
 assert r.get("baseHotspots") and r.get("fixedHotspots"), "no hotspot maps"
