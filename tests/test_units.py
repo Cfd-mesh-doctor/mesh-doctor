@@ -1350,16 +1350,62 @@ class PairingTest(unittest.TestCase):
         self.assertEqual(before, "https://mesh-doctor.vercel.app/connect")
         self.assertEqual(after, f"key={key}&engine=http%3A%2F%2Flocalhost%3A8768")
 
-    def test_pair_says_how_to_start_the_engine(self):
+    def pair(self, argv, state):
+        """(pairing.main(argv)'s output, the engine_state mock) while the engine on the port is in this state."""
         import pairing
-        for argv, want in [([], "meshdoctor serve"), (["--port", "8770"], "meshdoctor serve --port 8770")]:
-            out = io.StringIO()
-            with mock.patch.dict(os.environ, {"MESHDOCTOR_PROG": "meshdoctor", "MESHDOCTOR_PORT": "8765"}), \
-                    contextlib.redirect_stdout(out):
-                self.assertEqual(pairing.main(argv), 0)
-            self.assertIn("If the engine isn't running yet, start it first, in another terminal: " + want + "\n",
-                          out.getvalue())
-            self.assertNotIn("python3 -m", out.getvalue())
+        out = io.StringIO()
+        with mock.patch.dict(os.environ, {"MESHDOCTOR_PROG": "meshdoctor", "MESHDOCTOR_PORT": "8765"}), \
+                mock.patch.object(pairing, "engine_state", return_value=state) as seen, \
+                contextlib.redirect_stdout(out):
+            self.assertEqual(pairing.main(argv), 0)
+        self.assertNotIn("python3 -m", out.getvalue())
+        return out.getvalue(), seen
+
+    def test_pair_says_whether_the_engine_is_running(self):
+        out, seen = self.pair([], "running")
+        seen.assert_called_once_with(8765)
+        self.assertIn("The engine is running on port 8765, so the link works now.\n", out)
+        out, seen = self.pair(["--port", "8770"], "none")
+        seen.assert_called_once_with(8770)
+        self.assertIn("No engine is running on port 8770 yet: start it first, in another terminal: "
+                      "meshdoctor serve --port 8770\n", out)
+        out, _ = self.pair([], "unknown")
+        self.assertIn("If the engine isn't running yet, start it first, in another terminal: meshdoctor serve\n", out)
+        out, _ = self.pair(["--new"], "running")
+        self.assertIn("The engine running on port 8765 still has the old key: restart it (Ctrl+C in its terminal, "
+                      "then meshdoctor serve) for the new link to work.\n", out)
+
+    def serve_stub(self, status, body):
+        """A throwaway HTTP server on a free port of this machine, answering every GET with status and body."""
+        import http.server, threading
+
+        class Stub(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        httpd = http.server.HTTPServer(("127.0.0.1", 0), Stub)
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        self.addCleanup(httpd.server_close)
+        self.addCleanup(httpd.shutdown)
+        return httpd.server_address[1]
+
+    def test_engine_state(self):
+        import pairing, socket
+        api = json.dumps({"apiVersion": "1.2", "openapi": "/api/v1/openapi.json"}).encode()
+        self.assertEqual(pairing.engine_state(self.serve_stub(200, api)), "running")
+        self.assertEqual(pairing.engine_state(self.serve_stub(404, b"<html>not here</html>")), "unknown")
+        self.assertEqual(pairing.engine_state(self.serve_stub(200, b"<html>another app</html>")), "unknown")
+        s = socket.socket()
+        s.bind(("127.0.0.1", 0))
+        closed = s.getsockname()[1]
+        s.close()
+        self.assertEqual(pairing.engine_state(closed), "none")
 
     def test_server_compare(self):
         import server
