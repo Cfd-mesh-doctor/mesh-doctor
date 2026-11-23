@@ -19,6 +19,13 @@ export function jobOf(jobs: readonly Job[] | undefined, run: string): Job | unde
   return jobs?.find((j) => j.kind === "repair" && j.name === run);
 }
 
+/** The state of the job to show in place of a run's verdict: only while the run has none and its job says why (it
+ * is waiting, running, failed or was cancelled). A job that finished cleanly without a verdict says nothing more
+ * than that there is none. */
+export function shownJobState(r: RepairSummary, job: Job | undefined): Job["state"] | null {
+  return !r.verdict && job && job.state !== "done" ? job.state : null;
+}
+
 /** Where a run leads: its report once it has a verdict, else the details of the job making it (its progress, or why
  * it stopped), else nowhere: a run made in a terminal that hasn't finished has neither. */
 export function runLink(r: RepairSummary, job: Job | undefined): { path: string; label: string } | null {

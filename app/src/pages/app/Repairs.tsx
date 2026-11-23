@@ -17,7 +17,7 @@ import { useJobs, useRepairs } from "@/engine/hooks";
 import { caseName, newestFirst, runStep, runUpdated } from "@/engine/verdict";
 import { formatCells, formatDateTime, formatRelative } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
-import { RUN_FILTERS, jobOf, runGroup, runLink, type RunFilter } from "./runs";
+import { RUN_FILTERS, jobOf, runGroup, runLink, shownJobState, type RunFilter } from "./runs";
 
 /** The limits a run's checkMesh used, named as the engine's dashboard names them. */
 const LIMITS: Record<string, string> = { openfoam: "OpenFOAM's", strict: "Strict" };
@@ -140,6 +140,7 @@ export function Repairs() {
                 const link = runLink(r, job);
                 const step = runStep(r);
                 const updated = runUpdated(r);
+                const state = shownJobState(r, job);
                 return (
                   <TR key={r.name}>
                     <TD>
@@ -157,7 +158,7 @@ export function Repairs() {
                     <TD>
                       {/* A run with no verdict that a job is making says what the job is doing (running, failed,
                           cancelled), rather than only that it hasn't finished. */}
-                      {!r.verdict && job ? <JobStateBadge state={job.state} /> : <VerdictBadge verdict={r.verdict} pending={step} empty="No verdict" />}
+                      {state ? <JobStateBadge state={state} /> : <VerdictBadge verdict={r.verdict} pending={step} empty="No verdict" />}
                     </TD>
                     <TD className="hidden text-right text-[13px] tabular-nums md:table-cell">{formatCells(r.nCells)}</TD>
                     <TD className="hidden text-[13px] xl:table-cell">{r.profile ? (LIMITS[r.profile] ?? r.profile) : "–"}</TD>

@@ -359,3 +359,20 @@ describe("the Overview's Getting started", () => {
     expect(screen.queryByRole("region", { name: "Getting started" })).toBeNull();
   });
 });
+
+describe("the Overview's repair runs", () => {
+  it("say what the job of a run without a verdict did, as the Repairs screen does, and link its details", async () => {
+    open();
+    // Recent jobs names the run's job too: the run is the one in the Repair runs card.
+    const card = (await screen.findByRole("heading", { name: "Repair runs" })).closest("section")!;
+    const run = (await within(card).findByText("ahmed25-fine-strict")).closest("li")!; // the demo's cancelled repair
+    expect(within(run).getByText("Cancelled")).toBeInTheDocument();
+    expect(within(run).queryByText("Not finished")).toBeNull();
+    expect(within(run).getByRole("link", { name: "Details of ahmed25-fine-strict" }))
+      .toHaveAttribute("href", "/demo/jobs?job=20261121-130141-repair-ahmed25-fine-strict-0266");
+    // A finished run keeps its verdict and report.
+    const done = within(card).getByText("ahmed35-medium-fix").closest("li")!;
+    expect(within(done).getByText("Improved 4")).toBeInTheDocument();
+    expect(within(done).getByRole("link", { name: "Report of ahmed35-medium-fix" })).toHaveAttribute("href", "/demo/repairs/ahmed35-medium-fix/report");
+  });
+});

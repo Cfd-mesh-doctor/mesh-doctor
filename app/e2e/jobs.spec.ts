@@ -120,7 +120,8 @@ test("the sidebar says how many jobs are active, not a bare number", async ({ pa
 
 test("the Overview's recent jobs open their details on the Jobs screen", async ({ page }) => {
   await page.goto("/demo");
-  await page.getByRole("link", { name: "ahmed25-fine-strict" }).click();
+  // Exact: the Repair runs card has "Details of ahmed25-fine-strict" too.
+  await page.getByRole("link", { name: "ahmed25-fine-strict", exact: true }).click();
   await expect(page).toHaveURL(/\/demo\/jobs\?job=[\w-]*ahmed25-fine-strict[\w-]*$/);
   await expect(page.getByRole("dialog", { name: "ahmed25-fine-strict" })).toBeVisible();
 });

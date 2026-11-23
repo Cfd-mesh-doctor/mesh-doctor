@@ -25,6 +25,7 @@ import { DOCS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
 import { FIRST_RUN_SETUP } from "@/pages/install/commands";
+import { jobOf, runLink, shownJobState } from "./runs";
 
 /** Repairs a copy of a case, in WSL or a Linux terminal; the app can't start repairs itself yet. */
 const REPAIR_COMMAND = "meshdoctor full <case> <name>";
@@ -387,7 +388,11 @@ export function Overview() {
             </EmptyState>
           ) : (
             <ul className="divide-y divide-border border-t border-border">
-              {newestFirst(repairItems).slice(0, RUNS_SHOWN).map((r) => (
+              {newestFirst(repairItems).slice(0, RUNS_SHOWN).map((r) => {
+                const job = jobOf(jobItems, r.name);
+                const link = runLink(r, job);
+                const state = shownJobState(r, job);
+                return (
                 <li key={r.name} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-3">
                   {/* The whole name and case, wrapping rather than cut off (a long name breaks at its hyphens first).
                       On phones the verdict and Report go under them, so the name has the card's width. */}
@@ -401,16 +406,23 @@ export function Overview() {
                         : runUpdated(r) && <>{" "}<span className="whitespace-nowrap">· {formatRelative(runUpdated(r))}</span></>}
                     </div>
                   </div>
-                  {/* A list's own badge: a run with no verdict says so, not with a dash. */}
-                  <VerdictBadge verdict={r.verdict} pending={runStep(r)} empty="No verdict" />
-                  {r.verdict && (
-                    <Link to={to(`/repairs/${encodeURIComponent(r.name)}/report`)} aria-label={`Report of ${r.name}`}
+                  {/* A list's own badge: a run with no verdict says so, not with a dash; one that a job is making says
+                      what the job is doing (running, failed, cancelled), as on the Repairs screen. */}
+                  {state ? (
+                    <JobStateBadge state={state} />
+                  ) : (
+                    <VerdictBadge verdict={r.verdict} pending={runStep(r)} empty="No verdict" />
+                  )}
+                  {/* Its report, or else its job's progress or details. */}
+                  {link && (
+                    <Link to={to(link.path)} aria-label={`${link.label} of ${r.name}`}
                       className="shrink-0 text-[13px] font-medium text-primary hover:underline">
-                      Report
+                      {link.label}
                     </Link>
                   )}
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
           {/* The list keeps to the newest: it says there are more, where they all are, and where each case's latest is. */}

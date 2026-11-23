@@ -8,7 +8,7 @@ import { EngineError } from "@/engine/errors";
 import type { Job, RepairSummary } from "@/engine/types";
 import { renderScreen } from "@/test/render";
 import { Repairs } from "./Repairs";
-import { jobOf, runGroup, runLink } from "./runs";
+import { jobOf, runGroup, runLink, shownJobState } from "./runs";
 
 const path = "/demo/repairs";
 /** The demo's six runs: three unchanged, one improved, one that made a number worse, and one cancelled. */
@@ -36,6 +36,14 @@ describe("where a repair run leads", () => {
     expect(runLink(run(null), job("running"))).toEqual({ path: "/jobs?job=j1", label: "Progress" });
     expect(runLink(run(null), job("failed"))).toEqual({ path: "/jobs?job=j1", label: "Details" });
     expect(runLink(run(null), undefined)).toBeNull(); // made in a terminal and not finished: nowhere to go
+  });
+
+  it("shows its job's state in place of its verdict only while the job says why it has none", () => {
+    expect(shownJobState(run(null), job("running"))).toBe("running");
+    expect(shownJobState(run(null), job("cancelled"))).toBe("cancelled");
+    expect(shownJobState(run(null), job("done"))).toBeNull(); // finished without a verdict: "No verdict"
+    expect(shownJobState(run({ improved: [], regressions: [], unchanged: [] }), job("running"))).toBeNull();
+    expect(shownJobState(run(null), undefined)).toBeNull();
   });
 
   it("takes the run's newest repair job, and never an A/B test of the same name", () => {
