@@ -304,7 +304,7 @@ test("on a small phone, jobs show progress under the name and every filter shows
   await page.goto("/demo/jobs");
   const running = page.getByRole("row", { name: /ahmed25-medium-fix A\/B test/ });
   // No Progress column on a phone: the step shows once, under the name.
-  await expect(running.getByText("solving fixed").filter({ visible: true })).toHaveCount(1);
+  await expect(running.getByText("Solving on the repaired mesh").filter({ visible: true })).toHaveCount(1);
   // The filter's five choices need 356 px: on a phone the ones that don't fit go on to a second line, so none is cut
   // at the edge (Cancelled was, at "Canc", with the rest scrolled out of sight), down to the smallest phones.
   const filter = page.getByRole("radiogroup", { name: "Show jobs" });

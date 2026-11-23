@@ -155,6 +155,30 @@ describe("the Jobs screen", () => {
     expect(screen.queryByRole("columnheader", { name: "Took" })).toBeNull();
   });
 
+  it("links an A/B job to its test's page, to follow it while it runs, and a finished repair to its report", async () => {
+    open(path);
+    const follow = await screen.findByRole("link", { name: "Follow the A/B test of ahmed25-medium-fix" });
+    expect(follow).toHaveAttribute("href", "/demo/abtests/ahmed25-medium-fix");
+    expect(follow.parentElement).toContainElement(screen.getByRole("button", { name: "Cancel" })); // the running test's row still cancels it
+    expect(screen.getByRole("link", { name: "Open the A/B test of ahmed25-coarse-fix" })).toHaveAttribute("href", "/demo/abtests/ahmed25-coarse-fix");
+    // The repairs of the same names have their reports, as before.
+    expect(screen.getByRole("link", { name: "Report of ahmed25-coarse-fix" })).toHaveAttribute("href", "/demo/repairs/ahmed25-coarse-fix/report");
+    expect(screen.queryByRole("link", { name: /^Report of ahmed25-fine-strict/ })).toBeNull(); // cancelled: no report
+  });
+
+  it("opens an A/B job's test page from its details, running or not, where a repair's details open its report", async () => {
+    for (const [id, name] of [["20261121-130610-abtest-ahmed25-medium-fix-13c2", "ahmed25-medium-fix"], ["20261121-130250-abtest-ahmed25-coarse-fix-13d0", "ahmed25-coarse-fix"]]) {
+      const { unmount } = open(`${path}?job=${id}`);
+      const details = await screen.findByRole("dialog", { name: name! });
+      expect(within(details).getByRole("link", { name: "Open A/B test" })).toHaveAttribute("href", `/demo/abtests/${name}`);
+      expect(within(details).queryByRole("link", { name: "Open report" })).toBeNull();
+      unmount();
+    }
+    open(`${path}?job=20261121-130031-repair-ahmed25-fine-fix-0fa7`);
+    const details = await screen.findByRole("dialog", { name: "ahmed25-fine-fix" });
+    expect(within(details).getByRole("link", { name: "Open report" })).toHaveAttribute("href", "/demo/repairs/ahmed25-fine-fix/report");
+  });
+
   it("shows every job when the address names a filter it doesn't know", async () => {
     open(`${path}?show=nonsense`);
     expect(await screen.findAllByRole("button", { name: "ahmed25-medium-fix" })).toHaveLength(2);

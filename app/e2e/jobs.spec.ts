@@ -133,3 +133,17 @@ test("the Overview's active-jobs tile links to the active jobs", async ({ page }
   await expect(page.getByRole("radiogroup", { name: "Show jobs" }).getByRole("radio", { name: /^Active/ })).toBeChecked();
   await expect(page.getByRole("table").getByRole("row")).toHaveCount(2); // the head and the demo's running job
 });
+
+test("a running A/B job's row follows the test on its own page, and the page's job link leads back", async ({ page }) => {
+  await page.goto("/demo/jobs");
+  await page.getByRole("link", { name: "Follow the A/B test of ahmed25-medium-fix" }).click();
+  await expect(page).toHaveURL(/\/demo\/abtests\/ahmed25-medium-fix$/);
+  await expect(page.getByRole("heading", { level: 1, name: "ahmed25-medium-fix" })).toBeVisible();
+  await expect(page.getByRole("progressbar").first()).toBeVisible(); // it follows the run
+
+  await page.getByRole("link", { name: "Job details" }).click();
+  const details = page.getByRole("dialog", { name: "ahmed25-medium-fix" });
+  await expect(details).toBeVisible();
+  await details.getByRole("link", { name: "Open A/B test" }).click();
+  await expect(page).toHaveURL(/\/demo\/abtests\/ahmed25-medium-fix$/);
+});

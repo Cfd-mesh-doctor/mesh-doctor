@@ -235,7 +235,7 @@ test("the demo shows recorded jobs, and cancelling asks first", async ({ page })
   await page.goto("/demo/jobs");
   const running = page.getByRole("row", { name: "ahmed25-medium-fix A/B test" });
   await expect(running).toContainText("Running");
-  await expect(running).toContainText("solving fixed");
+  await expect(running).toContainText("Solving on the repaired mesh"); // the step in words, as on the test's page
   await running.getByRole("button", { name: "Cancel" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Cancel ahmed25-medium-fix?");

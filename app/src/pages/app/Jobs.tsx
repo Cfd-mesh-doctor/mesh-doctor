@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Every job on the engine: live progress while running, details, cancelling (after a confirmation), and the report
-// of a finished job's run. The filter lives in the address (?show=failed), so a reload or a link keeps it.
-import { FileText, ListChecks, OctagonX } from "lucide-react";
+// Every job on the engine: live progress while running, details, cancelling (after a confirmation), the report of a
+// finished repair's run, and an A/B job's test page. The filter lives in the address (?show=failed), so a reload or a
+// link keeps it.
+import { FileText, FlaskConical, ListChecks, OctagonX } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { DashboardLink } from "@/components/shared/DashboardLink";
@@ -20,6 +21,7 @@ import { ACTIVE_POLL_MS, useCancelJob, useJobs } from "@/engine/hooks";
 import { JOB_KIND_LABEL, isActive, type Job, type JobState } from "@/engine/types";
 import { elapsed, formatDateTime, formatDuration, formatPercent, formatRelative } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
+import { stepText } from "@/report/abtest";
 
 const FILTERS = ["all", "active", "done", "failed", "cancelled"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -28,21 +30,32 @@ function matches(f: Filter, s: JobState): boolean {
   return f === "all" || (f === "active" ? isActive(s) : s === f);
 }
 
-/** Where a finished job's run has its report (GET /repairs/{name}/report), or null while it has none. A job is named
- * after its run, and an A/B test is part of its run's report. */
-function reportPath(job: Job): string | null {
+/** An A/B test, or its continuation to more iterations. */
+const isAbJob = (job: Job) => job.kind === "abtest" || job.kind === "abextend";
+
+/** Where a job's run shows, or null while it has nothing to show. A job is named after its run. An A/B job's is its
+ * test's page, running or not: it follows a running test, and says how a stopped one ended. A repair's is its run's
+ * report, once the repair is done (GET /repairs/{name}/report). */
+function runPath(job: Job): string | null {
+  if (isAbJob(job)) return `/abtests/${encodeURIComponent(job.name)}`;
   return job.state === "done" ? `/repairs/${encodeURIComponent(job.name)}/report` : null;
 }
 
-/** The table's link to a finished job's report (named like the Overview's), or nothing. Left out on phones, where
- * the row opens the details and they have the report too, so the table keeps to the screen. */
-function ReportLink({ job }: { job: Job }) {
+/** The table's link to where a job's run shows, named like the Overview's report links and the A/B tests list's
+ * buttons, or nothing. Left out on phones, where the row opens the details and they have it too, so the table keeps
+ * to the screen. */
+function RunLink({ job }: { job: Job }) {
   const to = useAppPath();
-  const path = reportPath(job);
+  const path = runPath(job);
   if (!path) return null;
+  const [text, label] = !isAbJob(job)
+    ? ["Report", `Report of ${job.name}`]
+    : isActive(job.state)
+      ? ["Follow", `Follow the A/B test of ${job.name}`]
+      : ["Open", `Open the A/B test of ${job.name}`];
   return (
     <Button variant="ghost" size="sm" className="hidden sm:inline-flex" asChild>
-      <Link to={to(path)} aria-label={`Report of ${job.name}`}>Report</Link>
+      <Link to={to(path)} aria-label={label}>{text}</Link>
     </Button>
   );
 }
@@ -54,11 +67,14 @@ function duration(j: Job): string {
 function ProgressCell({ job }: { job: Job }) {
   if (isActive(job.state)) {
     const f = job.progress?.fraction;
+    // An A/B job's step reads as on its test's page ("Solving on the repaired mesh", not "solving fixed"). A long step
+    // takes a second line: on one, it widened the column and took the room a job's name needs for its line.
+    const step = isAbJob(job) ? stepText(job.progress?.step) : job.progress?.step;
     return (
       <div className="min-w-40">
         <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
-          <span className="truncate text-muted-foreground">{job.progress?.step || (job.state === "queued" ? "Waiting to start" : "Starting")}</span>
-          <span className="font-medium tabular-nums">{f == null ? "" : formatPercent(f)}</span>
+          <span className="line-clamp-2 text-muted-foreground">{step || (job.state === "queued" ? "Waiting to start" : "Starting")}</span>
+          <span className="shrink-0 font-medium whitespace-nowrap tabular-nums">{f == null ? "" : formatPercent(f)}</span>
         </div>
         <Progress value={f} label={`${job.name} progress`} />
       </div>
@@ -138,7 +154,7 @@ function DetailsDialog({ job, onClose, onCancel, nameOf }: {
 }) {
   const params = Object.entries(job?.params ?? {});
   const to = useAppPath();
-  const report = job && reportPath(job);
+  const run = job && runPath(job);
   // The details open on Close, the calm way out. The first button is otherwise an active job's red "Cancel job": it
   // only asks to confirm, but a key pressed straight after opening shouldn't start a cancel.
   const close = useRef<HTMLButtonElement>(null);
@@ -211,9 +227,9 @@ function DetailsDialog({ job, onClose, onCancel, nameOf }: {
                 </Button>
               )}
               <Button ref={close} variant="secondary" onClick={onClose}>Close</Button>
-              {report && (
+              {run && (
                 <Button asChild>
-                  <Link to={to(report)}><FileText /> Open report</Link>
+                  <Link to={to(run)}>{isAbJob(job) ? <><FlaskConical /> Open A/B test</> : <><FileText /> Open report</>}</Link>
                 </Button>
               )}
             </DialogActions>
@@ -348,7 +364,9 @@ export function Jobs() {
                         if (el) names.current.set(j.id, el);
                         return () => { names.current.delete(j.id); };
                       }}
-                      className="text-left font-medium underline-offset-4 hover:underline"
+                      // From 768 px a name keeps its line: the table shares its spare room by how long each
+                      // column's text is, so a long step took it from the names, which broke at a hyphen.
+                      className="text-left font-medium underline-offset-4 hover:underline md:whitespace-nowrap"
                       onClick={(e) => {
                         e.stopPropagation();
                         setDetailsId(j.id);
@@ -369,10 +387,16 @@ export function Jobs() {
                   <TD className="hidden text-[13px] whitespace-nowrap tabular-nums md:table-cell">{duration(j)}</TD>
                   <TD className="text-right" onClick={(e) => e.stopPropagation()}>
                     {isActive(j.state) ? (
-                      <Button variant="danger-ghost" size="sm" onClick={() => setCancelId(j.id)}>Cancel</Button>
-                    ) : reportPath(j) ? (
-                      // A finished job offers its report; its details open from its name or row, as on phones.
-                      <ReportLink job={j} />
+                      // A running A/B test can be followed on its own page too. Its two buttons sit one above the
+                      // other: side by side (even at 1280 px), they took the room a job's name needs for its line.
+                      <div className="flex flex-col items-end gap-1">
+                        <RunLink job={j} />
+                        <Button variant="danger-ghost" size="sm" onClick={() => setCancelId(j.id)}>Cancel</Button>
+                      </div>
+                    ) : runPath(j) ? (
+                      // A finished repair offers its report and an A/B job its test's page; the details open from
+                      // the job's name or row, as on phones.
+                      <RunLink job={j} />
                     ) : (
                       // On phones the whole row opens the details, so the button is left out.
                       <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={() => setDetailsId(j.id)}>

@@ -78,7 +78,7 @@ test("the demo's Cases page opens a case's latest report", async ({ page }) => {
 test("the demo's reports agree with its job list about A/B tests", async ({ page }) => {
   // The 25° medium A/B test is still solving in the job list...
   await page.goto("/demo/jobs");
-  await expect(page.getByRole("row", { name: "ahmed25-medium-fix A/B test" }).getByText("solving fixed").filter({ visible: true }))
+  await expect(page.getByRole("row", { name: "ahmed25-medium-fix A/B test" }).getByText("Solving on the repaired mesh").filter({ visible: true }))
     .toHaveCount(1);
   // ...so its run's report has no A/B test yet, while the coarse run's finished test is in its report.
   await page.goto("/demo/repairs/ahmed25-medium-fix/report");
