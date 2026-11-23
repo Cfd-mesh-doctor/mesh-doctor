@@ -22,6 +22,9 @@ export function isEngineCode(code: unknown): code is ApiErrorCode {
   return typeof code === "string" && ENGINE_CODES.has(code);
 }
 
+/** How the message for an answer without the engine's JSON ends: something else answered at its address. */
+export const NOT_THE_ENGINE = "without the engine's JSON";
+
 export class EngineError extends Error {
   readonly code: ErrorCode;
   /** HTTP status; 0 when nothing answered. */
@@ -125,6 +128,16 @@ export function explain(err: unknown, origin = globalThis.location?.origin ?? ""
     case "internal":
       return { title: "The engine hit an error", hint: "Details are in the engine's window (where `meshdoctor serve` runs)." };
     case "bad-response":
+      // An answer without the engine's JSON: most often another program on the engine's port, and what it answered
+      // follows. Anything else (a newer engine's own words, or the app's) is said as it is.
+      if (e.status > 0 && e.message.endsWith(NOT_THE_ENGINE)) {
+        return {
+          title: "Unexpected answer",
+          hint: "Something answered at the engine's address, but not the way Mesh Doctor's engine does: another "
+            + "program may be using its port. When it starts, `meshdoctor serve` prints the address it uses, and "
+            + `Settings shows the one this browser uses. (${e.message})`,
+        };
+      }
       return { title: "Unexpected answer", hint: e.message || "The address may not be a Mesh Doctor engine." };
     default:
       return { title: "Something went wrong", hint: e.message };

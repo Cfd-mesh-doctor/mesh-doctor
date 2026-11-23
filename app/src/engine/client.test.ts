@@ -126,3 +126,18 @@ describe("api.info", () => {
     expect(err.message).toMatch(/Reload the app/);
   });
 });
+
+describe("an answer that isn't the engine's", () => {
+  it("says in plain words that another program may be on the engine's port, and keeps what it answered", () => {
+    const { title, hint } = explain(new EngineError("bad-response", "HTTP 200 without the engine's JSON", 200));
+    expect(title).toBe("Unexpected answer");
+    expect(hint).toMatch(/^Something answered at the engine's address, but not the way Mesh Doctor's engine does: another program may be using its port\./);
+    expect(hint).toContain("`meshdoctor serve` prints the address it uses");
+    expect(hint).toMatch(/\(HTTP 200 without the engine's JSON\)$/);
+  });
+
+  it("says other unexpected errors as they are: a newer engine's own words, or the app's", () => {
+    expect(explain(new EngineError("bad-response", "a newer engine's words", 400)).hint).toBe("a newer engine's words");
+    expect(explain(new Error("boom")).hint).toBe("boom");
+  });
+});

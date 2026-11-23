@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // How the app reaches an engine. The real one is Mesh Doctor on this computer (http://localhost);
 // the demo answers from recorded data. Screens only see a Transport, so both look the same to them.
-import { EngineError, isEngineCode } from "./errors";
+import { NOT_THE_ENGINE, EngineError, isEngineCode } from "./errors";
 import { localAccessState } from "./permission";
 import type { CaseList, EngineInfo, Job, JobList, MachineInfo, RepairList } from "./types";
 import { API_MAJOR } from "./types";
@@ -60,7 +60,7 @@ export function httpTransport(engine: string, key: string, timeoutMs = TIMEOUT_M
           doc = await res.json();
         } catch {
           if (ctrl.signal.aborted && !signal?.aborted) throw new EngineError("timeout", "The answer took too long");
-          throw new EngineError("bad-response", `HTTP ${res.status} without the engine's JSON`, res.status);
+          throw new EngineError("bad-response", `HTTP ${res.status} ${NOT_THE_ENGINE}`, res.status);
         }
         if (!res.ok) {
           const err = (doc as { error?: { code?: unknown; message?: unknown } } | null)?.error;
