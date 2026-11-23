@@ -68,7 +68,9 @@ export function explain(err: unknown, origin = globalThis.location?.origin ?? ""
   if (e.needsPairing) {
     return {
       title: "This browser needs pairing again",
-      hint: "The engine has a different pairing key, or none was sent. Run this in WSL and open the link it prints:",
+      // The engine is answering, so its window is busy: a command typed there would wait for it to stop.
+      hint: "The engine has a different pairing key, or none was sent. Run this in a second WSL window (the engine "
+        + "keeps its own busy): it opens the pairing link.",
       command: "meshdoctor pair --open",
       troubleshooting: true,
     };

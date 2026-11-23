@@ -142,7 +142,7 @@ export const GROUPS: ProblemGroup[] = [
         [
           "\"This browser needs pairing again\"",
           "the key was replaced (`meshdoctor pair --new`), or this browser's site data was cleared",
-          "`meshdoctor pair --open`, or paste the link it prints on the Connect page",
+          "`meshdoctor pair --open` in a second WSL window (the engine keeps its own busy), or paste the link it prints on the Connect page",
         ],
         [
           "\"This engine version doesn't match the app\"",
