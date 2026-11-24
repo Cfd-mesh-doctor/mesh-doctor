@@ -9,7 +9,7 @@ async function pair(page: Page) {
   await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
 }
 
-const made = { "ahmed-coarse": "ahmed-body", "wheel-wing": "wheel-wing" };
+const made = { "ahmed-coarse": { template: "ahmed-body" }, "wheel-wing": { template: "wheel-wing" } };
 
 test("the Solve screen lists the cases Mesh Doctor made with their solves, and solves one", async ({ page }) => {
   const solved = run("ahmed-coarse", {
@@ -78,9 +78,36 @@ test("a run's page follows its solve, stops it and continues it", async ({ page 
   await expect(dialog.getByRole("button", { name: "Continue", exact: true })).toBeDisabled();
 });
 
+test("a case you made is solved through a copy: the case, the copy's name, then its run's page", async ({ page }) => {
+  const engine = await mockEngine(page, { made: { "wing-run": { copyOf: "wing" } }, runs: [], noJobs: true });
+  await pair(page);
+  await page.goto("/app/solve");
+  const runs = page.getByRole("list", { name: "Runs" });
+  await expect(runs.getByRole("listitem")).toContainText("A copy of wing");
+  await page.getByRole("button", { name: "Solve a case you made…" }).click();
+  const dialog = page.getByRole("dialog", { name: "Solve a copy of a case you made" });
+  // Yours only, not the copy Mesh Doctor made; the name suggested is free.
+  await expect(dialog.getByLabel("Case").getByRole("option")).toHaveText(["wing", "ahmed-25-coarse", "motorBike"]);
+  await expect(dialog.getByLabel("Name of the copy")).toHaveValue("wing-run-2");
+  await dialog.getByLabel("Case").selectOption("motorBike");
+  await expect(dialog.getByLabel("Name of the copy")).toHaveValue("motorBike-run");
+  await dialog.getByLabel("Name of the copy").fill("wing");
+  await expect(dialog.getByText("A case with this name is in the cases folder already. Pick another name.")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Solve a copy" })).toBeDisabled();
+  await dialog.getByLabel("Name of the copy").fill("mb-run");
+  await dialog.getByLabel("Processes").selectOption("2");
+  await dialog.getByRole("button", { name: "Solve a copy" }).click();
+  await expect(page).toHaveURL(/\/app\/solve\/mb-run$/);
+  expect(engine.started).toEqual([{ kind: "solve", params: { name: "mb-run", source: "motorBike", to: 2000, np: 2 } }]);
+  // Its job waits for its turn: the page says what it copies.
+  await expect(page.getByRole("heading", { name: "mb-run", level: 1 })).toBeVisible();
+  await expect(page.getByText("Solve · a copy of motorBike")).toBeVisible();
+  await expect(page.getByText("Starting", { exact: true })).toBeVisible();
+});
+
 test("the demo has no solves, and says so", async ({ page }) => {
   await page.goto("/demo/solve");
-  await expect(page.getByText("No case made with New case yet")).toBeVisible();
+  await expect(page.getByText("Nothing to solve here yet")).toBeVisible();
   await page.goto("/demo/solve/ahmed25-medium");
   await expect(page.getByText("The engine has no solve of this case.")).toBeVisible();
 });

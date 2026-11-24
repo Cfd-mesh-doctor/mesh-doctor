@@ -1306,9 +1306,14 @@ export interface operations {
                             [key: string]: number | null;
                         };
                         items: string[];
-                        /** @description the cases a case job made, each with its template: the cases a solve job takes (API 1.6) */
+                        /** @description the cases Mesh Doctor made, each with what from: a template, or a case you made (a copy of it, to solve); the cases a solve job takes (API 1.6) */
                         made?: {
-                            [key: string]: string;
+                            [key: string]: {
+                                /** @description the case you made that a solve job copied it from, to solve */
+                                copyOf?: string;
+                                /** @description the template a case job made it from */
+                                template?: string;
+                            };
                         };
                     };
                 };
@@ -1508,13 +1513,15 @@ export interface operations {
                     /** @enum {unknown} */
                     kind: "solve";
                     params: {
-                        /** @description a case in the cases folder that Mesh Doctor made (a case job's); a case you made is never changed */
+                        /** @description a case in the cases folder that Mesh Doctor made (a case job's, or a copy); with a source, the new case the copy goes in, a name not taken there */
                         name: string;
                         /**
                          * @description processes for a solve from iteration 0 (1: not split); a continuation keeps the run's own
                          * @default 4
                          */
                         np?: number;
+                        /** @description a case you made, to solve a copy of: its mesh and settings, not its results, are copied into the cases folder as name (a case you made is never changed). It needs its mesh joined, its 0 (or 0.orig) fields and a steady foamRun setup */
+                        source?: string;
                         /**
                          * @description the iteration to solve to; past the latest written one
                          * @default 2000
@@ -2188,7 +2195,7 @@ export interface operations {
                              * @enum {unknown}
                              */
                             state: "running" | "done" | "stopped" | "failed" | "cancelled" | "interrupted";
-                            /** @description decomposing, potentialFoam, solving, reconstructing or done */
+                            /** @description copying (a copy of a case you made), decomposing, potentialFoam, solving, reconstructing or done */
                             step: string;
                             /** @description the stretches solved so far, oldest first */
                             stretches: {
@@ -2255,7 +2262,7 @@ export interface operations {
                          * @enum {unknown}
                          */
                         state: "running" | "done" | "stopped" | "failed" | "cancelled" | "interrupted";
-                        /** @description decomposing, potentialFoam, solving, reconstructing or done */
+                        /** @description copying (a copy of a case you made), decomposing, potentialFoam, solving, reconstructing or done */
                         step: string;
                         /** @description the stretches solved so far, oldest first */
                         stretches: {
@@ -2355,7 +2362,7 @@ export interface operations {
                              * @enum {unknown}
                              */
                             state: "running" | "done" | "stopped" | "failed" | "cancelled" | "interrupted";
-                            /** @description decomposing, potentialFoam, solving, reconstructing or done */
+                            /** @description copying (a copy of a case you made), decomposing, potentialFoam, solving, reconstructing or done */
                             step: string;
                             /** @description the stretches solved so far, oldest first */
                             stretches: {
@@ -2451,7 +2458,7 @@ export interface operations {
                          * @enum {unknown}
                          */
                         state: "running" | "done" | "stopped" | "failed" | "cancelled" | "interrupted";
-                        /** @description decomposing, potentialFoam, solving, reconstructing or done */
+                        /** @description copying (a copy of a case you made), decomposing, potentialFoam, solving, reconstructing or done */
                         step: string;
                         /** @description the stretches solved so far, oldest first */
                         stretches: {

@@ -2,8 +2,9 @@
 import { describe, expect, it } from "vitest";
 import type { Job, Run } from "@/engine/types";
 import {
-  MAX_TO, current, procChoices, runRows, runShown, solveCommand, solveJobOf, solveStep, stretchFraction, stretchesText,
-  suggestedProcs, suggestedTo, toProblem, totalForces,
+  MAX_TO, copyName, copyNameProblem, copyTaken, current, madeFrom, madeOfJob, procChoices, runRows, runShown,
+  solveCommand, solveJobOf, solveStep, stretchFraction, stretchesText, suggestedProcs, suggestedTo, toProblem,
+  totalForces, yourCases,
 } from "./solveStart";
 
 const run = (name: string, more: Partial<Run> = {}): Run => ({
@@ -11,13 +12,15 @@ const run = (name: string, more: Partial<Run> = {}): Run => ({
   stretches: [{ from: 0, to: 2000 }], started: "2026-11-23T10:00:00Z", updated: "2026-11-23T11:00:00Z",
   finished: "2026-11-23T11:00:00Z", error: null, ...more,
 });
-const job = (name: string, state: Job["state"], kind: Job["kind"] = "solve") =>
-  ({ id: `${name}-${state}`, kind, name, state }) as Job;
+const job = (name: string, state: Job["state"], kind: Job["kind"] = "solve", params: Job["params"] = { name }) =>
+  ({ id: `${name}-${state}`, kind, name, state, params }) as Job;
+const tpl = (template: string) => ({ template });
 
 describe("a solve's words", () => {
   it("names its steps with the program at work, and leaves one it doesn't know as it is", () => {
     expect(solveStep("decomposing")).toBe("Splitting the case (decomposePar)");
     expect(solveStep("solving")).toBe("Solving (foamRun)");
+    expect(solveStep("copying")).toBe("Copying your case");
     expect(solveStep("meshing")).toBe("meshing");
     expect(solveStep("")).toBeNull();
   });
@@ -55,18 +58,59 @@ describe("a solve's words", () => {
 
 describe("the runs list", () => {
   it("has every case Mesh Doctor made, those solving first, then the solved ones newest first, then the rest", () => {
-    const made = { old: "ahmed-body", fresh: "ahmed-body", busy: "wheel-wing", zeta: "wheel-wing", alpha: "ahmed-body" };
+    const made = {
+      old: tpl("ahmed-body"), fresh: tpl("ahmed-body"), busy: tpl("wheel-wing"), zeta: { copyOf: "wing" },
+      alpha: tpl("ahmed-body"),
+    };
     const runs = [run("old", { updated: "2026-11-20T00:00:00Z" }), run("fresh"), run("busy", { state: "running" })];
     const rows = runRows(made, runs, [job("busy", "running")]);
     expect(rows.map((r) => [r.name, r.shown])).toEqual([
       ["busy", "running"], ["fresh", "done"], ["old", "done"], ["alpha", "unsolved"], ["zeta", "unsolved"],
     ]);
-    expect(rows[0]).toMatchObject({ template: "wheel-wing", job: { state: "running" } });
+    expect(rows[0]).toMatchObject({ made: { template: "wheel-wing" }, job: { state: "running" } });
+    expect(rows[4]!.made).toEqual({ copyOf: "wing" });
+  });
+
+  it("has a copy of yours that waits to be made, by its job, with the case it copies", () => {
+    const rows = runRows({}, [], [job("wing-run", "queued", "solve", { name: "wing-run", source: "wing" }), job("x", "done")]);
+    expect(rows).toEqual([expect.objectContaining({ name: "wing-run", shown: "queued", made: { copyOf: "wing" }, run: null })]);
   });
 
   it("keeps a run whose case it isn't told was made", () => {
     expect(runRows(undefined, [run("x")], undefined).map((r) => r.name)).toEqual(["x"]);
     expect(runRows({}, [], [])).toEqual([]);
+  });
+});
+
+describe("a copy of a case you made", () => {
+  it("says what a case was made from", () => {
+    expect(madeFrom(tpl("ahmed-body"))).toBe("made from the ahmed-body template");
+    expect(madeFrom({ copyOf: "wing" })).toBe("a copy of wing");
+    expect(madeFrom({})).toBeNull();
+    expect(madeFrom(null)).toBeNull();
+    expect(madeOfJob(job("w", "queued", "solve", { name: "w", source: "wing" }))).toEqual({ copyOf: "wing" });
+    expect(madeOfJob(job("w", "queued"))).toBeNull();
+    expect(madeOfJob(job("w", "queued", "repair", { name: "w", source: "wing" }))).toBeNull();
+  });
+
+  it("is of one of the cases you made: those Mesh Doctor didn't", () => {
+    expect(yourCases({ items: ["a", "b", "c"], made: { b: tpl("ahmed-body") } })).toEqual(["a", "c"]);
+    expect(yourCases({ items: ["a"] })).toEqual(["a"]);
+    expect(yourCases(undefined)).toEqual([]);
+  });
+
+  it("gets a name no case has, nor a new case's or a copy's job, while it waits or runs", () => {
+    const taken = copyTaken(["wing", "wing-run"], [
+      job("wing-run-2", "failed", "case"), job("wing-run-3", "queued"), job("wing-run-4", "failed"),
+    ]);
+    expect([...taken].sort()).toEqual(["wing", "wing-run", "wing-run-2", "wing-run-3"]);
+    expect(copyName("wing", taken)).toBe("wing-run-4");                     // a copy that failed left nothing
+    expect(copyName("motorBike", taken)).toBe("motorBike-run");
+    expect(copyName("x".repeat(80), new Set())).toHaveLength(77);
+    expect(copyNameProblem("wing-run-4", taken)).toBeNull();
+    expect(copyNameProblem("wing", taken)).toBe("A case with this name is in the cases folder already. Pick another name.");
+    expect(copyNameProblem("", taken)).toBe("Give the copy a name.");
+    expect(copyNameProblem("-x", taken)).toMatch(/^Use only letters/);
   });
 });
 
@@ -99,6 +143,7 @@ describe("the Solve dialog's numbers", () => {
   it("gives the command that does the same, with the processes for a first solve only", () => {
     expect(solveCommand("ahmed-coarse", 2000, 4)).toBe("meshdoctor solve ahmed-coarse --to 2000 --np 4");
     expect(solveCommand("ahmed-coarse", 3000, null)).toBe("meshdoctor solve ahmed-coarse --to 3000");
+    expect(solveCommand("wing-run", 2000, 4, "wing")).toBe("meshdoctor solve wing wing-run --to 2000 --np 4");
   });
 });
 

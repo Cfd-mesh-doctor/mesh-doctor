@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The solves of the cases Mesh Doctor made (API 1.6): the Solve screen's runs list, the Solve dialog's numbers and
-// checks, and a run's step and state in plain words.
-import { isActive, type Job, type Run, type RunLive, type RunShown } from "@/engine/types";
+// checks, a copy of a case you made (its name and the cases to pick from), and a run's step and state in plain words.
+import { isPlainName } from "@/engine/commands";
+import { isActive, type CaseList, type Job, type Made, type Run, type RunLive, type RunShown } from "@/engine/types";
 import { formatInt } from "@/lib/format";
 
 /** The iteration a first solve runs to: the solve job's own default. */
@@ -21,6 +22,7 @@ export const OLD_ENGINE_RUNS = "Your engine is older than this page and can't so
 
 /** A solve's steps, as the engine names them (meshdoctor/solve.py), in plain words with the program at work. */
 const SOLVE_STEPS: Record<string, string> = {
+  copying: "Copying your case",
   decomposing: "Splitting the case (decomposePar)",
   potentialFoam: "Starting the flow (potentialFoam)",
   solving: "Solving (foamRun)",
@@ -66,10 +68,23 @@ export function stretchesText(stretches: Run["stretches"]): string | null {
   return stretches.map((s) => `${formatInt(s.from)} → ${formatInt(s.to)}`).join(", then ");
 }
 
-/** One line of the runs list: a case a case job made, its template, its run once it has one, and its solve job. */
+/** What a case was made from, in a few words: "made from the ahmed-body template", or "a copy of wing". */
+export function madeFrom(made: Made | null | undefined): string | null {
+  if (made?.copyOf) return `a copy of ${made.copyOf}`;
+  if (made?.template) return `made from the ${made.template} template`;
+  return null;
+}
+
+/** What a solve job makes its case from: the case you made that it copies (its `source`), if it is a copy. */
+export function madeOfJob(job: Job | undefined): Made | null {
+  const source = job?.kind === "solve" ? job.params.source : undefined;
+  return typeof source === "string" && source ? { copyOf: source } : null;
+}
+
+/** One line of the runs list: a case Mesh Doctor made, what from, its run once it has one, and its solve job. */
 export interface RunRow {
   name: string;
-  template: string | null;
+  made: Made | null;
   run: Run | null;
   job: Job | undefined;
   shown: RunShown;
@@ -79,20 +94,50 @@ const ORDER: Record<RunShown, number> = {
   running: 0, queued: 0, interrupted: 1, stopped: 1, failed: 1, cancelled: 1, done: 1, unsolved: 2,
 };
 
-/** The runs list: every case a case job made, with its run, and any run of a case not listed (an older engine's
- * cases have no `made`). Those solving or waiting come first, then the ones solved, newest first, then the ones not
- * solved yet, by name. */
-export function runRows(made: Readonly<Record<string, string>> | undefined, runs: readonly Run[] | undefined,
+/** The runs list: every case Mesh Doctor made, with its run, any run of a case not listed (an older engine's cases
+ * have no `made`), and any solve job waiting or running (a copy of yours is listed once it is made). Those solving or
+ * waiting come first, then the ones solved, newest first, then the ones not solved yet, by name. */
+export function runRows(made: Readonly<Record<string, Made>> | undefined, runs: readonly Run[] | undefined,
   jobs: readonly Job[] | undefined): RunRow[] {
-  const names = new Set([...Object.keys(made ?? {}), ...(runs ?? []).map((r) => r.name)]);
+  const working = (jobs ?? []).filter((j) => j.kind === "solve" && isActive(j.state)).map((j) => j.name);
+  const names = new Set([...Object.keys(made ?? {}), ...(runs ?? []).map((r) => r.name), ...working]);
   const rows = [...names].map((name): RunRow => {
     const run = runs?.find((r) => r.name === name) ?? null;
     const job = solveJobOf(jobs, name);
-    return { name, template: made?.[name] || null, run, job, shown: runShown(run, job) };
+    return { name, made: made?.[name] ?? madeOfJob(job), run, job, shown: runShown(run, job) };
   });
   return rows.sort((a, b) => ORDER[a.shown] - ORDER[b.shown]
     || (b.run?.updated ?? "").localeCompare(a.run?.updated ?? "")
     || a.name.localeCompare(b.name));
+}
+
+/** The cases you made: those in the cases folder Mesh Doctor didn't make, which it solves through a copy. */
+export function yourCases(cases: Pick<CaseList, "items" | "made"> | undefined): string[] {
+  return (cases?.items ?? []).filter((n) => !cases?.made?.[n]);
+}
+
+/** Names a copy can't take: every case's in the cases folder, every new case's (one that failed keeps its folder,
+ * not listed), and every solve job's still waiting or running (a copy being made isn't listed yet). */
+export function copyTaken(cases: readonly string[] | undefined, jobs: readonly Job[] | undefined): Set<string> {
+  return new Set([...(cases ?? []), ...(jobs ?? [])
+    .filter((j) => j.kind === "case" || (j.kind === "solve" && isActive(j.state))).map((j) => j.name)]);
+}
+
+/** A free name for a copy of a case you made: its name and -run ("wing-run"), then -run-2, -run-3… while taken. */
+export function copyName(source: string, taken: ReadonlySet<string>): string {
+  const base = `${source.slice(0, 80 - "-run-99".length)}-run`;
+  if (!taken.has(base)) return base;
+  let n = 2;
+  while (taken.has(`${base}-${n}`)) n++;
+  return `${base}-${n}`;
+}
+
+/** What's wrong with a copy's name, or null when the engine will take it: a new case's, never one there already. */
+export function copyNameProblem(name: string, taken: ReadonlySet<string>): string | null {
+  if (!name) return "Give the copy a name.";
+  if (!isPlainName(name)) return "Use only letters, digits and _ . - (not . or - first), at most 80 characters.";
+  if (taken.has(name)) return "A case with this name is in the cases folder already. Pick another name.";
+  return null;
 }
 
 /** The iteration a solve is suggested to run to: 2,000 for a first one, else 1,000 past the latest written. */
@@ -139,7 +184,7 @@ export function totalForces(live: Pick<RunLive, "forces" | "forceInfo">): {
 }
 
 /** The terminal command that does the same: `meshdoctor solve`, with --np for a first solve only (a continuation
- * keeps the run's own). */
-export function solveCommand(name: string, to: number, np: number | null): string {
-  return `meshdoctor solve ${name} --to ${to}${np == null ? "" : ` --np ${np}`}`;
+ * keeps the run's own), and the case it copies first for a copy of yours. */
+export function solveCommand(name: string, to: number, np: number | null, source?: string): string {
+  return `meshdoctor solve ${source ? `${source} ` : ""}${name} --to ${to}${np == null ? "" : ` --np ${np}`}`;
 }

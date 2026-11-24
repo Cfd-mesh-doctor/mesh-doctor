@@ -4,8 +4,9 @@
 // found, and a warning's or a problem's fix with its command to copy, then the largest mesh the free memory takes.
 // Then New case: a case made from a template (API 1.5, NewCase.tsx), and Runs: each case Mesh Doctor made with its
 // solve (API 1.6: GET /runs), what it is doing and how far it has come, a link to its page (Run.tsx) and Solve… for
-// one not solved yet (SolveDialog.tsx). What the screen does next is listed under them until then.
-import { CircleCheck, CircleX, ExternalLink, FolderPlus, Play, RefreshCw, TriangleAlert } from "lucide-react";
+// one not solved yet (SolveDialog.tsx), and Solve a case you made…, which solves a copy of one of yours (CopyDialog).
+// What the screen does next is listed under them until then.
+import { CircleCheck, CircleX, CopyPlus, ExternalLink, FolderPlus, Play, RefreshCw, TriangleAlert } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { RunStateBadge } from "@/components/shared/badges";
@@ -26,9 +27,9 @@ import { DOCS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
 import { NewCaseDialog } from "./NewCase";
-import { SolveDialog } from "./SolveDialog";
+import { CopyDialog, SolveDialog } from "./SolveDialog";
 import { CHECK_COMMAND, OLD_ENGINE, cellsAtMost, sentence } from "./readiness";
-import { OLD_ENGINE_RUNS, current, runRows, solveStep, stretchFraction, type RunRow } from "./solveStart";
+import { OLD_ENGINE_RUNS, current, madeFrom, runRows, solveStep, stretchFraction, type RunRow } from "./solveStart";
 
 const STATE = {
   ok: { icon: CircleCheck, colour: "text-success", said: "OK" },
@@ -240,7 +241,8 @@ function NewCase() {
 function runLine(row: RunRow, cells: number | null | undefined): string {
   const { run, shown } = row;
   const now = current(run, shown);
-  const made = [row.template && `Made from the ${row.template} template`, cells != null && `about ${formatInt(cells)} cells`]
+  const from = madeFrom(row.made);
+  const made = [from && from.charAt(0).toUpperCase() + from.slice(1), cells != null && `about ${formatInt(cells)} cells`]
     .filter((x): x is string => typeof x === "string").join(", ");
   const at = (n: number) => `iteration ${formatInt(n)}`;
   const when = run?.finished ? `, ${formatRelative(run.finished)}` : "";
@@ -291,14 +293,15 @@ function RunItem({ row, cells, onSolve }: { row: RunRow; cells: number | null | 
   );
 }
 
-/** The cases Mesh Doctor made, each with its solve (API 1.6). A case you made is solved by its own Allrun in a
- * terminal: Mesh Doctor never changes it. */
+/** The cases Mesh Doctor made, each with its solve (API 1.6): the ones made with New case, and the copies it solves
+ * of cases you made, which it never changes (Solve a case you made…). */
 function Runs() {
   const jobs = useJobs();
   const cases = useCases();
   const active = jobs.data?.items.some((j) => j.kind === "solve" && isActive(j.state)) ?? false;
   const runs = useRuns(active);
   const [solving, setSolving] = useState<string | null>(null);
+  const [copying, setCopying] = useState(false);
   const old = runs.isError && !runs.data && asEngineError(runs.error).code === "not-found";
   const rows = useMemo(() => runRows(cases.data?.made, runs.data?.items, jobs.data?.items), [cases.data, runs.data, jobs.data]);
   const loading = runs.isPending || cases.isPending;
@@ -307,9 +310,9 @@ function Runs() {
       <CardHeader className="block">
         <CardTitle>Runs</CardTitle>
         <CardDescription>
-          The solves of the cases made with New case, on the engine&apos;s computer. A run&apos;s page draws its
-          residuals and forces as it solves and says whether it has converged; Stop ends it at the iteration it has
-          reached, and Continue goes on from there.
+          The solves of the cases Mesh Doctor made, on the engine&apos;s computer: the ones made with New case, and
+          copies of cases you made. A run&apos;s page draws its residuals and forces as it solves and says whether it
+          has converged; Stop ends it at the iteration it has reached, and Continue goes on from there.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -324,7 +327,7 @@ function Runs() {
           </div>
         ) : rows.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No case made with New case yet: make one above, and it shows here, ready to solve.
+            Nothing to solve here yet: make a case with New case above, or solve a copy of a case you made.
           </p>
         ) : (
           <ul className="-my-3 divide-y divide-border" aria-label="Runs">
@@ -338,14 +341,18 @@ function Runs() {
         )}
       </CardContent>
       <CardFooter className="flex-wrap">
+        <Button size="sm" variant="secondary" onClick={() => setCopying(true)} disabled={old}>
+          <CopyPlus aria-hidden /> Solve a case you made…
+        </Button>
         <span className="text-muted-foreground">
-          A case you made yourself is solved by its own Allrun in a terminal: Mesh Doctor never changes it. In a
-          terminal, <InlineCode text="meshdoctor solve <case>" /> solves a case made here.
+          Mesh Doctor never changes it: it solves a copy. In a terminal, <InlineCode text="meshdoctor solve <case>" />{" "}
+          solves a case made here, and <InlineCode text="meshdoctor solve <your-case> <name>" /> a copy of yours.
         </span>
       </CardFooter>
       {solving && (
         <SolveDialog open onOpenChange={(o) => { if (!o) setSolving(null); }} target={{ name: solving, run: null }} />
       )}
+      {copying && <CopyDialog open onOpenChange={(o) => { if (!o) setCopying(false); }} />}
     </Card>
   );
 }
@@ -357,7 +364,7 @@ function ComingNext() {
       <CardHeader className="block">
         <CardTitle>Coming next on this screen</CardTitle>
         <CardDescription>
-          Until then, a case you made yourself is solved by its Allrun in a terminal, as the worked example shows:{" "}
+          Until then, the worked example shows a first run from start to finish, in a terminal:{" "}
           <a href={DOCS.example} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
             the Ahmed body <ExternalLink className="size-3.5" aria-hidden />
           </a>
@@ -365,7 +372,6 @@ function ComingNext() {
       </CardHeader>
       <CardContent>
         <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-          <li>A case you made, solved here too: the engine copies its mesh and settings into a case of its own and solves that.</li>
           <li>A first run, guided from start to finish: the Ahmed body made and solved, then a repair and an A/B test of it.</li>
         </ul>
       </CardContent>

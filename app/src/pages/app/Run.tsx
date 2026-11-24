@@ -3,8 +3,9 @@
 // residuals and forces as they are now (GET /runs/{name}/live, the engine's live monitor), and the convergence judge
 // on it: the live monitor's while it solves, the engine's (GET /judge?case=) once it has ended. Stop ends it at the
 // iteration it has reached (POST /runs/{name}/stop), and Continue… solves on from the latest one written
-// (SolveDialog.tsx). A solve just started shows as starting until its job writes the run's status. While it solves
-// the screen asks again every 3 s, so the charts grow.
+// (SolveDialog.tsx). A solve just started shows as starting until its job writes the run's status, and a copy of a
+// case you made as copying while its job makes it. While it solves the screen asks again every 3 s, so the charts
+// grow.
 import { ArrowLeft, CircleStop, FastForward, ListChecks, Play } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
@@ -26,7 +27,9 @@ import { Section } from "@/pages/report/Section";
 import { tableRun } from "@/report/abtest";
 import { judgeOf } from "@/report/summary";
 import { SolveDialog } from "./SolveDialog";
-import { current, runShown, solveJobOf, solveStep, stretchFraction, stretchesText, totalForces } from "./solveStart";
+import {
+  current, madeFrom, madeOfJob, runShown, solveJobOf, solveStep, stretchFraction, stretchesText, totalForces,
+} from "./solveStart";
 
 const LINK = "font-medium text-primary underline-offset-4 hover:underline";
 
@@ -218,13 +221,13 @@ export function RunPage() {
   const [stoppedAt, setStoppedAt] = useState<string | null>(null);
   const [goingOn, setGoingOn] = useState(false);
 
-  const template = cases.data?.made?.[name];
+  const from = madeFrom(cases.data?.made?.[name] ?? madeOfJob(job));
   const stopping = shown === "running" && run != null && stoppedAt === (run.started ?? "");
   const canStop = shown === "running" && run?.state === "running" && run.step === "solving" && working && !stopping;
   const canGoOn = run != null && !solving && !working;
   const sub = [
     "Solve",
-    template && `made from the ${template} template`,
+    from,
     run?.end != null && `to iteration ${formatInt(run.end)}`,
     mode === "demo" && "recorded demo",
   ].filter((x): x is string => typeof x === "string");
@@ -258,7 +261,7 @@ export function RunPage() {
   if (!run && job && missing) {
     return (
       <>
-        <PageHeader title={name} description="Solve" actions={actions} />
+        <PageHeader title={name} description={sub.join(" · ")} actions={actions} />
         <Card>
           <CardHeader className="flex-wrap">
             <div>
@@ -277,7 +280,8 @@ export function RunPage() {
               </p>
             ) : (
               <p className="text-danger">
-                {job.error || `It stopped with exit code ${job.exitCode ?? "?"}.`} See{" "}
+                {job.state === "cancelled" ? "It was cancelled before the solve began."
+                  : job.error || `It stopped with exit code ${job.exitCode ?? "?"}.`} See{" "}
                 <Link to={to(`/jobs?job=${encodeURIComponent(job.id)}`)} className={LINK}>its job</Link> for its log.
               </p>
             )}
@@ -290,7 +294,7 @@ export function RunPage() {
   if (!run) {
     return (
       <>
-        <PageHeader title={name} description="Solve" actions={actions} />
+        <PageHeader title={name} description={sub.join(" · ")} actions={actions} />
         {first.isError ? (
           <>
             <ErrorPanel error={first.error} onRetry={() => void first.refetch()} retrying={first.isFetching} />

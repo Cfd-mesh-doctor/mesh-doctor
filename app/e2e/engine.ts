@@ -117,8 +117,9 @@ export async function mockEngine(
     check?: unknown;
     /** GET /templates' answer (two templates by default); null: none, as from an engine before API 1.5. */
     templates?: unknown;
-    /** The cases a case job made, each with its template (GET /cases' `made`, API 1.6); listed with the others. */
-    made?: Record<string, string>;
+    /** The cases Mesh Doctor made, each with what from (GET /cases' `made`, API 1.6): a template, or a case you made
+     * (a copy of it); listed with the others. */
+    made?: Record<string, { template?: string; copyOf?: string }>;
     /** Their solves (GET /runs), each as run() makes it; a running one has a solve job running too. */
     runs?: RunDoc[];
   } = {},

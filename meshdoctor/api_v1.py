@@ -140,13 +140,17 @@ def result_schema(p, q, b):
            "cells": {"type": "object", "additionalProperties": {"type": ["integer", "null"]},
                      "description": "each case's cell count, from its mesh's owner header (summed over processors "
                                     "for a decomposed case); null when the header doesn't say (API 1.2)"},
-           "made": {"type": "object", "additionalProperties": {"type": "string"},
-                    "description": "the cases a case job made, each with its template: the cases a solve job takes "
-                                   "(API 1.6)"}}})
+           "made": {"type": "object", "additionalProperties": {
+                        "type": "object", "additionalProperties": False, "properties": {
+                            "template": {"type": "string", "description": "the template a case job made it from"},
+                            "copyOf": {"type": "string",
+                                       "description": "the case you made that a solve job copied it from, to solve"}}},
+                    "description": "the cases Mesh Doctor made, each with what from: a template, or a case you made "
+                                   "(a copy of it, to solve); the cases a solve job takes (API 1.6)"}}})
 def cases(p, q, b):
     names = md_api.sources()
     root = md_api.run_dir()
-    made = {n: t for n, t in ((n, md_api.made(os.path.join(root, n))) for n in names) if t is not None}
+    made = {n: m for n, m in ((n, md_api.made(os.path.join(root, n))) for n in names) if m is not None}
     return {"items": names, "cells": {n: ramguard.mesh_cells(os.path.join(root, n)) for n in names}, "made": made}
 
 
@@ -515,7 +519,8 @@ RUN = {"type": "object", "required": ["name", "state", "step", "iteration", "sta
     "state": {"enum": ["running", "done", "stopped", "failed", "cancelled", "interrupted"],
               "description": "stopped: ended at a written iteration before its end (Stop); interrupted: its status "
                              "says running but its job is gone (the computer restarted, or the job was killed)"},
-    "step": {"type": "string", "description": "decomposing, potentialFoam, solving, reconstructing or done"},
+    "step": {"type": "string", "description": "copying (a copy of a case you made), decomposing, potentialFoam, "
+                                             "solving, reconstructing or done"},
     "iteration": dict(_INT_OR_NULL, description="the last iteration in its solver log"),
     "start": {"type": "integer", "description": "the iteration the latest stretch started from"},
     "end": dict(_INT_OR_NULL, description="the iteration the latest stretch runs to (endTime)"),
@@ -652,15 +657,22 @@ JOBS = {
     },
     "solve": {
         "summary": "solve a case Mesh Doctor made to an iteration: while none is written it splits the case, starts "
-                   "the flow with potentialFoam and runs foamRun; once one is written it continues from the latest",
+                   "the flow with potentialFoam and runs foamRun; once one is written it continues from the latest. "
+                   "With a source, it first makes the case as a copy of a case you made",
         "params": _params({"name": dict(NAME, description="a case in the cases folder that Mesh Doctor made (a case "
-                                                          "job's); a case you made is never changed"),
+                                                          "job's, or a copy); with a source, the new case the copy "
+                                                          "goes in, a name not taken there"),
+                           "source": dict(NAME, description="a case you made, to solve a copy of: its mesh and "
+                                                            "settings, not its results, are copied into the cases "
+                                                            "folder as name (a case you made is never changed). It "
+                                                            "needs its mesh joined, its 0 (or 0.orig) fields and a "
+                                                            "steady foamRun setup"),
                            "to": {"type": "integer", "minimum": 1, "maximum": solve.MAX_ITERS, "default": 2000,
                                   "description": "the iteration to solve to; past the latest written one"},
                            "np": {"type": "integer", "minimum": 1, "maximum": 64, "default": 4,
                                   "description": "processes for a solve from iteration 0 (1: not split); a "
                                                  "continuation keeps the run's own"}}, ["name"]),
-        "start": lambda a: solve.start(a["name"], a["to"], a["np"]),
+        "start": lambda a: solve.start(a["name"], a["to"], a["np"], a.get("source")),
         "links": lambda n: {"run": f"{PREFIX}/runs/{n}"},
     },
 }

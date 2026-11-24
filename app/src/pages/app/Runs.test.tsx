@@ -6,7 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import type { Transport } from "@/engine/client";
 import { EngineError } from "@/engine/errors";
-import type { Job, MachineInfo, Run } from "@/engine/types";
+import type { Job, MachineInfo, Made, Run } from "@/engine/types";
 import { renderScreen } from "@/test/render";
 import { RunPage } from "./Run";
 import { Solve } from "./Solve";
@@ -44,7 +44,7 @@ function liveOf(r: Run) {
 
 /** Your own engine (or the demo, by `kind`) with these made cases, runs and jobs. */
 function engine(o: {
-  made?: Record<string, string>; runs?: Run[]; jobs?: Job[]; live?: (r: Run) => unknown; noRuns?: boolean;
+  made?: Record<string, Made>; runs?: Run[]; jobs?: Job[]; live?: (r: Run) => unknown; noRuns?: boolean;
   kind?: "engine" | "demo";
 } = {}) {
   const posted: { path: string; body?: unknown }[] = [];
@@ -65,7 +65,8 @@ function engine(o: {
       }
       const made = o.made ?? {};
       if (route === "/cases") {
-        return { items: ["mine", ...Object.keys(made)], cells: Object.fromEntries(Object.keys(made).map((n) => [n, 480_000])), made } as T;
+        const items = ["mine", ...Object.keys(made)];
+        return { items, cells: Object.fromEntries(items.map((n) => [n, 480_000])), made } as T;
       }
       if (route === "/runs" && !o.noRuns) return { items: [...runs.values()] } as T;
       if (route === "/jobs") return { items: o.jobs ?? [] } as T;
@@ -98,7 +99,7 @@ const dialog = () => within(screen.getByRole("dialog"));
 describe("the Solve screen's runs", () => {
   it("lists each case Mesh Doctor made with its solve: those solving first, a link to each run's page", async () => {
     solvePage({
-      made: { a: "ahmed-body", b: "wheel-wing", c: "ahmed-body" },
+      made: { a: { template: "ahmed-body" }, b: { template: "wheel-wing" }, c: { template: "ahmed-body" } },
       runs: [run("a"), stopped("b")],
       jobs: [job("a", "running")],
     });
@@ -119,7 +120,7 @@ describe("the Solve screen's runs", () => {
 
   it("solves a case with Solve…, on the processes picked, and opens its page", async () => {
     const user = userEvent.setup();
-    const { posted, router } = solvePage({ made: { c: "ahmed-body" } });
+    const { posted, router } = solvePage({ made: { c: { template: "ahmed-body" } } });
     await user.click(await screen.findByRole("button", { name: "Solve c" }));
     expect(dialog().getByRole("heading", { name: "Solve c" })).toBeInTheDocument();
     expect(dialog().getByRole("textbox", { name: "Solve to iteration" })).toHaveValue("2000");
@@ -138,7 +139,7 @@ describe("the Solve screen's runs", () => {
 
   it("won't start a solve while another job runs, and says why", async () => {
     const user = userEvent.setup();
-    solvePage({ made: { c: "ahmed-body" }, jobs: [job("wing-fix", "running", "repair")] });
+    solvePage({ made: { c: { template: "ahmed-body" } }, jobs: [job("wing-fix", "running", "repair")] });
     await user.click(await screen.findByRole("button", { name: "Solve c" }));
     expect(await dialog().findByText(/Repair wing-fix is running\. The engine runs one big job at a time/)).toBeInTheDocument();
     expect(dialog().getByRole("button", { name: "Solve" })).toBeDisabled();
@@ -146,7 +147,7 @@ describe("the Solve screen's runs", () => {
 
   it("gives the command in the demo, which can't start jobs", async () => {
     const user = userEvent.setup();
-    solvePage({ made: { c: "ahmed-body" }, kind: "demo" });
+    solvePage({ made: { c: { template: "ahmed-body" } }, kind: "demo" });
     await user.click(await screen.findByRole("button", { name: "Solve c" }));
     expect(await dialog().findByRole("button", { name: "Copy “meshdoctor solve c --to 2000 --np 4”" })).toBeInTheDocument();
     expect(dialog().queryByRole("button", { name: "Solve" })).toBeNull();
@@ -155,19 +156,92 @@ describe("the Solve screen's runs", () => {
 
   it("says when no case was made yet, and tells an engine before the solve job to update", async () => {
     const view = solvePage({});
-    expect(await screen.findByText(/^No case made with New case yet/)).toBeInTheDocument();
+    expect(await screen.findByText(/^Nothing to solve here yet/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Solve a case you made…" })).toBeEnabled();
     view.unmount();
-    solvePage({ made: { c: "ahmed-body" }, noRuns: true });
+    solvePage({ made: { c: { template: "ahmed-body" } }, noRuns: true });
     expect(await screen.findByText(/^Your engine is older than this page and can't solve cases from here yet/)).toBeInTheDocument();
     expect(OLD_ENGINE_RUNS).toContain("`git pull`");
     expect(screen.queryByRole("list", { name: "Runs" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Solve a case you made…" })).toBeDisabled();
+  });
+});
+
+describe("solving a copy of a case you made", () => {
+  it("picks one of yours, suggests a free name for the copy, and starts the job that makes it and solves it", async () => {
+    const user = userEvent.setup();
+    const { posted, router } = solvePage({ made: { "mine-run": { copyOf: "mine" } } });
+    expect(await screen.findByText("A copy of mine, about 480,000 cells")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Solve a case you made…" }));
+    expect(dialog().getByRole("heading", { name: "Solve a copy of a case you made" })).toBeInTheDocument();
+    const which = dialog().getByRole("combobox", { name: "Case" });
+    expect(within(which).getAllByRole("option").map((o) => o.textContent)).toEqual(["mine (about 480,000 cells)"]);
+    const name = dialog().getByRole("textbox", { name: "Name of the copy" });
+    expect(name).toHaveValue("mine-run-2");                                 // mine-run is taken: the copy before
+    await user.clear(name);
+    await user.type(name, "mine-run");
+    expect(name).toHaveAccessibleDescription("A case with this name is in the cases folder already. Pick another name.");
+    expect(dialog().getByRole("button", { name: "Solve a copy" })).toBeDisabled();
+    await user.clear(name);
+    await user.type(name, ".x");
+    expect(name).toHaveAccessibleDescription(/^Use only letters, digits/);
+    await user.clear(name);
+    await user.type(name, "mine-fine");
+    expect(dialog().getByRole("textbox", { name: "Solve to iteration" })).toHaveValue("2000");
+    expect(dialog().getByRole("combobox", { name: "Processes" })).toHaveValue("4");
+    await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent(/The solve needs about \d+(\.\d)? GB of memory/));
+    await user.click(dialog().getByRole("button", { name: "Solve a copy" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/app/solve/mine-fine"));
+    expect(posted).toEqual([{ path: "/jobs", body: { kind: "solve", params: { name: "mine-fine", source: "mine", to: 2000, np: 4 } } }]);
+  });
+
+  it("says when there is no case of yours to copy, and gives the command in the demo", async () => {
+    const user = userEvent.setup();
+    const view = solvePage({ made: { mine: { template: "ahmed-body" } } });     // every case there made here
+    await user.click(await screen.findByRole("button", { name: "Solve a case you made…" }));
+    expect(await dialog().findByText(/cases folder has no case of yours with a mesh/)).toBeInTheDocument();
+    expect(dialog().getByRole("button", { name: "Solve a copy" })).toBeDisabled();
+    view.unmount();
+    solvePage({ kind: "demo" });
+    await user.click(await screen.findByRole("button", { name: "Solve a case you made…" }));
+    expect(await dialog().findByRole("button", { name: "Copy “meshdoctor solve mine mine-run --to 2000 --np 4”" }))
+      .toBeInTheDocument();
+    expect(dialog().getByText(/^The demo can't start jobs\. With your own engine paired, Solve a copy runs this/)).toBeInTheDocument();
+  });
+
+  it("lists a copy that waits to be made, and its page says what it copies", async () => {
+    const copy = job("mine-run", "queued", "solve", { params: { name: "mine-run", source: "mine", to: 2000, np: 4 } });
+    const view = solvePage({ jobs: [copy] });
+    const list = within(await screen.findByRole("list", { name: "Runs" }));
+    expect(list.getByRole("listitem")).toHaveTextContent("mine-runQueuedWaiting to start");
+    expect(list.getByRole("link", { name: "mine-run" })).toHaveAttribute("href", "/app/solve/mine-run");
+    view.unmount();
+    runPage("mine-run", { jobs: [copy] });
+    expect(await screen.findByText("Solve · a copy of mine")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Starting" })).toBeInTheDocument();
+  });
+
+  it("names the copying step, with no Stop while it copies", async () => {
+    runPage("mine-run", {
+      made: { "mine-run": { copyOf: "mine" } }, jobs: [job("mine-run", "running")],
+      runs: [run("mine-run", { step: "copying", iteration: 0, written: 0 })],
+    });
+    expect(await screen.findByRole("heading", { name: "Copying your case" })).toBeInTheDocument();
+    expect(screen.getByText(/^Solve · a copy of mine · to iteration 200/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+  });
+
+  it("says a copy cancelled before its solve began", async () => {
+    runPage("mine-run", { jobs: [job("mine-run", "cancelled", "solve", { params: { name: "mine-run", source: "mine" } })] });
+    expect(await screen.findByRole("heading", { name: "The solve didn't start" })).toBeInTheDocument();
+    expect(screen.getByText(/^It was cancelled before the solve began\. See/)).toBeInTheDocument();
   });
 });
 
 describe("a run's page", () => {
   it("follows a solve: its progress and pace, residuals and forces, the live judge, and Stop", async () => {
     const user = userEvent.setup();
-    const { posted } = runPage("a", { made: { a: "ahmed-body" }, runs: [run("a")], jobs: [job("a", "running")] });
+    const { posted } = runPage("a", { made: { a: { template: "ahmed-body" } }, runs: [run("a")], jobs: [job("a", "running")] });
     expect(await screen.findByRole("heading", { name: "a", level: 1 })).toBeInTheDocument();
     expect(await screen.findByText("Solve · made from the ahmed-body template · to iteration 200")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Solving (foamRun)" })).toBeInTheDocument();
@@ -194,7 +268,7 @@ describe("a run's page", () => {
 
   it("judges a run that has ended, and continues it from the latest iteration written", async () => {
     const user = userEvent.setup();
-    const { posted, router } = runPage("b", { made: { b: "ahmed-body" }, runs: [stopped("b")] });
+    const { posted, router } = runPage("b", { made: { b: { template: "ahmed-body" } }, runs: [stopped("b")] });
     expect(await screen.findByRole("heading", { name: "Stopped at iteration 150" })).toBeInTheDocument();
     expect(screen.getByText("Solved 0 → 150, on 4 processes.")).toBeInTheDocument();
     expect(screen.getByText(/^Stopped by request at iteration 150, which it wrote/)).toBeInTheDocument();

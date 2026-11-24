@@ -4,13 +4,16 @@
 later continued from its latest written time, or stopped early at a written time.
 
     python3 -m meshdoctor solve <case> [--to N] [--np P]
+    python3 -m meshdoctor solve <srcCase> <name> [--to N] [--np P]
 
-<case> is a case in the cases folder that Mesh Doctor made (python3 -m meshdoctor new): a case you made is never
-changed, so it isn't solved here.  While no iteration is written, a solve splits the case onto P processes (4 by
-default; 1 solves it whole), starts the flow with potentialFoam and runs foamRun to iteration N (2000 by default).
-Once one is written, a solve continues from the latest to N, on the same processes.  The run's state is in the case's
-.meshdoctor-solve.json, which GET /api/v1/runs lists.  The app starts the same thing as a `solve` job
-(POST /api/v1/jobs), which runs `solve.py run`; Stop (POST /api/v1/runs/{name}/stop) ends it at a written time.
+<case> is a case in the cases folder that Mesh Doctor made (python3 -m meshdoctor new, or a copy made here).  A case
+you made is never changed, so it is solved through a copy: with <srcCase> and a new <name>, its mesh and settings,
+not its results, are copied into the cases folder as <name>, with the marker of a case made here, and the copy is
+solved.  While no iteration is written, a solve splits the case onto P processes (4 by default; 1 solves it whole),
+starts the flow with potentialFoam and runs foamRun to iteration N (2000 by default).  Once one is written, a solve
+continues from the latest to N, on the same processes.  The run's state is in the case's .meshdoctor-solve.json,
+which GET /api/v1/runs lists.  The app starts the same thing as a `solve` job (POST /api/v1/jobs, with a `source` to
+solve a copy), which runs `solve.py run`; Stop (POST /api/v1/runs/{name}/stop) ends it at a written time.
 """
 import json, os, re, shlex, shutil, signal, subprocess, sys, time
 
@@ -19,6 +22,7 @@ import jobs
 import md_api
 import prog
 import ramguard
+import templates
 
 PKG = os.path.dirname(os.path.abspath(__file__))
 STATUS = jobs.SOLVE_STATUS
@@ -26,6 +30,7 @@ LOGS = ".runs"                        # the solve jobs' logs, in the workspace
 POLL_S = 2.0
 MAX_ITERS = 100_000
 TIME = re.compile(rb"^Time = ([0-9.eE+-]+)s?[ \t]*$", re.M)
+NAME_RULE = "a case name is letters, digits and _ . - (not . or - first), at most 80 characters"
 
 
 def now():
@@ -64,40 +69,88 @@ def latest(case):
     return int(best)
 
 
-def refusal(name, to, nproc=None):
-    """Why case `name` can't be solved to iteration `to` now, as (code, message) with no paths, or None."""
+def refusal(name, to, nproc=None, source=None):
+    """Why case `name` can't be solved to iteration `to` now, as (code, message) with no paths, or None.  With a
+    `source`, `name` is the new case a copy of it goes in."""
     if not md_api.SAFE.match(name):
-        return "bad-request", "a case name is letters, digits and _ . - (not . or - first), at most 80 characters"
+        return "bad-request", NAME_RULE
+    if source is not None:
+        return copy_refusal(source) or templates.refusal(name) or _procs(nproc)
     case = case_dir(name)
     if os.path.islink(case) or not os.path.isfile(os.path.join(case, "system", "controlDict")):
         return "not-found", f"no case {name} in the cases folder"
     made = md_api._read_json(os.path.join(case, jobs.CASE_MARKER))
     if not isinstance(made, dict):
-        return "unsupported", (f"{name} is a case you made, which Mesh Doctor never changes: it solves only a case it "
-                               "made (a new case from a template)")
+        return "unsupported", (f"{name} is a case you made, which Mesh Doctor never changes: solve a copy of it, "
+                               "under a new name")
     if made.get("state") != "done":
         return "not-ready", f"{name} has no mesh yet: make it again first"
     at = latest(case)
     if at == 0:                                 # a fresh start: its processes
-        cpus = os.cpu_count() or 1
-        if nproc is not None and nproc > cpus:
-            return "bad-request", f"this computer has {cpus} processors; ask for {cpus} or fewer"
-    elif to <= at:                              # a continuation: past what is written
+        return _procs(nproc)
+    if to <= at:                                # a continuation: past what is written
         return "bad-request", f"{name} is solved to iteration {at} already; continue it to a later one"
     return None
 
 
-def start(name, to, nproc):
-    """Start a solve job (POST /jobs, kind "solve"): the job, or a refusal, as md_api's other starts answer."""
-    why = refusal(name, to, nproc)
+def _procs(nproc):
+    cpus = os.cpu_count() or 1
+    if nproc is not None and nproc > cpus:
+        return "bad-request", f"this computer has {cpus} processors; ask for {cpus} or fewer"
+    return None
+
+
+def copy_refusal(source):
+    """Why a copy of case `source` can't be solved, as (code, message) with no paths, or None.  A copy needs the
+    case's mesh, joined (constant/polyMesh), its initial fields (0, or 0.orig) and a steady setup foamRun runs: a
+    solver entry in its controlDict, and steadyState time schemes."""
+    if not md_api.SAFE.match(source):
+        return "bad-request", NAME_RULE
+    src = case_dir(source)
+    if not os.path.isfile(os.path.join(src, "system", "controlDict")):
+        return "not-found", f"no case {source} in the cases folder"
+    if md_api._unfinished(src):
+        return "not-ready", f"{source} has no mesh yet: make it again first"
+    def mesh(where):
+        return any(os.path.isfile(os.path.join(src, where, "constant", "polyMesh", f)) for f in ("owner", "owner.gz"))
+    if not mesh(""):
+        return "not-ready", (f"{source}'s mesh is split onto its processors only: join it first (reconstructParMesh)"
+                             if mesh("processor0") else f"{source} has no mesh (constant/polyMesh)")
+    if not any(os.path.isdir(os.path.join(src, z)) for z in ("0", "0.orig")):
+        return "unsupported", f"{source} has no initial fields (a 0 or 0.orig folder)"
+    control, schemes = (_plain(os.path.join(src, "system", f)) for f in ("controlDict", "fvSchemes"))
+    if not re.search(r"^[ \t]*solver[ \t]+\w+[ \t]*;", control, re.M):
+        return "unsupported", (f"{source}'s controlDict names no solver: Mesh Doctor solves with foamRun (OpenFOAM 11 "
+                               "or later), which needs one, such as solver incompressibleFluid;")
+    if not re.search(r"\bddtSchemes\s*\{[^}]*\bdefault\s+steadyState\s*;", schemes):
+        return "unsupported", f"{source} is a transient case: Mesh Doctor solves steady cases for now"
+    return None
+
+
+def _plain(path):
+    """An OpenFOAM dictionary's text without its comments ('' when it can't be read)."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            text = f.read(1_000_000)
+    except OSError:
+        return ""
+    return re.sub(r"/\*.*?\*/|//[^\n]*", "", text, flags=re.S)
+
+
+def start(name, to, nproc, source=None):
+    """Start a solve job (POST /jobs, kind "solve"): the job, or a refusal, as md_api's other starts answer.  With a
+    `source`, the job first copies that case into the new case `name`, then solves the copy."""
+    why = refusal(name, to, nproc, source)
     if why:
         return md_api._refuse(*why)
     ws = config.settings()["workspace"]
     config.ensure_workspace(ws)
     os.makedirs(os.path.join(ws, LOGS), mode=0o700, exist_ok=True)
-    cmd = [sys.executable, os.path.join(PKG, "solve.py"), "run", name, "--to", str(to), "--np", str(nproc)]
-    return md_api._submit("solve", {"name": name, "to": to, "np": nproc}, name, cmd,
-                          log=f"{LOGS}/{name}_to_{to}.log", ram=(case_dir(name), "solve"))   # a log per stretch
+    cmd = [sys.executable, os.path.join(PKG, "solve.py"), "run", *([] if source is None else [source]), name,
+           "--to", str(to), "--np", str(nproc)]
+    params = {"name": name, "to": to, "np": nproc, **({} if source is None else {"source": source})}
+    return md_api._submit("solve", params, name, cmd, log=f"{LOGS}/{name}_to_{to}.log",   # a log per stretch
+                          ram=(case_dir(name if source is None else source), "solve"))
 
 
 def stop(name):
@@ -111,6 +164,8 @@ def stop(name):
         return None, ("not-found", f"no run {name}")
     if not solving(name):
         return None, ("not-ready", f"{name} isn't solving now")
+    if st.get("step") == "copying":
+        return None, ("not-ready", f"{name} is being copied: Stop works once it solves (cancel its job to end it now)")
     _stop_at(case, "writeNow")
     return describe(name), None
 
@@ -188,14 +243,15 @@ class Status:
 
 
 def _set(case, rel, entry, value):
-    """Set `entry value;` at the top level of an OpenFOAM dictionary file (added when it isn't there)."""
+    """Set `entry value;` at the top level of an OpenFOAM dictionary file (added when it isn't there, with a space
+    before the value however long the entry: numberOfSubdomains is longer than the column)."""
     path = os.path.join(case, rel)
     with open(path, encoding="utf-8") as f:
         text = f.read()
     pattern = re.compile(r"^(" + re.escape(entry) + r"\s+)[^;\n]*(;)", re.M)
     text, n = pattern.subn(lambda m: m.group(1) + str(value) + m.group(2), text, count=1)
     if not n:
-        text = text.rstrip("\n") + f"\n{entry:<16}{value};\n"
+        text = text.rstrip("\n") + f"\n{entry:<15} {value};\n"
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
 
@@ -239,32 +295,86 @@ def _fail(status, program, rc):
     return 1
 
 
-def run(name, to, nproc):
+def run(name, to, nproc, source=None):
     """Solve case `name` to iteration `to`: from iteration 0 on `nproc` processes, else from the latest written one on
-    the run's own split.  0 when it ran to `to` or was stopped at a written time."""
-    why = refusal(name, to)
+    the run's own split.  With a `source`, `name` is made first, as a copy of it (_copy).  0 when it ran to `to` or was
+    stopped at a written time."""
+    why = refusal(name, to, source=source)
     if why:
         _say(why[1])
         return 1
     case = case_dir(name)
+    made = None
+    if source is not None:
+        try:
+            os.mkdir(case)
+        except FileExistsError:
+            _say(f"a case named {name} exists already; pick another name")
+            return 1
+        made = templates.Status(case, copyOf=source)      # its marker: a case made here, being copied
+        made.step("copying")
     start_at = latest(case)
     first = start_at == 0                       # nothing written yet (as the template's Allrun): split, then start
     nproc = (nproc if first else split(case)) or 1
     status = Status(case, start_at, to, nproc, keep=not first)
+    if made is not None:
+        status.step("copying", 0.0)
+
+    def ended():                                # cancelled: a copy cut short is no case, so its name is free again
+        if made is not None and made.doc["state"] != "done":
+            _discard(case)
+        else:
+            status.end("cancelled")
 
     def term(sig, frame):                       # cancelled: say so in the status file, then end as the signal would
-        status.end("cancelled")
+        ended()
         sys.exit(128 + sig)
     before = signal.getsignal(signal.SIGTERM)
     signal.signal(signal.SIGTERM, term)
     try:
+        if made is not None and not _copy(source, case, made):
+            return 1
         return _solve(case, name, first, start_at, to, nproc, status)
     except KeyboardInterrupt:
-        status.end("cancelled")
+        ended()
         _say("stopped")
         return 130
     finally:
         signal.signal(signal.SIGTERM, signal.SIG_DFL if before is None else before)
+
+
+def _copy(source, case, made):
+    """Make the new case a copy of case `source`'s mesh and settings, not its results (templates.copy), which counts
+    its iterations as its times (deltaT 1) and writes by iteration.  On any failure the folder goes, so its name is
+    free again.  True once the copy is made."""
+    _say(f"copying {source}: its mesh and settings, not its results")
+    try:
+        cells = templates.copy(case_dir(source), case)
+        for entry, value in (("deltaT", 1), ("writeControl", "timeStep")):
+            _set(case, os.path.join("system", "controlDict"), entry, value)
+    except OSError as e:                        # shutil.Error too
+        _discard(case)
+        _say(f"the copy of {source} failed: {_reason(e)}")
+        return False
+    made.end("done", cells)
+    _say(f"copied {source}" + (f": {cells:,} cells" if cells else ""))
+    return True
+
+
+def _reason(e):
+    """Why a copy failed, in the system's words and naming no folders (No space left on device)."""
+    if e.strerror:
+        return e.strerror
+    for item in e.args[0] if e.args and isinstance(e.args[0], list) else []:   # shutil.Error: (src, dst, why)s
+        m = re.search(r"\] ([^:']+)", str(item[-1]) if isinstance(item, tuple) else "")
+        if m:
+            return m.group(1).strip()
+    return "a file couldn't be copied"
+
+
+def _discard(case):
+    """Remove a copy cut short: the folder its job made (os.mkdir), with all it holds."""
+    shutil.rmtree(case, ignore_errors=True)
 
 
 def _solve(case, name, first, start_at, to, nproc, status):
@@ -279,6 +389,7 @@ def _solve(case, name, first, start_at, to, nproc, status):
     if first:
         if parallel:
             status.step("decomposing", 0.01)
+            _dictionary(case, os.path.join("system", "decomposeParDict"))     # a copy of yours may have none
             _set(case, os.path.join("system", "decomposeParDict"), "numberOfSubdomains", nproc)
             for key in ("decomposer", "method"):  # OpenFOAM 14 reads decomposer; older dictionaries say method
                 _set(case, os.path.join("system", "decomposeParDict"), key, "scotch")
@@ -318,6 +429,15 @@ def _solve(case, name, first, start_at, to, nproc, status):
     return 0
 
 
+def _dictionary(case, rel):
+    """Make an OpenFOAM dictionary file with just its header, when the case has none."""
+    path = os.path.join(case, rel)
+    if not os.path.isfile(path):
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("FoamFile\n{\n    format      ascii;\n    class       dictionary;\n"
+                    f"    object      {os.path.basename(rel)};\n}}\n")
+
+
 def _unsplit(case):
     """A fresh solve on one process: an earlier try's split, which wrote nothing past iteration 0, is removed."""
     for n in os.listdir(case):
@@ -353,7 +473,14 @@ def main(argv):
     if not args or args[0] in ("-h", "--help"):
         print(prog.text(__doc__))
         return 0 if args else 2
-    name, rest = args[0], args[1:]
+    rest = list(args)
+    names = []
+    while rest and not rest[0].startswith("-") and len(names) < 2:
+        names.append(rest.pop(0))
+    if not names:
+        print(prog.text(__doc__))
+        return 2
+    source, name = names if len(names) == 2 else (None, names[0])
 
     def opt(flag, default):
         try:
@@ -363,14 +490,14 @@ def main(argv):
     to, nproc = opt("--to", 2000), opt("--np", 4)
     if not 1 <= to <= MAX_ITERS or not 1 <= nproc <= 64:
         sys.exit(f"--to is 1 to {MAX_ITERS:,} and --np 1 to 64")
-    why = refusal(name, to, nproc)
+    why = refusal(name, to, nproc, source)
     if why:
         sys.exit(why[1])
     if not job:                                 # a job's memory was checked when it was admitted (jobs.submit)
-        ok, msg = ramguard.check(case_dir(name), "solve")
+        ok, msg = ramguard.check(case_dir(name if source is None else source), "solve")
         if not ok:
             sys.exit(msg)
-    return run(name, to, nproc)
+    return run(name, to, nproc, source)
 
 
 if __name__ == "__main__":

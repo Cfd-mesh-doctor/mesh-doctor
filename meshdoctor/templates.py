@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 The Mesh Doctor authors
 """New cases from the templates in examples/: a copy in the cases folder under a new name, meshed by its Allmesh.
+A solve of a case you made makes a new case the same way: a copy of its mesh and settings, not its results (copy()).
 
     python3 -m meshdoctor new                                       the templates and their mesh sizes
     python3 -m meshdoctor new <template> <name> [--size S] [--replace]
@@ -63,6 +64,8 @@ SNAPPY = ((b"Shrinking and layer addition phase", "snappyHexMesh: adding layers"
           (b"Refinement phase", "snappyHexMesh: refining"))
 # What a copy leaves out: the template's accuracy check, and anything a run made there.
 SKIP = {"Allvalidate", "postProcessing", "polyMesh", "extendedFeatureEdgeMesh", "dynamicCode", "__pycache__"}
+# What a copy of a case you made leaves out (copy()): what its runs wrote beside its mesh and settings.
+RESULTS = {"postProcessing", "dynamicCode", "VTK", "__pycache__"}
 
 
 def now():
@@ -134,11 +137,12 @@ def start(template, size, name, replace=False):
 # making a case (the job's command, and the CLI's)
 
 class Status:
-    """The marker file: which template made the case, and where the making is (the job's progress)."""
+    """The marker file: what the case was made from (a template and its size, or the case it is a copy of: copyOf),
+    and where the making is (the job's progress)."""
 
-    def __init__(self, case, template, size):
+    def __init__(self, case, **origin):
         self.path = os.path.join(case, MARKER)
-        self.doc = {"madeBy": "Mesh Doctor", "template": template, "size": size, "created": now(),
+        self.doc = {"madeBy": "Mesh Doctor", **origin, "created": now(),
                     "state": "running", "step": "", "time": now(), "cells": None}
 
     def step(self, step):
@@ -191,6 +195,62 @@ def _skip(src):
     return skip
 
 
+def _results(src, case):
+    """copy()'s ignore: in the case's own folder, the times past 0, the split, the logs and what function objects
+    wrote; anywhere in it, Mesh Doctor's own files (a marker, a run's status) and a link round to a folder the copy
+    is walking through, or to the copy (_round)."""
+    into = os.path.realpath(case)
+
+    def skip(folder, names):
+        top = os.path.samefile(folder, src)
+        walked = _walked(src, folder)
+        return [n for n in names if n.startswith(".meshdoctor") or _round(os.path.join(folder, n), walked, into)
+                or (top and (n in RESULTS or n.startswith(("log.", "processor")) or _later(n)))]
+    return skip
+
+
+def _walked(src, folder):
+    """The real folders a walk from case `src` down to `folder` goes through: src's, and each one on the way."""
+    path, out = src, [os.path.realpath(src)]
+    rel = os.path.relpath(folder, src)
+    for part in [] if rel == os.curdir else rel.split(os.sep):
+        path = os.path.join(path, part)
+        out.append(os.path.realpath(path))
+    return out
+
+
+def _round(path, walked, into):
+    """Is `path` a link round to one of the `walked` folders or a folder holding one (again -> ., up -> .., the cases
+    folder), or to the copy (`into`), a folder holding it or one in it?  copytree follows links, so the copy has files
+    of its own a solve can't write through; it would follow these round and round, copying the case into itself
+    some 40 levels deep, until the system says too many levels of links or the disk is full."""
+    if not os.path.islink(path):
+        return False
+    to = os.path.realpath(path)
+
+    def holds(a, b):                            # a is the folder b, or one b is in
+        return b == a or b.startswith(a.rstrip(os.sep) + os.sep)
+    return any(holds(to, w) for w in walked) or holds(to, into) or holds(into, to)
+
+
+def _later(name):
+    """Is this the name of a time folder past 0, a written result?"""
+    try:
+        return float(name) > 0
+    except ValueError:
+        return False
+
+
+def copy(src, case):
+    """Copy case `src`'s mesh and settings, not its results, into the new folder `case` (its marker is in it): the
+    copy's cell count.  Its initial fields are its 0 folder, or 0.orig when it has no 0, as its Allrun would copy."""
+    shutil.copytree(src, case, ignore=_results(src, case), dirs_exist_ok=True, ignore_dangling_symlinks=True)
+    zero, orig = os.path.join(case, "0"), os.path.join(case, "0.orig")
+    if not os.path.isdir(zero) and os.path.isdir(orig):
+        shutil.copytree(orig, zero)
+    return ramguard.mesh_cells(case)
+
+
 def _blocks(case, old, new):
     """Set the background mesh's blocks in system/blockMeshDict (the size); False if the template's aren't there."""
     path = os.path.join(case, "system", "blockMeshDict")
@@ -225,7 +285,7 @@ def make(template, name, size, replace=False):
     except FileExistsError:
         _say(f"a case named {name} exists already; pick another name")
         return 1
-    status = Status(case, template, size)
+    status = Status(case, template=template, size=size)
 
     def stop(sig, frame):                       # cancelled: say so in the marker, then end as the signal would
         status.end("cancelled")

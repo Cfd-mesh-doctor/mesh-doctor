@@ -99,7 +99,7 @@ All routes live under `/api/v1` (`meshdoctor/api_v1.py`). The routes are a table
 |---|---|---|
 | `GET /` | | API version, result-file versions, job kinds |
 | `GET /openapi.json`, `GET /schemas/{kind}` | | the API description and the result schemas |
-| `GET /cases` | `/api/md/sources` | source cases the worker may read, with each one's cell count from its mesh's owner header (null when the header doesn't say; API 1.2); a new case from a template is listed once its mesh is made, and `made` names the cases a case job made, with their templates: the ones a solve takes (API 1.6) |
+| `GET /cases` | `/api/md/sources` | source cases the worker may read, with each one's cell count from its mesh's owner header (null when the header doesn't say; API 1.2); a new case from a template is listed once its mesh is made, and `made` names the cases Mesh Doctor made, with what each was made from: a template (`template`), or a case you made (`copyOf`: a solve job's copy of it): the ones a solve takes (API 1.6) |
 | `GET /repairs`, `GET /repairs/{name}` | `/api/md/results`, `/api/md/result` | repair runs, and a finished run's result (repair schema) |
 | `GET /repairs/{name}/clusters/{id}?tag=before\|after\|report` | `/api/md/cluster` | geometry of one defect cluster |
 | `GET /repairs/{name}/log` | `/api/md/log` | the repair sweeps from the log |
@@ -130,9 +130,10 @@ A job request names its kind and its parameters, which are checked against a sch
 {"kind": "abextend", "params": {"name": "mb", "to": 1000}}
 {"kind": "case", "params": {"template": "ahmed-body", "size": "coarse", "name": "ahmed"}}
 {"kind": "solve", "params": {"name": "ahmed", "to": 2000, "np": 4}}
+{"kind": "solve", "params": {"name": "mb-run", "source": "motorBike", "to": 2000, "np": 4}}
 ```
 
-A new repair or A/B test refuses to replace an existing run of the same name (`409 exists`) unless the request says `"replace": true`, because the copy step deletes the old run. A new case refuses a name that is taken in the cases folder; there `"replace": true` makes again only a case that an earlier case job made (it holds a `.meshdoctor-case.json`), never one you made. A solve runs only in a case a case job made, once its mesh is made (`422 unsupported` for a case you made): while no iteration is written it splits the case and starts the flow with `potentialFoam`, and once one is written it continues from the latest, on the same split. The old routes keep their old behaviour.
+A new repair or A/B test refuses to replace an existing run of the same name (`409 exists`) unless the request says `"replace": true`, because the copy step deletes the old run. A new case refuses a name that is taken in the cases folder; there `"replace": true` makes again only a case that an earlier case job made (it holds a `.meshdoctor-case.json`), never one you made. A solve runs only in a case Mesh Doctor made, once its mesh is made (`422 unsupported` for a case you made): while no iteration is written it splits the case and starts the flow with `potentialFoam`, and once one is written it continues from the latest, on the same split. A case you made is solved through a copy: with a `source`, the solve first makes `name` as a copy of its mesh and settings, not its results (no time past 0, no `processor*`, `postProcessing` or logs), with the marker naming the case it copied. The copy needs the mesh joined in `constant/polyMesh` (`409 not-ready` for one split onto processors only), a `0` or `0.orig` folder and a steady foamRun setup, a `solver` entry and `steadyState` time schemes (`422 unsupported` without them); one that fails or is cancelled is removed, so its name is free again. The old routes keep their old behaviour.
 
 | Error code | HTTP | Meaning |
 |---|---|---|

@@ -83,11 +83,14 @@ def _unfinished(case):
 
 
 def made(case):
-    """The template a case job made this case from, once its mesh is made (its marker says done); None for a case you
-    made, or one not made yet.  Only such a case is solved (solve.py)."""
+    """What Mesh Doctor made this case from, once it is made (its marker says done): {"template": ...} for a case job's
+    new case, {"copyOf": ...} for a solve's copy of a case you made; None for a case you made, or one not made yet.
+    Only a case made here is solved (solve.py)."""
     doc = _read_json(os.path.join(case, jobs.CASE_MARKER))
     if isinstance(doc, dict) and doc.get("state") == "done":
-        return str(doc.get("template") or "")
+        if doc.get("copyOf"):
+            return {"copyOf": str(doc["copyOf"])}
+        return {"template": str(doc.get("template") or "")}
     return None
 
 

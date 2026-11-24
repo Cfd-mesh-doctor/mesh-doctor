@@ -2455,9 +2455,20 @@
                     },
                     "made": {
                       "additionalProperties": {
-                        "type": "string"
+                        "additionalProperties": false,
+                        "properties": {
+                          "copyOf": {
+                            "description": "the case you made that a solve job copied it from, to solve",
+                            "type": "string"
+                          },
+                          "template": {
+                            "description": "the template a case job made it from",
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
                       },
-                      "description": "the cases a case job made, each with its template: the cases a solve job takes (API 1.6)",
+                      "description": "the cases Mesh Doctor made, each with what from: a template, or a case you made (a copy of it, to solve); the cases a solve job takes (API 1.6)",
                       "type": "object"
                     }
                   },
@@ -2903,7 +2914,7 @@
                   },
                   {
                     "additionalProperties": false,
-                    "description": "solve a case Mesh Doctor made to an iteration: while none is written it splits the case, starts the flow with potentialFoam and runs foamRun; once one is written it continues from the latest",
+                    "description": "solve a case Mesh Doctor made to an iteration: while none is written it splits the case, starts the flow with potentialFoam and runs foamRun; once one is written it continues from the latest. With a source, it first makes the case as a copy of a case you made",
                     "properties": {
                       "kind": {
                         "enum": [
@@ -2914,7 +2925,7 @@
                         "additionalProperties": false,
                         "properties": {
                           "name": {
-                            "description": "a case in the cases folder that Mesh Doctor made (a case job's); a case you made is never changed",
+                            "description": "a case in the cases folder that Mesh Doctor made (a case job's, or a copy); with a source, the new case the copy goes in, a name not taken there",
                             "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
                             "type": "string"
                           },
@@ -2924,6 +2935,11 @@
                             "maximum": 64,
                             "minimum": 1,
                             "type": "integer"
+                          },
+                          "source": {
+                            "description": "a case you made, to solve a copy of: its mesh and settings, not its results, are copied into the cases folder as name (a case you made is never changed). It needs its mesh joined, its 0 (or 0.orig) fields and a steady foamRun setup",
+                            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+                            "type": "string"
                           },
                           "to": {
                             "default": 2000,
@@ -4113,7 +4129,7 @@
                             ]
                           },
                           "step": {
-                            "description": "decomposing, potentialFoam, solving, reconstructing or done",
+                            "description": "copying (a copy of a case you made), decomposing, potentialFoam, solving, reconstructing or done",
                             "type": "string"
                           },
                           "stretches": {
@@ -4277,7 +4293,7 @@
                       ]
                     },
                     "step": {
-                      "description": "decomposing, potentialFoam, solving, reconstructing or done",
+                      "description": "copying (a copy of a case you made), decomposing, potentialFoam, solving, reconstructing or done",
                       "type": "string"
                     },
                     "stretches": {
@@ -4526,7 +4542,7 @@
                           ]
                         },
                         "step": {
-                          "description": "decomposing, potentialFoam, solving, reconstructing or done",
+                          "description": "copying (a copy of a case you made), decomposing, potentialFoam, solving, reconstructing or done",
                           "type": "string"
                         },
                         "stretches": {
@@ -4771,7 +4787,7 @@
                       ]
                     },
                     "step": {
-                      "description": "decomposing, potentialFoam, solving, reconstructing or done",
+                      "description": "copying (a copy of a case you made), decomposing, potentialFoam, solving, reconstructing or done",
                       "type": "string"
                     },
                     "stretches": {

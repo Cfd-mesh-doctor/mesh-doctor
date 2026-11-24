@@ -4,7 +4,8 @@
 
     python3 -m meshdoctor serve  [--port 8765] [--case <live case>]   dashboard
     python3 -m meshdoctor new    [<template> <name> [--size S]]       new case from a template, meshed
-    python3 -m meshdoctor solve  <case> [--to N] [--np P]            solve a case made here, or continue it
+    python3 -m meshdoctor solve  <case> [--to N] [--np P]             solve a case made here, or continue it
+    python3 -m meshdoctor solve  <srcCase> <name> [--to N] [--np P]   solve a copy of a case you made
     python3 -m meshdoctor full   <srcCase> <name> [--profile P]       copy, check, repair, check
     python3 -m meshdoctor copy | inspect | fix ...                    single repair steps
     python3 -m meshdoctor ab     <srcCase> <name> [--iters N] ...     A/B solver test

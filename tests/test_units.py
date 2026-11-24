@@ -1269,7 +1269,7 @@ printf 'FoamFile\\n{\\n    note "nPoints:900 nCells:480 nFaces:2000 nInternalFac
         self.assertEqual(seen, ["geometry", "surfaceFeatures", "blockMesh", "snappyHexMesh: refining",
                                 "snappyHexMesh: snapping", "snappyHexMesh: snapping", "snappyHexMesh: adding layers",
                                 "checkMesh"])
-        status = self.t.Status(case, "ahmed-body", "medium")
+        status = self.t.Status(case, template="ahmed-body", size="medium")
         status.step("snappyHexMesh: snapping")
         job = {"kind": "case", "name": "p", "created": "2000-01-01T00:00:00Z"}
         self.assertEqual(self.jobs.progress(job, os.path.join(self.d, "work"))["fraction"], 0.25)
@@ -1305,7 +1305,9 @@ class SolveTest(unittest.TestCase):
 
     PROGRAMS = {
         "decomposePar": """#!/bin/sh
-n=$(sed -n 's/^numberOfSubdomains[ \\t]*\\([0-9]*\\);.*/\\1/p' system/decomposeParDict)
+# As OpenFOAM reads it: the keyword, then a space, then the value.
+n=$(sed -n 's/^numberOfSubdomains[ \\t][ \\t]*\\([0-9]*\\);.*/\\1/p' system/decomposeParDict)
+[ -n "$n" ] || { echo "keyword numberOfSubdomains is undefined"; exit 1; }
 i=0; while [ "$i" -lt "$n" ]; do mkdir -p "processor$i/0"; i=$((i+1)); done
 """,
         "mpirun": """#!/bin/sh
@@ -1382,6 +1384,39 @@ echo End
     def post(self, params):
         return self.api.handle("POST", "/api/v1/jobs", {}, json.dumps({"kind": "solve", "params": params}).encode(),
                                "application/json")
+
+    def yours(self, name="yours", **changes):
+        """A case you made and solved by hand: beside its mesh and settings, its results, its split, its logs and what
+        its function objects wrote, none of which a copy takes.  A change of None removes that file or folder."""
+        self.case(name, None)
+        c = os.path.join(self.cases, name)
+        files = {"system/controlDict": self.CONTROL + "solver          incompressibleFluid;\n",
+                 "system/fvSchemes": "ddtSchemes\n{\n    default         steadyState; // SIMPLE\n}\n",
+                 "0/U": "internalField uniform (40 0 0);\n", "constant/momentumTransport": "simulationType RAS;\n",
+                 "Allrun": "#!/bin/sh\n", "100/U": "a result\n", "processor0/100/U": "a split result\n",
+                 "postProcessing/forces/0/forces.dat": "100 40 -170\n", "log.foamRun": "Time = 100\n", **changes}
+        for rel, text in files.items():
+            path = os.path.join(c, rel)
+            if text is None:
+                if os.path.isdir(path):
+                    shutil.rmtree(path)
+                else:
+                    os.remove(path)
+                continue
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as f:
+                f.write(text)
+        return c
+
+    @staticmethod
+    def tree(root):
+        """Every file under root, by its path there, with its text."""
+        out = {}
+        for d, _, names in os.walk(root):
+            for n in names:
+                with open(os.path.join(d, n)) as f:
+                    out[os.path.relpath(os.path.join(d, n), root).replace(os.sep, "/")] = f.read()
+        return out
 
     def assertRefused(self, answer, status, code, text):
         got, doc, _ = answer
@@ -1516,8 +1551,169 @@ echo End
         self.assertTrue(os.path.isfile(os.path.join(case, "log.potentialFoam")))
 
     def test_the_cases_say_which_ones_mesh_doctor_made(self):
+        self.case("copied", {"state": "done", "copyOf": "mine", "cells": 480})
         doc = self.api.handle("GET", "/api/v1/cases", {})[1]
-        self.assertEqual((sorted(doc["items"]), doc["made"]), (["made", "mine"], {"made": "ahmed-body"}))
+        self.assertEqual((sorted(doc["items"]), doc["made"]), (
+            ["copied", "made", "mine"], {"copied": {"copyOf": "mine"}, "made": {"template": "ahmed-body"}}))
+
+    def test_a_copy_has_the_mesh_and_settings_of_a_case_you_made_and_none_of_its_results(self):
+        import templates
+        src = self.yours()
+        before = self.tree(src)
+        dst = os.path.join(self.cases, "copy")
+        os.mkdir(dst)
+        self.assertEqual(templates.copy(src, dst), 480)
+        got = self.tree(dst)
+        self.assertEqual(sorted(got), ["0/U", "Allrun", "constant/momentumTransport", "constant/polyMesh/owner",
+                                       "system/controlDict", "system/decomposeParDict", "system/fvSchemes"])
+        self.assertEqual(got, {k: before[k] for k in got})                  # each file as it is in yours
+        self.assertEqual(self.tree(src), before)                            # and yours as it was
+        orig = self.yours("orig")                                           # its fields in 0.orig, for its Allrun
+        os.rename(os.path.join(orig, "0"), os.path.join(orig, "0.orig"))
+        dst = os.path.join(self.cases, "copy2")
+        os.mkdir(dst)
+        templates.copy(orig, dst)
+        self.assertEqual(self.tree(os.path.join(dst, "0")), self.tree(os.path.join(orig, "0.orig")))
+        self.assertTrue(os.path.isdir(os.path.join(dst, "0.orig")))
+        dst = os.path.join(self.cases, "copy3")                             # a case made here: not its marker
+        os.mkdir(dst)
+        templates.copy(os.path.join(self.cases, "made"), dst)
+        self.assertNotIn(self.jobs.CASE_MARKER, os.listdir(dst))
+
+    def test_a_copy_follows_the_links_in_a_case_you_made_but_none_that_go_round(self):
+        import templates
+        src = self.yours("linked")
+        out = os.path.join(self.d, "outside")
+        for rel, text in (("geometry/body.stl", "solid body\n"), ("x/fx", "x\n"), ("y/fy", "y\n")):
+            os.makedirs(os.path.dirname(os.path.join(out, rel)), exist_ok=True)
+            with open(os.path.join(out, rel), "w") as f:
+                f.write(text)
+        os.symlink(os.path.join(out, "y"), os.path.join(out, "x", "b"))      # two folders linked to each other
+        os.symlink(os.path.join(out, "x"), os.path.join(out, "y", "c"))
+        for link, to in (("again", "."), ("constant/up", ".."), ("system/all", self.cases), ("top", self.d),
+                         ("ahead", "../copy"), ("constant/geometry", os.path.join(out, "geometry")),
+                         ("x", os.path.join(out, "x"))):
+            os.symlink(to, os.path.join(src, link))
+        dst = os.path.join(self.cases, "copy")
+        os.mkdir(dst)
+        before = self.tree(src)
+        self.assertEqual(templates.copy(src, dst), 480)
+        got = self.tree(dst)
+        self.assertEqual(sorted(got), ["0/U", "Allrun", "constant/geometry/body.stl", "constant/momentumTransport",
+                                       "constant/polyMesh/owner", "system/controlDict", "system/decomposeParDict",
+                                       "system/fvSchemes", "x/b/fy", "x/fx"])
+        self.assertEqual(got["constant/geometry/body.stl"], "solid body\n")
+        self.assertEqual([os.path.join(d, n) for d, ds, fs in os.walk(dst) for n in ds + fs
+                          if os.path.islink(os.path.join(d, n))], [])      # files of its own, no links
+        self.assertEqual(self.tree(src), before)
+
+    def test_a_case_you_made_is_solved_through_a_copy_of_its_mesh_and_settings(self):
+        src = self.yours()
+        before = self.tree(src)
+        self.assertRefused(self.post({"name": "yours"}), 422, "unsupported", "solve a copy of it")
+        self.assertRefused(self.post({"name": "copy", "source": "nope"}), 404, "not-found", "no case nope")
+        self.assertRefused(self.post({"name": "copy", "source": "../x"}), 400, "bad-request", "source")
+        self.assertRefused(self.post({"name": "made", "source": "yours"}), 409, "exists", "exists already")
+        self.assertRefused(self.post({"name": "yours", "source": "yours"}), 409, "exists", "never changed")
+        st, doc, _ = self.post({"name": "copy", "source": "yours", "to": 40, "np": 2})
+        self.assertEqual(st, 202, doc)
+        self.assertEqual((doc["params"], doc["links"]["run"]),
+                         ({"name": "copy", "to": 40, "np": 2, "source": "yours"}, "/api/v1/runs/copy"))
+        argv = self.launched[0]
+        self.assertEqual(argv[argv.index("--") + 1:][2:], ["run", "yours", "copy", "--to", "40", "--np", "2"])
+
+        rc, lines = self.solve("copy", 40, 2, "yours")                     # the job's command
+        self.assertEqual((rc, lines[:2]), (0, ["copying yours: its mesh and settings, not its results",
+                                               "copied yours: 480 cells"]), lines)
+        copy = os.path.join(self.cases, "copy")
+        with open(os.path.join(copy, self.jobs.CASE_MARKER)) as f:
+            marker = json.load(f)
+        self.assertEqual((marker["copyOf"], marker["state"], marker["cells"], "template" in marker),
+                         ("yours", "done", 480, False))
+        run = self.s.describe("copy")
+        self.assertEqual((run["state"], run["written"], run["nProcs"], run["stretches"]),
+                         ("done", 40, 2, [{"from": 0, "to": 40}]))
+        self.assertFalse(any(os.path.exists(os.path.join(copy, n)) for n in ("100", "postProcessing")))
+        control = self.tree(copy)["system/controlDict"]
+        self.assertRegex(control, r"(?m)^deltaT\s+1;")                     # its iterations are its times
+        self.assertRegex(control, r"(?m)^endTime\s+40;")
+        self.assertIn("solver          incompressibleFluid;", control)
+        self.assertEqual(self.tree(src), before)                            # yours, as it was
+        doc = self.api.handle("GET", "/api/v1/cases", {})[1]
+        self.assertEqual((doc["made"]["copy"], doc["cells"]["copy"]), ({"copyOf": "yours"}, 480))
+        self.assertIsNone(self.s.refusal("copy", 60))                       # then continued as any case made here
+        self.assertIn("solved to iteration 40 already", self.s.refusal("copy", 40)[1])
+
+    def test_a_copy_of_a_case_with_no_split_dictionary_gets_one_openfoam_reads(self):
+        self.yours(**{"system/decomposeParDict": None})
+        rc, lines = self.solve("copy", 20, 2, "yours")
+        self.assertEqual(rc, 0, lines)
+        text = self.tree(os.path.join(self.cases, "copy"))["system/decomposeParDict"]
+        self.assertTrue(text.startswith("FoamFile\n{"), text)
+        for entry in (r"numberOfSubdomains[ \t]+2;", r"decomposer[ \t]+scotch;", r"method[ \t]+scotch;"):
+            self.assertRegex(text, r"(?m)^" + entry + "$")
+        self.assertEqual((self.s.describe("copy")["state"], self.s.describe("copy")["nProcs"]), ("done", 2))
+        self.assertTrue(os.path.isdir(os.path.join(self.cases, "copy", "processor1")))
+        self.assertFalse(os.path.exists(os.path.join(self.cases, "yours", "system", "decomposeParDict")))
+
+    def test_a_copy_needs_a_joined_mesh_initial_fields_and_a_steady_foamrun_setup(self):
+        self.yours()
+        self.yours("nomesh", **{"constant/polyMesh/owner": None})
+        self.yours("split", **{"constant/polyMesh/owner": None, "processor0/constant/polyMesh/owner": "x\n"})
+        self.yours("nozero", **{"0": None})
+        self.yours("nosolver", **{"system/controlDict": self.CONTROL + "// solver incompressibleFluid;\n"})
+        self.yours("transient", **{"system/fvSchemes": "ddtSchemes\n{\n    default         Euler;\n}\n"})
+        for source, status, code, text in (
+                ("nomesh", 409, "not-ready", "has no mesh (constant/polyMesh)"),
+                ("split", 409, "not-ready", "join it first (reconstructParMesh)"),
+                ("nozero", 422, "unsupported", "no initial fields"),
+                ("nosolver", 422, "unsupported", "names no solver"),
+                ("transient", 422, "unsupported", "transient case"),
+                ("half", 409, "not-ready", "no mesh yet")):
+            self.assertRefused(self.post({"name": "copy", "source": source}), status, code, text)
+        with mock.patch.object(self.s.os, "cpu_count", lambda: 8):
+            self.assertRefused(self.post({"name": "copy", "source": "yours", "np": 9}), 400, "bad-request",
+                               "8 processors")
+        self.assertEqual(self.launched, [])
+
+    def test_a_copy_cut_short_leaves_no_case_and_waits_to_be_stopped_until_it_solves(self):
+        import templates
+        self.yours()
+        copy = os.path.join(self.cases, "copy")
+        err = self.s.shutil.Error([("from", "to", "[Errno 13] Permission denied: 'to'")])
+        for fails, said in ((OSError(28, "No space left on device"), "No space left on device"),
+                            (err, "Permission denied")):
+            with mock.patch.object(templates, "copy", side_effect=fails):
+                rc, lines = self.solve("copy", 40, 2, "yours")
+            self.assertEqual((rc, lines[-1]), (1, f"the copy of yours failed: {said}"))
+            self.assertFalse(os.path.lexists(copy))                         # so the name is free again
+        with mock.patch.object(templates, "copy", side_effect=KeyboardInterrupt):
+            rc, lines = self.solve("copy", 40, 2, "yours")
+        self.assertEqual((rc, lines[-1], os.path.lexists(copy)), (130, "stopped", False))
+        seen = {}
+
+        def copying(src, case):                                             # what its run says while it copies
+            with mock.patch.object(self.s, "solving", lambda n: True):
+                seen["run"], seen["stop"] = self.s.describe("copy"), self.s.stop("copy")
+            raise OSError(28, "No space left on device")
+        with mock.patch.object(templates, "copy", copying):
+            self.solve("copy", 40, 2, "yours")
+        self.assertEqual((seen["run"]["state"], seen["run"]["step"], seen["run"]["written"]), ("running", "copying", 0))
+        self.assertEqual(seen["stop"][1][0], "not-ready")
+        self.assertIn("is being copied", seen["stop"][1][1])
+
+    def test_the_command_solves_a_copy_of_a_case_you_made(self):
+        self.yours()
+        with self.assertRaises(SystemExit) as e:
+            self.s.main(["yours", "made", "--to", "10"])
+        self.assertIn("exists already", str(e.exception))
+        asked, out = [], io.StringIO()
+        with mock.patch.object(self.s.ramguard, "check", lambda case, step: asked.append((case, step)) or (True, "")), \
+                contextlib.redirect_stdout(out):
+            rc = self.s.main(["yours", "copy", "--to", "10", "--np", "1"])
+        self.assertEqual(rc, 0, out.getvalue())
+        self.assertEqual(asked, [(os.path.join(self.cases, "yours"), "solve")])     # the memory of yours' mesh
+        self.assertEqual((self.s.describe("copy")["written"], self.s.split(os.path.join(self.cases, "copy"))), (10, 0))
 
     def test_a_runs_live_page_data_follows_its_stretches(self):
         saved = dict(self.api._live)                                            # before server.py adds its own

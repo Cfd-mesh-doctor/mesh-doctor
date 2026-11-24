@@ -74,6 +74,7 @@ JOB = "/api/md/start?src=example_case&name=..&profile=openfoam"
 V1JOB = b'{"kind": "repair", "params": {"source": "example_case", "name": ".."}}'
 CASEJOB = b'{"kind": "case", "params": {"template": "ahmed-body", "name": ".."}}'
 SOLVEJOB = b'{"kind": "solve", "params": {"name": ".."}}'
+COPYJOB = b'{"kind": "solve", "params": {"name": "copy", "source": ".."}}'
 JSON = "application/json"
 PAGES = ("/", "/run", "/meshdoctor", "/meshmap", "/report")
 APP_KEY = ""
@@ -155,6 +156,8 @@ CHECKS = [
     ("v1 solve without token refused", "POST", "/api/v1/jobs", {"Content-Type": JSON}, 403, "token", SOLVEJOB),
     ("v1 solve with token reaches the API, which refuses '..'", "POST", "/api/v1/jobs",
      {"Content-Type": JSON, "X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 400, '"code": "bad-request"', SOLVEJOB),
+    ("v1 a solve of a copy takes no bad source name", "POST", "/api/v1/jobs",
+     {"Content-Type": JSON, "X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 400, '"code": "bad-request"', COPYJOB),
     # page scripts: only plain names from web/js/
     ("shared page script is served", "GET", "/js/md.js", {}, 200, "MD.render"),
     ("unknown script is not served", "GET", "/js/nope.js", {}, 404, ""),

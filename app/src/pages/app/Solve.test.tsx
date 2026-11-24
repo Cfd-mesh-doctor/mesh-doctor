@@ -162,10 +162,10 @@ describe("the Solve screen's Ready to solve?", () => {
 });
 
 describe("the Solve screen's other parts", () => {
-  it("lists what comes next on it, and where to solve a case until then", () => {
+  it("lists what comes next on it, and the worked example until then", () => {
     renderScreen(<Solve />, { path, transport: engine(withChecks({})) });
     const next = within(screen.getByRole("heading", { name: "Coming next on this screen" }).closest("section")!);
-    expect(next.getAllByRole("listitem")).toHaveLength(2);
+    expect(next.getAllByRole("listitem")).toHaveLength(1);
     expect(next.getByRole("link", { name: /the Ahmed body/ })).toHaveAttribute("href", expect.stringContaining("examples/ahmed-body"));
   });
 

@@ -8,9 +8,11 @@ type Json<R> = R extends { content: { "application/json": infer T } } ? T : neve
 type Since<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 
 export type EngineInfo = Json<operations["info"]["responses"][200]>;
-/** `cells` (each case's size) is new in API 1.2, and `made` (the cases a case job made: the ones a solve takes) in
+/** `cells` (each case's size) is new in API 1.2, and `made` (the cases Mesh Doctor made: the ones a solve takes) in
  *  API 1.6. */
 export type CaseList = Since<Json<operations["cases"]["responses"][200]>, "cells" | "made">;
+/** What Mesh Doctor made a case from (`made`, API 1.6): a template, or a case you made (a solve job's copy of it). */
+export type Made = NonNullable<CaseList["made"]>[string];
 export type JobList = Json<operations["list_jobs"]["responses"][200]>;
 export type RepairList = Json<operations["repairs"]["responses"][200]>;
 export type MachineInfo = Json<operations["machine"]["responses"][200]>;
