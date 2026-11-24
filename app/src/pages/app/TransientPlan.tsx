@@ -3,8 +3,11 @@
 // in fact, which only a transient run with averaged forces solves. Plan a transient run starts a tplan job (API 1.6),
 // which works out from the run's result the time step such a run would need at each Courant number, which cells set
 // it and what it would cost (GET /tplans/{name}). While it plans, the card says so; once made, it shows the plan, and
-// says when the run has been solved further since. The case is only read.
-import { Hourglass, RotateCw } from "lucide-react";
+// says when the run has been solved further since. The case is only read. With a plan, Start a transient run… starts
+// one (TransientDialog in SolveDialog.tsx): a new case of the run's mesh, settings and latest result, solved in time;
+// the transient runs made of the run are listed under the plan.
+import { Hourglass, RotateCw, Waves } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { TextWithCode } from "@/components/shared/InlineCode";
@@ -14,9 +17,10 @@ import { Progress } from "@/components/ui/misc";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { useAppPath, useEngine } from "@/engine/context";
 import { asEngineError } from "@/engine/errors";
-import { useEngineInfo, useJobs, useStartJob, useTransientPlan } from "@/engine/hooks";
+import { useCases, useEngineInfo, useJobs, useStartJob, useTransientPlan } from "@/engine/hooks";
 import { isActive, type RunDetail, type TransientPlan } from "@/engine/types";
 import { formatInt } from "@/lib/format";
+import { TransientDialog } from "./SolveDialog";
 import { planHeadline, planJobOf, planMade, planProcs, planRows, planStale, regionLines, setBy } from "./tplan";
 
 const LINK = "font-medium text-primary underline-offset-4 hover:underline";
@@ -96,7 +100,12 @@ export function TransientPlanCard({ run }: { run: RunDetail }) {
   const shown = plan.data;
   const failed = !planning && job?.state === "failed" ? job : undefined;
   const cancelled = !planning && !shown && job?.state === "cancelled";
-  const body = old || planning || failed || cancelled || shown || (code != null && code !== "not-found") || start.isError;
+  const cases = useCases();
+  // The transient runs made of this run (GET /cases' `made`: `transientOf`), by name.
+  const made = Object.entries(cases.data?.made ?? {}).filter(([, m]) => m.transientOf === run.name).map(([n]) => n).sort();
+  const [starting, setStarting] = useState(false);
+  const body = old || planning || failed || cancelled || shown || (code != null && code !== "not-found") || start.isError
+    || made.length > 0;
 
   return (
     <Card>
@@ -106,7 +115,8 @@ export function TransientPlanCard({ run }: { run: RunDetail }) {
           A steady run that won&apos;t settle (the judge&apos;s &ldquo;plateau / oscillation&rdquo;) can be a flow that is
           unsteady in fact, such as a wing-tip vortex or a wake. A transient run with averaged forces is then the way on,
           and it costs far more: this works out from the run&apos;s result the time step it would need, which cells set
-          it, and how long it would take. It only reads the case.
+          it, and how long it would take. It only reads the case. With a plan, Start a transient run starts one, as
+          a new case.
         </CardDescription>
       </CardHeader>
       {body && (
@@ -134,9 +144,25 @@ export function TransientPlanCard({ run }: { run: RunDetail }) {
             <ErrorPanel compact error={plan.error} onRetry={() => void plan.refetch()} retrying={plan.isFetching} />
           )}
           {shown && <PlanView plan={shown} run={run} />}
+          {made.length > 0 && (
+            <p className="text-sm">
+              Transient {made.length === 1 ? "run" : "runs"} of it:{" "}
+              {made.map((n, i) => (
+                <span key={n}>
+                  {i > 0 && ", "}
+                  <Link to={to(`/solve/${encodeURIComponent(n)}`)} className={`font-mono text-[13px] ${LINK}`}>{n}</Link>
+                </span>
+              ))}
+            </p>
+          )}
         </CardContent>
       )}
       <CardFooter className="flex-wrap">
+        {shown && (
+          <Button size="sm" disabled={!can || planning} onClick={() => setStarting(true)}>
+            <Waves aria-hidden /> Start a transient run…
+          </Button>
+        )}
         <Button size="sm" variant={shown ? "secondary" : "primary"}
           disabled={!can || planning || start.isPending || mode === "demo"}
           onClick={() => start.mutate({ kind: "tplan", params: { name: run.name } })}>
@@ -146,6 +172,7 @@ export function TransientPlanCard({ run }: { run: RunDetail }) {
           {shown ? "Plans again from the run's latest result." : "It reads the result and doesn't solve: about 2 s for half a million cells."}
         </span>
       </CardFooter>
+      {shown && <TransientDialog open={starting} onOpenChange={setStarting} target={{ run, plan: shown }} />}
     </Card>
   );
 }

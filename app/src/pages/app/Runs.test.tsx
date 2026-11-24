@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The solves of the cases Mesh Doctor made (API 1.6): the Solve screen's Runs card and its Solve dialog, and a run's
-// page with its charts, judge, Stop and Continue.
+// page with its charts, judge, Stop and Continue; a transient run's, in seconds.
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
@@ -42,12 +42,36 @@ function liveOf(r: Run) {
   };
 }
 
+/** A transient run of steady run "s" (API 1.6), solving from 0 to 0.001 s on 4 processes, at 0.0005 s with 0.00025 s
+ * written; and its page data: 30 time steps of 16.7 µs, 1.4 s each, its residuals and forces over time, and the
+ * transient judge in time steps, as the live page answers it for one. */
+const T = (more: Partial<Run> = {}): Run => run("t", {
+  iteration: 0.0005, start: 0, end: 0.001, written: 0.00025,
+  transient: { steady: "s", at: "300", maxCo: 1, model: "DDES" }, ...more,
+});
+function transientLive(r: Run) {
+  const ts = Array.from({ length: 30 }, (_, i) => (i + 1) * 1.67e-5);
+  return {
+    ...liveOf(r),
+    solver: r.state === "running"
+      ? { state: "running", iteration: r.iteration, end: r.end, deltaT: 1.67e-5, wall_per_it: 1.4, eta: 42 }
+      : { state: "stopped", iteration: r.iteration, end: r.end, deltaT: 1.67e-5 },
+    residuals: { cols: ["Time", "p", "Ux"], rows: ts.map((t) => [t, 0.01, 0.002]) },
+    forces: { body: ts.map((t) => [t, 40 + Math.sin(t * 1e5), 150]) },
+    judge: {
+      transient: true, window: 15, group: "body", verdict: "statistically stationary, but check: k bounded in 90% of steps",
+      flags: ["k bounded in 90% of steps"], average: { drag: { mean: 40.2, u: 0.3 } }, axes: { flow: "+x", up: "z" },
+    },
+  };
+}
+
 /** Your own engine (or the demo, by `kind`) with these made cases, runs and jobs. */
 function engine(o: {
   made?: Record<string, Made>; runs?: Run[]; jobs?: Job[]; live?: (r: Run) => unknown; noRuns?: boolean;
   kind?: "engine" | "demo";
 } = {}) {
   const posted: { path: string; body?: unknown }[] = [];
+  const judged: string[] = [];
   const runs = new Map((o.runs ?? []).map((r) => [r.name, structuredClone(r)]));
   const transport: Transport = {
     kind: o.kind ?? "engine",
@@ -71,7 +95,10 @@ function engine(o: {
       if (route === "/runs" && !o.noRuns) return { items: [...runs.values()] } as T;
       if (route === "/jobs") return { items: o.jobs ?? [] } as T;
       if (route === "/machine") return MACHINE as T;
-      if (route === "/judge") return { verdict: "converged", window: 200, group: "body", average: { drag: { mean: 41.8, u: 0.2 } } } as T;
+      if (route === "/judge") {
+        judged.push(path);
+        return { verdict: "converged", window: 200, group: "body", average: { drag: { mean: 41.8, u: 0.2 } } } as T;
+      }
       const m = /^\/runs\/([^/]+)(\/live)?$/.exec(route);
       const r = m && runs.get(decodeURIComponent(m[1]!));
       if (m && r && m[2]) {
@@ -83,7 +110,7 @@ function engine(o: {
       throw new EngineError("not-found", `no such API route ${route}`, 404);
     },
   };
-  return { transport, posted };
+  return { transport, posted, judged };
 }
 
 const solvePage = (o: Parameters<typeof engine>[0]) => {
@@ -92,7 +119,10 @@ const solvePage = (o: Parameters<typeof engine>[0]) => {
 };
 const runPage = (name: string, o: Parameters<typeof engine>[0]) => {
   const e = engine(o);
-  return { ...renderScreen(<RunPage />, { path: "/app/solve/:name", at: `/app/solve/${name}`, transport: e.transport }), posted: e.posted };
+  return {
+    ...renderScreen(<RunPage />, { path: "/app/solve/:name", at: `/app/solve/${name}`, transport: e.transport }),
+    posted: e.posted, judged: e.judged,
+  };
 };
 const dialog = () => within(screen.getByRole("dialog"));
 
@@ -337,6 +367,57 @@ describe("a run's page", () => {
       live: (r) => ({ ...liveOf(r), solver: { state: "running", iteration: 120, end: 200 } }),
     });
     expect(await screen.findByText("60 % · iteration 120 of 200")).toBeInTheDocument();
+  });
+
+  it("follows a transient run in seconds: its time and time step, what it started from, its charts over time", async () => {
+    runPage("t", { made: { t: { transientOf: "s" } }, runs: [T()], jobs: [job("t", "running")], live: transientLive });
+    expect(await screen.findByText("Solve · a transient run of s · to 0.001 s")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Solving (foamRun)" })).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Progress of the solve of t" })).toHaveAttribute("aria-valuenow", "50");
+    expect(await screen.findByText("50 % · 0.0005 s of 0.001 s · time step 17 µs · 1.40 s per time step · about 42 s left"))
+      .toBeInTheDocument();
+    expect(screen.getByText("Written to 0.00025 s, on 4 processes.")).toBeInTheDocument();
+    expect(screen.getByText(/^A transient run of/)).toHaveTextContent(
+      "A transient run of s: DDES at a largest Courant number of 1, from s's iteration 300.");
+    expect(screen.getByRole("link", { name: "s" })).toHaveAttribute("href", "/app/solve/s");
+    expect(screen.getByRole("img", { name: "Initial residual of p per time step, log scale" })).toBeInTheDocument();
+    expect(screen.getByText(/^Initial residual at each time step, log scale/)).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Downforce from body over time" })).toBeInTheDocument();
+    expect(screen.getByText(/a transient run's forces swing with the flow/)).toBeInTheDocument();
+    // The live page's judge is the transient judge, in time steps
+    expect(screen.getByText("The live judge, so far")).toBeInTheDocument();
+    expect(screen.getByText("Judged over the last 15 time steps, flow along +x, z up")).toBeInTheDocument();
+    expect(screen.getByText("statistically stationary, but check: k bounded in 90% of steps")).toBeInTheDocument();
+  });
+
+  it("judges a transient run that has ended in time steps, plans none of it, and continues it by time", async () => {
+    const user = userEvent.setup();
+    const ended = T({ state: "stopped", step: "done", iteration: 0.00025, written: 0.00025, end: 0.001,
+      stretches: [{ from: 0, to: 0.00025 }], finished: HOUR_AGO });
+    const { posted, judged } = runPage("t", { made: { t: { transientOf: "s" } }, runs: [ended], live: transientLive });
+    expect(await screen.findByRole("heading", { name: "Stopped at 0.00025 s" })).toBeInTheDocument();
+    expect(screen.getByText("Solved 0 → 0.00025 s, on 4 processes.")).toBeInTheDocument();
+    expect(screen.getByText("Stopped by request at 0.00025 s, which it wrote: Continue solves on from there.")).toBeInTheDocument();
+    expect(await screen.findByText("The judge on the whole run")).toBeInTheDocument();
+    expect(screen.getByText("statistically stationary, but check: k bounded in 90% of steps")).toBeInTheDocument();
+    expect(judged).toEqual([]);                                  // not GET /judge's 200 iterations
+    expect(screen.queryByRole("heading", { name: "Plan a transient run" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Continue…" }));
+    expect(dialog().getByRole("heading", { name: "Continue t" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveTextContent("The transient run continues from 0.00025 s, the latest time "
+      + "written, on the run's 4 processes, to the time you give, writing four times on the way.");
+    const to = dialog().getByRole("textbox", { name: "Solve to (s)" });
+    expect(to).toHaveValue("0.001");                             // the end it stopped short of
+    await user.clear(to);
+    await user.type(to, "0.0002");
+    expect(to).toHaveAccessibleDescription("Give one past 0.00025 s, the latest time written: the run continues from there.");
+    expect(dialog().getByRole("button", { name: "Continue" })).toBeDisabled();
+    await user.clear(to);
+    await user.type(to, "0.002");
+    await user.click(dialog().getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]).toEqual({ path: "/jobs", body: { kind: "solve", params: { name: "t", to: 0.002 } } });
   });
 
   it("says when the engine's server has no live monitor, and still says how the run stands", async () => {

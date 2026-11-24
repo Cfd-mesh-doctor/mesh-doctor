@@ -503,6 +503,30 @@ def _live_judge(res, frc, stage_from, now_it, avg_from=None):
     return out
 
 
+JUDGE_S = 15        # a transient run's judge reads its whole logs: while it solves, at most this often
+_tjudged = {}       # run name -> (when it was judged, its logs' sizes and times then, the judge)
+
+
+def _transient_judge(name, case, running):
+    """A transient run's judge on its page, as GET /judge?case= answers it (abtest.judge): the transient verdict over
+    the last half of its time steps (10 to 200), with its forces' means, how well its time steps converged and its
+    Courant number.  It reads the run's whole logs, so while the run solves it is judged again at most every JUDGE_S
+    seconds; once the run has ended, when its logs change."""
+    logs = caseinfo.solver_logs(case)
+    try:
+        key = tuple((f, os.path.getsize(f), os.path.getmtime(f)) for f in logs)
+    except OSError:
+        key = None                              # a log went away meanwhile: judge it afresh
+    c = _tjudged.get(name)
+    if c and key is not None and (c[1] == key or (running and time.time() - c[0] < JUDGE_S)):
+        return c[2]
+    out = abtest.judge(case, None, logs=logs)
+    if len(_tjudged) >= 16:                     # one per run whose page is open: keep only recent ones
+        _tjudged.clear()
+    _tjudged[name] = (time.time(), key, out)
+    return out
+
+
 def _settings(case):
     t = read_all(os.path.join(case, "system", "fvSolution")) or ""
     out = {}
@@ -568,7 +592,8 @@ _solve_cache = {}
 
 def solve_live(name):
     """GET /runs/{name}/live: a solve's page data (solve.py's runs), as run_status is an A/B test's; None for no run.
-    Its stretches are its stages, and the live judge takes the whole run, whose stretches share their settings."""
+    Its stretches are its stages, and the live judge takes the whole run, whose stretches share their settings; a
+    transient run's is the transient judge, in time steps (_transient_judge)."""
     c = _solve_cache.get(name)
     if c and time.time() - c[0] < 3:
         return c[1]
@@ -602,9 +627,10 @@ def solve_live(name):
         solver["eta"] = max(0, left) * solver["wall_per_it"]
     res = md_api._residuals(case, maxpts=1500) or {}
     frc = force_payload(case)
+    judge = (_transient_judge(name, case, run["state"] == "running") if run.get("transient")
+             else _live_judge(res, frc, 0, it, 0))
     data = {"name": name, "run": run, "stages": stages, "current": stages[-1], "solver": solver, "residuals": res,
-            "forces": frc["series"], "forceInfo": frc["info"], "judge": _live_judge(res, frc, 0, it, 0),
-            "now": time.time()}
+            "forces": frc["series"], "forceInfo": frc["info"], "judge": judge, "now": time.time()}
     _solve_cache[name] = (time.time(), data)
     return data
 

@@ -55,11 +55,55 @@ export function run(name: string, more: Record<string, unknown> = {}) {
     updated: new Date().toISOString(), finished: null as string | null, error: null, ...more,
   };
 }
-type RunDoc = ReturnType<typeof run>;
+/** A transient run of ahmed-coarse (API 1.6): DDES at a largest Courant number of 1 from its iteration 300, counting
+ *  time in s; by default solving at 0.0005 s of 0.001 s on 4 processes, with 0.00025 s written. */
+export function transientRun(name: string, more: Record<string, unknown> = {}) {
+  return run(name, {
+    iteration: 0.0005, end: 0.001, written: 0.00025,
+    transient: { steady: "ahmed-coarse", at: "300", maxCo: 1, model: "DDES" }, ...more,
+  });
+}
+type RunDoc = ReturnType<typeof run> & {
+  transient?: { steady: string; at: string; maxCo: number | null; model: string | null } | null;
+};
+
+/** A transient run's time step, 20 µs. */
+const DT = 2e-5;
+
+/** A transient run's page data: its time steps up to the time it is at, its residuals and forces swinging with the
+ *  flow, and the transient judge in time steps, over the last half of them (10 to 200) as GET /judge's: still
+ *  developing while it solves, converged once it has ended. */
+function transientLive(r: RunDoc) {
+  const at = Number(r.iteration ?? r.written);
+  const n = Math.max(0, Math.round(at / DT));
+  const ts = Array.from({ length: n }, (_, i) => (i + 1) * DT);
+  const solving = r.state === "running";
+  const stages = [...r.stretches.map((s) => ({ name: s.from === 0 ? "First solve" : "Continued", ...s }))];
+  if (solving) stages.push({ name: r.start === 0 ? "First solve" : "Continued", from: r.start, to: r.end });
+  return {
+    name: r.name, run: r, stages, current: stages.at(-1) ?? { name: "First solve", from: 0, to: r.end },
+    solver: solving
+      ? { state: "running", iteration: at, end: r.end, deltaT: DT, wall_per_it: 1.4, eta: Math.round((r.end - at) / DT) * 1.4,
+          log: "log.foamRun" }
+      : { state: "done", iteration: at, end: r.end, deltaT: DT, log: "log.foamRun" },
+    residuals: { cols: ["Time", "p", "Ux"],
+      rows: ts.map((t, i) => [t, 0.012 + 0.004 * Math.sin(i / 3), 0.003 + 0.001 * Math.sin(i / 4)]) },
+    forces: { body: ts.map((t, i) => [t, 40 + 1.5 * Math.sin(i / 2), 150 + 6 * Math.sin(i / 3)]) },
+    forceInfo: { total: "body", groups: ["body"], vertical: "downforce", flow: "+x", up: "z", source: {} },
+    judge: {
+      transient: true, window: Math.max(10, Math.min(200, Math.floor(n / 2))), group: "body", flags: [] as string[],
+      verdict: solving ? "still developing (force means still drifting; average later)"
+        : "converged (statistically stationary, every time step converged)",
+      average: { drag: { mean: 40.1, u: 0.3 }, downforce: { mean: 150.4, u: 1.2 } }, axes: { flow: "+x", up: "z" },
+    },
+    now: Date.now() / 1000,
+  };
+}
 
 /** A run's page data (GET /runs/{name}/live): two fields' residuals falling and a body's forces settling, up to the
- *  iteration it is at; the live judge still collecting. */
+ *  iteration it is at; the live judge still collecting. A transient run's: transientLive's. */
 function runLive(r: RunDoc) {
+  if (r.transient) return transientLive(r);
   const n = Math.max(0, Math.floor(Number(r.iteration ?? r.written)));
   const ts = Array.from({ length: n }, (_, i) => i + 1);
   const solving = r.state === "running";
@@ -157,9 +201,9 @@ export async function mockEngine(
     check?: unknown;
     /** GET /templates' answer (two templates by default); null: none, as from an engine before API 1.5. */
     templates?: unknown;
-    /** The cases Mesh Doctor made, each with what from (GET /cases' `made`, API 1.6): a template, or a case you made
-     * (a copy of it); listed with the others. */
-    made?: Record<string, { template?: string; copyOf?: string }>;
+    /** The cases Mesh Doctor made, each with what from (GET /cases' `made`, API 1.6): a template, a case you made
+     * (a copy of it), or a solved run (a transient run of it); listed with the others. */
+    made?: Record<string, { template?: string; copyOf?: string; transientOf?: string }>;
     /** Their solves (GET /runs), each as run() makes it; a running one has a solve job running too. */
     runs?: RunDoc[];
     /** Verify install's comparison of a run (GET /runs/{name}/validation), by its name. */

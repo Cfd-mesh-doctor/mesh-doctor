@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The solves of the cases Mesh Doctor made (API 1.6): the Solve screen's runs list, the Solve dialog's numbers and
 // checks, a copy of a case you made (its name and the cases to pick from), and a run's step and state in plain words.
+// A transient run (`transient`, the steady run it started from) counts time in s where a steady run counts iterations.
 import { isPlainName } from "@/engine/commands";
 import { isActive, type CaseList, type Job, type Made, type Run, type RunLive, type RunShown } from "@/engine/types";
 import { formatInt } from "@/lib/format";
@@ -60,6 +61,46 @@ export function current(run: Run | null | undefined, shown: RunShown): Run | nul
   return run && (shown !== "running" || run.state === "running") ? run : null;
 }
 
+const time4 = new Intl.NumberFormat("en-US", { maximumSignificantDigits: 4 });
+
+/** A time in s to 4 significant digits, without its unit: 0.0011 → "0.0011", 0.20875 → "0.2088". */
+export function timeNumber(seconds: number): string {
+  return time4.format(seconds);
+}
+
+/** A time in s as a transient run's pages say it: "0.0011 s". */
+export function formatTime(seconds: number): string {
+  return `${timeNumber(seconds)} s`;
+}
+
+/** A time in s to type in a field: to 6 significant digits, as OpenFOAM writes its times ("0.2088", never
+ * "0.20880000000000001"). */
+export function timeInput(seconds: number): string {
+  return String(Number(seconds.toPrecision(6)));
+}
+
+/** Is it a transient run (API 1.6: `transient`, the steady run it started from), which counts time in s? */
+export function isTransient(run: Pick<Run, "transient"> | null | undefined): boolean {
+  return run?.transient != null;
+}
+
+/** Where a run is, or ended, in its own unit: "iteration 1,200", or a transient run's "0.0011 s". */
+export function atText(n: number, transient: boolean): string {
+  return transient ? formatTime(n) : `iteration ${formatInt(n)}`;
+}
+
+/** How far a stretch has come: "iteration 120 of 200", or a transient run's "0.0005 s of 0.0011 s". */
+export function ofText(at: number, end: number, transient: boolean): string {
+  return transient ? `${formatTime(at)} of ${formatTime(end)}` : `iteration ${formatInt(at)} of ${formatInt(end)}`;
+}
+
+/** A transient run's origin in words: "DDES at a largest Courant number of 1, from ahmed's iteration 300". */
+export function transientText(t: NonNullable<Run["transient"]>): string {
+  const at = t.at.trim() !== "" && Number.isInteger(Number(t.at)) ? `iteration ${formatInt(Number(t.at))}` : `time ${t.at}`;
+  const how = [t.model, t.maxCo != null && `at a largest Courant number of ${t.maxCo}`].filter(Boolean).join(" ");
+  return how ? `${how}, from ${t.steady}'s ${at}` : `From ${t.steady}'s ${at}`;
+}
+
 /** How far the stretch a run is in has come, from where it started to where it runs to (0 to 1); undefined until
  * it says. */
 export function stretchFraction(run: Pick<Run, "start" | "end" | "iteration">): number | undefined {
@@ -68,23 +109,28 @@ export function stretchFraction(run: Pick<Run, "start" | "end" | "iteration">): 
   return Math.min(1, Math.max(0, (iteration - start) / (end - start)));
 }
 
-/** A run's stretches in a few words: "0 → 2,000, then 2,000 → 3,000". */
-export function stretchesText(stretches: Run["stretches"]): string | null {
+/** A run's stretches in a few words: "0 → 2,000, then 2,000 → 3,000", or a transient run's "0 → 0.0005, then
+ * 0.0005 → 0.0011 s". */
+export function stretchesText(stretches: Run["stretches"], transient = false): string | null {
   if (!stretches.length) return null;
-  return stretches.map((s) => `${formatInt(s.from)} → ${formatInt(s.to)}`).join(", then ");
+  const n = transient ? timeNumber : formatInt;
+  return stretches.map((s) => `${n(s.from)} → ${n(s.to)}`).join(", then ") + (transient ? " s" : "");
 }
 
-/** What a case was made from, in a few words: "made from the ahmed-body template", or "a copy of wing". */
+/** What a case was made from, in a few words: "made from the ahmed-body template", "a copy of wing", or "a transient
+ * run of ahmed". */
 export function madeFrom(made: Made | null | undefined): string | null {
+  if (made?.transientOf) return `a transient run of ${made.transientOf}`;
   if (made?.copyOf) return `a copy of ${made.copyOf}`;
   if (made?.template) return `made from the ${made.template} template`;
   return null;
 }
 
-/** What a solve job makes its case from: the case you made that it copies (its `source`), or the template it makes
- * it from (its `template`), if it makes one. */
+/** What a solve job makes its case from: the case you made that it copies (its `source`), the template it makes
+ * it from (its `template`), or the steady run it makes a transient run of (its `steady`), if it makes one. */
 export function madeOfJob(job: Job | undefined): Made | null {
-  const { source, template } = job?.kind === "solve" ? job.params : {};
+  const { source, template, steady } = job?.kind === "solve" ? job.params : {};
+  if (typeof steady === "string" && steady) return { transientOf: steady };
   if (typeof source === "string" && source) return { copyOf: source };
   return typeof template === "string" && template ? { template } : null;
 }
@@ -140,9 +186,10 @@ export function copyName(source: string, taken: ReadonlySet<string>): string {
   return `${base}-${n}`;
 }
 
-/** What's wrong with a copy's name, or null when the engine will take it: a new case's, never one there already. */
-export function copyNameProblem(name: string, taken: ReadonlySet<string>): string | null {
-  if (!name) return "Give the copy a name.";
+/** What's wrong with a new case's name (a copy's, or `what` else), or null when the engine will take it: never one
+ * there already. */
+export function copyNameProblem(name: string, taken: ReadonlySet<string>, what = "the copy"): string | null {
+  if (!name) return `Give ${what} a name.`;
   if (!isPlainName(name)) return "Use only letters, digits and _ . - (not . or - first), at most 80 characters.";
   if (taken.has(name)) return "A case with this name is in the cases folder already. Pick another name.";
   return null;
@@ -160,6 +207,28 @@ export function toProblem(text: string, written: number): string | null {
   if (n < 1 || n > MAX_TO) return `Give an iteration from 1 to ${formatInt(MAX_TO)}.`;
   if (n <= written) {
     return `Give one past ${formatInt(written)}, the latest iteration written: the solve continues from there.`;
+  }
+  return null;
+}
+
+/** The time a transient run is suggested to continue to: the end it stopped short of, else as far again as its
+ * latest stretch went (0.0011 s after 0.0005 → 0.0008 s). */
+export function suggestedTime(run: Pick<Run, "written" | "start" | "end">): number {
+  const { written, start, end } = run;
+  if (end != null && end > written) return end;
+  const more = end != null && end > start ? end - start : written;
+  return Number((written + more).toPrecision(6));
+}
+
+/** What's wrong with the time in s typed to solve a transient run to, or null when the engine will take it: a number
+ * past `written`, the latest time written (0 for a new one). */
+export function timeProblem(text: string, written: number): string | null {
+  const t = text.trim();
+  if (!/^(\d+(\.\d*)?|\.\d+)(e[+-]?\d+)?$/i.test(t)) return "Give the time in s, such as 0.2.";
+  const n = Number(t);
+  if (!Number.isFinite(n) || n <= 0) return "Give a time past 0 s.";
+  if (n <= written) {
+    return `Give one past ${formatTime(written)}, the latest time written: the run continues from there.`;
   }
   return null;
 }
@@ -195,4 +264,9 @@ export function totalForces(live: Pick<RunLive, "forces" | "forceInfo">): {
  * keeps the run's own), and the case it copies first for a copy of yours. */
 export function solveCommand(name: string, to: number, np: number | null, source?: string): string {
   return `meshdoctor solve ${source ? `${source} ` : ""}${name} --to ${to}${np == null ? "" : ` --np ${np}`}`;
+}
+
+/** The terminal command that starts a transient run `name` of steady run `steady`. */
+export function transientCommand(name: string, steady: string, co: number, model: string, to: number, np: number): string {
+  return `meshdoctor solve ${name} --steady ${steady} --co ${co} --model ${model} --to ${to} --np ${np}`;
 }

@@ -5,6 +5,7 @@
 // Then New case: a case made from a template (API 1.5, NewCase.tsx), and Runs: each case Mesh Doctor made with its
 // solve (API 1.6: GET /runs), what it is doing and how far it has come, a link to its page (Run.tsx) and Solve… for
 // one not solved yet (SolveDialog.tsx), and Solve a case you made…, which solves a copy of one of yours (CopyDialog).
+// A transient run of a solved run (started from that run's page) is listed as one, in seconds.
 // Verify install, under Ready to solve?, solves the coarse Ahmed body as the accuracy check did and compares its drag
 // (VerifyInstall.tsx). What the screen does next is listed under them until then.
 import { CircleCheck, CircleX, CopyPlus, ExternalLink, FolderPlus, Play, RefreshCw, TriangleAlert } from "lucide-react";
@@ -30,7 +31,9 @@ import { cn } from "@/lib/utils";
 import { NewCaseDialog } from "./NewCase";
 import { CopyDialog, SolveDialog } from "./SolveDialog";
 import { CHECK_COMMAND, OLD_ENGINE, cellsAtMost, sentence } from "./readiness";
-import { OLD_ENGINE_RUNS, current, madeFrom, runRows, solveStep, stretchFraction, type RunRow } from "./solveStart";
+import {
+  OLD_ENGINE_RUNS, atText, current, isTransient, madeFrom, ofText, runRows, solveStep, stretchFraction, type RunRow,
+} from "./solveStart";
 import { VerifyInstall } from "./VerifyInstall";
 
 const STATE = {
@@ -239,25 +242,29 @@ function NewCase() {
   );
 }
 
-/** What a run's line says under its name: where it is, or where it ended. */
+/** What a run's line says under its name: where it is, or where it ended; a transient run's, in seconds, and what it
+ * is a transient run of. */
 function runLine(row: RunRow, cells: number | null | undefined): string {
   const { run, shown } = row;
   const now = current(run, shown);
   const from = madeFrom(row.made);
   const made = [from && from.charAt(0).toUpperCase() + from.slice(1), cells != null && `about ${formatInt(cells)} cells`]
     .filter((x): x is string => typeof x === "string").join(", ");
-  const at = (n: number) => `iteration ${formatInt(n)}`;
+  const transient = isTransient(run) || row.made?.transientOf != null;
+  const at = (n: number) => atText(n, transient);
   const when = run?.finished ? `, ${formatRelative(run.finished)}` : "";
+  const of = transient && from ? ` (${from})` : "";
   switch (shown) {
     case "unsolved": return made || "Not solved yet";
     case "queued": return "Waiting to start";
     case "running":
       return [solveStep(now?.step) ?? "Starting",
-        now?.iteration != null && now.end != null && `${at(now.iteration)} of ${formatInt(now.end)}`]
-        .filter(Boolean).join(" · ");
-    case "done": return `Solved to ${at(run?.written ?? 0)}${when}`;
-    case "stopped": return `Stopped at ${at(run?.written ?? 0)}${when}`;
-    case "cancelled": return `Cancelled${run?.written ? `, written to ${at(run.written)}` : " before it wrote an iteration"}${when}`;
+        now?.iteration != null && now.end != null && ofText(now.iteration, now.end, transient)]
+        .filter(Boolean).join(" · ") + of;
+    case "done": return `Solved to ${at(run?.written ?? 0)}${when}${of}`;
+    case "stopped": return `Stopped at ${at(run?.written ?? 0)}${when}${of}`;
+    case "cancelled": return `Cancelled${run?.written ? `, written to ${at(run.written)}`
+      : ` before it wrote ${transient ? "a time" : "an iteration"}`}${when}`;
     case "failed": return `Stopped with an error${run?.written ? `, written to ${at(run.written)}` : ""}${when}`;
     case "interrupted": return `Its job is gone, written to ${at(run?.written ?? 0)}`;
   }
@@ -315,7 +322,8 @@ function Runs() {
         <CardDescription>
           The solves of the cases Mesh Doctor made, on the engine&apos;s computer: the ones made with New case, and
           copies of cases you made. A run&apos;s page draws its residuals and forces as it solves and says whether it
-          has converged; Stop ends it at the iteration it has reached, and Continue goes on from there.
+          has converged; Stop ends it where it has reached, and Continue goes on from there. A solved run&apos;s page
+          plans a transient run of it, and starts one: it is listed here too, in seconds.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -355,7 +363,8 @@ function Runs() {
         </span>
       </CardFooter>
       {solving && (
-        <SolveDialog open onOpenChange={(o) => { if (!o) setSolving(null); }} target={{ name: solving, run: null }} />
+        <SolveDialog open onOpenChange={(o) => { if (!o) setSolving(null); }}
+          target={{ name: solving, run: null, transientOf: cases.data?.made?.[solving]?.transientOf }} />
       )}
       {copying && <CopyDialog open onOpenChange={(o) => { if (!o) setCopying(false); }} />}
     </Card>
@@ -381,8 +390,9 @@ function ComingNext() {
       <CardContent>
         <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
           <li>
-            Transient runs: solving one, its averaging window and the transient judge. A solved run&apos;s page plans
-            one already: the time step at each Courant number, the cells that set it, and the hours.
+            A transient run&apos;s time step and Courant number over time, and the window its forces are averaged
+            over. A solved run&apos;s page plans one and starts it already, and the transient run&apos;s page follows
+            it in seconds, with the transient judge.
           </li>
         </ul>
       </CardContent>

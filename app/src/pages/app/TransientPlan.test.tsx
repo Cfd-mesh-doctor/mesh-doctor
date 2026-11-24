@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // A solved run's Plan a transient run (TransientPlan.tsx): starting the plan, following its job, the plan once made, a
-// plan from an earlier result, one that failed, a busy engine, and an engine from before it.
+// plan from an earlier result, one that failed, a busy engine, and an engine from before it; with a plan, starting a
+// transient run of the run (TransientDialog), and the transient runs made of it.
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import type { Transport } from "@/engine/client";
 import { EngineError } from "@/engine/errors";
-import type { Job, RunDetail, TransientPlan } from "@/engine/types";
+import type { CaseList, Job, RunDetail, TransientPlan } from "@/engine/types";
 import { renderScreen } from "@/test/render";
 import { OLD_ENGINE_TPLAN, TransientPlanCard } from "./TransientPlan";
 
@@ -51,9 +52,10 @@ const job = (state: Job["state"], more: Partial<Job> = {}) =>
   ({ id: ID, kind: "tplan", name: "ahmed", state, params: { name: "ahmed" }, ...more }) as Job;
 
 /** Your own engine (or the demo, by `kind`) with these job kinds (those of API 1.6 by default), jobs and plan (none by
- * default: not-found). A job it starts waits to start; `refuse`: the error it answers instead of starting one. */
+ * default: not-found), and `cases` (GET /cases; with them, a computer of 8 cores). A job it starts waits to start;
+ * `refuse`: the error it answers instead of starting one. */
 function engine(o: {
-  kinds?: string[]; jobs?: Job[]; plan?: TransientPlan; refuse?: EngineError; kind?: "engine" | "demo";
+  kinds?: string[]; jobs?: Job[]; plan?: TransientPlan; refuse?: EngineError; kind?: "engine" | "demo"; cases?: CaseList;
 } = {}) {
   const posted: unknown[] = [];
   const asked: string[] = [];
@@ -67,10 +69,14 @@ function engine(o: {
       if (method === "POST" && route === "/jobs") {
         if (o.refuse) throw o.refuse;
         posted.push(body);
-        const made = job("queued", { id: NEW });
+        const b = body as { kind: Job["kind"]; params: Job["params"] & { name: string } };
+        const made = b.kind === "tplan" ? job("queued", { id: NEW })
+          : job("queued", { id: `20261123-221500-solve-${b.params.name}-0002`, kind: b.kind, name: b.params.name, params: b.params });
         jobs.unshift(made);
         return structuredClone(made) as T;
       }
+      if (route === "/cases" && o.cases) return structuredClone(o.cases) as T;
+      if (route === "/machine" && o.cases) return { cpus: 16, cores: 8, memoryMb: 32_000, ramLimitMb: null } as T;
       if (route === "/") {
         return { apiVersion: "1.6", version: "0.2.0", jobKinds: o.kinds ?? ["repair", "abtest", "abextend", "case",
           "solve", "tplan"] } as T;
@@ -87,7 +93,12 @@ function engine(o: {
 const show = (o: Parameters<typeof engine>[0] = {}, run: RunDetail = RUN) => {
   const e = engine(o);
   const view = renderScreen(<TransientPlanCard run={run} />, { path: "/app/solve/ahmed", transport: e.transport });
-  return { ...e, unmount: view.unmount };
+  return { ...e, unmount: view.unmount, router: view.router };
+};
+/** The cases folder: the run, a case you made, and a DDES run of the run made before. */
+const CASES: CaseList = {
+  items: ["ahmed", "mine", "ahmed-ddes"], cells: { ahmed: 478_901, mine: 1000, "ahmed-ddes": 478_901 },
+  made: { ahmed: { template: "ahmed-body" }, "ahmed-ddes": { transientOf: "ahmed" } },
 };
 const button = (name: string) => screen.getByRole("button", { name });
 const enabled = (name: string) => waitFor(() => expect(button(name)).toBeEnabled());
@@ -175,6 +186,71 @@ describe("Plan a transient run", () => {
     expect(within(alert).getByText("The solve of ahmed is running. Wait for it to finish, or cancel it on the Jobs page."))
       .toBeInTheDocument();
     expect(posted).toEqual([]);
+  });
+
+  it("with a plan, starts a transient run of the run: its name, model, Courant number, time and processes", async () => {
+    const user = userEvent.setup();
+    const { posted, router } = show({ jobs: [job("done")], plan: PLAN, cases: CASES });
+    // The transient runs made of it, each a link to its page
+    expect(await screen.findByText(/^Transient run of it:/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "ahmed-ddes" })).toHaveAttribute("href", "/app/solve/ahmed-ddes");
+    await enabled("Start a transient run…");
+    await user.click(button("Start a transient run…"));
+    const dialog = within(screen.getByRole("dialog", { name: "Start a transient run of ahmed" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent(/new case of ahmed's mesh, settings and latest result \(iteration 300\)/);
+    const name = dialog.getByRole("textbox", { name: "Name" });
+    expect(name).toHaveValue("ahmed-ddes-2");                                // ahmed-ddes is taken
+    expect(dialog.getByRole("radio", { name: "DDES" })).toHaveAttribute("aria-checked", "true");
+    expect(dialog.getByText(/^Delayed detached-eddy simulation \(kOmegaSSTDES\)/)).toBeInTheDocument();
+    const co = dialog.getByRole("textbox", { name: "Largest Courant number" });
+    expect(co).toHaveValue("1");
+    expect(co).toHaveAccessibleDescription("At 1 the plan's time step is 18 µs: 11,369 steps to 0.2088 s, about 3.8 h on "
+      + "its 6 processes.");
+    const to = dialog.getByRole("textbox", { name: "Solve to (s)" });
+    expect(to).toHaveValue("0.2088");
+    expect(to).toHaveAccessibleDescription("8 flow times over the body (8 L/U: 1.044 m at 40 m/s), which the plan's hours "
+      + "are for.");
+    expect(await dialog.findByRole("combobox", { name: "Processes" })).toHaveValue("6");     // the steady run's
+    expect(await dialog.findByText(/^The solve needs about/)).toBeInTheDocument();
+
+    // URANS: its own name and Courant number, and what the plan gives at it
+    await user.click(dialog.getByRole("radio", { name: "URANS" }));
+    expect(name).toHaveValue("ahmed-urans");
+    expect(co).toHaveValue("5");
+    expect(co).toHaveAccessibleDescription("At 5 the plan's time step is 92 µs: 2,274 steps to 0.2088 s, about 45 min on "
+      + "its 6 processes.");
+    await user.selectOptions(dialog.getByRole("combobox", { name: "Processes" }), "4");
+    expect(co).toHaveAccessibleDescription(/about 45 min on its 6 processes \(about 1\.1 h on 4 processes, if it splits as evenly\)\.$/);
+    // DDES takes 2 at most
+    await user.click(dialog.getByRole("radio", { name: "DDES" }));
+    await user.clear(co);
+    await user.type(co, "3");
+    expect(co).toHaveAccessibleDescription("DDES resolves the wake's eddies, which needs about 1: give 2 or less, or pick URANS.");
+    expect(dialog.getByRole("button", { name: "Start the transient run" })).toBeDisabled();
+    await user.clear(co);
+    await user.type(co, "0.8");
+    await user.clear(to);
+    await user.type(to, "0.1");
+    expect(co).toHaveAccessibleDescription("At 0.8 the plan's time step is 15 µs: 6,807 steps to 0.1 s, about 2.3 h on "
+      + "its 6 processes (about 3.4 h on 4 processes, if it splits as evenly).");
+    await user.click(dialog.getByRole("button", { name: "Start the transient run" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/app/solve/ahmed-ddes-2"));
+    expect(posted).toEqual([{ kind: "solve", params: { name: "ahmed-ddes-2", steady: "ahmed", maxCo: 0.8, model: "DDES",
+      to: 0.1, np: 4 } }]);
+  });
+
+  it("starts no transient run before a plan, and says when the plan is from an earlier result", async () => {
+    const user = userEvent.setup();
+    const before = show({ cases: CASES });
+    expect(await screen.findByRole("link", { name: "ahmed-ddes" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start a transient run…" })).toBeNull();
+    before.unmount();
+    const further = { ...RUN, iteration: 600, end: 600, written: 600, stretches: [{ from: 0, to: 600 }] };
+    show({ jobs: [job("done")], plan: PLAN, cases: CASES }, further);
+    await enabled("Start a transient run…");
+    await user.click(button("Start a transient run…"));
+    expect(await within(screen.getByRole("dialog")).findByText("The plan is from iteration 300, and ahmed has been solved "
+      + "to iteration 600 since: Plan again for the numbers of its latest result.")).toBeInTheDocument();
   });
 
   it("with an engine from before it, says to update and asks for no plan; the demo plans nothing", async () => {

@@ -2371,6 +2371,39 @@ class TransientSolveTest(unittest.TestCase):
         self.assertAlmostEqual(s["eta"], 75.0)                               # 25 time steps of 20 us, 3 s each
         self.assertEqual(doc["current"], {"name": "Continued", "from": 0.0004, "to": 0.001})
 
+    def test_a_transient_runs_page_judges_it_in_time_steps_as_the_judge_route_does(self):
+        saved = dict(self.api._live)
+        import schema, server
+        self.api.provide(run_live=server.solve_live)
+        self.addCleanup(lambda: (self.api._live.clear(), self.api._live.update(saved)))
+        self.addCleanup(server._solve_cache.clear)
+        self.addCleanup(server._tjudged.clear)
+        self.steady()
+        self.assertEqual(self.solve("ahmedT", 0.0004, 2, None, None, None, "steady", 1, "DDES")[0], 0)
+        case = os.path.join(self.cases, "ahmedT")
+        # 60 time steps of PIMPLE, each converged by its last outer corrector, the forces swinging about a steady mean
+        write_transient_run(case, 60, 5e-4, 0.8, lambda i: 40 + math.sin(i / 3), log="log.foamRun")
+        server._solve_cache.clear()
+        st, doc, _ = self.api.handle("GET", "/api/v1/runs/ahmedT/live", {})
+        self.assertEqual(st, 200, doc)
+        self.assertEqual(schema.check(doc, self.api.RUN_LIVE), [])
+        j = doc["judge"]
+        self.assertEqual((j["transient"], j["window"], j["steps"]["n"], j["steps"]["outerIterations"]),
+                         (True, 30, 30, 2))                                  # the last half of its time steps
+        self.assertEqual(j["verdict"], "converged (statistically stationary, every time step converged)")
+        st, whole, _ = self.api.handle("GET", "/api/v1/judge", {"case": "ahmedT", "window": "30"})
+        self.assertEqual((st, whole["verdict"], whole["steps"]), (200, j["verdict"], j["steps"]))
+        # It reads the run's whole logs: while it solves, it is judged again at most every JUDGE_S; once it has
+        # ended, as soon as they change
+        write_transient_run(case, 40, 5e-4, 1.5, lambda i: 40.0, log="log.foamRun")
+        self.assertIs(server._transient_judge("ahmedT", case, True), server._tjudged["ahmedT"][2])
+        self.assertEqual(server._transient_judge("ahmedT", case, True)["window"], 30)
+        later = server._transient_judge("ahmedT", case, False)
+        self.assertEqual((later["window"], later["steps"]["maxCourant"]), (20, 1.5))
+        self.assertIn("max Courant 1.5", later["verdict"])
+        # a steady run's page keeps the live judge of its iterations
+        self.assertNotIn("transient", server.solve_live("steady")["judge"])
+
     def test_the_command_starts_a_transient_run_of_a_steady_one_and_continues_it_by_time(self):
         self.steady()
         for argv, text in ((["t", "--steady", "steady", "--co", "x"], "--co takes a number"),

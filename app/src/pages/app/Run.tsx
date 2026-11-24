@@ -5,7 +5,10 @@
 // iteration it has reached (POST /runs/{name}/stop), and Continue… solves on from the latest one written
 // (SolveDialog.tsx). A solve just started shows as starting until its job writes the run's status, and a copy of a
 // case you made as copying while its job makes it. While it solves the screen asks again every 3 s, so the charts
-// grow. Once it has ended, Plan a transient run (TransientPlan.tsx) says what a transient run of it would take.
+// grow. Once it has ended, Plan a transient run (TransientPlan.tsx) says what a transient run of it would take, and
+// starts one. A transient run (`transient`) counts time in s: its progress, stretches, charts and Continue are in
+// seconds, it names the steady run it started from, and its judge is the transient judge, in time steps, which the
+// live page answers while it solves and once it has ended.
 import { ArrowLeft, CircleStop, FastForward, ListChecks, Play } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
@@ -29,19 +32,21 @@ import { judgeOf } from "@/report/summary";
 import { SolveDialog } from "./SolveDialog";
 import { TransientPlanCard } from "./TransientPlan";
 import {
-  current, madeFrom, madeOfJob, runShown, solveJobOf, solveStep, stretchFraction, stretchesText, totalForces,
+  atText, current, formatTime, isTransient, madeFrom, madeOfJob, ofText, runShown, solveJobOf, solveStep,
+  stretchFraction, stretchesText, timeNumber, totalForces, transientText,
 } from "./solveStart";
+import { formatStep } from "./tplan";
 
 const LINK = "font-medium text-primary underline-offset-4 hover:underline";
 
 /** The status card's title: the step while it solves, else how it ended. */
 function title(shown: RunShown, run: RunDetail): string {
-  const at = formatInt(run.written);
+  const at = atText(run.written, isTransient(run));
   switch (shown) {
     case "queued": return "Waiting to start";
     case "running": return solveStep(current(run, shown)?.step) ?? "Starting";
-    case "done": return `Solved to iteration ${at}`;
-    case "stopped": return `Stopped at iteration ${at}`;
+    case "done": return `Solved to ${at}`;
+    case "stopped": return `Stopped at ${at}`;
     case "cancelled": return "Cancelled";
     case "failed": return "Stopped with an error";
     case "interrupted": return "Interrupted";
@@ -49,13 +54,17 @@ function title(shown: RunShown, run: RunDetail): string {
   }
 }
 
-/** What the live monitor says of the solver: iteration, pace and time left; else the run's own iteration. */
+/** What the live monitor says of the solver: iteration, pace and time left; else the run's own iteration. A
+ * transient run's: its time, its latest time step, and its pace per time step. */
 function paceLine(solver: RunLive["solver"] | undefined, run: RunDetail): string | null {
+  const transient = isTransient(run);
   const it = solver?.iteration ?? run.iteration;
   const end = solver?.end ?? run.end;
   const parts = [
-    it != null && end != null && `iteration ${formatInt(it)} of ${formatInt(end)}`,
-    solver?.wall_per_it != null && solver.wall_per_it > 0 && `${solver.wall_per_it.toFixed(2)} s per iteration`,
+    it != null && end != null && ofText(it, end, transient),
+    transient && solver?.deltaT != null && solver.deltaT > 0 && `time step ${formatStep(solver.deltaT)}`,
+    solver?.wall_per_it != null && solver.wall_per_it > 0
+      && `${solver.wall_per_it.toFixed(2)} s per ${transient ? "time step" : "iteration"}`,
     solver?.state === "running" && solver.eta != null && (solver.wall_per_it ?? 0) > 0
       && `about ${formatDuration(solver.eta)} left`,
   ].filter((x): x is string => typeof x === "string");
@@ -71,19 +80,21 @@ function StatusCard({ shown, run, job, live, stopping }: {
   stopping: boolean;
 }) {
   const to = useAppPath();
+  const transient = isTransient(run);
   // Until its job writes the run's status, the status and the live data are an earlier stretch's.
   const now = current(run, shown);
   const solver = now ? live?.solver : undefined;
   const fraction = now ? stretchFraction({ start: now.start, end: solver?.end ?? now.end, iteration: solver?.iteration ?? now.iteration }) : undefined;
   const pace = now ? paceLine(solver, now) : null;
-  const stretches = stretchesText(run.stretches);
+  const stretches = stretchesText(run.stretches, transient);
   const ended = shown !== "running" && shown !== "queued";
-  const kept = `What it wrote is kept, to iteration ${formatInt(run.written)}: Continue solves on from there.`;
+  const at = atText(run.written, transient);
+  const kept = `What it wrote is kept, to ${at}: Continue solves on from there.`;
   const jobLink = job && <Link to={to(`/jobs?job=${encodeURIComponent(job.id)}`)} className={LINK}>its job</Link>;
   const split = run.nProcs == null ? null : run.nProcs > 1 ? `on ${run.nProcs} processes` : "unsplit, on one process";
   // While it solves: what is written so far (a Stop or a cancel keeps it), and any stretches before this one; once it
   // has ended, its stretches.
-  const written = run.written > 0 ? `Written to iteration ${formatInt(run.written)}` : "Nothing written yet";
+  const written = run.written > 0 ? `Written to ${at}` : "Nothing written yet";
   const sofar = ended
     ? (stretches ? `Solved ${stretches}` : written)
     : `${written}${stretches ? ` (solved before: ${stretches})` : ""}`;
@@ -109,7 +120,14 @@ function StatusCard({ shown, run, job, live, stopping }: {
             </p>
           </div>
         )}
-        {stopping && <p>Stopping: the solver writes the iteration it has reached, then ends.</p>}
+        {run.transient && (
+          <p>
+            A transient run of{" "}
+            <Link to={to(`/solve/${encodeURIComponent(run.transient.steady)}`)} className={LINK}>{run.transient.steady}</Link>:{" "}
+            {transientText(run.transient)}.
+          </p>
+        )}
+        {stopping && <p>Stopping: the solver writes the {transient ? "time" : "iteration"} it has reached, then ends.</p>}
         <p className="text-muted-foreground">
           {[sofar, split].filter(Boolean).join(", ")}.
         </p>
@@ -121,12 +139,13 @@ function StatusCard({ shown, run, job, live, stopping }: {
         )}
         {shown === "stopped" && (
           <p className="text-muted-foreground">
-            Stopped by request at iteration {formatInt(run.written)}, which it wrote: Continue solves on from there.
+            Stopped by request at {at}, which it wrote: Continue solves on from there.
           </p>
         )}
         {shown === "cancelled" && (
           <p className="text-muted-foreground">
-            Its job was cancelled. {run.written > 0 ? kept : "It hadn't written an iteration: Solve again starts afresh."}
+            Its job was cancelled.{" "}
+            {run.written > 0 ? kept : `It hadn't written ${transient ? "a time" : "an iteration"}: Solve again starts afresh.`}
           </p>
         )}
         {shown === "interrupted" && (
@@ -140,8 +159,9 @@ function StatusCard({ shown, run, job, live, stopping }: {
   );
 }
 
-/** The run's initial residuals per iteration over all its stretches, one field at a time. */
-function ResidualsCard({ residuals }: { residuals: RunLive["residuals"] }) {
+/** The run's initial residuals per iteration (a transient run's: per time step, over time) over all its stretches,
+ * one field at a time. */
+function ResidualsCard({ residuals, transient }: { residuals: RunLive["residuals"]; transient: boolean }) {
   const history = useMemo(() => tableRun(residuals), [residuals]);
   const fields = Object.keys(history?.y ?? {});
   const [picked, setPicked] = useState<string | null>(null);
@@ -155,7 +175,12 @@ function ResidualsCard({ residuals }: { residuals: RunLive["residuals"] }) {
       <CardHeader className="flex-wrap">
         <div>
           <CardTitle>Residuals</CardTitle>
-          <CardDescription>Initial residual per iteration, log scale: lower and still falling is better.</CardDescription>
+          <CardDescription>
+            {transient
+              ? "Initial residual at each time step, log scale: in a transient run they rise and fall with the flow, "
+                + "and what counts is that each time step converges, which the judge checks."
+              : "Initial residual per iteration, log scale: lower and still falling is better."}
+          </CardDescription>
         </div>
         {fields.length > 1 && (
           <Segmented label="Field" value={field} onChange={setPicked}
@@ -163,16 +188,17 @@ function ResidualsCard({ residuals }: { residuals: RunLive["residuals"] }) {
         )}
       </CardHeader>
       <CardContent>
-        <LineChart series={series} log xLabel="iteration" empty="No residuals for this field"
-          label={`Initial residual of ${field} per iteration, log scale`} />
+        <LineChart series={series} log xLabel={transient ? "time (s)" : "iteration"} empty="No residuals for this field"
+          xFormat={transient ? timeNumber : undefined}
+          label={`Initial residual of ${field} per ${transient ? "time step" : "iteration"}, log scale`} />
       </CardContent>
     </Card>
   );
 }
 
-/** The total force group's drag or vertical force per iteration, one at a time: they differ too much to share an
- * axis. */
-function ForcesCard({ live }: { live: RunLive }) {
+/** The total force group's drag or vertical force per iteration (a transient run's: over time), one at a time: they
+ * differ too much to share an axis. */
+function ForcesCard({ live, transient }: { live: RunLive; transient: boolean }) {
   const { group, rows, vertical } = useMemo(() => totalForces(live), [live]);
   const [which, setWhich] = useState<"vertical" | "drag">("vertical");
   const name = which === "drag" ? "Drag" : vertical.charAt(0).toUpperCase() + vertical.slice(1);
@@ -186,16 +212,21 @@ function ForcesCard({ live }: { live: RunLive }) {
         <div>
           <CardTitle>Forces</CardTitle>
           <CardDescription>
-            {group ? <>From the case's <span className="font-mono">{group}</span> output, per iteration: </> : "Per iteration: "}
-            a force that settles to a steady value is a sign of a converged run.
+            {group ? <>From the case's <span className="font-mono">{group}</span> output, {transient ? "over time" : "per iteration"}: </>
+              : transient ? "Over time: " : "Per iteration: "}
+            {transient
+              ? "a transient run's forces swing with the flow; their means settling is the sign of a run that is "
+                + "statistically stationary, which the judge checks."
+              : "a force that settles to a steady value is a sign of a converged run."}
           </CardDescription>
         </div>
         <Segmented label="Force" value={which} onChange={setWhich}
           options={[{ value: "vertical", label: vertical === "lift" ? "Lift" : "Downforce" }, { value: "drag", label: "Drag" }]} />
       </CardHeader>
       <CardContent>
-        <LineChart series={series} xLabel="iteration" empty="No forces written yet"
-          label={`${name}${group ? ` from ${group}` : ""} per iteration`} />
+        <LineChart series={series} xLabel={transient ? "time (s)" : "iteration"} empty="No forces written yet"
+          xFormat={transient ? timeNumber : undefined}
+          label={`${name}${group ? ` from ${group}` : ""} ${transient ? "over time" : "per iteration"}`} />
       </CardContent>
     </Card>
   );
@@ -216,7 +247,10 @@ export function RunPage() {
   // While it solves, the live data is asked for every 3 s; once it has ended, once more, for its last iterations.
   const live = useRunLive(name, solving ? "solving" : `${run?.state}:${run?.written}`, solving ? ACTIVE_POLL_MS : false, run != null);
   const ended = run != null && !solving && run.written > 0;
-  const judge = useCaseJudge(name, ended, run?.written ?? null);
+  // A transient run's judge is the live page's at its end too: the transient judge over the last half of its time
+  // steps, where GET /judge's window would be 200 of them.
+  const transient = isTransient(run);
+  const judge = useCaseJudge(name, ended && !transient, run?.written ?? null);
   const cases = useCases();
   const stop = useStopRun();
   const [stoppedAt, setStoppedAt] = useState<string | null>(null);
@@ -229,7 +263,7 @@ export function RunPage() {
   const sub = [
     "Solve",
     from,
-    run?.end != null && `to iteration ${formatInt(run.end)}`,
+    run?.end != null && `to ${transient ? formatTime(run.end) : `iteration ${formatInt(run.end)}`}`,
     mode === "demo" && "recorded demo",
   ].filter((x): x is string => typeof x === "string");
   const actions = (
@@ -319,7 +353,7 @@ export function RunPage() {
   const hasResiduals = (doc?.residuals.rows?.length ?? 0) > 0;
   const hasForces = doc != null && totalForces(doc).rows.length > 0;
   const liveJudge = solving ? judgeOf(doc?.judge) : null;
-  const shownJudge = liveJudge ?? (ended ? judgeOf(judge.data) : null);
+  const shownJudge = liveJudge ?? (ended ? judgeOf(transient ? doc?.judge : judge.data) : null);
 
   return (
     <>
@@ -342,7 +376,7 @@ export function RunPage() {
 
       {doc && hasResiduals ? (
         <Section title="Residuals">
-          <div className="mt-4"><ResidualsCard residuals={doc.residuals} /></div>
+          <div className="mt-4"><ResidualsCard residuals={doc.residuals} transient={transient} /></div>
         </Section>
       ) : liveCode == null && (
         <Card className="mt-4 p-5">
@@ -354,7 +388,7 @@ export function RunPage() {
 
       {doc && hasForces && (
         <Section title="Forces">
-          <div className="mt-4"><ForcesCard live={doc} /></div>
+          <div className="mt-4"><ForcesCard live={doc} transient={transient} /></div>
         </Section>
       )}
 
@@ -367,7 +401,7 @@ export function RunPage() {
         <ErrorPanel className="mt-4" compact error={judge.error} onRetry={() => void judge.refetch()} retrying={judge.isFetching} />
       )}
 
-      {ended && (
+      {ended && !transient && (
         <Section title="Transient plan">
           <div className="mt-4"><TransientPlanCard run={run} /></div>
         </Section>

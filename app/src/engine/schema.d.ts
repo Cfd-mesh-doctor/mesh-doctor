@@ -2390,7 +2390,7 @@ export interface operations {
                         forceInfo: Record<string, unknown>;
                         /** @description each force group's [iteration, drag, vertical] rows */
                         forces: Record<string, unknown>;
-                        /** @description the live judge on the whole run, whose stretches share their settings (the same limits as abtest.judge) */
+                        /** @description the live judge on the whole run, whose stretches share their settings (the same limits as abtest.judge); a transient run's is the transient judge, in time steps, as GET /judge?case= answers it over the last half of its time steps (10 to 200), judged again at most every 15 s while it solves */
                         judge: {
                             /** @description averaged forces with their uncertainty (batch means) */
                             average?: Record<string, unknown>;

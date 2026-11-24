@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { expect, test, type Page } from "@playwright/test";
-import { MATCHING, mockEngine, pairingLink, PLAN, run } from "./engine";
+import { MATCHING, mockEngine, pairingLink, PLAN, run, transientRun } from "./engine";
 
 /** Pairs with the pretend engine. */
 async function pair(page: Page) {
@@ -163,6 +163,90 @@ test("an engine from before the transient plan says to update it, and plans noth
     .toBeVisible();
   await expect(page.getByRole("button", { name: "Plan a transient run" })).toBeDisabled();
   expect(engine.requests.some((r) => r.url().includes("/tplans/"))).toBe(false);
+});
+
+test("a solved run's plan starts a transient run of it, as a new case, and its page follows the job", async ({ page }) => {
+  const engine = await mockEngine(page, { made, runs: [solved300()], noJobs: true, kinds: KINDS, tplans: { "ahmed-coarse": PLAN } });
+  await pair(page);
+  await page.goto("/app/solve/ahmed-coarse");
+  await page.getByRole("button", { name: "Start a transient run…" }).click();
+  const dialog = page.getByRole("dialog", { name: "Start a transient run of ahmed-coarse" });
+  await expect(dialog).toContainText("makes a new case of ahmed-coarse's mesh, settings and latest result (iteration 300)");
+  await expect(dialog.getByLabel("Name", { exact: true })).toHaveValue("ahmed-coarse-ddes");
+  await expect(dialog.getByRole("radio", { name: "DDES" })).toHaveAttribute("aria-checked", "true");
+  await expect(dialog.getByLabel("Largest Courant number")).toHaveValue("1");
+  // This computer has 4 cores: the plan's hours on its 6 processes, and on the 4 it can give.
+  await expect(dialog.getByText("At 1 the plan's time step is 18 µs: 11,369 steps to 0.2088 s, about 3.8 h on its 6 "
+    + "processes (about 5.7 h on 4 processes, if it splits as evenly).")).toBeVisible();
+  await expect(dialog.getByLabel("Solve to (s)")).toHaveValue("0.2088");
+  await expect(dialog.getByText("8 flow times over the body (8 L/U: 1.044 m at 40 m/s), which the plan's hours are for."))
+    .toBeVisible();
+  await expect(dialog.getByLabel("Processes")).toHaveValue("4");
+  await dialog.getByLabel("Largest Courant number").fill("3");
+  await expect(dialog.getByText("DDES resolves the wake's eddies, which needs about 1: give 2 or less, or pick URANS."))
+    .toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Start the transient run" })).toBeDisabled();
+  // URANS takes the 3 typed, under its own name.
+  await dialog.getByRole("radio", { name: "URANS" }).click();
+  await expect(dialog.getByLabel("Name", { exact: true })).toHaveValue("ahmed-coarse-urans");
+  await expect(dialog.getByLabel("Largest Courant number")).toHaveValue("3");
+  await dialog.getByLabel("Solve to (s)").fill("0.1");
+  await expect(dialog.getByText(/^At 3 the plan's time step is 55 µs: 1,815 steps to 0\.1 s, about/)).toBeVisible();
+  await dialog.getByRole("button", { name: "Start the transient run" }).click();
+  await expect(page).toHaveURL(/\/app\/solve\/ahmed-coarse-urans$/);
+  expect(engine.started).toEqual([{ kind: "solve", params: {
+    name: "ahmed-coarse-urans", steady: "ahmed-coarse", maxCo: 3, model: "URANS", to: 0.1, np: 4 } }]);
+  // Its job waits for its turn: the page says what it is a transient run of.
+  await expect(page.getByRole("heading", { name: "ahmed-coarse-urans", level: 1 })).toBeVisible();
+  await expect(page.getByText("Solve · a transient run of ahmed-coarse")).toBeVisible();
+  await expect(page.getByText("Starting", { exact: true })).toBeVisible();
+});
+
+test("a transient run's page follows it in seconds with the transient judge, stops it and continues it", async ({ page }) => {
+  const engine = await mockEngine(page, {
+    made: { ...made, "ahmed-coarse-ddes": { transientOf: "ahmed-coarse" } },
+    runs: [solved300(), transientRun("ahmed-coarse-ddes")], noJobs: true, kinds: KINDS,
+  });
+  await pair(page);
+  await page.goto("/app/solve");
+  const runs = page.getByRole("list", { name: "Runs" });
+  await expect(runs.getByRole("listitem").filter({ hasText: "ahmed-coarse-ddes" }))
+    .toContainText("0.0005 s of 0.001 s (a transient run of ahmed-coarse)");
+  // The steady run's page lists the transient runs made of it.
+  await runs.getByRole("link", { name: "ahmed-coarse", exact: true }).click();
+  await expect(page.getByText(/^Transient run of it:/)).toBeVisible();
+  await page.getByRole("link", { name: "ahmed-coarse-ddes" }).click();
+  await expect(page).toHaveURL(/\/app\/solve\/ahmed-coarse-ddes$/);
+
+  await expect(page.getByText("Solve · a transient run of ahmed-coarse · to 0.001 s")).toBeVisible();
+  await expect(page.getByText(/0\.0005 s of 0\.001 s · time step 20 µs · 1\.40 s per time step · about 35 s left/)).toBeVisible();
+  await expect(page.getByText("Written to 0.00025 s, on 4 processes.")).toBeVisible();
+  await expect(page.getByText("A transient run of ahmed-coarse: DDES at a largest Courant number of 1, from "
+    + "ahmed-coarse's iteration 300.")).toBeVisible();
+  await expect(page.getByRole("img", { name: "Initial residual of p per time step, log scale" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "Downforce from body over time" })).toBeVisible();
+  await expect(page.getByText("Judged over the last 12 time steps, flow along +x, z up")).toBeVisible();
+  await expect(page.getByText("still developing (force means still drifting; average later)")).toBeVisible();
+
+  await page.getByRole("button", { name: "Stop" }).click();
+  await expect(page.getByRole("heading", { name: "Stopped at 0.0005 s" })).toBeVisible();
+  // Once it has ended, still the transient judge, in time steps: not GET /judge's, over 200 iterations.
+  await expect(page.getByText("The judge on the whole run")).toBeVisible();
+  await expect(page.getByText("converged (statistically stationary, every time step converged)")).toBeVisible();
+  expect(engine.requests.some((r) => r.url().includes("/judge?case=ahmed-coarse-ddes"))).toBe(false);
+  await expect(page.getByRole("heading", { name: "Plan a transient run" })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Continue…" }).click();
+  const dialog = page.getByRole("dialog", { name: "Continue ahmed-coarse-ddes" });
+  await expect(dialog).toContainText("The transient run continues from 0.0005 s, the latest time written, on the run's 4 "
+    + "processes, to the time you give");
+  await expect(dialog.getByLabel("Solve to (s)")).toHaveValue("0.001");
+  await dialog.getByLabel("Solve to (s)").fill("0.0004");
+  await expect(dialog.getByText("Give one past 0.0005 s, the latest time written: the run continues from there.")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Continue", exact: true })).toBeDisabled();
+  await dialog.getByLabel("Solve to (s)").fill("0.002");
+  await dialog.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect.poll(() => engine.started).toEqual([{ kind: "solve", params: { name: "ahmed-coarse-ddes", to: 0.002 } }]);
 });
 
 test("a case you made is solved through a copy: the case, the copy's name, then its run's page", async ({ page }) => {

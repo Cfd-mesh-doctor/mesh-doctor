@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // A light SVG line chart for residual histories: log or linear y axis, round-number ticks, and a read-out
-// on hover or touch. Long histories are thinned to two points per pixel column (each column's lowest and
+// on hover or touch. The x axis's numbers are formatNumber's unless `xFormat` says otherwise (a transient run's
+// times in s), and the label at its right end is moved left as far as it needs to fit. Long histories are thinned to two points per pixel column (each column's lowest and
 // highest), so a run of 100k iterations draws as fast as a short one and keeps its spikes.
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { formatNumber } from "@/lib/format";
@@ -34,11 +35,15 @@ function points(s: LineSeries, log: boolean): Pt[] {
   return out;
 }
 
-export function LineChart({ series, log = false, height = 260, xLabel = "x", label, empty = "Nothing to draw" }: {
+export function LineChart({
+  series, log = false, height = 260, xLabel = "x", xFormat = formatNumber, label, empty = "Nothing to draw",
+}: {
   series: LineSeries[];
   log?: boolean;
   height?: number;
   xLabel?: string;
+  /** how the x axis and the read-out write an x (formatNumber by default) */
+  xFormat?: (x: number) => string;
   /** what the chart shows, for screen readers */
   label: string;
   empty?: string;
@@ -125,11 +130,16 @@ export function LineChart({ series, log = false, height = 260, xLabel = "x", lab
                 <text x={M.left - 6} y={geo.Y(t.v)} dy="0.32em" textAnchor="end" className="fill-muted-foreground">{t.text}</text>
               </g>
             ))}
-            {geo.xTicks.map((v) => (
-              <text key={v} x={geo.X(v)} y={height - M.bottom + 16} textAnchor="middle" className="fill-muted-foreground">
-                {formatNumber(v)}
-              </text>
-            ))}
+            {geo.xTicks.map((v) => {
+              const text = xFormat(v);
+              // About 6.6 px a character: a label past the chart's right edge would be cut off.
+              const x = Math.min(geo.X(v), w - 1 - text.length * 3.3);
+              return (
+                <text key={v} x={x} y={height - M.bottom + 16} textAnchor="middle" className="fill-muted-foreground">
+                  {text}
+                </text>
+              );
+            })}
             <text x={M.left + plotW / 2} y={height - 3} textAnchor="middle" className="fill-muted-foreground">{xLabel}</text>
           </g>
           <line x1={M.left} x2={w - M.right} y1={height - M.bottom} y2={height - M.bottom} className="stroke-border-strong" />
@@ -156,7 +166,7 @@ export function LineChart({ series, log = false, height = 260, xLabel = "x", lab
           className="pointer-events-none absolute top-2 z-10 min-w-36 rounded-lg border border-border bg-surface px-2.5 py-2 text-xs shadow-pop"
           style={tipLeft > w - 180 ? { right: w - tipLeft + 10 } : { left: tipLeft + 10 }}
         >
-          <p className="font-medium">{xLabel} {formatNumber(hover.x)}</p>
+          <p className="font-medium">{xLabel} {xFormat(hover.x)}</p>
           {hover.at.map(({ s, p }) => (
             <p key={s.name} className="mt-1 flex items-center justify-between gap-3">
               <span className="inline-flex items-center gap-1.5 text-muted-foreground">

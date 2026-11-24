@@ -41,6 +41,23 @@ describe("line chart", () => {
     expect(screen.getByText("1e-2")).toBeInTheDocument();
   });
 
+  it("writes its x axis as asked, and keeps the label at its right end inside the chart", () => {
+    const s: LineSeries = {
+      name: "p", stroke: "stroke-primary", swatch: "bg-primary", x: [1e-4, 2e-4, 3e-4, 4e-4, 5e-4], y: [1, 2, 3, 2, 1],
+    };
+    const view = render(<LineChart label="p over time" series={[s]} />);
+    expect(screen.getByText("5.000e-4")).toBeInTheDocument();                 // formatNumber's
+    view.unmount();
+    const seconds = new Intl.NumberFormat("en-US", { maximumSignificantDigits: 4 });
+    render(<LineChart label="p over time" series={[s]} xFormat={(x) => seconds.format(x)} />);
+    expect(screen.queryByText(/e-4$/)).toBeNull();
+    // 640 px wide (no layout in tests): the first label at its tick, the last moved left of the right end's (626)
+    expect(Number(screen.getByText("0.0001").getAttribute("x"))).toBe(50);
+    const last = Number(screen.getByText("0.0005").getAttribute("x"));
+    expect(last).toBeLessThan(626);
+    expect(last + 3.3 * "0.0005".length).toBeLessThanOrEqual(639);
+  });
+
   it("says when there is nothing to draw", () => {
     render(<LineChart log label="residuals" empty="No residuals" series={[line("a", [0, null])]} />);
     expect(screen.getByText("No residuals")).toBeInTheDocument();

@@ -2,9 +2,10 @@
 import { describe, expect, it } from "vitest";
 import type { Job, Run } from "@/engine/types";
 import {
-  MAX_TO, copyName, copyNameProblem, copyTaken, current, madeFrom, madeOfJob, procChoices, runRows, runShown,
-  solveCommand, solveJobOf, solveStep, stretchFraction, stretchesText, suggestedProcs, suggestedTo, toProblem,
-  totalForces, yourCases,
+  MAX_TO, atText, copyName, copyNameProblem, copyTaken, current, formatTime, isTransient, madeFrom, madeOfJob, ofText,
+  procChoices, runRows, runShown, solveCommand, solveJobOf, solveStep, stretchFraction, stretchesText, suggestedProcs,
+  suggestedTime, suggestedTo, timeInput, timeNumber, timeProblem, toProblem, totalForces, transientCommand,
+  transientText, yourCases,
 } from "./solveStart";
 
 const run = (name: string, more: Partial<Run> = {}): Run => ({
@@ -153,6 +154,52 @@ describe("the Solve dialog's numbers", () => {
     expect(solveCommand("ahmed-coarse", 2000, 4)).toBe("meshdoctor solve ahmed-coarse --to 2000 --np 4");
     expect(solveCommand("ahmed-coarse", 3000, null)).toBe("meshdoctor solve ahmed-coarse --to 3000");
     expect(solveCommand("wing-run", 2000, 4, "wing")).toBe("meshdoctor solve wing wing-run --to 2000 --np 4");
+  });
+});
+
+describe("a transient run", () => {
+  const t = run("ahmed-ddes", {
+    iteration: 0.0011, start: 0.0005, end: 0.0011, written: 0.0011,
+    stretches: [{ from: 0, to: 0.0005 }, { from: 0.0005, to: 0.0011 }],
+    transient: { steady: "ahmed", at: "300", maxCo: 1, model: "DDES" },
+  });
+
+  it("is one with `transient`, and counts time in s where a steady run counts iterations", () => {
+    expect([isTransient(t), isTransient(run("a")), isTransient(run("a", { transient: null })), isTransient(null)])
+      .toEqual([true, false, false, false]);
+    expect([timeNumber(0.0011), timeNumber(0.20875), timeNumber(0), timeNumber(1.5)]).toEqual(["0.0011", "0.2088", "0", "1.5"]);
+    expect(formatTime(0.000255)).toBe("0.000255 s");
+    expect([atText(0.0011, true), atText(1200, false)]).toEqual(["0.0011 s", "iteration 1,200"]);
+    expect([ofText(0.00052, 0.0011, true), ofText(120, 200, false)]).toEqual(["0.00052 s of 0.0011 s", "iteration 120 of 200"]);
+    expect(stretchesText(t.stretches, true)).toBe("0 → 0.0005, then 0.0005 → 0.0011 s");
+    expect(stretchFraction({ start: 0.0005, end: 0.0011, iteration: 0.0008 })).toBeCloseTo(0.5);
+  });
+
+  it("says what it started from: the steady run, its result, the model and the largest Courant number", () => {
+    expect(transientText(t.transient!)).toBe("DDES at a largest Courant number of 1, from ahmed's iteration 300");
+    expect(transientText({ steady: "wing", at: "0.5", maxCo: 5, model: "URANS" }))
+      .toBe("URANS at a largest Courant number of 5, from wing's time 0.5");
+    expect(transientText({ steady: "wing", at: "latest", maxCo: null, model: null })).toBe("From wing's time latest");
+    expect(madeFrom({ transientOf: "ahmed" })).toBe("a transient run of ahmed");
+    expect(madeOfJob(job("ahmed-ddes", "queued", "solve", { name: "ahmed-ddes", steady: "ahmed", maxCo: 1, to: 0.2 })))
+      .toEqual({ transientOf: "ahmed" });
+  });
+
+  it("continues to the end it stopped short of, else as far again as its latest stretch went, past what is written", () => {
+    expect(suggestedTime(t)).toBe(0.0017);
+    expect(suggestedTime({ written: 0.000255, start: 0.0002, end: 0.001 })).toBe(0.001);      // stopped short of it
+    expect(suggestedTime({ written: 0.2088, start: 0, end: 0.2088 })).toBe(0.4176);
+    expect([timeInput(0.2088), timeInput(0.1 + 0.2), timeInput(1.7e-5)]).toEqual(["0.2088", "0.3", "0.000017"]);
+    expect(timeProblem("0.0017", 0.0011)).toBeNull();
+    expect(timeProblem("2e-3", 0.0011)).toBeNull();
+    expect(timeProblem(".5", 0)).toBeNull();
+    expect(timeProblem("0.0011", 0.0011)).toBe("Give one past 0.0011 s, the latest time written: the run continues from there.");
+    expect(timeProblem("0", 0)).toBe("Give a time past 0 s.");
+    for (const bad of ["", "abc", "-1", "1,5", "0.2 s", "Infinity"]) expect(timeProblem(bad, 0)).toBe("Give the time in s, such as 0.2.");
+    expect(transientCommand("ahmed-ddes", "ahmed", 1, "DDES", 0.2088, 6))
+      .toBe("meshdoctor solve ahmed-ddes --steady ahmed --co 1 --model DDES --to 0.2088 --np 6");
+    expect(solveCommand("ahmed-ddes", 0.0017, null)).toBe("meshdoctor solve ahmed-ddes --to 0.0017");
+    expect(copyNameProblem("", new Set(), "the transient run")).toBe("Give the transient run a name.");
   });
 });
 

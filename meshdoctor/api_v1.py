@@ -635,7 +635,11 @@ RUN_LIVE = {"type": "object", "required": ["name", "run", "stages", "current", "
                                           "before it has any"),
     "forces": LIVE["properties"]["forces"], "forceInfo": LIVE["properties"]["forceInfo"],
     "judge": dict(LIVE["properties"]["judge"], description="the live judge on the whole run, whose stretches share "
-                                                           "their settings (the same limits as abtest.judge)"),
+                                                           "their settings (the same limits as abtest.judge); a "
+                                                           "transient run's is the transient judge, in time steps, as "
+                                                           "GET /judge?case= answers it over the last half of its time "
+                                                           "steps (10 to 200), judged again at most every 15 s while it "
+                                                           "solves"),
     "now": LIVE["properties"]["now"]}}
 
 

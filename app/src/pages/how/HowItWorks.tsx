@@ -346,6 +346,27 @@ export function HowItWorks() {
                 In the web app, a solved run's page has Plan a transient run: the engine makes the same plan as a job
                 and the page shows it, with the hours on the run's own processes.
               </p>
+              <p>
+                <strong>The transient run itself:</strong> <code>meshdoctor solve &lt;name&gt; --steady &lt;run&gt;</code>{" "}
+                makes the new case <code>&lt;name&gt;</code> a transient run of a solved steady run: its mesh, settings
+                and latest result with its face flux, solved in time from there, so with no <code>potentialFoam</code>.
+                By default it is DDES (<code>kOmegaSSTDES</code> with F2 shielding, so the boundary layers stay RANS and
+                the wake's eddies are resolved), with second-order time steps (<code>backward</code>),{" "}
+                <code>LUST</code> for the velocity, PIMPLE with 3 outer correctors and a time step OpenFOAM adjusts to a
+                largest Courant number of 1 (<code>--co</code>; DDES takes 2 at most). Its first time step is the
+                plan's, when one was made of the same result. <code>--model URANS</code> keeps the steady run's own RAS
+                model and can run at a Courant number up to 20, with its outer correctors relaxed above 1. It runs 8
+                flow times over the body (8 L/U) unless <code>--to</code> gives the time in s, and writes four times a
+                stretch; <code>meshdoctor solve &lt;name&gt; --to S</code> continues it from its latest written time.
+                The steady run is only read.
+              </p>
+              <p>
+                In the web app, a solved run's plan has Start a transient run: you give its name, DDES or URANS, the
+                largest Courant number (the dialog shows the plan's time step, steps and hours at it), the time to
+                solve to (8 L/U by default) and the processes. Its page follows it in seconds: its time and time step,
+                its residuals and forces over time, and the transient judge over the last half of its time steps. Stop
+                and Continue work as for a steady run, with the time in s.
+              </p>
             </Step>
 
             <Step s={hotspots} n={6}>

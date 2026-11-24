@@ -365,7 +365,7 @@ export const DESIGN: DocSection[] = [
             [
               "`GET /runs/{name}/live`",
               "(new)",
-              "a run's page: its stretches, the solver's iteration, pace and time left (a transient run's: its time steps left, at its latest time step), its residuals and forces over all its stretches, and the live judge (API 1.6)"
+              "a run's page: its stretches, the solver's iteration, pace and time left (a transient run's: its time steps left, at its latest time step), its residuals and forces over all its stretches, and the live judge (a transient run's: the transient judge, in time steps, as `GET /judge?case=` answers it, judged again at most every 15 s while it solves) (API 1.6)"
             ],
             [
               "`GET /runs/{name}/validation`",
