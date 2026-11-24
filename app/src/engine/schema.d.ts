@@ -2628,7 +2628,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         items: {
-                            /** @description a transient run's averaged flow (the fieldAverage meanFlow: UMean, pMean, UPrime2Mean and pPrime2Mean in each time it writes), which the solve switches on once its forces have settled, as the transient judge finds that; all null until then; null for a steady run, or a transient run with none (made before API 1.9, or with a fieldAverage of its own) (API 1.9) */
+                            /** @description a transient run's averaged flow (the fieldAverage meanFlow: UMean, pMean, UPrime2Mean and pPrime2Mean in each time it writes), which the solve switches on once its forces have settled, as the transient judge finds that; all null until then; null for a steady run, or a transient run with none (made before API 1.9 and not solved since, as its next solve gives it one; or with a fieldAverage of its own) (API 1.9) */
                             averaging?: {
                                 /** @description the time it averages from, in s: the latest time written with it less its averaging's totalTime, else the time the solver was at when it was switched on */
                                 from: number | null;
@@ -2715,7 +2715,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        /** @description a transient run's averaged flow (the fieldAverage meanFlow: UMean, pMean, UPrime2Mean and pPrime2Mean in each time it writes), which the solve switches on once its forces have settled, as the transient judge finds that; all null until then; null for a steady run, or a transient run with none (made before API 1.9, or with a fieldAverage of its own) (API 1.9) */
+                        /** @description a transient run's averaged flow (the fieldAverage meanFlow: UMean, pMean, UPrime2Mean and pPrime2Mean in each time it writes), which the solve switches on once its forces have settled, as the transient judge finds that; all null until then; null for a steady run, or a transient run with none (made before API 1.9 and not solved since, as its next solve gives it one; or with a fieldAverage of its own) (API 1.9) */
                         averaging?: {
                             /** @description the time it averages from, in s: the latest time written with it less its averaging's totalTime, else the time the solver was at when it was switched on */
                             from: number | null;
@@ -2839,7 +2839,7 @@ export interface operations {
                         };
                         /** @description the run, as GET /runs/{name} has it */
                         run: {
-                            /** @description a transient run's averaged flow (the fieldAverage meanFlow: UMean, pMean, UPrime2Mean and pPrime2Mean in each time it writes), which the solve switches on once its forces have settled, as the transient judge finds that; all null until then; null for a steady run, or a transient run with none (made before API 1.9, or with a fieldAverage of its own) (API 1.9) */
+                            /** @description a transient run's averaged flow (the fieldAverage meanFlow: UMean, pMean, UPrime2Mean and pPrime2Mean in each time it writes), which the solve switches on once its forces have settled, as the transient judge finds that; all null until then; null for a steady run, or a transient run with none (made before API 1.9 and not solved since, as its next solve gives it one; or with a fieldAverage of its own) (API 1.9) */
                             averaging?: {
                                 /** @description the time it averages from, in s: the latest time written with it less its averaging's totalTime, else the time the solver was at when it was switched on */
                                 from: number | null;
@@ -2964,7 +2964,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        /** @description a transient run's averaged flow (the fieldAverage meanFlow: UMean, pMean, UPrime2Mean and pPrime2Mean in each time it writes), which the solve switches on once its forces have settled, as the transient judge finds that; all null until then; null for a steady run, or a transient run with none (made before API 1.9, or with a fieldAverage of its own) (API 1.9) */
+                        /** @description a transient run's averaged flow (the fieldAverage meanFlow: UMean, pMean, UPrime2Mean and pPrime2Mean in each time it writes), which the solve switches on once its forces have settled, as the transient judge finds that; all null until then; null for a steady run, or a transient run with none (made before API 1.9 and not solved since, as its next solve gives it one; or with a fieldAverage of its own) (API 1.9) */
                         averaging?: {
                             /** @description the time it averages from, in s: the latest time written with it less its averaging's totalTime, else the time the solver was at when it was switched on */
                             from: number | null;

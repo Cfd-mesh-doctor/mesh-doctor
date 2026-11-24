@@ -3195,6 +3195,50 @@ class TransientSolveTest(unittest.TestCase):
         self.assertEqual(self.s.latest(case), 0.00135)
         self.assertRefused(self.post({"name": "steady", "to": 60.5}), 400, "bad-request", "whole number")
 
+    def test_a_transient_run_made_before_its_flow_was_averaged_gets_the_averaging_when_it_is_solved_again(self):
+        import transient
+        self.steady()
+        rc, lines = self.solve("ahmedT", 0.0004, 2, None, None, None, "steady", 1, "DDES")
+        self.assertEqual(rc, 0, lines)
+        case = os.path.join(self.cases, "ahmedT")
+        # As an engine before API 1.9 made it: its function objects in its controlDict, and no system/functions
+        control = os.path.join(case, "system", "controlDict")
+        steady = transient.read(os.path.join(self.cases, "steady", "system", "controlDict"))
+        span = transient.block(steady, "functions")
+        made = transient.read(control)
+        self.assertTrue(span and transient.MOVED in made)
+        with open(control, "w") as f:
+            f.write(made.replace(transient.MOVED, steady[span[0]:span[1]]))
+        os.remove(os.path.join(case, "system", "functions"))
+        run = self.api.handle("GET", "/api/v1/runs/ahmedT", {})[1]
+        self.assertEqual((transient.average_state(case), run["averaging"]), (None, None))
+        # Its forces had settled by the end of that stretch: solved again, it averages from there, as a new run would
+        forces = os.path.join(case, "postProcessing", "forcesTotal", "0")
+        os.makedirs(forces)
+        with open(os.path.join(forces, "forces.dat"), "w") as f:
+            for i in range(1, 201):
+                f.write(f"{i * 2e-6:g} (({50 + 40 * math.exp(-i / 8) + math.sin(i / 3)} 0 -30) (0 0 0))\n")
+        settled = transient.forces_settled(case)
+        rc, lines = self.solve("ahmedT", 0.001, 4)
+        self.assertEqual((rc, lines[-1]), (0, "ahmedT: solved to 0.001 s"), lines)
+        self.assertIn("ahmedT: its function objects moved to system/functions, with the averaging of its flow, as a "
+                      "new transient run has them", lines)
+        self.assertIn(f"ahmedT: its forces settled at {settled:g} s: averaging its flow from 0.0004 s", lines)
+        moved = transient.read(control)
+        self.assertEqual((transient.block(moved, "functions"), transient.MOVED in moved), (None, True))
+        functions = os.path.join(case, "system", "functions")
+        self.assertIn("forcesTotal", transient.read(functions))              # its own function objects, moved
+        self.assertEqual((transient.average_state(case), self.status()["averaging"]),
+                         ("on", {"from": 0.0004, "settled": settled}))
+        self.assertEqual(self.api.handle("GET", "/api/v1/runs/ahmedT", {})[1]["averaging"],
+                         {"from": 0.0004, "settled": settled, "written": None})
+        # Once: a later stretch leaves them where they are
+        before = transient.read(functions)
+        rc, lines = self.solve("ahmedT", 0.0012, 2)
+        self.assertEqual(rc, 0, lines)
+        self.assertFalse([line for line in lines if "system/functions" in line], lines)
+        self.assertEqual(transient.read(functions), before)
+
     def test_a_transient_run_writes_the_times_asked_for_each_stretch_and_keeps_every_one(self):
         import diskguard, schema
         self.steady()

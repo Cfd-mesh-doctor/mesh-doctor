@@ -275,7 +275,8 @@ def _fieldAverage(text):
 
 
 def functions(case):
-    """Put the new run's function objects in system/functions with its averaging (AVERAGE_ENTRY, off at first):
+    """Put the new run's function objects in system/functions with its averaging (AVERAGE_ENTRY, off at first), or
+    an older run's, made before Mesh Doctor averaged a transient run's flow, when it is solved again (solve.run):
     OpenFOAM 14 reads that file again when it changes as the run solves, so switch_on() can start the averaging then;
     a controlDict's own `functions` it reads only at the start, and not at all once system/functions is there.  The
     controlDict's top-level entries that the functions name ($forceDefaults) go with them, removed once read
@@ -388,10 +389,11 @@ def _averaged(case):
 
 def averaging(case, doc=None):
     """A transient run's averaging, as GET /runs/{name} gives it: {from, settled, written} in s; None when it has none
-    (made before Mesh Doctor averaged a transient run's flow, or with a fieldAverage of its own).  All three are None
-    until it is switched on.  `from`: when it began, from the latest time written with it (that time less its
-    totalTime), else as its status says (`doc`: the time the solver was at when it was switched on); `settled`: when
-    the forces had settled then; `written`: that latest time, None before one."""
+    (made before Mesh Doctor averaged a transient run's flow and not solved since, as its next solve gives it one with
+    functions(); or with a fieldAverage of its own).  All three are None until it is switched on.  `from`: when it
+    began, from the latest time written with it (that time less its totalTime), else as its status says (`doc`: the
+    time the solver was at when it was switched on); `settled`: when the forces had settled then; `written`: that
+    latest time, None before one."""
     state = average_state(case)
     if state is None:
         return None

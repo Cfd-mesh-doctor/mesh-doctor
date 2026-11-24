@@ -769,6 +769,11 @@ def _solve(case, name, first, start_at, to, nproc, status, unsteady=False):
                 return _fail(status, "potentialFoam", rc)
     log = "log.foamRun" if first else f"log.foamRun_to_{to}"
     status.step("solving", 0.05)
+    # A transient run made before Mesh Doctor averaged its flow (API 1.9) has its function objects in its controlDict
+    # and no averaging: they move to system/functions with it (transient.functions), as a new run has them
+    if unsteady and transient.average_state(case) is None and transient.functions(case):
+        _say(f"{name}: its function objects moved to system/functions, with the averaging of its flow, as a new "
+             "transient run has them")
     # A transient run averages its flow from when its forces have settled: in an earlier stretch, or as it solves
     average = unsteady and transient.average_state(case) == "off"
     if average and _average(case, name, status, start_at):

@@ -111,7 +111,8 @@ const AVERAGES = "its mean flow and how much it swings (UMean, pMean, UPrime2Mea
 
 /** What a transient run averages, in words (API 1.9's `averaging`: its mean flow and how much it swings, which the
  * solve switches on once its forces have settled, as it checks before each stretch and every half a minute as it
- * solves); null for a run without it (a steady run, or one an engine before API 1.9 made). */
+ * solves); null for a run without it (a steady run, or one an engine before API 1.9 made, until it is solved
+ * again). */
 export function averagingText(a: Run["averaging"], ended: boolean): string | null {
   if (!a) return null;
   if (a.from == null) {
