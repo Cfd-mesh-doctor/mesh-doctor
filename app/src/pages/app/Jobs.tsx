@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Every job on the engine: live progress while running, details, cancelling (after a confirmation), the report of a
-// finished repair's run, and an A/B job's test page. The filter lives in the address (?show=failed), so a reload or a
-// link keeps it.
-import { FileText, FlaskConical, FolderOpen, ListChecks, OctagonX } from "lucide-react";
+// finished repair's run, an A/B job's test page, a new case on Cases, and a solve's or a transient plan's run page. The
+// filter lives in the address (?show=failed), so a reload or a link keeps it.
+import { FileText, FlaskConical, FolderOpen, Hourglass, ListChecks, OctagonX, Play } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { DashboardLink } from "@/components/shared/DashboardLink";
@@ -34,13 +34,17 @@ function matches(f: Filter, s: JobState): boolean {
 
 /** An A/B test, or its continuation to more iterations. */
 const isAbJob = (job: Job) => job.kind === "abtest" || job.kind === "abextend";
+/** A solve, or a transient plan of a run: both show on the run's page (Run.tsx), and are named after the run. */
+const isRunJob = (job: Job) => job.kind === "solve" || job.kind === "tplan";
 
 /** Where a job's run shows, or null while it has nothing to show. A job is named after its run. An A/B job's is its
- * test's page, running or not: it follows a running test, and says how a stopped one ended. A repair's is its run's
- * report, once the repair is done (GET /repairs/{name}/report). A new case's is the case on Cases, once it has its
- * mesh. */
+ * test's page, running or not: it follows a running test, and says how a stopped one ended. A solve's and a transient
+ * plan's is the run's page, running or not too: it follows the solve (or says it is starting, or why it didn't), and
+ * shows the plan (or that it is being made). A repair's is its run's report, once the repair is done
+ * (GET /repairs/{name}/report). A new case's is the case on Cases, once it has its mesh. */
 function runPath(job: Job): string | null {
   if (isAbJob(job)) return `/abtests/${encodeURIComponent(job.name)}`;
+  if (isRunJob(job)) return `/solve/${encodeURIComponent(job.name)}`;
   if (job.state !== "done") return null;
   return job.kind === "case" ? `/cases?q=${encodeURIComponent(job.name)}` : `/repairs/${encodeURIComponent(job.name)}/report`;
 }
@@ -52,13 +56,16 @@ function RunLink({ job }: { job: Job }) {
   const to = useAppPath();
   const path = runPath(job);
   if (!path) return null;
+  const what = job.kind === "solve" ? `the run ${job.name}` : `the A/B test of ${job.name}`;
   const [text, label] = job.kind === "case"
     ? ["Case", `The case ${job.name} on Cases`]
-    : !isAbJob(job)
+    : job.kind === "tplan"
+    ? ["Plan", `The transient plan of ${job.name}`]
+    : !isAbJob(job) && job.kind !== "solve"
     ? ["Report", `Report of ${job.name}`]
     : isActive(job.state)
-      ? ["Follow", `Follow the A/B test of ${job.name}`]
-      : ["Open", `Open the A/B test of ${job.name}`];
+      ? ["Follow", `Follow ${what}`]
+      : ["Open", `Open ${what}`];
   return (
     <Button variant="ghost" size="sm" className="hidden sm:inline-flex" asChild>
       <Link to={to(path)} aria-label={label}>{text}</Link>
@@ -244,7 +251,10 @@ function DetailsDialog({ job, jobs, onClose, onCancel, nameOf }: {
                 <Button asChild>
                   <Link to={to(run)}>
                     {isAbJob(job) ? <><FlaskConical /> Open A/B test</>
-                      : job.kind === "case" ? <><FolderOpen /> Open on Cases</> : <><FileText /> Open report</>}
+                      : job.kind === "case" ? <><FolderOpen /> Open on Cases</>
+                      : job.kind === "solve" ? <><Play /> Open the run</>
+                      : job.kind === "tplan" ? <><Hourglass /> Open the plan</>
+                      : <><FileText /> Open report</>}
                   </Link>
                 </Button>
               )}
@@ -404,15 +414,16 @@ export function Jobs() {
                   <TD className="hidden text-[13px] whitespace-nowrap tabular-nums md:table-cell">{duration(j)}</TD>
                   <TD className="text-right" onClick={(e) => e.stopPropagation()}>
                     {isActive(j.state) ? (
-                      // A running A/B test can be followed on its own page too. Its two buttons sit one above the
-                      // other: side by side (even at 1280 px), they took the room a job's name needs for its line.
+                      // A running A/B test or solve can be followed on its own page too. Its two buttons sit one
+                      // above the other: side by side (even at 1280 px), they took the room a job's name needs for
+                      // its line.
                       <div className="flex flex-col items-end gap-1">
                         <RunLink job={j} />
                         <Button variant="danger-ghost" size="sm" onClick={() => setCancelId(j.id)}>Cancel</Button>
                       </div>
                     ) : runPath(j) ? (
-                      // A finished repair offers its report and an A/B job its test's page; the details open from
-                      // the job's name or row, as on phones.
+                      // A finished repair offers its report, an A/B job its test's page and a solve or a plan its
+                      // run's page; the details open from the job's name or row, as on phones.
                       <RunLink job={j} />
                     ) : (
                       // On phones the whole row opens the details, so the button is left out.

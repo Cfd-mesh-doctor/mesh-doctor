@@ -523,7 +523,7 @@ test("on a phone the menu's Take the tour closes the menu and opens the tour", a
 test("on a phone the tour brings the part it means into view, clear of the top bar and above the tour", async ({ page }) => {
   await page.goto("/demo");
   await page.getByRole("button", { name: "Take the tour" }).click();
-  for (let i = 1; i < 7; i++) await page.keyboard.press("Enter");
+  for (let i = 1; i < 8; i++) await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog", { name: "Reports: did the repair help?" })).toBeVisible();
   // A report's verdict is far down a phone's screen, below its five number tiles.
   const verdict = page.locator('[data-tour="verdict"]');
@@ -532,5 +532,22 @@ test("on a phone the tour brings the part it means into view, clear of the top b
     const part = await verdict.boundingBox();
     const tour = await page.getByRole("dialog").boundingBox();
     expect(part && tour && part.y >= 56 && part.y < tour.y).toBe(true);
+  }).toPass({ timeout: 5000 });
+});
+
+test("on a phone the tour's Solve step keeps New case in view, above the tour, as the cards above it fill in", async ({ page }) => {
+  await page.goto("/demo");
+  await page.getByRole("button", { name: "Take the tour" }).click();
+  for (let i = 1; i < 4; i++) await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog", { name: "Solve: run a case in OpenFOAM" })).toBeVisible();
+  // The readiness card above it fills in once the engine answers, after the step has opened, which pushes it down.
+  const part = page.locator('[data-tour="new-case"]');
+  await expect(part).toHaveAttribute("data-tour-spot", "");
+  await expect(async () => { // where it comes to rest
+    const was = await part.boundingBox();
+    await page.waitForTimeout(250);
+    const now = await part.boundingBox();
+    const tour = await page.getByRole("dialog").boundingBox();
+    expect(was && now && tour && was.y === now.y && now.y >= 56 && now.y < tour.y).toBe(true);
   }).toPass({ timeout: 5000 });
 });

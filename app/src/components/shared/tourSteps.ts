@@ -34,6 +34,12 @@ export const TOUR_STEPS: readonly TourStep[] = [
     spot: "cases",
   },
   {
+    title: "Solve: run a case in OpenFOAM",
+    text: "Solve runs OpenFOAM on the engine's computer, and first checks that the computer has everything a solve needs. New case makes a ready-made case from a template, such as the Ahmed body, and meshes it; Solve under Runs then solves it, or a copy of a case you made. A run's page draws its residuals and forces as it solves and says whether it has converged.",
+    page: "/solve",
+    spot: "new-case",
+  },
+  {
     title: "Repairs: every repair run",
     text: "Repairs lists every repair run, newest first, with its verdict: whether the repair made the mesh better. Each finished run opens its report, and New repair starts another, always on a copy of the case.",
     page: "/repairs",
@@ -47,7 +53,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
   },
   {
     title: "Jobs: what is running",
-    text: "Repairs and A/B tests run as jobs, whether started here or from the engine's dashboard, and Jobs shows their progress live. Cancel stops a job that is running; Report opens one that has finished. A repair run in a terminal shows on the Overview instead.",
+    text: "Repairs, A/B tests, new cases and solves run as jobs, whether started here or from the engine's dashboard, and Jobs shows their progress live. Cancel stops a job that is running; a job's link opens what it makes: a repair's report, an A/B test, a new case or a solve's run. A repair run in a terminal shows on the Overview instead.",
     page: "/jobs",
     spot: "jobs",
   },
@@ -74,15 +80,16 @@ export const FIRST_STEPS_TOUR_STEP: TourStep = {
  * repair, or stays on Jobs, where a job's report opens, before one has finished. With `noRuns` (the engine lists no repair run
  * yet), its Overview step is about Getting started, which the Overview opens with until then. */
 export function engineTourSteps(report: string | null, noRuns = false): readonly TourStep[] {
-  const [, overview, cases, repairs, abtests, jobs, reports] =
-    TOUR_STEPS as readonly [TourStep, TourStep, TourStep, TourStep, TourStep, TourStep, TourStep];
+  const [, overview, cases, solve, repairs, abtests, jobs, reports] =
+    TOUR_STEPS as readonly [TourStep, TourStep, TourStep, TourStep, TourStep, TourStep, TourStep, TourStep];
   return [
     {
       title: "Welcome to Mesh Doctor",
-      text: "This browser is paired with the Mesh Doctor engine on your computer, so these screens show your own cases, repair runs, A/B tests and jobs, read from the engine. Your meshes stay on your computer. The tour opens each screen in turn and takes about a minute.",
+      text: "This browser is paired with the Mesh Doctor engine on your computer, so these screens show your own cases, solves, repair runs, A/B tests and jobs, read from the engine. Your meshes stay on your computer. The tour opens each screen in turn and takes about a minute.",
     },
     noRuns ? FIRST_STEPS_TOUR_STEP : overview,
     cases,
+    solve,
     repairs,
     abtests,
     jobs,

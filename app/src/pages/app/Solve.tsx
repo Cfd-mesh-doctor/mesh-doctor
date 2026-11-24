@@ -216,11 +216,12 @@ function ReadinessCard() {
   );
 }
 
-/** A case to try things on, made from a template: the button that opens the New case dialog. */
+/** A case to try things on, made from a template: the button that opens the New case dialog. The tour's Solve step
+ * rings it. */
 function NewCase() {
   const [open, setOpen] = useState(false);
   return (
-    <Card className="mt-6">
+    <Card className="mt-6" data-tour="new-case">
       <CardHeader className="block">
         <CardTitle>New case</CardTitle>
         <CardDescription>

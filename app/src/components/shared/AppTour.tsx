@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The app's short walkthrough: five steps in plain words on where things are and what each screen tells you, which
+// The app's short walkthrough: eight steps in plain words on where things are and what each screen tells you, which
 // can be skipped at any step. Each step opens the screen it describes and rings the part it means, and the tour stands
 // aside so it shows. It opens with the focus on Next, so Enter steps through it; each new step is read out, as the
 // focus stays put while the words change; and closing it hands the focus back to whatever opened it, or on to the
@@ -22,28 +22,51 @@ export function AppTour({ open, onClose, steps }: { open: boolean; onClose: () =
   const last = step === steps.length - 1;
   // Rings the part of the screen the step means once it's there (a screen shows its data after it opens), and brings
   // it into view when it's off the screen or low on it, where the tour stands, or when it reaches under the tour's box
-  // and would fit above it once scrolled up (Getting started, on a laptop's screen). CSS lifts it above the tour's
-  // shade, and its scroll-margin-top keeps it clear of the header.
+  // and would fit above it once scrolled up (Getting started, on a laptop's screen). It looks again whenever the part
+  // moves on the page in the next two seconds, as the cards above it fill in and push it down (Solve, on a phone). CSS
+  // lifts it above the tour's shade, and its scroll-margin-top keeps it clear of the header.
   useEffect(() => {
     if (!open || !spot) return;
     let lit: Element | null = null;
     let settle: ReturnType<typeof setTimeout> | undefined;
+    let frame = 0;
+    let glided = -Infinity; // when the tour last scrolled to the part smoothly
+    const place = (el: Element) => {
+      const { top, bottom } = el.getBoundingClientRect();
+      const box = document.querySelector("[data-tour-box]")?.getBoundingClientRect().top ?? window.innerHeight;
+      const margin = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
+      // A part that reaches under the box goes up when it would then show above it, or all but its last few pixels.
+      const under = bottom > box && bottom - top <= box - margin + 24;
+      // A smooth scroll to it that may still be on its way heads for where the part was before it moved.
+      const heading = performance.now() - glided < 1000;
+      if (heading || top < 0 || top > window.innerHeight / 2 || (under && top > margin + 1)) {
+        const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+        el.scrollIntoView({ block: "start", behavior: still ? "auto" : "smooth" });
+        if (!still) glided = performance.now();
+      }
+    };
     const light = () => {
       const el = document.querySelector(`[data-tour="${spot}"]`);
       if (!el) return false;
       lit = el;
       el.setAttribute("data-tour-spot", "");
-      settle = setTimeout(() => { // after the screen has settled: opening one scrolls it to the top
-        const { top, bottom } = el.getBoundingClientRect();
-        const box = document.querySelector("[data-tour-box]")?.getBoundingClientRect().top ?? window.innerHeight;
-        const margin = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
-        // A part that reaches under the box goes up when it would then show above it, or all but its last few pixels.
-        const under = bottom > box && bottom - top <= box - margin + 24;
-        if (top < 0 || top > window.innerHeight / 2 || (under && top > margin + 1)) {
-          const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-          el.scrollIntoView({ block: "start", behavior: still ? "auto" : "smooth" });
+      const check = () => { // once the screen has settled: opening one scrolls it to the top
+        clearTimeout(settle);
+        settle = setTimeout(() => place(el), 150);
+      };
+      check();
+      const end = performance.now() + 2000;
+      const y = () => el.getBoundingClientRect().top + window.scrollY; // where it is on the page, however scrolled
+      let was = y();
+      const follow = () => {
+        const now = y();
+        if (Math.abs(now - was) > 1) {
+          was = now;
+          check();
         }
-      }, 150);
+        if (performance.now() < end) frame = requestAnimationFrame(follow);
+      };
+      frame = requestAnimationFrame(follow);
       return true;
     };
     const watch = new MutationObserver(() => {
@@ -53,6 +76,7 @@ export function AppTour({ open, onClose, steps }: { open: boolean; onClose: () =
     return () => {
       watch.disconnect();
       clearTimeout(settle);
+      cancelAnimationFrame(frame);
       lit?.removeAttribute("data-tour-spot");
     };
   }, [open, spot]);

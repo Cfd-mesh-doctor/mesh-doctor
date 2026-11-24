@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { demoTransport } from "@/demo/transport";
 import { renderScreen } from "@/test/render";
 import { AppTour } from "./AppTour";
 import { TOUR_STEPS } from "./tourSteps";
 
-const PARTS = ["tiles", "cases", "repairs", "abtests", "jobs", "verdict"];
+const PARTS = ["tiles", "cases", "new-case", "repairs", "abtests", "jobs", "verdict"];
 
 /** The tour's button, and stand-ins for the parts of the screens it rings. */
 function Opener({ parts }: { parts: string[] }) {
@@ -38,6 +38,13 @@ describe("the app tour", () => {
   it("says, at a report, that your own engine's report offers to start the solver test when it has none", () => {
     const reports = TOUR_STEPS.find((s) => s.spot === "verdict")!;
     expect(reports.text).toMatch(/if not, your own engine's report offers to start that test\.$/);
+  });
+
+  it("opens Solve after Cases, as the sidebar lists them, and rings New case there, the way to a first case to solve", () => {
+    const at = TOUR_STEPS.findIndex((s) => s.page === "/solve");
+    expect(TOUR_STEPS[at - 1]!.page).toBe("/cases");
+    expect(TOUR_STEPS[at]!.spot).toBe("new-case");
+    expect(TOUR_STEPS[at]!.text).toMatch(/New case makes a ready-made case from a template, such as the Ahmed body, and meshes it/);
   });
 
   it("steps through with Enter and back again, then hands the focus back when done", async () => {
@@ -71,7 +78,7 @@ describe("the app tour", () => {
     const at = () => router.state.location.pathname;
     await user.click(screen.getByRole("button", { name: "Take the tour" }));
     expect(at()).toBe("/demo/jobs"); // the welcome stays where the tour was opened
-    for (const page of ["/demo", "/demo/cases", "/demo/repairs", "/demo/abtests", "/demo/jobs",
+    for (const page of ["/demo", "/demo/cases", "/demo/solve", "/demo/repairs", "/demo/abtests", "/demo/jobs",
       "/demo/repairs/ahmed35-medium-fix/report"]) {
       await user.keyboard("{Enter}");
       await waitFor(() => expect(at()).toBe(page));
@@ -109,6 +116,38 @@ describe("the app tour", () => {
     document.body.append(tiles);
     await waitFor(() => expect(ringed()).toEqual(["tiles"]));
     tiles.remove();
+  });
+
+  it("brings the part it rings into view again as the cards above it fill in and push it down, for two seconds", async () => {
+    const user = userEvent.setup();
+    show();
+    const part = document.querySelector<HTMLElement>('[data-tour="tiles"]')!;
+    let top = 100; // high on the screen, where it stays put
+    part.getBoundingClientRect = () => ({ top, bottom: top + 120 }) as DOMRect;
+    const scroll = vi.fn();
+    part.scrollIntoView = scroll;
+    await user.click(screen.getByRole("button", { name: "Take the tour" }));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "requestAnimationFrame", "cancelAnimationFrame", "performance"] });
+    try {
+      const wait = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+      fireEvent.click(screen.getByRole("button", { name: "Next" })); // the Overview, whose tiles it rings
+      await wait(400);
+      expect(ringed()).toEqual(["tiles"]);
+      expect(scroll).not.toHaveBeenCalled();
+      top = 600; // the cards above it filled in: low on the screen, where the tour stands
+      await wait(400);
+      expect(scroll).toHaveBeenCalledTimes(1);
+      expect(scroll).toHaveBeenLastCalledWith({ block: "start", behavior: "smooth" });
+      top = 300; // it moved again while that scroll may still be on its way, to where it was
+      await wait(400);
+      expect(scroll).toHaveBeenCalledTimes(2);
+      await wait(1500); // two seconds on, it's left where it is
+      top = 700;
+      await wait(400);
+      expect(scroll).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("can be skipped, or closed with Escape, at any step, and starts again from the beginning", async () => {

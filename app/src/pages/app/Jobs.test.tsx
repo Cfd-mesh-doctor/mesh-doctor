@@ -219,6 +219,31 @@ describe("the Jobs screen", () => {
     expect(within(details).getByRole("link", { name: "Open on Cases" })).toHaveAttribute("href", "/demo/cases?q=ahmed-coarse");
   });
 
+  it("links a solve and a transient plan to the run's page, running or not, from their rows and their details", async () => {
+    const answers = structuredClone(DEMO_ANSWERS);
+    const items = (answers["/jobs"] as JobList).items;
+    const running = items.find((j) => j.state === "running")!;
+    const done = items.find((j) => j.state === "done")!;
+    const id = "20261124-120000-solve-ahmed-coarse-0001";
+    items.unshift(
+      { ...running, id: "20261124-130000-solve-wheel-wing-0002", kind: "solve", name: "wheel-wing",
+        params: { name: "wheel-wing", to: 500 }, progress: { step: "foamRun", fraction: 0.2, updated: null } },
+      { ...done, id, kind: "solve", name: "ahmed-coarse", params: { name: "ahmed-coarse", to: 2000 } },
+      { ...done, id: "20261124-140000-tplan-ahmed-coarse-0003", kind: "tplan", name: "ahmed-coarse",
+        params: { name: "ahmed-coarse" } },
+    );
+    const view = renderScreen(<Jobs />, { path, at: path, transport: demoTransport(answers, 0) });
+    expect(await screen.findByRole("link", { name: "Follow the run wheel-wing" })).toHaveAttribute("href", "/demo/solve/wheel-wing");
+    expect(screen.getByRole("link", { name: "Open the run ahmed-coarse" })).toHaveAttribute("href", "/demo/solve/ahmed-coarse");
+    expect(screen.getByRole("link", { name: "The transient plan of ahmed-coarse" })).toHaveAttribute("href", "/demo/solve/ahmed-coarse");
+    // Not a repair's report, which a solve or a plan hasn't got.
+    expect(screen.queryByRole("link", { name: /^Report of (wheel-wing|ahmed-coarse)$/ })).toBeNull();
+    view.unmount();
+    renderScreen(<Jobs />, { path, at: `${path}?job=${id}`, transport: demoTransport(answers, 0) });
+    const details = await screen.findByRole("dialog", { name: "ahmed-coarse" });
+    expect(within(details).getByRole("link", { name: "Open the run" })).toHaveAttribute("href", "/demo/solve/ahmed-coarse");
+  });
+
   it("shows every job when the address names a filter it doesn't know", async () => {
     open(`${path}?show=nonsense`);
     expect(await screen.findAllByRole("button", { name: "ahmed25-medium-fix" })).toHaveLength(2);
