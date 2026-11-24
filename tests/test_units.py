@@ -2363,7 +2363,8 @@ echo End
             st, doc, _ = self.api.handle("GET", "/api/v1/disk", {"case": "yours"})
         self.assertEqual((st, doc["case"]), (200, {"name": "yours", "copyMb": 1, "transientMb": 1,
                                                    "solveMb": {"several": 4, "one": 2},
-                                                   "continueMb": {"several": 1, "one": 0}}))
+                                                   "continueMb": {"several": 1, "one": 0},
+                                                   "transientSolveMb": {"several": 6, "one": 3}}))
         st, doc, _ = self.api.handle("GET", "/api/v1/disk", {"case": "nope"})
         self.assertEqual((st, doc["error"]["code"]), (404, "not-found"))
         st, doc, _ = self.api.handle("GET", "/api/v1/disk", {"case": "../x"})
@@ -2480,8 +2481,10 @@ class TransientSolveTest(unittest.TestCase):
             return {os.path.relpath(os.path.join(d, n), root): os.path.getsize(os.path.join(d, n))
                     for d, _, names in os.walk(root) for n in names}
         before, after = sizes(src), sizes(new)
-        # its fields as made, and its settings as copied, before they are made transient
-        self.assertEqual(need, sum(after[r] if r.startswith("0" + os.sep) else before[r] for r in after))
+        # its fields as made, and its settings as copied, before they are made transient (its function objects then
+        # go in a file of their own, a few hundred bytes, as small as those changes)
+        self.assertEqual(need, sum(after[r] if r.startswith("0" + os.sep) else before[r] for r in after
+                                   if r != os.path.join("system", "functions")))
         self.assertIsNone(transient.make_size(os.path.join(self.cases, "made")))     # no result to start from
         mb, what = self.s.disk_need("ahmedT2", 2, steady="steady")
         self.assertEqual(what, "the transient run of steady and its solve need")
@@ -2510,7 +2513,16 @@ class TransientSolveTest(unittest.TestCase):
                      r"writeControl\s+adjustableRunTime;", r"writeInterval\s+0\.0522;"):
             self.assertRegex(control, "(?m)^" + line)
         self.assertNotIn("maxDeltaT", control)                              # the Courant number alone sets it
-        self.assertIn("        writeInterval 1;", control)                 # a function object's own is left alone
+        # its function objects are in system/functions, which OpenFOAM reads again as it solves, with its averaging off
+        self.assertNotRegex(control, r"(?m)^functions\b")
+        self.assertIn(transient.MOVED, control)
+        funcs = got["system/functions"]
+        self.assertTrue(funcs.startswith(transient.FUNCTIONS), funcs[:200])
+        for line in ("#includeFunc residuals(p, U, k, omega)", "forcesTotal         // whole body",
+                     "    writeInterval 1;", "    lRef        1.044;", transient.AVERAGE_ENTRY):
+            self.assertIn(line, funcs)                                      # a function object's own is left alone
+        self.assertNotIn("#remove", funcs)
+        self.assertEqual(transient.average_state(new), "off")
         schemes = got["system/fvSchemes"]
         for line in ("ddtSchemes      { default backward; }", "div(phi,U)      Gauss LUST grad(U);",
                      "div(phi,k)      Gauss limitedLinear 1;"):
@@ -2553,6 +2565,126 @@ class TransientSolveTest(unittest.TestCase):
         self.assertEqual(text[a:b], text[text.index("SIMPLE"):text.rindex("}") + 1])   # comments don't count
         self.assertIsNone(transient.block(text, "PIMPLE"))
         self.assertIsNone(transient.result(os.path.join(self.cases, "made")))          # no result
+
+    def functions_of(self, control, own=None):
+        """A case with this controlDict (and system/functions, `own`), its function objects put in system/functions
+        (transient.functions): (what it said, its controlDict, its system/functions or None)."""
+        import transient
+        case = tempfile.mkdtemp(prefix="functions_", dir=self.cases)
+        os.makedirs(os.path.join(case, "system"))
+        for rel, text in (("system/controlDict", control), ("system/functions", own)):
+            if text is not None:
+                with open(os.path.join(case, rel), "w") as f:
+                    f.write(text)
+        said = transient.functions(case)
+        out = []
+        for rel in ("system/controlDict", "system/functions"):
+            path = os.path.join(case, rel)
+            out.append(transient.read(path) if os.path.isfile(path) else None)
+        return (said, *out)
+
+    def test_a_transient_runs_function_objects_go_in_system_functions_with_its_averaging_off(self):
+        import transient
+        head = "solver          incompressibleFluid;\nendTime         1;\n"
+        # The entries they name ($forceDefaults, $speed) go with them, removed once read; an environment variable
+        # ($FOAM_CASE) stays as it is
+        control = (head + "// forces in N\nforceDefaults\n{\n    type        forces;\n    rhoInf      1.205;\n}\n"
+                   "speed           15;   // m/s\n\nfunctions\n{\n    #includeFunc residuals(p, U)\n\n"
+                   "    forcesTotal { $forceDefaults; patches (modelGroup); }\n"
+                   "    forcesWing  { $forceDefaults; patches (model_wing); magUInf $speed; }\n"
+                   "    paths       { type sets; file \"$FOAM_CASE/x\"; }    // {\n}\n\n// end\n")
+        said, cd, funcs = self.functions_of(control)
+        self.assertTrue(said)
+        self.assertEqual(cd, control[:control.index("functions\n{")] + transient.MOVED + "\n\n// end\n")
+        self.assertEqual(funcs, transient.FUNCTIONS + (
+            "\n// The run's function objects, from its controlDict, and its averaging (Mesh Doctor)\n"
+            "\nforceDefaults\n{\n    type        forces;\n    rhoInf      1.205;\n}\n\nspeed           15;\n"
+            "\n#includeFunc residuals(p, U)\n\nforcesTotal { $forceDefaults; patches (modelGroup); }\n"
+            "forcesWing  { $forceDefaults; patches (model_wing); magUInf $speed; }\n"
+            "paths       { type sets; file \"$FOAM_CASE/x\"; }    // {\n"
+            "\n" + transient.AVERAGE_ENTRY + "\n\n#remove forceDefaults\n#remove speed\n"))
+        # The wheel and wing template's own, as OpenFOAM 14 read it (checked for real: its forces from the moved
+        # macro, and the averaging switched on as it solved, on one process and on two)
+        import templates
+        with open(os.path.join(templates.EXAMPLES, "wheel-wing", "system", "controlDict")) as f:
+            said, cd, funcs = self.functions_of(f.read())
+        self.assertTrue(said)
+        self.assertIn("forceDefaults\n{\n    type        forces;", cd)              # the controlDict keeps its own
+        self.assertIn("forcesWing  { $forceDefaults; patches (model_wing); }", funcs)
+        self.assertTrue(funcs.endswith(transient.AVERAGE_ENTRY + "\n\n#remove forceDefaults\n"), funcs[-300:])
+        # A case with functions of its own in system/functions (OpenFOAM leaves the controlDict's out then): the
+        # averaging goes after them
+        said, cd, funcs = self.functions_of(control, transient.FUNCTIONS + "\n#includeFunc yPlus\n")
+        self.assertEqual((said, cd, funcs), (True, control, transient.FUNCTIONS + "\n#includeFunc yPlus\n\n"
+                                             + transient.AVERAGE_ENTRY + "\n"))
+        # One with no function objects gets just its averaging
+        said, cd, funcs = self.functions_of(head)
+        self.assertEqual((said, cd, funcs), (True, head, transient.FUNCTIONS + "\n// The run's function objects, "
+                                             "from its controlDict, and its averaging (Mesh Doctor)\n\n"
+                                             + transient.AVERAGE_ENTRY + "\n"))
+        # None for one with a fieldAverage of its own (both would write UMean), or that names an entry another way
+        for text in (head + "functions\n{\n    avg { type  fieldAverage; fields (U); }\n}\n",
+                     head + "functions\n{\n    forcesTotal { $:forceDefaults; patches (a); }\n}\n",
+                     head + "functions\n{\n    forcesTotal { $../forceDefaults; patches (a); }\n}\n"):
+            self.assertEqual(self.functions_of(text), (False, text, None), text)
+        own = transient.FUNCTIONS + "\navg { type fieldAverage; fields (U); }\n"
+        self.assertEqual(self.functions_of(head, own), (False, head, own))
+
+    def test_its_averaging_is_switched_on_once_its_forces_settle_and_says_from_when(self):
+        import transient
+        case = os.path.join(self.cases, "avg")
+        os.makedirs(os.path.join(case, "system"))
+        other = "    other { type probes; enabled false; }\n"
+        funcs = transient.FUNCTIONS + "\n" + other + "\n" + transient.AVERAGE_ENTRY + "\n"
+        path = os.path.join(case, "system", "functions")
+        with open(path, "w") as f:
+            f.write(funcs)
+        self.assertEqual((transient.average_state(case), transient.averaging(case)),
+                         ("off", {"from": None, "settled": None, "written": None}))
+        os.utime(path, (1000, 1000))
+        before = time.time()
+        self.assertTrue(transient.switch_on(case, 60))
+        with open(path) as f:
+            self.assertEqual(f.read(), funcs.replace("    enabled         false;", "    enabled         true;"))
+        self.assertGreaterEqual(os.stat(path).st_mtime, before)            # past OpenFOAM's skew: it reads it again
+        os.utime(path, (time.time() - 5, time.time() - 5))
+        stamp = os.stat(path).st_mtime
+        self.assertTrue(transient.switch_on(case, 60))                      # on already: left as it is
+        self.assertEqual((os.stat(path).st_mtime, transient.average_state(case)), (stamp, "on"))
+        self.assertIn(other, transient.read(path))                         # another function object's own stays
+        with open(path, "w") as f:
+            f.write(funcs)
+        later = time.time() + 100                                           # a time moved on before: 60 s past it
+        os.utime(path, (later, later))
+        self.assertTrue(transient.switch_on(case, 60))
+        self.assertAlmostEqual(os.stat(path).st_mtime, later + 60, delta=1)
+        # From when: the latest time written with it, less its totalTime (in the run's own folder or its processor0)
+        doc = {"averaging": {"from": 0.0841, "settled": 0.042}}
+        self.assertEqual(transient.averaging(case, doc), {"from": 0.0841, "settled": 0.042, "written": None})
+        for rel, total in (("0.1/uniform/meanFlowProperties", "0.0159"),
+                           ("processor0/0.105/uniform/meanFlowProperties", "0.0209")):
+            os.makedirs(os.path.dirname(os.path.join(case, rel)), exist_ok=True)
+            with open(os.path.join(case, rel), "w") as f:
+                f.write("FoamFile { object meanFlowProperties; }\n// the p one first\np\n{\n    totalIter 9;\n"
+                        f"    totalTime 1;\n}}\nU\n{{\n    totalIter 10;\n    totalTime {total};\n}}\n")
+        self.assertEqual(transient.averaging(case, doc), {"from": 0.0841, "settled": 0.042, "written": 0.105})
+        self.assertEqual(transient._averaged(case), (0.0841, 0.105))
+        # None without one: a run made before, or a steady case
+        os.remove(path)
+        self.assertEqual((transient.average_state(case), transient.averaging(case, doc), transient.switch_on(case, 60)),
+                         (None, None, False))
+        # Its forces settled: as the transient judge finds it, the later of drag and vertical force; not while they
+        # still drift, nor with no forces
+        settled = os.path.join(self.cases, "settled")
+        os.makedirs(os.path.join(settled, "0"))
+        with open(os.path.join(settled, "0", "U"), "w") as f:
+            f.write("internalField uniform (20 0 0);\n")
+        self.assertIsNone(transient.forces_settled(settled))
+        write_transient_run(settled, 200, 1e-5, 0.8, lambda i: 50 + 40 * math.exp(-i / 8) + math.sin(i / 3))
+        at = transient.forces_settled(settled)
+        self.assertTrue(0.01 < at < 0.1, at)                               # once its start has died away
+        write_transient_run(settled, 200, 1e-5, 0.8, lambda i: 50 + i)      # still drifting
+        self.assertIsNone(transient.forces_settled(settled))
 
     def test_a_transient_run_needs_a_solved_steady_run_whose_settings_it_can_make_transient(self):
         self.steady()
@@ -2655,9 +2787,34 @@ class TransientSolveTest(unittest.TestCase):
         self.assertRefused(self.post({"name": "ahmedT"}), 400, "bad-request", "give the time in s to continue it to")
         self.assertRefused(self.post({"name": "ahmedT", "to": 0.0004}), 400, "bad-request",
                            "solved to 0.0004 s already")
+        # Not averaging yet: its forces haven't settled (it wrote none)
+        self.assertEqual((run["averaging"], self.status().get("averaging")),
+                         ({"from": None, "settled": None, "written": None}, None))
+        self.assertIsNone(self.s.describe("steady")["averaging"])
+        # They had settled by the end of that stretch, so the next one averages from its start
+        forces = os.path.join(case, "postProcessing", "forcesTotal", "0")
+        os.makedirs(forces)
+        with open(os.path.join(forces, "forces.dat"), "w") as f:
+            for i in range(1, 201):
+                f.write(f"{i * 2e-6:g} (({50 + 40 * math.exp(-i / 8) + math.sin(i / 3)} 0 -30) (0 0 0))\n")
+        import transient
+        settled = transient.forces_settled(case)
+        self.assertTrue(0 < settled < 0.0002, settled)
         rc, lines = self.solve("ahmedT", 0.001, 4)
         self.assertEqual((rc, lines[0], lines[-1]), (0, "ahmedT: continuing from 0.0004 s to 0.001 s on 2 processes",
                                                      "ahmedT: solved to 0.001 s"))
+        self.assertIn(f"ahmedT: its forces settled at {settled:g} s: averaging its flow from 0.0004 s", lines)
+        self.assertEqual((transient.average_state(case), self.status()["averaging"]),
+                         ("on", {"from": 0.0004, "settled": settled}))
+        st, run, _ = self.api.handle("GET", "/api/v1/runs/ahmedT", {})
+        self.assertEqual(schema.check(run, self.api.RUN_ONE), [])
+        self.assertEqual(run["averaging"], {"from": 0.0004, "settled": settled, "written": None})
+        uniform = os.path.join(case, "processor0", "0.001", "uniform")         # as OpenFOAM writes it with the time
+        os.makedirs(uniform, exist_ok=True)
+        with open(os.path.join(uniform, "meanFlowProperties"), "w") as f:
+            f.write("U\n{\n    totalIter 4;\n    totalTime 0.0006;\n}\n")
+        self.assertEqual(self.api.handle("GET", "/api/v1/runs/ahmedT", {})[1]["averaging"],
+                         {"from": 0.0004, "settled": settled, "written": 0.001})
         control = self.text("ahmedT", "system/controlDict")
         for line in (r"startFrom\s+startTime;", r"startTime\s+0\.0004;", r"beginTime\s+0\.0004;",
                      r"writeInterval\s+0\.00015;"):
@@ -2825,7 +2982,10 @@ class DiskGuardTest(unittest.TestCase):
         # (mesh MB, purgeWrite, processes[, from the start]): the measured 3.25 and 1.2 times the mesh, keeping 2
         for args, mb in (((100, 2, 6), 325), ((100, 2, 1), 120), ((100, 2, 6, False), 60), ((100, 2, 1, False), 0),
                          ((100, 0, 6), 485), ((100, 0, 1), 240), ((100, 0, 6, False), 380), ((100, 0, 1, False), 240),
-                         ((100, 1, 2), 245), ((100, 9, 2), 485), ((1, 2, 2), 4)):
+                         ((100, 1, 2), 245), ((100, 9, 2), 485), ((1, 2, 2), 4),
+                         # a transient run's written times hold its averages too: 2.1 times as much
+                         ((100, 2, 6, True, True), 567), ((100, 2, 1, True, True), 252),
+                         ((100, 2, 6, False, True), 126), ((100, 0, 1, False, True), 504)):
             self.assertEqual(self.g.solve_mb(*args), mb, args)
         self.assertEqual(self.g.mesh_mb(480_000), 66)                        # the coarse Ahmed body's: 65.6 MB
 

@@ -27,7 +27,7 @@ import tplan
 import validate
 import version
 
-API_VERSION = "1.8"
+API_VERSION = "1.9"
 PREFIX = "/api/v1"
 MAX_BODY = 64 * 1024
 
@@ -564,7 +564,19 @@ RUN = {"type": "object", "required": ["name", "state", "step", "iteration", "sta
                                  "it took (at), its largest Courant number and its model; null for a steady run "
                                  "(API 1.6)", "properties": {
                       "steady": {"type": "string"}, "at": {"type": "string"},
-                      "maxCo": {"type": ["number", "null"]}, "model": {"type": ["string", "null"]}}}}}
+                      "maxCo": {"type": ["number", "null"]}, "model": {"type": ["string", "null"]}}},
+    "averaging": {"type": ["object", "null"], "required": ["from", "settled", "written"],
+                  "description": "a transient run's averaged flow (the fieldAverage meanFlow: UMean, pMean, UPrime2Mean "
+                                 "and pPrime2Mean in each time it writes), which the solve switches on once its forces "
+                                 "have settled, as the transient judge finds that; all null until then; null for a "
+                                 "steady run, or a transient run with none (made before API 1.9, or with a "
+                                 "fieldAverage of its own) (API 1.9)", "properties": {
+                      "from": dict(_NUM_OR_NULL, description="the time it averages from, in s: the latest time "
+                                                             "written with it less its averaging's totalTime, else the "
+                                                             "time the solver was at when it was switched on"),
+                      "settled": dict(_NUM_OR_NULL, description="when its forces had settled then, in s"),
+                      "written": dict(_NUM_OR_NULL, description="the latest time written with it, in s; null before "
+                                                                "one")}}}}
 RUN_ONE = dict(RUN, properties=dict(RUN["properties"], links={
     "type": "object", "description": "itself, Stop, and its convergence judge (GET /judge?case=)"}))
 
@@ -856,7 +868,12 @@ DISK_CASE = {"type": ["object", "null"], "required": ["name", "copyMb", "transie
                                          "transient run of it does too; null when it has no mesh to measure"),
     "continueMb": dict(_SOLVES, description="what a continuation of it writes as it goes: on several processes its "
                                             "latest time joined, and its written times when it keeps every one "
-                                            "(purgeWrite 0); null when it has no mesh to measure")}}
+                                            "(purgeWrite 0), a transient run's with its averaged flow; null when it "
+                                            "has no mesh to measure"),
+    "transientSolveMb": dict(_SOLVES, description="what a transient run of it writes as it goes from the start: as "
+                                                  "solveMb, with its averaged flow in each written time; null when it "
+                                                  "has no joined result to start from, or no mesh to measure "
+                                                  "(API 1.9)")}}
 
 
 @route("GET", "/disk", "The free space for a new case in the cases folder, which the disk guard checks a solve "

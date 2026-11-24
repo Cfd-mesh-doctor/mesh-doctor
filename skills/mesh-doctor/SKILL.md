@@ -92,7 +92,9 @@ their spread, not just "it improved".
   writes them as a cell set). It only reads the case. Then `meshdoctor solve <name> --steady <run> [--co C]
   [--model DDES|URANS] [--to SECONDS]` makes `<name>` a transient run that starts from the steady flow (DDES at a
   Courant number of 1 by default, to 8 flow times). Its `--to`, its progress and its continuations are seconds of
-  flow, not iterations.
+  flow, not iterations. It averages its flow (`UMean`, `pMean`, `UPrime2Mean`, `pPrime2Mean`) once its forces have
+  settled: the solve switches the averaging on then, so the start-up isn't in it, and says from when; so does the run's
+  page in the web app.
 - **Following a solve.** `meshdoctor judge <case>` says whether it has converged: it compares its last 200
   iterations (or time steps) with the 200 before, so it needs 400 of them. For a shorter run, such as a transient run
   of a few hundred time steps, `meshdoctor judge <case> auto` makes each window half the run (10 to 200). The

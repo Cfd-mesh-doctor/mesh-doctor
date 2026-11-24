@@ -84,9 +84,10 @@ function engine(o: {
       }
       if (route === "/cases" && o.cases) return structuredClone(o.cases) as T;
       if (route === "/machine" && o.cases) return { cpus: 16, cores: 8, memoryMb: 32_000, ramLimitMb: null } as T;
-      if (route === "/disk" && o.cases) {                                   // as the coarse Ahmed body takes it
+      if (route === "/disk" && o.cases) {         // as the coarse Ahmed body takes it, a transient solve averaged
         return { freeMb: 402_339, keepMb: 1024, case: { name: "ahmed", copyMb: 65, transientMb: 103,
-          solveMb: { several: 212, one: 78 }, continueMb: { several: 39, one: 0 } } } as T;
+          solveMb: { several: 212, one: 78 }, continueMb: { several: 39, one: 0 },
+          transientSolveMb: { several: 445, one: 164 } } } as T;
       }
       if (route === "/") {
         return { apiVersion: "1.6", version: "0.2.0", jobKinds: o.kinds ?? ["repair", "abtest", "abextend", "case",
@@ -233,8 +234,9 @@ describe("Plan a transient run", () => {
       + "are for.");
     expect(await dialog.findByRole("combobox", { name: "Processes" })).toHaveValue("6");     // the steady run's
     expect(await dialog.findByText(/^The solve needs about/)).toBeInTheDocument();
+    // the new case, then what its solve writes on 6 processes with its averaged flow (API 1.9): 103 + 445 MB
     await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent("The transient run and its solve need "
-      + "about 315 MB of disk space; the disk the cases are on has 393 GB free."));
+      + "about 548 MB of disk space; the disk the cases are on has 393 GB free."));
 
     // URANS: its own name and Courant number, and what the plan gives at it
     await user.click(dialog.getByRole("radio", { name: "URANS" }));

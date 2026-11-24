@@ -2,7 +2,8 @@
 import { describe, expect, it } from "vitest";
 import type { DiskInfo, Job, Run } from "@/engine/types";
 import {
-  MAX_TO, atText, copyName, copyNameProblem, copyTaken, current, diskCheck, diskSpace, formatTime, isTransient,
+  MAX_TO, atText, averagingText, copyName, copyNameProblem, copyTaken, current, diskCheck, diskSpace, formatTime,
+  isTransient,
   madeFrom, madeOfJob, ofText,
   procChoices, runRows, runShown, solveCommand, solveJobOf, solveStep, stretchFraction, stretchesText, suggestedProcs,
   suggestedTime, suggestedTo, timeInput, timeNumber, timeProblem, toProblem, totalForces, transientCommand,
@@ -202,6 +203,29 @@ describe("a transient run", () => {
     expect(solveCommand("ahmed-ddes", 0.0017, null)).toBe("meshdoctor solve ahmed-ddes --to 0.0017");
     expect(copyNameProblem("", new Set(), "the transient run")).toBe("Give the transient run a name.");
   });
+
+  it("says from when it averages its flow: once its forces have settled, as the engine switches it on (API 1.9)", () => {
+    const off = { from: null, settled: null, written: null };
+    expect(averagingText(off, false)).toBe("It averages its flow once its forces have settled: they haven't yet.");
+    expect(averagingText(off, true)).toBe("Its flow isn't averaged: it ended before averaging began, which waits for "
+      + "its forces to settle. Continue it, and it averages once they have.");
+    const fields = "its mean flow and how much it swings (UMean, pMean, UPrime2Mean, pPrime2Mean)";
+    expect(averagingText({ from: 0.00052, settled: 0.0004, written: null }, false)).toBe("Its flow is averaged from "
+      + `0.00052 s, once its forces had settled (at 0.0004 s): each time it writes from now on holds ${fields}.`);
+    expect(averagingText({ from: 0.00052, settled: 0.0004, written: 0.0011 }, true)).toBe("Its flow is averaged from "
+      + `0.00052 s, once its forces had settled (at 0.0004 s): each time it has written since holds ${fields}, the `
+      + "latest at 0.0011 s.");
+    expect(averagingText({ from: 0.00052, settled: 0.0004, written: null }, true)).toBe("Its flow is averaged from "
+      + "0.00052 s, once its forces had settled (at 0.0004 s), but it ended before it wrote a time with the average "
+      + `in. Continue it, and each time it writes holds ${fields}.`);
+    // Settled at the time it switched on, or not said (a status written before it, the average read from the case)
+    expect(averagingText({ from: 0.0005, settled: 0.0005, written: 0.001 }, true)).toBe("Its flow is averaged from "
+      + `0.0005 s, once its forces had settled: each time it has written since holds ${fields}, the latest at 0.001 s.`);
+    expect(averagingText({ from: 0.0005, settled: null, written: 0.001 }, true))
+      .toMatch(/^Its flow is averaged from 0\.0005 s, once its forces had settled: each/);
+    // Not a run that averages: steady, or made by an engine before API 1.9
+    expect([averagingText(null, true), averagingText(undefined, false)]).toEqual([null, null]);
+  });
 });
 
 describe("a run's forces", () => {
@@ -235,6 +259,15 @@ describe("what a solve takes on the disk", () => {
     expect(diskCheck(disk(402_339), null, true, 2)?.need).toBe(212);                    // a case it made, solved
     expect(diskCheck(disk(402_339), null, false, 4)?.need).toBe(39);                    // and continued
     expect(diskCheck(disk(402_339), null, false, 1)?.need).toBe(0);
+  });
+
+  it("counts a new transient run's averaged flow in what it writes, as API 1.9 says it, and an older engine doesn't", () => {
+    const averaged = { transientSolveMb: { several: 445, one: 164 } };
+    expect(diskCheck(disk(402_339, averaged), "transient", true, 6)?.need).toBe(103 + 445);
+    expect(diskCheck(disk(402_339, averaged), "transient", true, 1)?.need).toBe(103 + 164);
+    expect(diskCheck(disk(402_339, averaged), "copy", true, 4)?.need).toBe(277);         // a copy solves steady
+    expect(diskCheck(disk(402_339, averaged), null, false, 4)?.need).toBe(39);            // continueMb has it
+    expect(diskCheck(disk(402_339, { transientSolveMb: null }), "transient", true, 6)?.need).toBe(103 + 212);
   });
 
   it("fits with the space the engine keeps free to spare, as its disk guard checks, and no less", () => {

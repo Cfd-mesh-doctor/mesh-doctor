@@ -194,6 +194,9 @@ test("a solved run's plan starts a transient run of it, as a new case, and its p
   await expect(dialog.getByText("8 flow times over the body (8 L/U: 1.044 m at 40 m/s), which the plan's hours are for."))
     .toBeVisible();
   await expect(dialog.getByLabel("Processes")).toHaveValue("4");
+  // The new case, then what its solve writes with its averaged flow, on the disk the cases are on.
+  await expect(dialog).toContainText(
+    "The transient run and its solve need about 548 MB of disk space; the disk the cases are on has 393 GB free.");
   await dialog.getByLabel("Largest Courant number").fill("3");
   await expect(dialog.getByText("DDES resolves the wake's eddies, which needs about 1: give 2 or less, or pick URANS."))
     .toBeVisible();
@@ -235,6 +238,7 @@ test("a transient run's page follows it in seconds with the transient judge, sto
   await expect(page.getByText("Written to 0.00025 s, on 4 processes.")).toBeVisible();
   await expect(page.getByText("A transient run of ahmed-coarse: DDES at a largest Courant number of 1, from "
     + "ahmed-coarse's iteration 300.")).toBeVisible();
+  await expect(page.getByText("It averages its flow once its forces have settled: they haven't yet.")).toBeVisible();
   await expect(page.getByRole("img", { name: "Initial residual of p per time step, log scale" })).toBeVisible();
   await expect(page.getByRole("img", { name: "Downforce from body over time" })).toBeVisible();
   await expect(page.getByText("Judged over the last 12 time steps, flow along +x, z up")).toBeVisible();
@@ -247,6 +251,8 @@ test("a transient run's page follows it in seconds with the transient judge, sto
 
   await page.getByRole("button", { name: "Stop" }).click();
   await expect(page.getByRole("heading", { name: "Stopped at 0.0005 s" })).toBeVisible();
+  await expect(page.getByText("Its flow isn't averaged: it ended before averaging began, which waits for its forces "
+    + "to settle. Continue it, and it averages once they have.")).toBeVisible();
   // Once it has ended, still the transient judge, in time steps: not GET /judge's, over 200 iterations.
   await expect(page.getByText("The judge on the whole run")).toBeVisible();
   await expect(page.getByText("converged (statistically stationary, every time step converged)")).toBeVisible();

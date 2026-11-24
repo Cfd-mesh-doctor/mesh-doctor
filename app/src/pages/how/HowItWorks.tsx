@@ -377,7 +377,13 @@ export function HowItWorks() {
                 model and can run at a Courant number up to 20, with its outer correctors relaxed above 1. It runs 8
                 flow times over the body (8 L/U) unless <code>--to</code> gives the time in s, and writes four times a
                 stretch; <code>meshdoctor solve &lt;name&gt; --to S</code> continues it from its latest written time.
-                The steady run is only read.
+                It averages its flow from when its forces have settled, so the start-up isn't in the average: its
+                function objects go in <code>system/functions</code>, which OpenFOAM reads again when it changes as the
+                run solves, with a <code>fieldAverage</code> (<code>UMean</code>, <code>pMean</code>,{" "}
+                <code>UPrime2Mean</code> and <code>pPrime2Mean</code>: the mean flow and how much it swings) that is
+                off at first. The solve checks the forces before each stretch and every half a minute as it solves, and
+                switches it on once they have settled; each time written from then on holds the average, and a
+                continuation carries it on. The steady run is only read.
               </p>
               <p>
                 In the web app, a solved run's plan has Start a transient run: you give its name, DDES or URANS, the
@@ -385,7 +391,8 @@ export function HowItWorks() {
                 solve to (8 L/U by default) and the processes. Its page follows it in seconds: its time and time step,
                 its residuals and forces over time, its time step and Courant number (mean and largest) at each time
                 step, and the transient judge over the last half of its time steps, its means from when the forces
-                settled (shaded on the forces chart). Stop and Continue work as for a steady run, with the time in s.
+                settled (shaded on the forces chart), and from when the run averages its flow, with the latest time
+                written with the average. Stop and Continue work as for a steady run, with the time in s.
               </p>
             </Step>
 

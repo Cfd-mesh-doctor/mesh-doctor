@@ -20,7 +20,10 @@ latest to N, on the same processes.  With --steady, the new case <name> is a tra
 (transient.py): its mesh, settings and latest result, solved in time with DDES (the default) or URANS at a largest
 Courant number of C (1 by default) to SECONDS of flow (8 L/U by default), with no potentialFoam, as it starts from the
 steady flow.  A transient run counts seconds, not iterations: its --to, its progress and its continuations are times.
-The run's state is in the case's .meshdoctor-solve.json, which GET /api/v1/runs lists.  The app starts the same thing
+It averages its flow (transient.py's meanFlow: UMean, pMean, UPrime2Mean, pPrime2Mean) from when its forces have
+settled: as it solves, the solve reads its forces every AVERAGE_CHECK_S, and before each stretch, and once they have
+settled (the transient judge's rule) switches the averaging on, which OpenFOAM takes up at its next time step; its
+status says from when.  The run's state is in the case's .meshdoctor-solve.json, which GET /api/v1/runs lists.  The app starts the same thing
 as a `solve` job (POST /api/v1/jobs, with a `source` to solve a copy, a `template` to make the case first, or a
 `steady` run to start a transient one from), which runs `solve.py run`; Stop (POST /api/v1/runs/{name}/stop) ends it
 at a written time.  Before a solve starts, the disk guard (diskguard.py) checks that the new case it makes and
@@ -49,6 +52,7 @@ NAME_RULE = "a case name is letters, digits and _ . - (not . or - first), at mos
 WHOLE = "a steady run counts whole iterations: give a whole number"
 SKEW_S = 60     # OpenFOAM re-reads a changed controlDict only once its time is past the one it read by more than its
                 # fileModificationSkew (10 s in OpenFOAM 14, 30 s in some), so a Stop moves the file's time on past it
+AVERAGE_CHECK_S = 30            # a transient run's forces are read this often as it solves, until they have settled
 
 
 def now():
@@ -258,16 +262,19 @@ def disk(name):
     """GET /disk's case: what solving case `name` takes on the disk, in MB.  A copy of it (copyMb), a transient run of
     it (transientMb: its copy, with its latest result in place of its initial fields; None with no joined result),
     and what a solve writes as it goes, on several processes or one (diskguard.solve_mb): from the start (solveMb),
-    as a copy of it or a transient run of it does too, and continued (continueMb); None with no mesh to measure."""
+    as a copy of it does too, and continued (continueMb), a transient run's with its averages; and a transient run of
+    it from the start (transientSolveMb, with its averages; None with no joined result); None with no mesh to
+    measure."""
     case = case_dir(name)
     mesh, purge, made = _mesh_mb(case), _purge(case), transient.make_size(case)
+    averaged = transient_of(case) is not None
 
-    def solves(first):
-        return None if mesh is None else {k: diskguard.solve_mb(mesh, purge, n, first)
+    def solves(first, avg=averaged):
+        return None if mesh is None else {k: diskguard.solve_mb(mesh, purge, n, first, avg)
                                           for k, n in (("several", 2), ("one", 1))}
     return {"name": name, "copyMb": diskguard.mb(templates.copy_size(case)),
             "transientMb": None if made is None else diskguard.mb(made), "solveMb": solves(True),
-            "continueMb": solves(False)}
+            "continueMb": solves(False), "transientSolveMb": None if made is None else solves(True, True)}
 
 
 def disk_need(name, nproc, source=None, template=None, size=None, steady=None):
@@ -287,12 +294,14 @@ def disk_need(name, nproc, source=None, template=None, size=None, steady=None):
         if made is None or mesh is None:
             return None
         what = f"the copy of {source}" if source is not None else f"the transient run of {steady}"
-        return diskguard.mb(made) + diskguard.solve_mb(mesh, _purge(src), nproc), f"{what} and its solve need"
+        return (diskguard.mb(made) + diskguard.solve_mb(mesh, _purge(src), nproc, averaged=steady is not None),
+                f"{what} and its solve need")
     case = case_dir(name)
     mesh, first = _mesh_mb(case), latest(case) == 0
     if mesh is None:
         return None
-    return (diskguard.solve_mb(mesh, _purge(case), nproc if first else split(case) or 1, first),
+    return (diskguard.solve_mb(mesh, _purge(case), nproc if first else split(case) or 1, first,
+                               transient_of(case) is not None),
             f"the solve of {name} needs" if first else f"the continuation of {name} needs")
 
 
@@ -406,10 +415,12 @@ def describe(name):
     state = st.get("state")
     if state == "running" and not solving(name):
         state = "interrupted"
+    of = transient_of(case)
     return {"name": name, "state": state, "step": st.get("step") or "", "iteration": st.get("iteration"),
             "start": st.get("start", 0), "end": st.get("end"), "written": latest(case), "nProcs": st.get("nProcs"),
             "stretches": st.get("stretches", []), "started": st.get("started"), "updated": st.get("time"),
-            "finished": st.get("finished"), "error": st.get("error"), "transient": transient_of(case)}
+            "finished": st.get("finished"), "error": st.get("error"), "transient": of,
+            "averaging": transient.averaging(case, st) if of else None}
 
 
 # --------------------------------------------------------------------------
@@ -426,6 +437,8 @@ class Status:
                     "start": start_at, "end": end, "nProcs": nproc, "started": now(), "time": now(),
                     "finished": None, "error": None, "fraction": 0.0, "stretches": old.get("stretches", []),
                     "pid": os.getpid(), "pidStart": jobs.started(os.getpid())}
+        if old.get("averaging"):                # a transient run's: when its averaging was switched on
+            self.doc["averaging"] = old["averaging"]
         self._write()
 
     def step(self, step, fraction, **more):
@@ -679,9 +692,14 @@ def _solve(case, name, first, start_at, to, nproc, status, unsteady=False):
                 return _fail(status, "potentialFoam", rc)
     log = "log.foamRun" if first else f"log.foamRun_to_{to}"
     status.step("solving", 0.05)
+    # A transient run averages its flow from when its forces have settled: in an earlier stretch, or as it solves
+    average = unsteady and transient.average_state(case) == "off"
+    if average and _average(case, name, status, start_at):
+        average = False
     p = _foam(case, f"nice -n 5 {mpi}foamRun{par}", log)
     seen, it = 0, start_at
     span = (to - start_at) if unsteady else max(1, to - start_at)
+    checked = time.monotonic()
     while True:
         try:
             rc = p.wait(timeout=POLL_S)
@@ -689,6 +707,9 @@ def _solve(case, name, first, start_at, to, nproc, status, unsteady=False):
         except subprocess.TimeoutExpired:
             seen, it = _iteration(os.path.join(case, log), seen, it)
             status.step("solving", round(0.05 + 0.92 * (it - start_at) / span, 3) if span > 0 else 0.05, iteration=it)
+            if average and time.monotonic() - checked >= AVERAGE_CHECK_S:
+                checked = time.monotonic()
+                average = not _average(case, name, status, it)
     seen, it = _iteration(os.path.join(case, log), seen, it)
     status.doc["iteration"] = it
     stopped = re.search(r"^[ \t]*stopAt[ \t]+writeNow[ \t]*;", _plain(os.path.join(case, "system", "controlDict")),
@@ -709,6 +730,19 @@ def _solve(case, name, first, start_at, to, nproc, status, unsteady=False):
     else:
         _say(f"{name}: solved to iteration {it}" + ("" if state == "done" else f", stopped before {to}"))
     return 0
+
+
+def _average(case, name, status, at):
+    """Switch a transient run's averaging on (transient.switch_on) once its forces have settled
+    (transient.forces_settled), from time `at`, where the solver is, and say so in its status (averaging: from,
+    settled).  True once it is on."""
+    settled = transient.forces_settled(case)
+    if settled is None or not transient.switch_on(case, SKEW_S):
+        return False
+    status.doc["averaging"] = {"from": at, "settled": settled}
+    status._write()
+    _say(f"{name}: its forces settled at {settled:g} s: averaging its flow from {at:g} s")
+    return True
 
 
 def _dictionary(case, rel):

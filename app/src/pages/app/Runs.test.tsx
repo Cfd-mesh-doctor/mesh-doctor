@@ -456,7 +456,9 @@ describe("a run's page", () => {
 
   it("follows a transient run in seconds: its time and time step, what it started from, its charts over time", async () => {
     const user = userEvent.setup();
-    runPage("t", { made: { t: { transientOf: "s" } }, runs: [T()], jobs: [job("t", "running")], live: transientLive });
+    const off = { from: null, settled: null, written: null };                 // averaging, until its forces settle
+    runPage("t", { made: { t: { transientOf: "s" } }, runs: [T({ averaging: off })], jobs: [job("t", "running")],
+      live: transientLive });
     expect(await screen.findByText("Solve · a transient run of s · to 0.001 s")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Solving (foamRun)" })).toBeInTheDocument();
     expect(screen.getByRole("progressbar", { name: "Progress of the solve of t" })).toHaveAttribute("aria-valuenow", "50");
@@ -465,6 +467,7 @@ describe("a run's page", () => {
     expect(screen.getByText("Written to 0.00025 s, on 4 processes.")).toBeInTheDocument();
     expect(screen.getByText(/^A transient run of/)).toHaveTextContent(
       "A transient run of s: DDES at a largest Courant number of 1, from s's iteration 300.");
+    expect(screen.getByText("It averages its flow once its forces have settled: they haven't yet.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "s" })).toHaveAttribute("href", "/app/solve/s");
     expect(screen.getByRole("img", { name: "Initial residual of p per time step, log scale" })).toBeInTheDocument();
     expect(screen.getByText(/^Initial residual at each time step, log scale/)).toBeInTheDocument();
@@ -491,7 +494,8 @@ describe("a run's page", () => {
   it("judges a transient run that has ended in time steps, plans none of it, and continues it by time", async () => {
     const user = userEvent.setup();
     const ended = T({ state: "stopped", step: "done", iteration: 0.00025, written: 0.00025, end: 0.001,
-      stretches: [{ from: 0, to: 0.00025 }], finished: HOUR_AGO });
+      stretches: [{ from: 0, to: 0.00025 }], finished: HOUR_AGO,
+      averaging: { from: 0.00012, settled: 0.0001, written: 0.00025 } });
     const { posted, judged } = runPage("t", { made: { t: { transientOf: "s" } }, runs: [ended], live: transientLive });
     expect(await screen.findByRole("heading", { name: "Stopped at 0.00025 s" })).toBeInTheDocument();
     expect(screen.getByText("Solved 0 → 0.00025 s, on 4 processes.")).toBeInTheDocument();
@@ -502,6 +506,10 @@ describe("a run's page", () => {
     expect(screen.getByText("The means are from 0.0001 s on, when its forces settled.")).toBeInTheDocument();
     expect(screen.getByText(/The shaded part, from when they settled, is what it averages\.$/)).toBeInTheDocument();
     expect(screen.getByText("averaged")).toBeInTheDocument();
+    // and what it averages, from when it switched averaging on
+    expect(screen.getByText(/^Its flow is averaged from/)).toHaveTextContent("Its flow is averaged from 0.00012 s, once its "
+      + "forces had settled (at 0.0001 s): each time it has written since holds its mean flow and how much it swings "
+      + "(UMean, pMean, UPrime2Mean, pPrime2Mean), the latest at 0.00025 s.");
     expect(judged).toEqual([]);                                  // not GET /judge's 200 iterations
     expect(screen.queryByRole("heading", { name: "Plan a transient run" })).toBeNull();
 

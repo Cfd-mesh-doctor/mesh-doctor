@@ -335,7 +335,7 @@ export const DESIGN: DocSection[] = [
             [
               "`GET /disk`",
               "(new)",
-              "the free space for a new case in the cases folder (inside WSL 2, at most that of the Windows drive that holds Linux's own disk), which the disk guard checks a solve against; with `?case=`, what solving that case takes on the disk: a copy of it, a transient run of it, and a solve from the start or continued, on several processes or one (API 1.7)"
+              "the free space for a new case in the cases folder (inside WSL 2, at most that of the Windows drive that holds Linux's own disk), which the disk guard checks a solve against; with `?case=`, what solving that case takes on the disk: a copy of it, a transient run of it, and a solve from the start or continued, on several processes or one (API 1.7); a new transient run's solve from the start with its averaged flow, `transientSolveMb` (API 1.9)"
             ],
             [
               "`GET /check`",
@@ -365,7 +365,7 @@ export const DESIGN: DocSection[] = [
             [
               "`GET /runs`, `GET /runs/{name}`",
               "(new)",
-              "solves of cases Mesh Doctor made (`solve` jobs, and `meshdoctor solve` in a terminal), newest first: each run's state (`running`, `done`, `stopped` at a written iteration, `failed`, `cancelled`, or `interrupted` when nothing solves it any more: no job, and no solve in a terminal), the iteration it is at, the latest one written and the stretches solved so far (a transient run's in seconds, with `transient`: the steady run it started from, the time of the result it took, its largest Courant number and its model); one run adds its links, its judge (`GET /judge?case=`) among them (API 1.6)"
+              "solves of cases Mesh Doctor made (`solve` jobs, and `meshdoctor solve` in a terminal), newest first: each run's state (`running`, `done`, `stopped` at a written iteration, `failed`, `cancelled`, or `interrupted` when nothing solves it any more: no job, and no solve in a terminal), the iteration it is at, the latest one written and the stretches solved so far (a transient run's in seconds, with `transient`: the steady run it started from, the time of the result it took, its largest Courant number and its model); a transient run's `averaging` says from when it averages its flow, which its solve switches on once its forces have settled, when they settled and the latest time written with the average (API 1.9); one run adds its links, its judge (`GET /judge?case=`) among them (API 1.6)"
             ],
             [
               "`GET /runs/{name}/live`",

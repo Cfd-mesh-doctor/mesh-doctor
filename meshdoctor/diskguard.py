@@ -18,6 +18,9 @@ A stretch writes about four times (solve.write_interval) and keeps as many as it
 templates keep 2; 0 keeps every one); on several processes, its latest time is joined at its end.  So a solve from
 the start of a template's case writes 3.25 times its mesh on several processes, as measured (3.2 for all three), and
 1.2 times on one.  A continuation adds its latest time, joined, and only when every written time is kept, its own.
+A transient run's written times hold its averages too, once its forces have settled (transient.py): UMean, pMean,
+UPrime2Mean and pPrime2Mean, 11 values a cell, 1.1 times a written time's own fields (U, p, k, omega and nut, and the
+flux on about 3 faces a cell: about 10), worked out from those fields' sizes; the guard counts them in each one.
 1 GB is kept free for everything else.
 
 The free space is that of the cases folder's disk.  Inside WSL 2, Linux's own disk is a file on a Windows drive (C:,
@@ -31,6 +34,7 @@ MB = 1024 * 1024
 MESH_KB_PER_CELL = 0.14                         # a mesh written as the templates write theirs
 SPLIT = 1.05                                    # the mesh's split onto the processes, times the mesh
 WRITTEN = {"split": 0.8, "joined": 0.6}         # a written time, times the mesh
+AVERAGED = 1.1                                  # a transient run's averages, times a written time's own fields
 STRETCH = 4                                     # the times a stretch writes (solve.write_interval)
 KEEP_MB = 1024                                  # kept free for everything else
 WINDOWS_DRIVE = "/mnt/c"                        # inside WSL 2: the Windows drive that holds Linux's own disk
@@ -74,16 +78,18 @@ def mesh_mb(cells):
     return _up(cells * MESH_KB_PER_CELL / 1024)
 
 
-def solve_mb(mesh, purge, nproc, first=True):
+def solve_mb(mesh, purge, nproc, first=True, averaged=False):
     """The MB a stretch of a solve writes as it goes, from the MB of its mesh, on `nproc` processes, keeping `purge`
     written times (its controlDict's purgeWrite; 0: every one).  From the start (`first`): its split and the times it
     keeps; a continuation: the times it adds, none when it keeps only the latest few (each new one takes an older
-    one's place), as its split is there already.  On several processes, its latest time joined too."""
+    one's place), as its split is there already.  On several processes, its latest time joined too.  A transient
+    run's written times hold its averages too (`averaged`: AVERAGED more)."""
     several = nproc > 1
+    grow = 1 + AVERAGED if averaged else 1
     kept = purge if 0 < purge < STRETCH else STRETCH
     added = kept if first else (0 if purge > 0 else STRETCH)
-    times = (SPLIT if several and first else 0) + added * WRITTEN["split" if several else "joined"]
-    return _up(mesh * (times + (WRITTEN["joined"] if several else 0)))
+    times = (SPLIT if several and first else 0) + added * WRITTEN["split" if several else "joined"] * grow
+    return _up(mesh * (times + (WRITTEN["joined"] * grow if several else 0)))
 
 
 def _up(x):

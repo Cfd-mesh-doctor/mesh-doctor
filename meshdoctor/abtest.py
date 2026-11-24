@@ -497,6 +497,13 @@ def settle(series, batch=5):
     return None if d == half else series[d * batch][0]
 
 
+def settled_at(frc, d, group):
+    """When force group `group`'s drag and vertical force had both settled (settle): the later of the two, or None
+    while either hasn't.  The transient judge's `settled`, and when solve.py starts a transient run's averaging."""
+    at = [settle(caseinfo.series(frc, d, group, w)) for w in ("drag", "vertical")]
+    return None if None in at else max(at)
+
+
 STEP_TOL = 1e-3       # p initial residual at the last outer iteration of a converged time step
 CO_LIMIT = 1.0        # max Courant number that scale-resolving runs (DES/LES) should stay under
 
@@ -594,8 +601,7 @@ def judge(case, window=200, group=None, avg_from=None, logs=None, to=None, steps
         out["to"] = to
     settled = None
     if unsteady:                           # its averages start when both its forces have settled
-        at = [settle(caseinfo.series(frc, d, group, w)) for w in ("drag", "vertical")]
-        settled = None if None in at else max(at)
+        settled = settled_at(frc, d, group)
         out["settled"] = settled
     # averaged forces with uncertainty over [avg_from, end] (default: last 2 windows):
     # main group's vertical force and drag, then every other group's vertical force

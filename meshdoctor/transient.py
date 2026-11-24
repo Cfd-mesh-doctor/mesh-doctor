@@ -12,9 +12,16 @@ URANS keeps the steady run's own RAS model, in time, and can run at a larger Cou
 Courant number asked for.  The new case's times are seconds of flow from 0; by default it runs 8 flow times over the
 body (8 L/U, from its force coefficients' lRef and its freestream speed, as the transient plan takes them).  The
 steady run is only read, and its latest result must be joined (solve.py joins it when a stretch ends).
-"""
-import math, os, re, shutil
 
+Its function objects go in system/functions, which OpenFOAM 14 reads again when the file changes as the run solves (a
+controlDict's own `functions` it reads only at the start), with one more that is off at first: a fieldAverage
+(meanFlow) of U and p.  solve.py switches it on once the run's forces have settled, as the transient judge finds
+that (abtest.settled_at), so each time written from then on holds the mean flow and how much it swings: UMean, pMean,
+UPrime2Mean and pPrime2Mean, which a continuation averages on.  averaging() says from when.
+"""
+import gzip, math, os, re, shutil, statistics, textwrap, time, zlib
+
+import abtest
 import caseinfo
 import templates
 import tplan
@@ -32,6 +39,21 @@ LES = """LES
     delta           maxDeltaxyz;
     maxDeltaxyzCoeffs { deltaCoeff 1; }
 }"""
+AVERAGE = "meanFlow"             # the fieldAverage that averages a transient run's flow, in system/functions
+AVERAGE_ENTRY = AVERAGE + """    // the mean flow and how much it swings: UMean, pMean, UPrime2Mean, pPrime2Mean
+{                   // off until the forces settle, when Mesh Doctor switches it on as the run solves
+    type            fieldAverage;
+    libs            ("libfieldFunctionObjects.so");
+    writeControl    writeTime;
+    enabled         false;
+    mean            yes;
+    prime2Mean      yes;
+    fields          (U p);
+}"""
+FUNCTIONS = ('FoamFile\n{\n    format      ascii;\n    class       dictionary;\n    location    "system";\n'
+             '    object      functions;\n}\n')
+MOVED = "// functions: in system/functions, which OpenFOAM reads again when it changes as the run solves (Mesh Doctor)"
+OFF = r"(?m)^([ \t]*enabled[ \t]+)(?:false|no|off)([ \t]*;)"
 
 
 def read(path):
@@ -47,10 +69,16 @@ def plain(text):
     return re.sub(r"/\*.*?\*/|//[^\n]*", "", text, flags=re.S)
 
 
+def blank(text):
+    """An OpenFOAM dictionary's text with its comments blanked: the same places, so what is found in it is found in
+    the text too."""
+    return re.sub(r"/\*.*?\*/|//[^\n]*", lambda m: re.sub(r"[^\n]", " ", m.group(0)), text, flags=re.S)
+
+
 def block(text, name):
     """(start, end) of the dictionary `name { ... }` that starts a line of `text`, braces matched and comments left
     out (blanked, so the places are the text's own); None when it has none."""
-    text = re.sub(r"/\*.*?\*/|//[^\n]*", lambda m: re.sub(r"[^\n]", " ", m.group(0)), text, flags=re.S)
+    text = blank(text)
     m = re.search(r"^[ \t]*" + re.escape(name) + r"\s*\{", text, re.M)
     if not m:
         return None
@@ -227,3 +255,144 @@ def settings(case, co, model, to, dt):
     _edit(case, os.path.join("system", "fvSolution"), solution)
     if model == "DDES":
         _edit(case, os.path.join("constant", "momentumTransport"), transport)
+    functions(case)
+
+
+def _write(path, text):
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+
+
+def _fieldAverage(text):
+    return re.search(r"\btype\s+fieldAverage\s*;", plain(text)) is not None
+
+
+def functions(case):
+    """Put the new run's function objects in system/functions with its averaging (AVERAGE_ENTRY, off at first):
+    OpenFOAM 14 reads that file again when it changes as the run solves, so switch_on() can start the averaging then;
+    a controlDict's own `functions` it reads only at the start, and not at all once system/functions is there.  The
+    controlDict's top-level entries that the functions name ($forceDefaults) go with them, removed once read
+    (#remove).  No averaging is added to a case with a fieldAverage of its own (both would write UMean), nor to one
+    whose functions name an entry some other way ($:name, $../name), which the move could break: False then."""
+    own = os.path.join(case, "system", "functions")
+    if os.path.isfile(own):                     # the steady run's own: OpenFOAM leaves the controlDict's out then
+        text = read(own)
+        if _fieldAverage(text) or block(text, AVERAGE):
+            return False
+        _write(own, text.rstrip("\n") + "\n\n" + AVERAGE_ENTRY + "\n")
+        return True
+    path = os.path.join(case, "system", "controlDict")
+    text = read(path)
+    span = block(text, "functions")
+    inner = text[blank(text).index("{", span[0]) + 1:span[1] - 1] if span else ""
+    bare = plain(inner)
+    if _fieldAverage(inner) or re.search(r"\$(?![\w{])", bare):
+        return False
+    rest = text[:span[0]] + text[span[1]:] if span else text
+    carried, names = [], []
+    for name in dict.fromkeys(re.findall(r"\$\{?(\w+)", bare)):
+        got = block(rest, name)
+        if got is None:
+            m = re.search(r"(?m)^[ \t]*" + re.escape(name) + r"[ \t]+[^;{}\n]*;", blank(rest))
+            if m is None:
+                continue                        # not the controlDict's: an environment variable, say
+            got = m.span()
+        carried.append(rest[got[0]:got[1]].strip())
+        names.append(name)
+    parts = [FUNCTIONS, "\n// The run's function objects, from its controlDict, and its averaging (Mesh Doctor)\n"]
+    parts += ["\n" + c + "\n" for c in carried]
+    body = textwrap.dedent(inner).strip()
+    if body:
+        parts.append("\n" + body + "\n")
+    parts.append("\n" + AVERAGE_ENTRY + "\n")
+    parts += ["\n" + "".join(f"#remove {n}\n" for n in names)] if names else []
+    _write(own, "".join(parts))
+    if span:
+        _write(path, text[:span[0]] + MOVED + text[span[1]:])
+    return True
+
+
+def average_state(case):
+    """The run's averaging (AVERAGE in system/functions): "off" until switch_on(), "on", or None when it has none."""
+    text = blank(read(os.path.join(case, "system", "functions")))
+    span = block(text, AVERAGE)
+    if span is None:
+        return None
+    return "off" if re.search(OFF, text[span[0]:span[1]]) else "on"
+
+
+def switch_on(case, skew):
+    """Switch the run's averaging on (enabled true in system/functions), then move the file's time on past OpenFOAM's
+    fileModificationSkew (by `skew` s, as Stop does controlDict's), so the solver reads it again at its next time step
+    and averages from there.  True once it is on; False when the run has no averaging to switch on."""
+    path = os.path.join(case, "system", "functions")
+    text = read(path)
+    span = block(text, AVERAGE)
+    if span is None:
+        return False
+    m = re.search(OFF, blank(text)[span[0]:span[1]])
+    if m is None:
+        return True                             # on already
+    try:
+        old = os.stat(path).st_mtime
+    except OSError:
+        return False
+    _write(path, text[:span[0] + m.start()] + m.group(1) + "true" + m.group(2) + text[span[0] + m.end():])
+    t = max(time.time(), old + skew)
+    os.utime(path, (t, t))
+    return True
+
+
+def forces_settled(case):
+    """When the run's forces settled, in s, as the transient judge finds it (abtest.settled_at: its total force
+    group's drag and vertical force, by MSER-5); None while they haven't, or when it has no forces to read."""
+    try:
+        frc = abtest.parse_forces(case)
+        d = caseinfo.describe(case, frc)
+        return abtest.settled_at(frc, d, d["total"])
+    except (OSError, ValueError, KeyError, IndexError, ZeroDivisionError, statistics.StatisticsError):
+        return None
+
+
+def _averaged(case):
+    """(from, written): the latest written time that holds the averaging's own record (uniform/meanFlowProperties), in
+    the run's own folder or its processor0, and that time less the record's totalTime of U; None before one."""
+    best = None
+    for root in (case, os.path.join(case, "processor0")):
+        for name, value in times(root).items():
+            props = os.path.join(root, name, "uniform", AVERAGE + "Properties")
+            if (best is None or value > best[1]) and (os.path.isfile(props) or os.path.isfile(props + ".gz")):
+                best = (props, value)
+    if best is None:
+        return None
+    props, value = best
+    text = read(props)
+    if not text and os.path.isfile(props + ".gz"):
+        try:
+            with gzip.open(props + ".gz", "rt", encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except (OSError, EOFError, zlib.error):
+            return None
+    m = re.search(r"(?<![\w.])U\s*\{[^}]*?\btotalTime\s+(" + caseinfo.NUM + r")\s*;", plain(text))
+    if m is None:
+        return None
+    return float(f"{value - float(m.group(1)):.6g}"), value
+
+
+def averaging(case, doc=None):
+    """A transient run's averaging, as GET /runs/{name} gives it: {from, settled, written} in s; None when it has none
+    (made before Mesh Doctor averaged a transient run's flow, or with a fieldAverage of its own).  All three are None
+    until it is switched on.  `from`: when it began, from the latest time written with it (that time less its
+    totalTime), else as its status says (`doc`: the time the solver was at when it was switched on); `settled`: when
+    the forces had settled then; `written`: that latest time, None before one."""
+    state = average_state(case)
+    if state is None:
+        return None
+    out = {"from": None, "settled": None, "written": None}
+    if state == "on":
+        rec = (doc or {}).get("averaging") or {}
+        out.update({"from": rec.get("from"), "settled": rec.get("settled")})
+        got = _averaged(case)
+        if got:
+            out["from"], out["written"] = got
+    return out

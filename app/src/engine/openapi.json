@@ -1755,7 +1755,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.8"
+    "version": "1.9"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -2775,7 +2775,7 @@
                       "description": "with `case`: what solving it takes on the disk",
                       "properties": {
                         "continueMb": {
-                          "description": "what a continuation of it writes as it goes: on several processes its latest time joined, and its written times when it keeps every one (purgeWrite 0); null when it has no mesh to measure",
+                          "description": "what a continuation of it writes as it goes: on several processes its latest time joined, and its written times when it keeps every one (purgeWrite 0), a transient run's with its averaged flow; null when it has no mesh to measure",
                           "properties": {
                             "one": {
                               "description": "on one process",
@@ -2835,6 +2835,29 @@
                           "minimum": 0,
                           "type": [
                             "integer",
+                            "null"
+                          ]
+                        },
+                        "transientSolveMb": {
+                          "description": "what a transient run of it writes as it goes from the start: as solveMb, with its averaged flow in each written time; null when it has no joined result to start from, or no mesh to measure (API 1.9)",
+                          "properties": {
+                            "one": {
+                              "description": "on one process",
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "several": {
+                              "description": "on several processes",
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "several",
+                            "one"
+                          ],
+                          "type": [
+                            "object",
                             "null"
                           ]
                         }
@@ -4374,6 +4397,41 @@
                     "items": {
                       "items": {
                         "properties": {
+                          "averaging": {
+                            "description": "a transient run's averaged flow (the fieldAverage meanFlow: UMean, pMean, UPrime2Mean and pPrime2Mean in each time it writes), which the solve switches on once its forces have settled, as the transient judge finds that; all null until then; null for a steady run, or a transient run with none (made before API 1.9, or with a fieldAverage of its own) (API 1.9)",
+                            "properties": {
+                              "from": {
+                                "description": "the time it averages from, in s: the latest time written with it less its averaging's totalTime, else the time the solver was at when it was switched on",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "settled": {
+                                "description": "when its forces had settled then, in s",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "written": {
+                                "description": "the latest time written with it, in s; null before one",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "from",
+                              "settled",
+                              "written"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
                           "end": {
                             "description": "the iteration the latest stretch runs to (endTime)",
                             "type": [
@@ -4567,6 +4625,41 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "averaging": {
+                      "description": "a transient run's averaged flow (the fieldAverage meanFlow: UMean, pMean, UPrime2Mean and pPrime2Mean in each time it writes), which the solve switches on once its forces have settled, as the transient judge finds that; all null until then; null for a steady run, or a transient run with none (made before API 1.9, or with a fieldAverage of its own) (API 1.9)",
+                      "properties": {
+                        "from": {
+                          "description": "the time it averages from, in s: the latest time written with it less its averaging's totalTime, else the time the solver was at when it was switched on",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "settled": {
+                          "description": "when its forces had settled then, in s",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "written": {
+                          "description": "the latest time written with it, in s; null before one",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "from",
+                        "settled",
+                        "written"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
                     "end": {
                       "description": "the iteration the latest stretch runs to (endTime)",
                       "type": [
@@ -4853,6 +4946,41 @@
                     "run": {
                       "description": "the run, as GET /runs/{name} has it",
                       "properties": {
+                        "averaging": {
+                          "description": "a transient run's averaged flow (the fieldAverage meanFlow: UMean, pMean, UPrime2Mean and pPrime2Mean in each time it writes), which the solve switches on once its forces have settled, as the transient judge finds that; all null until then; null for a steady run, or a transient run with none (made before API 1.9, or with a fieldAverage of its own) (API 1.9)",
+                          "properties": {
+                            "from": {
+                              "description": "the time it averages from, in s: the latest time written with it less its averaging's totalTime, else the time the solver was at when it was switched on",
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "settled": {
+                              "description": "when its forces had settled then, in s",
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "written": {
+                              "description": "the latest time written with it, in s; null before one",
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "from",
+                            "settled",
+                            "written"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "end": {
                           "description": "the iteration the latest stretch runs to (endTime)",
                           "type": [
@@ -5161,6 +5289,41 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "averaging": {
+                      "description": "a transient run's averaged flow (the fieldAverage meanFlow: UMean, pMean, UPrime2Mean and pPrime2Mean in each time it writes), which the solve switches on once its forces have settled, as the transient judge finds that; all null until then; null for a steady run, or a transient run with none (made before API 1.9, or with a fieldAverage of its own) (API 1.9)",
+                      "properties": {
+                        "from": {
+                          "description": "the time it averages from, in s: the latest time written with it less its averaging's totalTime, else the time the solver was at when it was switched on",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "settled": {
+                          "description": "when its forces had settled then, in s",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "written": {
+                          "description": "the latest time written with it, in s; null before one",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "from",
+                        "settled",
+                        "written"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
                     "end": {
                       "description": "the iteration the latest stretch runs to (endTime)",
                       "type": [

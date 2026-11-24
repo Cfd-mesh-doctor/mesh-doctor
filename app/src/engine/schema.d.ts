@@ -1495,7 +1495,7 @@ export interface operations {
                     "application/json": {
                         /** @description with `case`: what solving it takes on the disk */
                         case: {
-                            /** @description what a continuation of it writes as it goes: on several processes its latest time joined, and its written times when it keeps every one (purgeWrite 0); null when it has no mesh to measure */
+                            /** @description what a continuation of it writes as it goes: on several processes its latest time joined, and its written times when it keeps every one (purgeWrite 0), a transient run's with its averaged flow; null when it has no mesh to measure */
                             continueMb: {
                                 /** @description on one process */
                                 one: number;
@@ -1515,6 +1515,13 @@ export interface operations {
                             } | null;
                             /** @description a transient run of it: its copy, with its latest result in place of its initial fields; null when it has no joined result to start from */
                             transientMb: number | null;
+                            /** @description what a transient run of it writes as it goes from the start: as solveMb, with its averaged flow in each written time; null when it has no joined result to start from, or no mesh to measure (API 1.9) */
+                            transientSolveMb?: {
+                                /** @description on one process */
+                                one: number;
+                                /** @description on several processes */
+                                several: number;
+                            } | null;
                         } | null;
                         /** @description the free space for a new case in the cases folder: its disk's, and inside WSL 2 at most that of the Windows drive that holds Linux's own disk; null when it can't be read */
                         freeMb: number | null;
@@ -2338,6 +2345,15 @@ export interface operations {
                 content: {
                     "application/json": {
                         items: {
+                            /** @description a transient run's averaged flow (the fieldAverage meanFlow: UMean, pMean, UPrime2Mean and pPrime2Mean in each time it writes), which the solve switches on once its forces have settled, as the transient judge finds that; all null until then; null for a steady run, or a transient run with none (made before API 1.9, or with a fieldAverage of its own) (API 1.9) */
+                            averaging?: {
+                                /** @description the time it averages from, in s: the latest time written with it less its averaging's totalTime, else the time the solver was at when it was switched on */
+                                from: number | null;
+                                /** @description when its forces had settled then, in s */
+                                settled: number | null;
+                                /** @description the latest time written with it, in s; null before one */
+                                written: number | null;
+                            } | null;
                             /** @description the iteration the latest stretch runs to (endTime) */
                             end: number | null;
                             /** @description why it failed (state failed), naming no folders */
@@ -2410,6 +2426,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** @description a transient run's averaged flow (the fieldAverage meanFlow: UMean, pMean, UPrime2Mean and pPrime2Mean in each time it writes), which the solve switches on once its forces have settled, as the transient judge finds that; all null until then; null for a steady run, or a transient run with none (made before API 1.9, or with a fieldAverage of its own) (API 1.9) */
+                        averaging?: {
+                            /** @description the time it averages from, in s: the latest time written with it less its averaging's totalTime, else the time the solver was at when it was switched on */
+                            from: number | null;
+                            /** @description when its forces had settled then, in s */
+                            settled: number | null;
+                            /** @description the latest time written with it, in s; null before one */
+                            written: number | null;
+                        } | null;
                         /** @description the iteration the latest stretch runs to (endTime) */
                         end: number | null;
                         /** @description why it failed (state failed), naming no folders */
@@ -2519,6 +2544,15 @@ export interface operations {
                         };
                         /** @description the run, as GET /runs/{name} has it */
                         run: {
+                            /** @description a transient run's averaged flow (the fieldAverage meanFlow: UMean, pMean, UPrime2Mean and pPrime2Mean in each time it writes), which the solve switches on once its forces have settled, as the transient judge finds that; all null until then; null for a steady run, or a transient run with none (made before API 1.9, or with a fieldAverage of its own) (API 1.9) */
+                            averaging?: {
+                                /** @description the time it averages from, in s: the latest time written with it less its averaging's totalTime, else the time the solver was at when it was switched on */
+                                from: number | null;
+                                /** @description when its forces had settled then, in s */
+                                settled: number | null;
+                                /** @description the latest time written with it, in s; null before one */
+                                written: number | null;
+                            } | null;
                             /** @description the iteration the latest stretch runs to (endTime) */
                             end: number | null;
                             /** @description why it failed (state failed), naming no folders */
@@ -2629,6 +2663,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** @description a transient run's averaged flow (the fieldAverage meanFlow: UMean, pMean, UPrime2Mean and pPrime2Mean in each time it writes), which the solve switches on once its forces have settled, as the transient judge finds that; all null until then; null for a steady run, or a transient run with none (made before API 1.9, or with a fieldAverage of its own) (API 1.9) */
+                        averaging?: {
+                            /** @description the time it averages from, in s: the latest time written with it less its averaging's totalTime, else the time the solver was at when it was switched on */
+                            from: number | null;
+                            /** @description when its forces had settled then, in s */
+                            settled: number | null;
+                            /** @description the latest time written with it, in s; null before one */
+                            written: number | null;
+                        } | null;
                         /** @description the iteration the latest stretch runs to (endTime) */
                         end: number | null;
                         /** @description why it failed (state failed), naming no folders */

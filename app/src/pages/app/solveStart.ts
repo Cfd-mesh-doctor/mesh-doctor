@@ -103,6 +103,30 @@ export function transientText(t: NonNullable<Run["transient"]>): string {
   return how ? `${how}, from ${t.steady}'s ${at}` : `From ${t.steady}'s ${at}`;
 }
 
+const AVERAGES = "its mean flow and how much it swings (UMean, pMean, UPrime2Mean, pPrime2Mean)";
+
+/** What a transient run averages, in words (API 1.9's `averaging`: its mean flow and how much it swings, which the
+ * solve switches on once its forces have settled, as it checks before each stretch and every half a minute as it
+ * solves); null for a run without it (a steady run, or one an engine before API 1.9 made). */
+export function averagingText(a: Run["averaging"], ended: boolean): string | null {
+  if (!a) return null;
+  if (a.from == null) {
+    return ended
+      ? "Its flow isn't averaged: it ended before averaging began, which waits for its forces to settle. Continue it, "
+        + "and it averages once they have."
+      : "It averages its flow once its forces have settled: they haven't yet.";
+  }
+  const settled = a.settled != null && formatTime(a.settled) !== formatTime(a.from) ? ` (at ${formatTime(a.settled)})` : "";
+  const since = `Its flow is averaged from ${formatTime(a.from)}, once its forces had settled${settled}`;
+  if (a.written != null) {
+    return `${since}: each time it has written since holds ${AVERAGES}, the latest at ${formatTime(a.written)}.`;
+  }
+  return ended
+    ? `${since}, but it ended before it wrote a time with the average in. Continue it, and each time it writes holds `
+      + `${AVERAGES}.`
+    : `${since}: each time it writes from now on holds ${AVERAGES}.`;
+}
+
 /** How far the stretch a run is in has come, from where it started to where it runs to (0 to 1); undefined until
  * it says. */
 export function stretchFraction(run: Pick<Run, "start" | "end" | "iteration">): number | undefined {
@@ -252,14 +276,15 @@ export interface DiskCheck { need: number; free: number; keep: number; fits: boo
 
 /** What a solve takes on the disk, from GET /disk's answer for the case it solves, or makes its new case from: that
  * new case first (`made`: a copy of a case you made, or a transient run of a steady run), then what it writes as it
- * goes, from the start or continued (`first`), on `procs` processes. Null when the engine doesn't say (an engine
- * before API 1.7, or a free space or size it can't measure), as its disk guard doesn't check the disk then either. */
+ * goes, from the start or continued (`first`), on `procs` processes: a transient run's with its averaged flow (API
+ * 1.9's transientSolveMb; an older engine's solveMb). Null when the engine doesn't say (an engine before API 1.7, or
+ * a free space or size it can't measure), as its disk guard doesn't check the disk then either. */
 export function diskCheck(
   disk: DiskInfo | undefined, made: "copy" | "transient" | null, first: boolean, procs: number,
 ): DiskCheck | null {
   const c = disk?.case;
   if (!disk || !c || disk.freeMb == null) return null;
-  const writes = first ? c.solveMb : c.continueMb;
+  const writes = !first ? c.continueMb : made === "transient" ? c.transientSolveMb ?? c.solveMb : c.solveMb;
   const before = made === "copy" ? c.copyMb : made === "transient" ? c.transientMb : 0;
   if (!writes || before == null) return null;
   const need = before + (procs > 1 ? writes.several : writes.one);
