@@ -8,8 +8,9 @@ type Json<R> = R extends { content: { "application/json": infer T } } ? T : neve
 type Since<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 
 export type EngineInfo = Json<operations["info"]["responses"][200]>;
-/** `cells` (each case's size) is new in API 1.2. */
-export type CaseList = Since<Json<operations["cases"]["responses"][200]>, "cells">;
+/** `cells` (each case's size) is new in API 1.2, and `made` (the cases a case job made: the ones a solve takes) in
+ *  API 1.6. */
+export type CaseList = Since<Json<operations["cases"]["responses"][200]>, "cells" | "made">;
 export type JobList = Json<operations["list_jobs"]["responses"][200]>;
 export type RepairList = Json<operations["repairs"]["responses"][200]>;
 export type MachineInfo = Json<operations["machine"]["responses"][200]>;
@@ -45,6 +46,20 @@ export type ReadinessCheck = Readiness["checks"][number];
 export type TemplateList = Json<operations["list_templates"]["responses"][200]>;
 export type Template = TemplateList["items"][number];
 export type TemplateSize = Template["sizes"][number];
+/** The solves of the cases Mesh Doctor made (API 1.6): each one's state, iterations and stretches. */
+export type RunList = Json<operations["list_runs"]["responses"][200]>;
+export type Run = RunList["items"][number];
+export type RunState = Run["state"];
+/** A run's state as the screens show it: its solve job's while that waits or runs (the run's own status may be an
+ *  earlier stretch's until the job writes it), else the run's own, or unsolved for a case with no run yet. */
+export type RunShown = RunState | "queued" | "unsolved";
+/** One run, as GET /runs/{name} and POST /runs/{name}/stop answer: the run with its links. */
+export type RunDetail = Json<operations["get_run"]["responses"][200]>;
+/** A run's page data (API 1.6): its stretches, the solver's iteration and pace, its residuals and forces, and the
+ *  live judge. */
+export type RunLive = Json<operations["run_live"]["responses"][200]>;
+/** The judge on a case's solver logs and forces (GET /judge?case=). */
+export type CaseJudge = Json<operations["judge"]["responses"][200]>;
 
 /** The API major version this app speaks; the engine reports major.minor and any 1.x works. */
 export const API_MAJOR = 1;

@@ -689,7 +689,7 @@ class ApiV1Test(unittest.TestCase):
         self.assertIn(text, doc["error"]["message"])
 
     def test_reads(self):
-        self.assertEqual(self.get("/cases")[:2], (200, {"items": ["c1"], "cells": {"c1": None}}))   # empty owner
+        self.assertEqual(self.get("/cases")[:2], (200, {"items": ["c1"], "cells": {"c1": None}, "made": {}}))
         with open(os.path.join(self.src, "constant", "polyMesh", "owner"), "w") as f:
             f.write("FoamFile\n{\n    note \"nPoints:1200 nCells:1000 nFaces:3400 nInternalFaces:2600\";\n}\n")
         self.assertEqual(self.get("/cases")[1]["cells"], {"c1": 1000})
@@ -1514,6 +1514,66 @@ echo End
         self.assertEqual((rc, lines[0]), (0, "made: solving from iteration 0 to 10"))
         self.assertEqual((self.s.split(case), self.s.latest(case), self.status()["nProcs"]), (0, 10, 1))
         self.assertTrue(os.path.isfile(os.path.join(case, "log.potentialFoam")))
+
+    def test_the_cases_say_which_ones_mesh_doctor_made(self):
+        doc = self.api.handle("GET", "/api/v1/cases", {})[1]
+        self.assertEqual((sorted(doc["items"]), doc["made"]), (["made", "mine"], {"made": "ahmed-body"}))
+
+    def test_a_runs_live_page_data_follows_its_stretches(self):
+        saved = dict(self.api._live)                                            # before server.py adds its own
+        import schema, server
+        self.api.provide(run_live=server.solve_live)
+        self.addCleanup(lambda: (self.api._live.clear(), self.api._live.update(saved)))
+        self.addCleanup(server._solve_cache.clear)
+
+        def live():
+            server._solve_cache.clear()
+            return self.api.handle("GET", "/api/v1/runs/made/live", {})
+        st, doc, _ = live()
+        self.assertEqual((st, doc["error"]["code"]), (404, "not-found"))       # not solved yet
+        self.assertEqual(self.solve("made", 30, 1)[0], 0)
+        case = os.path.join(self.cases, "made")
+        write_steady_run(case, 30, lambda t: 1e-3 / t, lambda t: 50.0)        # a solver log and forces as foamRun's
+        with open(os.path.join(case, "log.foamRun"), "a") as f:
+            f.write("End\n")
+        st, doc, _ = live()
+        self.assertEqual(st, 200, doc)
+        self.assertEqual(schema.check(doc, self.api.RUN_LIVE), [])
+        self.assertEqual((doc["run"]["state"], doc["stages"], doc["current"]["to"]),
+                         ("done", [{"name": "First solve", "from": 0, "to": 30}], 30))
+        self.assertEqual((doc["solver"]["state"], doc["solver"]["iteration"], doc["solver"]["end"]), ("done", 30.0, 30))
+        self.assertEqual((doc["residuals"]["cols"], len(doc["residuals"]["rows"])), (["Time", "p"], 30))
+        self.assertIsInstance(doc["forces"], dict)
+        self.assertIn("verdict", doc["judge"])
+        # A continuation solving now: its stretch comes last, read from its own log.
+        status = self.status()
+        status.update(state="running", start=30, end=60, iteration=45)
+        with open(os.path.join(case, self.jobs.SOLVE_STATUS), "w") as f:
+            json.dump(status, f)
+        with open(os.path.join(case, "log.foamRun_to_60"), "w") as f:
+            f.write("".join(f"Time = {t}\n\n" for t in range(31, 46)))
+        with mock.patch.object(self.s, "solving", lambda name: True):
+            st, doc, _ = live()
+        self.assertEqual(schema.check(doc, self.api.RUN_LIVE), [])
+        self.assertEqual([s["name"] for s in doc["stages"]], ["First solve", "Continued"])
+        self.assertEqual((doc["current"], doc["solver"]["state"], doc["solver"]["iteration"], doc["solver"]["log"]),
+                         ({"name": "Continued", "from": 30, "to": 60}, "running", 45.0, "log.foamRun_to_60"))
+        st, doc, _ = live()                                                     # its job is gone
+        self.assertEqual((doc["run"]["state"], doc["solver"]["state"]), ("interrupted", "stopped"))
+        self.assertEqual(self.api.handle("GET", "/api/v1/runs/nope/live", {})[0], 404)
+
+    def test_the_pace_of_iterations_quicker_than_the_logs_whole_second_clock(self):
+        import server
+        lp = os.path.join(self.cases, "log.pace")
+
+        def solver(clock_of, n):
+            with open(lp, "w") as f:
+                f.write("".join(f"Time = {i}\n\nExecutionTime = {0.2 * i:.2f} s  ClockTime = {clock_of(i)} s\n\n"
+                                for i in range(1, n + 1)))
+            return server._solver_of(lp)
+        self.assertEqual(solver(lambda i: 2 * i, 50)["wall_per_it"], 2.0)          # the median of the last 40
+        self.assertAlmostEqual(solver(lambda i: i // 4, 41)["wall_per_it"], 10 / 39)  # four a second: their mean
+        self.assertNotIn("wall_per_it", solver(lambda i: 7, 5))                       # all in one second
 
     def test_the_command_refuses_a_case_you_made_and_continues_one_solved_by_hand(self):
         with self.assertRaises(SystemExit) as e:

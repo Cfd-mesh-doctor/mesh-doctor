@@ -397,6 +397,7 @@ def _status():
 
 import md_api  # Mesh Doctor routes
 import abtest  # batch-means force averages
+import solve  # solves of cases Mesh Doctor made (GET /runs/{name}/live)
 from urllib.parse import urlparse, parse_qs
 
 
@@ -531,6 +532,77 @@ def _active_label():
     return best
 
 
+def _solver_of(lp):
+    """A solver log as the run pages show it: running, done (End), error (FOAM FATAL, with its message) or stopped
+    (unchanged for 5 minutes); the last iteration, and seconds per iteration: the median of the last 40, or their
+    mean when the log's whole-second ClockTime makes the median 0 (iterations quicker than a second)."""
+    txt, _ = read_tail(lp, 400_000)
+    txt = txt or ""
+    times = re.findall(r"^Time = (" + NUM + r")s?\s*$", txt, re.M)
+    execs = re.findall(r"^ExecutionTime = (" + NUM + r") s\s+ClockTime = (" + NUM + ") s", txt, re.M)
+    solver = {"state": "running", "log": os.path.basename(lp)}
+    if times:
+        solver["iteration"] = float(times[-1])
+    if len(execs) >= 3:
+        clocks = [float(c) for _, c in execs[-40:]]
+        d = sorted(b - a for a, b in zip(clocks, clocks[1:]))
+        wall = d[len(d) // 2] or (clocks[-1] - clocks[0]) / (len(clocks) - 1)
+        if wall > 0:                    # all in one second: it can't tell yet
+            solver["wall_per_it"] = wall
+        solver["clock"] = clocks[-1]
+    if re.search(r"^End\s*$", txt, re.M):
+        solver["state"] = "done"
+    if "FOAM FATAL" in txt or "FOAM aborting" in txt:
+        solver["state"] = "error"; solver["error"] = txt[txt.rfind("FOAM FATAL"):][:600]
+    age = time.time() - (mtime(lp) or 0)
+    if solver["state"] == "running" and age > 300:
+        solver["state"] = "stopped"; solver["idle_s"] = age
+    return solver
+
+
+_solve_cache = {}
+
+
+def solve_live(name):
+    """GET /runs/{name}/live: a solve's page data (solve.py's runs), as run_status is an A/B test's; None for no run.
+    Its stretches are its stages, and the live judge takes the whole run, whose stretches share their settings."""
+    c = _solve_cache.get(name)
+    if c and time.time() - c[0] < 3:
+        return c[1]
+    run = solve.describe(name)
+    if run is None:
+        return None
+    case = solve.case_dir(name)
+    named = lambda f: "First solve" if f == 0 else "Continued"     # noqa: E731
+    stages = [{"name": named(s["from"]), "from": s["from"], "to": s["to"]} for s in run["stretches"]]
+    solving = run["state"] in ("running", "interrupted") and run["end"] is not None
+    if solving:
+        stages.append({"name": named(run["start"]), "from": run["start"], "to": run["end"]})
+    if not stages:
+        stages = [{"name": named(run["start"]), "from": run["start"], "to": run["end"] or run["start"]}]
+    own = os.path.join(case, "log.foamRun" if run["start"] == 0 else f"log.foamRun_to_{run['end']}")
+    try:
+        logs = [os.path.join(case, f) for f in os.listdir(case) if f.startswith("log.foamRun")]
+    except OSError:
+        logs = []
+    lp = own if os.path.isfile(own) else max(logs, key=lambda f: mtime(f) or 0, default=None)
+    solver = _solver_of(lp) if lp else {"state": "pending"}
+    if run["state"] != "running" and solver["state"] == "running":
+        solver["state"] = "stopped"                 # cancelled, or its job is gone: the log ended without End
+        solver["idle_s"] = time.time() - (mtime(lp) or 0)
+    solver["end"] = run["end"] if run["end"] is not None else stages[-1]["to"]
+    it = solver.get("iteration") or run["iteration"] or 0
+    if solver.get("wall_per_it") and run["state"] == "running":
+        solver["eta"] = max(0, solver["end"] - it) * solver["wall_per_it"]
+    res = md_api._residuals(case, maxpts=1500) or {}
+    frc = force_payload(case)
+    data = {"name": name, "run": run, "stages": stages, "current": stages[-1], "solver": solver, "residuals": res,
+            "forces": frc["series"], "forceInfo": frc["info"], "judge": _live_judge(res, frc, 0, it, 0),
+            "now": time.time()}
+    _solve_cache[name] = (time.time(), data)
+    return data
+
+
 def run_status(label):
     label = label or _active_label()
     if not label or not md_api.SAFE.match(label):
@@ -562,26 +634,7 @@ def run_status(label):
         pass
     solver = {"state": "pending"}
     if logs:
-        lp = max((os.path.join(case, f) for f in logs), key=lambda f: mtime(f) or 0)
-        txt, _ = read_tail(lp, 400_000)
-        txt = txt or ""
-        times = re.findall(r"^Time = (" + NUM + r")s?\s*$", txt, re.M)
-        execs = re.findall(r"^ExecutionTime = (" + NUM + r") s\s+ClockTime = (" + NUM + ") s", txt, re.M)
-        solver = {"state": "running", "log": os.path.basename(lp)}
-        if times:
-            solver["iteration"] = float(times[-1])
-        if len(execs) >= 3:
-            n = min(len(execs), 40)
-            d = sorted(float(execs[i][1]) - float(execs[i - 1][1]) for i in range(len(execs) - n + 1, len(execs)))
-            solver["wall_per_it"] = d[len(d) // 2]
-            solver["clock"] = float(execs[-1][1])
-        if re.search(r"^End\s*$", txt, re.M):
-            solver["state"] = "done"
-        if "FOAM FATAL" in txt or "FOAM aborting" in txt:
-            solver["state"] = "error"; solver["error"] = txt[txt.rfind("FOAM FATAL"):][:600]
-        age = time.time() - (mtime(lp) or 0)
-        if solver["state"] == "running" and age > 300:
-            solver["state"] = "stopped"; solver["idle_s"] = age
+        solver = _solver_of(max((os.path.join(case, f) for f in logs), key=lambda f: mtime(f) or 0))
     cd = read_all(os.path.join(case, "system", "controlDict")) or ""
     me = re.search(r"\bendTime\s+(" + NUM + r")\s*;", cd)
     solver["end"] = float(me.group(1)) if me else stages[-1]["to"]
@@ -631,7 +684,7 @@ import hmac, secrets, traceback
 
 import api_v1  # /api/v1: the versioned API (route table, error format, OpenAPI)
 import pairing
-api_v1.provide(abtest_live=run_status, live=status, live_case=lambda: CASE)
+api_v1.provide(abtest_live=run_status, live=status, live_case=lambda: CASE, run_live=solve_live)
 
 TOKEN = secrets.token_urlsafe(24)
 HOSTS = {f"{h}:{PORT}" for h in ("localhost", "127.0.0.1", "[::1]")}

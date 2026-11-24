@@ -20,6 +20,9 @@ type Answers = Record<string, unknown>;
  *  gives WSL 25 GB and 8 cores. */
 export const DEMO_MACHINE: MachineInfo = { cpus: 8, cores: 8, memoryMb: 25_600, ramLimitMb: null };
 
+/** What the demo says of a run's page: the recording has no solve to show. */
+export const DEMO_RUNS_NOTE = "The demo has no solves: they are of the cases New case makes, which the demo can't.";
+
 const found = (group: Readiness["checks"][number]["group"], id: string, label: string, what: string) =>
   ({ id, label, group, state: "ok" as const, found: what, fix: null, command: null });
 
@@ -252,6 +255,9 @@ export function demoTransport(answers: Answers = DEMO_ANSWERS, delayMs = DELAY_M
       }
       if (route === "/check") return { ...structuredClone(DEMO_READINESS), checked: new Date().toISOString() } as T;
       if (route === "/templates") return structuredClone(DEMO_TEMPLATES) as T;
+      // The recording has no case Mesh Doctor made, so no solve of one: the demo engine has no runs.
+      if (route === "/runs") return { items: [] } as T;
+      if (route.startsWith("/runs/")) throw new EngineError("not-found", DEMO_RUNS_NOTE, 404);
       if (route === "/abtests") {
         const tests = await abtests();
         const items = [...tests.keys()].sort();

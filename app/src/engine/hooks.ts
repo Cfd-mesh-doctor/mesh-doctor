@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Data for the screens. Answers are cached per engine; jobs refresh every 3 s while one is active.
-import { QueryClient, skipToken, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { QueryClient, keepPreviousData, skipToken, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./client";
 import { useEngine } from "./context";
 import { asEngineError } from "./errors";
-import { isActive, type AbtestDetail, type Job, type JobList, type JobRequest } from "./types";
+import { isActive, type AbtestDetail, type Job, type JobList, type JobRequest, type RunDetail } from "./types";
 
 export function makeQueryClient(): QueryClient {
   return new QueryClient({
@@ -161,9 +161,86 @@ export function useVariants(enabled = true) {
   });
 }
 
+/** An answer that asking again won't change: an engine older than the route (not-found), or a server with no live
+ * monitor (unavailable). */
+function refused(status: string, error: unknown, codes: readonly string[]): boolean {
+  return status === "error" && codes.includes(asEngineError(error).code);
+}
+
+/** The solves of the cases Mesh Doctor made (API 1.6): asked for again every 3 s while one solves, or while a solve
+ * job is `active` (it may not have written its run yet), else every 15 s. An engine before API 1.6 has none to list
+ * (not-found): it isn't asked again. */
+export function useRuns(active: boolean) {
+  const { transport } = useEngine();
+  return useQuery({
+    queryKey: [transport?.scope, "runs"],
+    queryFn: transport ? ({ signal }) => api.runs(transport, signal) : skipToken,
+    refetchInterval: (q) => {
+      if (refused(q.state.status, q.state.error, ["not-found"])) return false;
+      return active || q.state.data?.items.some((r) => r.state === "running") ? ACTIVE_POLL_MS : IDLE_POLL_MS;
+    },
+  });
+}
+
+/** One run, asked for again as often as `every` says for its last answer (false: not again): every 3 s while it
+ * solves, or while a solve job of it waits to start and it has no run yet. */
+export function useRun(name: string, every: (last: RunDetail | undefined) => number | false) {
+  const { transport } = useEngine();
+  return useQuery({
+    queryKey: [transport?.scope, "run", name],
+    queryFn: transport ? ({ signal }) => api.run(transport, name, signal) : skipToken,
+    refetchInterval: (q) => every(q.state.data),
+  });
+}
+
+/** A run's page data (its residuals, forces, pace and live judge), every `every` ms while it solves (false: not
+ * again). `version` (its state and where it ended) is part of the key, so a run that has ended is asked for once
+ * more, for its last iterations; the last answer shows until the new one comes. A server with no live monitor
+ * (unavailable) and a run it doesn't have (not-found) say so once: neither is asked again. */
+export function useRunLive(name: string, version: string, every: number | false, enabled = true) {
+  const { transport } = useEngine();
+  return useQuery({
+    queryKey: [transport?.scope, "run-live", name, version],
+    queryFn: transport && enabled ? ({ signal }) => api.runLive(transport, name, signal) : skipToken,
+    retry: false,
+    placeholderData: keepPreviousData,
+    refetchInterval: (q) => (refused(q.state.status, q.state.error, ["unavailable", "not-found"]) ? false : every),
+  });
+}
+
+/** The judge on a case's solve (GET /judge?case=), once its run has ended (`enabled`). A run continued further ends
+ * somewhere else, so `version` (the iteration it ended at) is part of the key: it is judged again. */
+export function useCaseJudge(name: string, enabled: boolean, version: number | null = null) {
+  const { transport } = useEngine();
+  return useQuery({
+    queryKey: [transport?.scope, "case-judge", name, version],
+    queryFn: transport && enabled ? ({ signal }) => api.caseJudge(transport, name, signal) : skipToken,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** Stops a run: the solver writes the iteration it is at and ends. The run's answer goes into its page at once; then
+ * it, the runs and the jobs are asked for again. */
+export function useStopRun() {
+  const { transport } = useEngine();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => {
+      if (!transport) throw new Error("not connected");
+      return api.stopRun(transport, name);
+    },
+    onSuccess: (run: RunDetail, name) => qc.setQueryData([transport?.scope, "run", name], run),
+    onSettled: (_run, _error, name) => {
+      void qc.invalidateQueries({ queryKey: [transport?.scope, "run", name] });
+      void qc.invalidateQueries({ queryKey: [transport?.scope, "runs"] });
+      void qc.invalidateQueries({ queryKey: [transport?.scope, "jobs"] });
+    },
+  });
+}
+
 /** Starts a job. The new job goes into the jobs list at once, so the Jobs screen and an A/B test's page can follow it
- * before the next refresh; then the jobs and the repair runs are asked for again, and after an A/B job the A/B
- * tests. */
+ * before the next refresh; then the jobs and the repair runs are asked for again, after an A/B job the A/B tests,
+ * and after a solve the runs. */
 export function useStartJob() {
   const { transport } = useEngine();
   const qc = useQueryClient();
@@ -183,6 +260,10 @@ export function useStartJob() {
       if (body.kind === "abtest" || body.kind === "abextend") {
         void qc.invalidateQueries({ queryKey: [transport?.scope, "abtests"] });
         void qc.invalidateQueries({ queryKey: [transport?.scope, "abtest"] });
+      }
+      if (body.kind === "solve") {
+        void qc.invalidateQueries({ queryKey: [transport?.scope, "runs"] });
+        void qc.invalidateQueries({ queryKey: [transport?.scope, "run", body.params.name] });
       }
     },
   });

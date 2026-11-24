@@ -4,8 +4,8 @@
 import { NOT_THE_ENGINE, EngineError, isEngineCode } from "./errors";
 import { localAccessState } from "./permission";
 import type {
-  AbtestDetail, AbtestList, AbtestLive, CaseList, ClusterShape, EngineInfo, Job, JobList, JobRequest, JudgeAnswer, MachineInfo,
-  Readiness, RepairList, TemplateList, VariantList,
+  AbtestDetail, AbtestList, AbtestLive, CaseJudge, CaseList, ClusterShape, EngineInfo, Job, JobList, JobRequest, JudgeAnswer,
+  MachineInfo, Readiness, RepairList, RunDetail, RunList, RunLive, TemplateList, VariantList,
 } from "./types";
 import { API_MAJOR } from "./types";
 import type { Report } from "@/report/read";
@@ -125,4 +125,16 @@ export const api = {
   /** The engine's self check (API 1.4), run for this answer; an older engine answers not-found. */
   readiness: (t: Transport, signal?: AbortSignal) => t.request<Readiness>("GET", "/check", undefined, signal),
   templates: (t: Transport, signal?: AbortSignal) => t.request<TemplateList>("GET", "/templates", undefined, signal),
+  /** The solves of the cases Mesh Doctor made (API 1.6); an older engine answers not-found. */
+  runs: (t: Transport, signal?: AbortSignal) => t.request<RunList>("GET", "/runs", undefined, signal),
+  run: (t: Transport, name: string, signal?: AbortSignal) =>
+    t.request<RunDetail>("GET", `/runs/${encodeURIComponent(name)}`, undefined, signal),
+  /** A run's page data: its residuals and forces, the solver's pace and the live judge. */
+  runLive: (t: Transport, name: string, signal?: AbortSignal) =>
+    t.request<RunLive>("GET", `/runs/${encodeURIComponent(name)}/live`, undefined, signal),
+  /** Stops a run: the solver writes the iteration it is at and ends, and a continuation starts from there. */
+  stopRun: (t: Transport, name: string) => t.request<RunDetail>("POST", `/runs/${encodeURIComponent(name)}/stop`),
+  /** The judge on a case's solve, over all its solver logs: is it converged? */
+  caseJudge: (t: Transport, name: string, signal?: AbortSignal) =>
+    t.request<CaseJudge>("GET", `/judge?case=${encodeURIComponent(name)}`, undefined, signal),
 };

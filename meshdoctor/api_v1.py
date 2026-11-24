@@ -134,15 +134,20 @@ def result_schema(p, q, b):
 
 
 @route("GET", "/cases", "Source cases this worker may read (never changed: a new case from a template goes in a "
-       "new folder, listed once its mesh is made), with their sizes",
+       "new folder, listed once its mesh is made), with their sizes and which ones Mesh Doctor made",
        ok={"type": "object", "required": ["items", "cells"], "properties": {
            "items": {"type": "array", "items": {"type": "string"}},
            "cells": {"type": "object", "additionalProperties": {"type": ["integer", "null"]},
                      "description": "each case's cell count, from its mesh's owner header (summed over processors "
-                                    "for a decomposed case); null when the header doesn't say (API 1.2)"}}})
+                                    "for a decomposed case); null when the header doesn't say (API 1.2)"},
+           "made": {"type": "object", "additionalProperties": {"type": "string"},
+                    "description": "the cases a case job made, each with its template: the cases a solve job takes "
+                                   "(API 1.6)"}}})
 def cases(p, q, b):
     names = md_api.sources()
-    return {"items": names, "cells": {n: ramguard.mesh_cells(os.path.join(md_api.run_dir(), n)) for n in names}}
+    root = md_api.run_dir()
+    made = {n: t for n, t in ((n, md_api.made(os.path.join(root, n))) for n in names) if t is not None}
+    return {"items": names, "cells": {n: ramguard.mesh_cells(os.path.join(root, n)) for n in names}, "made": made}
 
 
 @route("GET", "/repairs", "Repair runs in the workspace, with their status and verdict",
@@ -315,7 +320,10 @@ LIVE = {"type": "object", "required": ["label", "status", "stages", "current", "
                                             "5 minutes"},
                    "iteration": {"type": "number", "description": "the last iteration in the log"},
                    "end": {"type": "number", "description": "the iteration it runs to (endTime)"},
-                   "wall_per_it": {"type": "number", "description": "seconds per iteration, the median of the last 40"},
+                   "wall_per_it": {"type": "number",
+                                   "description": "seconds per iteration: the median of the last 40, or their mean "
+                                                  "when the log's whole-second clock makes that 0; left out until it "
+                                                  "can tell"},
                    "eta": {"type": "number", "description": "seconds left at that pace (while running)"},
                    "clock": {"type": "number"}, "log": {"type": "string"},
                    "error": {"type": "string", "description": "the log's FOAM FATAL message (state error)"},
@@ -547,6 +555,35 @@ def stop_run(p, q, b):
     if why:
         raise ApiError(*why)
     return _run_out(run)
+
+
+_SOLVER = LIVE["properties"]["solver"]
+RUN_LIVE = {"type": "object", "required": ["name", "run", "stages", "current", "solver", "residuals", "forces",
+                                           "forceInfo", "judge", "now"], "properties": {
+    "name": {"type": "string", "description": "the case it solves"},
+    "run": dict(RUN, description="the run, as GET /runs/{name} has it"),
+    "stages": {"type": "array", "items": _STAGE,
+               "description": "its stretches: the first solve, then each continuation; while it solves, the stretch "
+                              "it is in comes last"},
+    "current": dict(_STAGE, description="the stretch it is in now, or else its last"),
+    "solver": dict(_SOLVER, description="the solver log of the stretch it is in (log.foamRun, or log.foamRun_to_<end> "
+                                        "for a continuation); stopped: its log ended without End (a Stop's ends "
+                                        "with it) or hasn't changed for 5 minutes"),
+    "residuals": dict(_TABLE, description="its initial residuals over all its stretches, at most 1500 rows; {} "
+                                          "before it has any"),
+    "forces": LIVE["properties"]["forces"], "forceInfo": LIVE["properties"]["forceInfo"],
+    "judge": dict(LIVE["properties"]["judge"], description="the live judge on the whole run, whose stretches share "
+                                                           "their settings (the same limits as abtest.judge)"),
+    "now": LIVE["properties"]["now"]}}
+
+
+@route("GET", "/runs/{name}/live", "A run's page data: its stretches, the solver's iteration and pace, its residuals "
+       "and forces, and the live judge (API 1.6)", ok=RUN_LIVE)
+def run_live(p, q, b):
+    name = _name(p["name"])
+    if "run_live" not in _live:
+        raise ApiError("unavailable", "the live monitor is not running in this server")
+    return _found(_live["run_live"](name), "run " + name)
 
 
 @route("GET", "/variants", "Solver-setting variants an A/B second run can use",

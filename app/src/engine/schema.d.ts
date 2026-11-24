@@ -93,7 +93,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Source cases this worker may read (never changed: a new case from a template goes in a new folder, listed once its mesh is made), with their sizes */
+        /** Source cases this worker may read (never changed: a new case from a template goes in a new folder, listed once its mesh is made), with their sizes and which ones Mesh Doctor made */
         get: operations["cases"];
         put?: never;
         post?: never;
@@ -419,6 +419,23 @@ export interface paths {
         };
         /** One run: its state, the iteration it is at, the stretches solved, and its links (API 1.6) */
         get: operations["get_run"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs/{name}/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A run's page data: its stretches, the solver's iteration and pace, its residuals and forces, and the live judge (API 1.6) */
+        get: operations["run_live"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1238,7 +1255,7 @@ export interface operations {
                              * @enum {unknown}
                              */
                             state: "pending" | "running" | "done" | "error" | "stopped";
-                            /** @description seconds per iteration, the median of the last 40 */
+                            /** @description seconds per iteration: the median of the last 40, or their mean when the log's whole-second clock makes that 0; left out until it can tell */
                             wall_per_it?: number;
                         };
                         /** @description the source case */
@@ -1289,6 +1306,10 @@ export interface operations {
                             [key: string]: number | null;
                         };
                         items: string[];
+                        /** @description the cases a case job made, each with its template: the cases a solve job takes (API 1.6) */
+                        made?: {
+                            [key: string]: string;
+                        };
                     };
                 };
             };
@@ -1735,7 +1756,7 @@ export interface operations {
                              * @enum {unknown}
                              */
                             state: "pending" | "running" | "done" | "error" | "stopped";
-                            /** @description seconds per iteration, the median of the last 40 */
+                            /** @description seconds per iteration: the median of the last 40, or their mean when the log's whole-second clock makes that 0; left out until it can tell */
                             wall_per_it?: number;
                         };
                         /** @description the source case */
@@ -2245,6 +2266,136 @@ export interface operations {
                         updated: string | null;
                         /** @description the latest iteration written, which a continuation starts from */
                         written: number;
+                    };
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    run_live: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description the stretch it is in now, or else its last */
+                        current: {
+                            from: number;
+                            /** @description the settings of this stretch: the A/B run, or a continuation */
+                            name: string;
+                            to: number;
+                        };
+                        /** @description how to read them: total, groups, vertical, flow, up, source */
+                        forceInfo: Record<string, unknown>;
+                        /** @description each force group's [iteration, drag, vertical] rows */
+                        forces: Record<string, unknown>;
+                        /** @description the live judge on the whole run, whose stretches share their settings (the same limits as abtest.judge) */
+                        judge: {
+                            /** @description averaged forces with their uncertainty (batch means) */
+                            average?: Record<string, unknown>;
+                            avgFrom?: number;
+                            /** @enum {unknown} */
+                            level?: "ok" | "warn" | "err";
+                            /** @description collecting: ... until the stretch has 40 iterations */
+                            verdict?: string;
+                            /** @description iterations judged */
+                            window: number;
+                        };
+                        /** @description the case it solves */
+                        name: string;
+                        /** @description the worker's clock, seconds since 1970 */
+                        now: number;
+                        /** @description its initial residuals over all its stretches, at most 1500 rows; {} before it has any */
+                        residuals: {
+                            /** @description Time, then each field */
+                            cols?: string[];
+                            /** @description one row per iteration, in the order of cols (null: not solved then) */
+                            rows?: (number | null)[][];
+                        };
+                        /** @description the run, as GET /runs/{name} has it */
+                        run: {
+                            /** @description the iteration the latest stretch runs to (endTime) */
+                            end: number | null;
+                            /** @description why it failed (state failed), naming no folders */
+                            error: string | null;
+                            /** @description when the latest stretch ended (UTC); null while it runs */
+                            finished: string | null;
+                            /** @description the last iteration in its solver log */
+                            iteration: number | null;
+                            /** @description the case it solves: a case in the cases folder that Mesh Doctor made */
+                            name: string;
+                            /** @description the processes it runs on; 1: the case isn't split */
+                            nProcs: number | null;
+                            /** @description the iteration the latest stretch started from */
+                            start: number;
+                            /** @description when the latest stretch started (UTC) */
+                            started: string | null;
+                            /**
+                             * @description stopped: ended at a written iteration before its end (Stop); interrupted: its status says running but its job is gone (the computer restarted, or the job was killed)
+                             * @enum {unknown}
+                             */
+                            state: "running" | "done" | "stopped" | "failed" | "cancelled" | "interrupted";
+                            /** @description decomposing, potentialFoam, solving, reconstructing or done */
+                            step: string;
+                            /** @description the stretches solved so far, oldest first */
+                            stretches: {
+                                from: number;
+                                to: number;
+                            }[];
+                            /** @description when its status last changed (UTC) */
+                            updated: string | null;
+                            /** @description the latest iteration written, which a continuation starts from */
+                            written: number;
+                        };
+                        /** @description the solver log of the stretch it is in (log.foamRun, or log.foamRun_to_<end> for a continuation); stopped: its log ended without End (a Stop's ends with it) or hasn't changed for 5 minutes */
+                        solver: {
+                            clock?: number;
+                            /** @description the iteration it runs to (endTime) */
+                            end: number;
+                            /** @description the log's FOAM FATAL message (state error) */
+                            error?: string;
+                            /** @description seconds left at that pace (while running) */
+                            eta?: number;
+                            /** @description seconds since the log changed (state stopped) */
+                            idle_s?: number;
+                            /** @description the last iteration in the log */
+                            iteration?: number;
+                            log?: string;
+                            /**
+                             * @description pending: no log yet; stopped: running, but its log has not changed for 5 minutes
+                             * @enum {unknown}
+                             */
+                            state: "pending" | "running" | "done" | "error" | "stopped";
+                            /** @description seconds per iteration: the median of the last 40, or their mean when the log's whole-second clock makes that 0; left out until it can tell */
+                            wall_per_it?: number;
+                        };
+                        /** @description its stretches: the first solve, then each continuation; while it solves, the stretch it is in comes last */
+                        stages: {
+                            from: number;
+                            /** @description the settings of this stretch: the A/B run, or a continuation */
+                            name: string;
+                            to: number;
+                        }[];
                     };
                 };
             };

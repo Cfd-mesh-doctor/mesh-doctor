@@ -408,8 +408,10 @@ test("an engine older than the readiness check is told to update, with the same 
   await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
   await page.goto("/app/solve");
   await expect(page.getByText("Not checked")).toBeVisible();
-  await expect(page.getByText(/Your engine is older than this page/)).toBeVisible();
+  await expect(page.getByText(/Your engine is older than this page and can't check its computer/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Copy “meshdoctor check”" })).toBeVisible();
+  // Older than the solve job too (no GET /runs): the Runs card says so as well.
+  await expect(page.getByText(/Your engine is older than this page and can't solve cases from here yet/)).toBeVisible();
 });
 
 test("Solve's New case makes a case from a template: a free name, the memory it needs, then its job on Jobs", async ({ page }) => {

@@ -99,7 +99,7 @@ All routes live under `/api/v1` (`meshdoctor/api_v1.py`). The routes are a table
 |---|---|---|
 | `GET /` | | API version, result-file versions, job kinds |
 | `GET /openapi.json`, `GET /schemas/{kind}` | | the API description and the result schemas |
-| `GET /cases` | `/api/md/sources` | source cases the worker may read, with each one's cell count from its mesh's owner header (null when the header doesn't say; API 1.2); a new case from a template is listed once its mesh is made |
+| `GET /cases` | `/api/md/sources` | source cases the worker may read, with each one's cell count from its mesh's owner header (null when the header doesn't say; API 1.2); a new case from a template is listed once its mesh is made, and `made` names the cases a case job made, with their templates: the ones a solve takes (API 1.6) |
 | `GET /repairs`, `GET /repairs/{name}` | `/api/md/results`, `/api/md/result` | repair runs, and a finished run's result (repair schema) |
 | `GET /repairs/{name}/clusters/{id}?tag=before\|after\|report` | `/api/md/cluster` | geometry of one defect cluster |
 | `GET /repairs/{name}/log` | `/api/md/log` | the repair sweeps from the log |
@@ -119,6 +119,7 @@ All routes live under `/api/v1` (`meshdoctor/api_v1.py`). The routes are a table
 | `GET /jobs?state=&limit=`, `GET /jobs/{job}` | | jobs, newest first, with progress and links to their runs (job schema) |
 | `POST /jobs/{job}/cancel` | | stop a job and everything it started (`409 finished` if it already ended) |
 | `GET /runs`, `GET /runs/{name}` | (new) | solves of cases Mesh Doctor made (`solve` jobs), newest first: each run's state (`running`, `done`, `stopped` at a written iteration, `failed`, `cancelled`, or `interrupted` when its job is gone), the iteration it is at, the latest one written and the stretches solved so far; one run adds its links, its judge (`GET /judge?case=`) among them (API 1.6) |
+| `GET /runs/{name}/live` | (new) | a run's page: its stretches, the solver's iteration, pace and time left, its residuals and forces over all its stretches, and the live judge (API 1.6) |
 | `POST /runs/{name}/stop` | | Stop: the run writes the iteration it is at and ends (`stopAt writeNow`), so a later solve job continues from there (`409 not-ready` if it isn't solving) |
 
 A job request names its kind and its parameters, which are checked against a schema (also in the OpenAPI document) before anything starts. Unknown parameters are refused:

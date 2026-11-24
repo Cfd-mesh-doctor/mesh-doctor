@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Coloured labels for a job's state, a repair's verdict and an A/B test's state.
-import { Ban, CircleCheck, CircleDashed, CircleX, LoaderCircle, TriangleAlert, type LucideIcon } from "lucide-react";
+// Coloured labels for a job's state, a repair's verdict, an A/B test's state and a solve's.
+import {
+  Ban, CircleCheck, CircleDashed, CircleMinus, CircleStop, CircleX, LoaderCircle, TriangleAlert, type LucideIcon,
+} from "lucide-react";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Tip } from "@/components/ui/tooltip";
-import type { JobState } from "@/engine/types";
+import type { JobState, RunShown } from "@/engine/types";
 import { verdictText, type Verdict } from "@/engine/verdict";
 import type { AbState } from "@/report/abtest";
 
@@ -42,6 +44,29 @@ export function AbStateBadge({ state, queued }: { state: AbState; queued?: boole
   return (
     <Badge tone={s.tone}>
       <Icon className={"spin" in s && s.spin ? "animate-spin" : undefined} aria-hidden />
+      {s.label}
+    </Badge>
+  );
+}
+
+const RUN: Record<RunShown, { label: string; tone: BadgeTone; icon: LucideIcon; spin?: boolean }> = {
+  queued: { label: "Queued", tone: "neutral", icon: CircleDashed },
+  running: { label: "Solving", tone: "primary", icon: LoaderCircle, spin: true },
+  done: { label: "Solved", tone: "success", icon: CircleCheck },
+  stopped: { label: "Stopped", tone: "neutral", icon: CircleStop },
+  failed: { label: "Failed", tone: "danger", icon: CircleX },
+  cancelled: { label: "Cancelled", tone: "warning", icon: Ban },
+  interrupted: { label: "Interrupted", tone: "warning", icon: TriangleAlert },
+  unsolved: { label: "Not solved", tone: "neutral", icon: CircleMinus },
+};
+
+/** What a solve is doing (solveStart.ts's runShown): its job's state while that waits or runs, else the run's. */
+export function RunStateBadge({ state }: { state: RunShown }) {
+  const s = RUN[state] ?? RUN.unsolved;
+  const Icon = s.icon;
+  return (
+    <Badge tone={s.tone}>
+      <Icon className={s.spin ? "animate-spin" : undefined} aria-hidden />
       {s.label}
     </Badge>
   );

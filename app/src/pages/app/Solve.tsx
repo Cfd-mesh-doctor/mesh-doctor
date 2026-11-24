@@ -2,11 +2,13 @@
 // The Solve screen: OpenFOAM cases set up and run on the computer the engine runs on. It opens with Ready to solve?,
 // the engine's self check (GET /check, API 1.4: what `meshdoctor check` prints, as JSON): each check with what it
 // found, and a warning's or a problem's fix with its command to copy, then the largest mesh the free memory takes.
-// Then New case: a case made from a template (API 1.5, NewCase.tsx). What the screen does next (a case's solve with
-// live charts) is listed under them until then.
-import { CircleCheck, CircleX, ExternalLink, FolderPlus, RefreshCw, TriangleAlert } from "lucide-react";
-import { useState, type ReactNode } from "react";
+// Then New case: a case made from a template (API 1.5, NewCase.tsx), and Runs: each case Mesh Doctor made with its
+// solve (API 1.6: GET /runs), what it is doing and how far it has come, a link to its page (Run.tsx) and Solve… for
+// one not solved yet (SolveDialog.tsx). What the screen does next is listed under them until then.
+import { CircleCheck, CircleX, ExternalLink, FolderPlus, Play, RefreshCw, TriangleAlert } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
+import { RunStateBadge } from "@/components/shared/badges";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { InlineCode, TextWithCode } from "@/components/shared/InlineCode";
@@ -14,17 +16,19 @@ import { PageHeader } from "@/components/shared/page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, CardTitleRow } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/misc";
+import { Progress, Skeleton } from "@/components/ui/misc";
 import { useAppPath, useEngine } from "@/engine/context";
 import { asEngineError } from "@/engine/errors";
-import { useReadiness } from "@/engine/hooks";
-import type { Readiness, ReadinessCheck } from "@/engine/types";
-import { formatCount, formatDateTime } from "@/lib/format";
+import { useCases, useJobs, useReadiness, useRuns } from "@/engine/hooks";
+import { isActive, type Readiness, type ReadinessCheck } from "@/engine/types";
+import { formatCount, formatDateTime, formatInt, formatRelative } from "@/lib/format";
 import { DOCS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
 import { NewCaseDialog } from "./NewCase";
+import { SolveDialog } from "./SolveDialog";
 import { CHECK_COMMAND, OLD_ENGINE, cellsAtMost, sentence } from "./readiness";
+import { OLD_ENGINE_RUNS, current, runRows, solveStep, stretchFraction, type RunRow } from "./solveStart";
 
 const STATE = {
   ok: { icon: CircleCheck, colour: "text-success", said: "OK" },
@@ -232,6 +236,120 @@ function NewCase() {
   );
 }
 
+/** What a run's line says under its name: where it is, or where it ended. */
+function runLine(row: RunRow, cells: number | null | undefined): string {
+  const { run, shown } = row;
+  const now = current(run, shown);
+  const made = [row.template && `Made from the ${row.template} template`, cells != null && `about ${formatInt(cells)} cells`]
+    .filter((x): x is string => typeof x === "string").join(", ");
+  const at = (n: number) => `iteration ${formatInt(n)}`;
+  const when = run?.finished ? `, ${formatRelative(run.finished)}` : "";
+  switch (shown) {
+    case "unsolved": return made || "Not solved yet";
+    case "queued": return "Waiting to start";
+    case "running":
+      return [solveStep(now?.step) ?? "Starting",
+        now?.iteration != null && now.end != null && `${at(now.iteration)} of ${formatInt(now.end)}`]
+        .filter(Boolean).join(" · ");
+    case "done": return `Solved to ${at(run?.written ?? 0)}${when}`;
+    case "stopped": return `Stopped at ${at(run?.written ?? 0)}${when}`;
+    case "cancelled": return `Cancelled${run?.written ? `, written to ${at(run.written)}` : " before it wrote an iteration"}${when}`;
+    case "failed": return `Stopped with an error${run?.written ? `, written to ${at(run.written)}` : ""}${when}`;
+    case "interrupted": return `Its job is gone, written to ${at(run?.written ?? 0)}`;
+  }
+}
+
+/** One case Mesh Doctor made, with its solve: a link to the run's page once it has one, else Solve…. */
+function RunItem({ row, cells, onSolve }: { row: RunRow; cells: number | null | undefined; onSolve: () => void }) {
+  const to = useAppPath();
+  const page = row.run != null || row.job != null;
+  const now = current(row.run, row.shown);
+  const fraction = now && row.shown === "running" ? stretchFraction(now) : undefined;
+  return (
+    <li className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          {page ? (
+            <Link to={to(`/solve/${encodeURIComponent(row.name)}`)}
+              className="font-mono text-[13px] font-medium text-primary underline-offset-4 hover:underline">{row.name}</Link>
+          ) : (
+            <span className="font-mono text-[13px] font-medium">{row.name}</span>
+          )}
+          <RunStateBadge state={row.shown} />
+        </div>
+        <p className="mt-1 text-[13px] text-muted-foreground">{runLine(row, cells)}</p>
+        {row.shown === "running" && (
+          <Progress className="mt-2 max-w-xs" value={fraction} label={`Progress of the solve of ${row.name}`} />
+        )}
+      </div>
+      {row.shown === "unsolved" && (
+        <Button size="sm" variant="secondary" onClick={onSolve} aria-label={`Solve ${row.name}`}>
+          <Play aria-hidden /> Solve…
+        </Button>
+      )}
+    </li>
+  );
+}
+
+/** The cases Mesh Doctor made, each with its solve (API 1.6). A case you made is solved by its own Allrun in a
+ * terminal: Mesh Doctor never changes it. */
+function Runs() {
+  const jobs = useJobs();
+  const cases = useCases();
+  const active = jobs.data?.items.some((j) => j.kind === "solve" && isActive(j.state)) ?? false;
+  const runs = useRuns(active);
+  const [solving, setSolving] = useState<string | null>(null);
+  const old = runs.isError && !runs.data && asEngineError(runs.error).code === "not-found";
+  const rows = useMemo(() => runRows(cases.data?.made, runs.data?.items, jobs.data?.items), [cases.data, runs.data, jobs.data]);
+  const loading = runs.isPending || cases.isPending;
+  return (
+    <Card className="mt-6">
+      <CardHeader className="block">
+        <CardTitle>Runs</CardTitle>
+        <CardDescription>
+          The solves of the cases made with New case, on the engine&apos;s computer. A run&apos;s page draws its
+          residuals and forces as it solves and says whether it has converged; Stop ends it at the iteration it has
+          reached, and Continue goes on from there.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {old ? (
+          <p className="text-sm text-muted-foreground"><TextWithCode text={OLD_ENGINE_RUNS} /></p>
+        ) : runs.isError ? (
+          <ErrorPanel compact error={runs.error} onRetry={() => void runs.refetch()} retrying={runs.isFetching} />
+        ) : loading ? (
+          <div className="space-y-3" aria-busy>
+            <p role="status" className="text-sm text-muted-foreground">Asking the engine for its runs…</p>
+            <Skeleton className="h-4 w-64" />
+          </div>
+        ) : rows.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No case made with New case yet: make one above, and it shows here, ready to solve.
+          </p>
+        ) : (
+          <ul className="-my-3 divide-y divide-border" aria-label="Runs">
+            {rows.map((r) => (
+              <RunItem key={r.name} row={r} cells={cases.data?.cells?.[r.name]} onSolve={() => setSolving(r.name)} />
+            ))}
+          </ul>
+        )}
+        {cases.isError && !old && (
+          <ErrorPanel compact className="mt-3" error={cases.error} onRetry={() => void cases.refetch()} retrying={cases.isFetching} />
+        )}
+      </CardContent>
+      <CardFooter className="flex-wrap">
+        <span className="text-muted-foreground">
+          A case you made yourself is solved by its own Allrun in a terminal: Mesh Doctor never changes it. In a
+          terminal, <InlineCode text="meshdoctor solve <case>" /> solves a case made here.
+        </span>
+      </CardFooter>
+      {solving && (
+        <SolveDialog open onOpenChange={(o) => { if (!o) setSolving(null); }} target={{ name: solving, run: null }} />
+      )}
+    </Card>
+  );
+}
+
 /** What this screen does next, until it does. */
 function ComingNext() {
   return (
@@ -239,7 +357,7 @@ function ComingNext() {
       <CardHeader className="block">
         <CardTitle>Coming next on this screen</CardTitle>
         <CardDescription>
-          Until then, a case&apos;s Allrun solves it in a terminal, as the worked example shows:{" "}
+          Until then, a case you made yourself is solved by its Allrun in a terminal, as the worked example shows:{" "}
           <a href={DOCS.example} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
             the Ahmed body <ExternalLink className="size-3.5" aria-hidden />
           </a>
@@ -247,8 +365,8 @@ function ComingNext() {
       </CardHeader>
       <CardContent>
         <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-          <li>Its solve on this computer, with the residuals and forces drawn as it runs, the convergence judge, and Stop and Continue.</li>
-          <li>A first run, guided from start to finish: the Ahmed body solved, then a repair and an A/B test of it.</li>
+          <li>A case you made, solved here too: the engine copies its mesh and settings into a case of its own and solves that.</li>
+          <li>A first run, guided from start to finish: the Ahmed body made and solved, then a repair and an A/B test of it.</li>
         </ul>
       </CardContent>
     </Card>
@@ -265,6 +383,7 @@ export function Solve() {
       />
       <ReadinessCard />
       <NewCase />
+      <Runs />
       <ComingNext />
     </>
   );

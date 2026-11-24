@@ -82,6 +82,15 @@ def _unfinished(case):
     return not (isinstance(doc, dict) and doc.get("state") == "done")
 
 
+def made(case):
+    """The template a case job made this case from, once its mesh is made (its marker says done); None for a case you
+    made, or one not made yet.  Only such a case is solved (solve.py)."""
+    doc = _read_json(os.path.join(case, jobs.CASE_MARKER))
+    if isinstance(doc, dict) and doc.get("state") == "done":
+        return str(doc.get("template") or "")
+    return None
+
+
 def sources():
     """The cases in the cases folder: each folder with a mesh, but the workspace and a new case not made yet."""
     out = []

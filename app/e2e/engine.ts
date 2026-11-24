@@ -46,7 +46,41 @@ export function readiness(change: Record<string, Record<string, unknown>> = {}) 
   };
 }
 
-/** An A/B test as GET /abtests/{name} answers it. */
+/** A solve as GET /runs/{name} answers it (API 1.6): by default on its first stretch, solving at iteration 1,200 of
+ *  2,000 on 4 processes, with 1,000 written. */
+export function run(name: string, more: Record<string, unknown> = {}) {
+  return {
+    name, state: "running", step: "solving", iteration: 1200, start: 0, end: 2000, written: 1000, nProcs: 4,
+    stretches: [] as { from: number; to: number }[], started: new Date(Date.now() - 900_000).toISOString(),
+    updated: new Date().toISOString(), finished: null as string | null, error: null, ...more,
+  };
+}
+type RunDoc = ReturnType<typeof run>;
+
+/** A run's page data (GET /runs/{name}/live): two fields' residuals falling and a body's forces settling, up to the
+ *  iteration it is at; the live judge still collecting. */
+function runLive(r: RunDoc) {
+  const n = Math.max(0, Math.floor(Number(r.iteration ?? r.written)));
+  const ts = Array.from({ length: n }, (_, i) => i + 1);
+  const solving = r.state === "running";
+  const stages = [...r.stretches.map((s) => ({ name: s.from === 0 ? "First solve" : "Continued", ...s }))];
+  if (solving) stages.push({ name: r.start === 0 ? "First solve" : "Continued", from: r.start, to: r.end });
+  return {
+    name: r.name, run: r, stages, current: stages.at(-1) ?? { name: "First solve", from: 0, to: r.end },
+    solver: solving
+      ? { state: "running", iteration: n, end: r.end, wall_per_it: 0.42, eta: (r.end - n) * 0.42, log: "log.foamRun" }
+      : { state: "done", iteration: n, end: r.end, log: "log.foamRun" },
+    residuals: { cols: ["Time", "p", "Ux"], rows: ts.map((t) => [t, 0.4 * Math.exp(-t / 250) + 2e-5, 0.1 * Math.exp(-t / 300) + 4e-6]) },
+    forces: { body: ts.map((t) => [t, 42 + 30 * Math.exp(-t / 200), 180 * (1 - Math.exp(-t / 180)) + 4 * Math.sin(t / 12)]) },
+    forceInfo: { total: "body", groups: ["body"], vertical: "downforce", flow: "+x", up: "z", source: {} },
+    judge: solving
+      ? { window: 200, avgFrom: 1000, level: "warn", verdict: "not converged yet: the forces still drift",
+          average: { drag: { mean: 42.3, u: 0.4 }, downforce: { mean: 179.6, u: 2.1 } } }
+      : { window: 200, level: "ok", verdict: "converged" },
+    now: Date.now() / 1000,
+  };
+}
+
 /** GET /templates (API 1.5): the engine's two templates, the Ahmed body in three mesh sizes. */
 const TEMPLATES = {
   items: [
@@ -83,16 +117,27 @@ export async function mockEngine(
     check?: unknown;
     /** GET /templates' answer (two templates by default); null: none, as from an engine before API 1.5. */
     templates?: unknown;
+    /** The cases a case job made, each with its template (GET /cases' `made`, API 1.6); listed with the others. */
+    made?: Record<string, string>;
+    /** Their solves (GET /runs), each as run() makes it; a running one has a solve job running too. */
+    runs?: RunDoc[];
   } = {},
 ): Promise<MockEngine> {
   const state: MockEngine = {
-    requests: [], cases: ["wing", "ahmed-25-coarse", "motorBike"],
+    requests: [], cases: ["wing", "ahmed-25-coarse", "motorBike", ...Object.keys(opts.made ?? {})],
     down: opts.down ?? false, wrongKey: opts.wrongKey ?? false, apiVersion: "1.0", started: [],
   };
   const jobs = opts.noJobs ? [] : [
     job("20261121-130610-repair-wing-fix-13c2", "wing-fix", "running", { progress: { step: "fixing", fraction: 0.62 } }),
     job("20261121-120000-repair-old-fix-0001", "old-fix", "done", { finished: new Date(Date.now() - 300_000).toISOString() }),
   ];
+  const runs = new Map((opts.runs ?? []).map((r) => [r.name, structuredClone(r)]));
+  for (const r of runs.values()) {
+    if (r.state === "running") {
+      jobs.unshift(job(`20261123-110000-solve-${r.name}-e2e0`, r.name, "running",
+        { kind: "solve", params: { name: r.name, to: r.end }, progress: { step: "solving", fraction: 0.6 } }));
+    }
+  }
   await page.route(`${ENGINE}/**`, async (route) => {
     const req = route.request();
     state.requests.push(req);
@@ -114,7 +159,26 @@ export async function mockEngine(
       return json(500, { error: { code: "internal", message: "internal error; details are in the server window" } });
     }
     if (path === "/") return json(200, { apiVersion: state.apiVersion, version: "0.1.0", schemas: { repair: "1.0", job: "1.0" }, jobKinds: ["repair"] });
-    if (path === "/cases") return json(200, { items: state.cases });
+    if (path === "/cases") return json(200, { items: state.cases, ...(opts.made && { made: opts.made }) });
+    // Its solves (API 1.6): Stop ends a running one at the iteration it has reached, and its job with it.
+    if (path === "/runs" && opts.runs) return json(200, { items: [...runs.values()] });
+    const solve = /^\/runs\/([^/]+)(\/live|\/stop)?$/.exec(path);
+    const r = solve && runs.get(decodeURIComponent(solve[1]!));
+    if (solve && !r) return json(404, { error: { code: "not-found", message: `no run ${solve[1]}` } });
+    if (solve && r && solve[2] === "/stop" && req.method() === "POST") {
+      if (r.state !== "running") return json(409, { error: { code: "not-ready", message: `${r.name} isn't solving now` } });
+      const answer = structuredClone(r);
+      const now = new Date().toISOString();
+      Object.assign(r, { state: "stopped", step: "done", written: r.iteration, end: r.iteration, finished: now, updated: now,
+        stretches: [...r.stretches, { from: r.start, to: r.iteration }] });
+      const j = jobs.find((x) => x.kind === "solve" && x.name === r.name && x.state === "running");
+      if (j) Object.assign(j, { state: "done", finished: now, progress: null });
+      return json(200, answer);
+    }
+    if (solve && r && solve[2] === "/live") return json(200, runLive(r));
+    if (solve && r && !solve[2]) return json(200, r);
+    if (path === "/judge") return json(200, { verdict: "converged", window: 200, group: "body",
+      average: { drag: { mean: 41.8, u: 0.2 }, downforce: { mean: 181.4, u: 0.9 } } });
     if (path === "/jobs" && req.method() === "GET") return json(200, { items: jobs });
     if (path === "/repairs") return json(200, { items: opts.repairs ?? [] });
     // A 16 GB laptop with no RAM limit (API 1.1).

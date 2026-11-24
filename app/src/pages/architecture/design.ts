@@ -265,7 +265,7 @@ export const DESIGN: DocSection[] = [
             [
               "`GET /cases`",
               "`/api/md/sources`",
-              "source cases the worker may read, with each one's cell count from its mesh's owner header (null when the header doesn't say; API 1.2); a new case from a template is listed once its mesh is made"
+              "source cases the worker may read, with each one's cell count from its mesh's owner header (null when the header doesn't say; API 1.2); a new case from a template is listed once its mesh is made, and `made` names the cases a case job made, with their templates: the ones a solve takes (API 1.6)"
             ],
             [
               "`GET /repairs`, `GET /repairs/{name}`",
@@ -361,6 +361,11 @@ export const DESIGN: DocSection[] = [
               "`GET /runs`, `GET /runs/{name}`",
               "(new)",
               "solves of cases Mesh Doctor made (`solve` jobs), newest first: each run's state (`running`, `done`, `stopped` at a written iteration, `failed`, `cancelled`, or `interrupted` when its job is gone), the iteration it is at, the latest one written and the stretches solved so far; one run adds its links, its judge (`GET /judge?case=`) among them (API 1.6)"
+            ],
+            [
+              "`GET /runs/{name}/live`",
+              "(new)",
+              "a run's page: its stretches, the solver's iteration, pace and time left, its residuals and forces over all its stretches, and the live judge (API 1.6)"
             ],
             [
               "`POST /runs/{name}/stop`",
