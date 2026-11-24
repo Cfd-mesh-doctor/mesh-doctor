@@ -342,6 +342,10 @@ export function HowItWorks() {
                 to it. DES and LES need max Co ≤ 1. URANS with enough outer correctors usually runs higher, so the plan
                 shows both.
               </p>
+              <p>
+                In the web app, a solved run's page has Plan a transient run: the engine makes the same plan as a job
+                and the page shows it, with the hours on the run's own processes.
+              </p>
             </Step>
 
             <Step s={hotspots} n={6}>

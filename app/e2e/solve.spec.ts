@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { expect, test, type Page } from "@playwright/test";
-import { MATCHING, mockEngine, pairingLink, run } from "./engine";
+import { MATCHING, mockEngine, pairingLink, PLAN, run } from "./engine";
 
 /** Pairs with the pretend engine. */
 async function pair(page: Page) {
@@ -118,6 +118,51 @@ test("a run's page follows its solve, stops it and continues it", async ({ page 
   await dialog.getByLabel("Solve to iteration").fill("1100");
   await expect(dialog.getByText(/Give one past 1,200/)).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Continue", exact: true })).toBeDisabled();
+});
+
+/** ahmed-coarse solved to 300 on 6 processes, as the plan's run was. */
+const solved300 = () => run("ahmed-coarse", { state: "done", step: "done", iteration: 300, end: 300, written: 300,
+  nProcs: 6, stretches: [{ from: 0, to: 300 }], finished: new Date().toISOString() });
+const KINDS = ["repair", "abtest", "abextend", "case", "solve", "tplan"];
+
+test("a solved run's page plans a transient run of it as a job, and follows the job", async ({ page }) => {
+  const engine = await mockEngine(page, { made, runs: [solved300()], noJobs: true, kinds: KINDS });
+  await pair(page);
+  await page.goto("/app/solve/ahmed-coarse");
+  await expect(page.getByRole("heading", { name: "Plan a transient run" })).toBeVisible();
+  await expect(page.getByText("It reads the result and doesn't solve: about 2 s for half a million cells.")).toBeVisible();
+  await page.getByRole("button", { name: "Plan a transient run" }).click();
+  await expect(page.getByText(/^Waiting to start: OpenFOAM works out each cell's Courant number/)).toBeVisible();
+  expect(engine.started).toEqual([{ kind: "tplan", params: { name: "ahmed-coarse" } }]);
+  await expect(page.getByRole("progressbar", { name: "Planning a transient run of ahmed-coarse" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Plan a transient run" })).toBeDisabled();
+  await page.getByRole("link", { name: "Its job" }).click();
+  await expect(page).toHaveURL(/\/app\/jobs\?job=20261123-120000-tplan-ahmed-coarse-e2e1$/);
+});
+
+test("a run's transient plan: the time step at each Courant number, its cost, and the cells that set it", async ({ page }) => {
+  await mockEngine(page, { made, runs: [solved300()], noJobs: true, kinds: KINDS, tplans: { "ahmed-coarse": PLAN } });
+  await pair(page);
+  await page.goto("/app/solve/ahmed-coarse");
+  await expect(page.getByText("At a largest Courant number of 1, which DES and LES need, the time step is 18 µs: 11,369 "
+    + "steps for 0.21 s of flow (8 body lengths), about 3.8 h on 6 processes.")).toBeVisible();
+  const table = page.getByRole("table", { name: "The time step and time of a transient run at each largest Courant number" });
+  await expect(table.getByRole("row").nth(1).getByRole("cell")).toHaveText(["1", "18 µs", "11,369", "3.8 h", "40 µs, 1.7 h"]);
+  await expect(table.getByRole("row").nth(3).getByRole("cell")).toHaveText(["20", "370 µs", "569", "11 min", "810 µs, 5 min"]);
+  await expect(page.getByText(/^62 cells of 478,901 are within 2× of the largest Courant number/)).toBeVisible();
+  await expect(page.getByText("38 cells near (−0.0635, 0.18, 0.322) m, about 2.6 mm across")).toBeVisible();
+  await expect(page.getByText("Planned from iteration 300 of this run, in 2 s.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Plan again" })).toBeEnabled();
+});
+
+test("an engine from before the transient plan says to update it, and plans nothing", async ({ page }) => {
+  const engine = await mockEngine(page, { made, runs: [solved300()], noJobs: true });
+  await pair(page);
+  await page.goto("/app/solve/ahmed-coarse");
+  await expect(page.getByText(/^Your engine is older than this page and can't plan a transient run from here yet/))
+    .toBeVisible();
+  await expect(page.getByRole("button", { name: "Plan a transient run" })).toBeDisabled();
+  expect(engine.requests.some((r) => r.url().includes("/tplans/"))).toBe(false);
 });
 
 test("a case you made is solved through a copy: the case, the copy's name, then its run's page", async ({ page }) => {

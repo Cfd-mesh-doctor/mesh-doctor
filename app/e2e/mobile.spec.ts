@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { expect, test } from "@playwright/test";
 import { testReport } from "../src/report/testReport";
-import { ENGINE, MATCHING, mockEngine, pairingLink, run } from "./engine";
+import { ENGINE, MATCHING, mockEngine, pairingLink, PLAN, run } from "./engine";
 import { lineBreaks } from "./text";
 
 test.describe("in a browser that hasn't seen the tour", () => {
@@ -148,6 +148,30 @@ test("on the smallest phones Verify install's answer fits, its chart within the 
     expect(overflow, `the Solve screen is wider than a ${width} px screen`).toBeLessThanOrEqual(1);
     const [c, k] = [await card.boundingBox(), await chart.boundingBox()];
     expect(k!.x + k!.width, `the chart is wider than its card at ${width} px`).toBeLessThanOrEqual(c!.x + c!.width + 1);
+  }
+});
+
+test("on the smallest phones a run's transient plan fits, its table scrolling in its own box", async ({ page }) => {
+  const solved = run("ahmed-coarse", { state: "done", step: "done", iteration: 300, end: 300, written: 300, nProcs: 6,
+    stretches: [{ from: 0, to: 300 }], finished: new Date().toISOString() });
+  await mockEngine(page, { made: { "ahmed-coarse": { template: "ahmed-body" } }, runs: [solved], noJobs: true,
+    kinds: ["repair", "case", "solve", "tplan"], tplans: { "ahmed-coarse": PLAN } });
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  for (const width of [360, 320]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/app/solve/ahmed-coarse");
+    const table = page.getByRole("table", { name: "The time step and time of a transient run at each largest Courant number" });
+    await expect(table).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow, `the run's page is wider than a ${width} px screen`).toBeLessThanOrEqual(1);
+    const box = await table.locator("xpath=..").boundingBox();
+    expect(box!.x + box!.width, `the table's box is wider than a ${width} px screen`).toBeLessThanOrEqual(width + 1);
+    expect(await table.locator("xpath=..").evaluate((el) => el.scrollWidth > el.clientWidth), `the table scrolls at ${width} px`)
+      .toBe(true);
+    const button = await page.getByRole("button", { name: "Plan again" }).boundingBox();
+    expect(button!.x + button!.width, `Plan again is cut off at ${width} px`).toBeLessThanOrEqual(width + 1);
   }
 });
 

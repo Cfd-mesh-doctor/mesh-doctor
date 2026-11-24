@@ -65,6 +65,9 @@ export type CaseJudge = Json<operations["judge"]["responses"][200]>;
 /** Verify install (API 1.6): a run of the Ahmed body template against the wind tunnel and against the accuracy
  *  check's run of the same mesh, its drag and lift over the last quarter of its iterations. */
 export type RunValidation = Json<operations["run_validation"]["responses"][200]>;
+/** The transient plan a tplan job made of a case (API 1.6): from its latest result, the time step a transient run would
+ *  need at each Courant number, which cells set it, and the steps and hours such a run would take. */
+export type TransientPlan = Json<operations["transient_plan"]["responses"][200]>;
 
 /** The API major version this app speaks; the engine reports major.minor and any 1.x works. */
 export const API_MAJOR = 1;
@@ -79,4 +82,5 @@ export const JOB_KIND_LABEL: Record<JobKind, string> = {
   abextend: "A/B extension",
   case: "New case",
   solve: "Solve",
+  tplan: "Transient plan",
 };

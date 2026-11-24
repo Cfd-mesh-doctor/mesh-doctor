@@ -56,7 +56,7 @@ export const DESIGN: DocSection[] = [
             [
               "`tplan.py`",
               "core + CLI",
-              "the transient plan: `plan()` returns a `tplan` document; it runs OpenFOAM only in a throwaway shadow case, so the case is only read. Not yet a job kind or an API route"
+              "the transient plan: `plan()` returns a `tplan` document; it runs OpenFOAM only in a throwaway shadow case, so the case is only read. A `tplan` job (`start()`) writes it to `<workspace>/.tplans/<case>.json`, which `GET /tplans/{name}` answers"
             ],
             [
               "`repair.py`, `abtest.py`",
@@ -148,8 +148,8 @@ export const DESIGN: DocSection[] = [
             ],
             [
               "transient plan",
-              "`transient-plan` (CLI)",
-              "people deciding on a transient run; later the API"
+              "`transient-plan` (CLI), a `tplan` job",
+              "people deciding on a transient run; the web app's run page"
             ],
             [
               "`meshDoctor/map.json`",
@@ -345,7 +345,7 @@ export const DESIGN: DocSection[] = [
             [
               "`POST /jobs`",
               "`/api/md/start`, `abstart`, `abextend`",
-              "start a repair, A/B test, A/B extension, new case or solve (202 Accepted, the job document)"
+              "start a repair, A/B test, A/B extension, new case, solve or transient plan (202 Accepted, the job document)"
             ],
             [
               "`GET /jobs?state=&limit=`, `GET /jobs/{job}`",
@@ -376,6 +376,11 @@ export const DESIGN: DocSection[] = [
               "`POST /runs/{name}/stop`",
               "",
               "Stop: the run writes the iteration it is at and ends (`stopAt writeNow`), so a later solve job continues from there (`409 not-ready` if it isn't solving)"
+            ],
+            [
+              "`GET /tplans/{name}`",
+              "(new)",
+              "the transient plan a `tplan` job made of a case in the cases folder, from its latest result (`tplan` schema): the time step a transient run would need at each max Courant number, which cells set it, and the steps and hours such a run would take; `404 not-found` before a plan (API 1.6)"
             ]
           ]
         }
@@ -384,11 +389,11 @@ export const DESIGN: DocSection[] = [
         "text": "A job request names its kind and its parameters, which are checked against a schema (also in the OpenAPI document) before anything starts. Unknown parameters are refused:"
       },
       {
-        "code": "{\"kind\": \"repair\", \"params\": {\"source\": \"motorBike\", \"name\": \"mb\", \"profile\": \"openfoam\"}}\n{\"kind\": \"abtest\", \"params\": {\"name\": \"mb\", \"iters\": 200, \"init\": \"0.warm\", \"variant\": \"\"}}\n{\"kind\": \"abextend\", \"params\": {\"name\": \"mb\", \"to\": 1000}}\n{\"kind\": \"case\", \"params\": {\"template\": \"ahmed-body\", \"size\": \"coarse\", \"name\": \"ahmed\"}}\n{\"kind\": \"solve\", \"params\": {\"name\": \"ahmed\", \"to\": 2000, \"np\": 4}}\n{\"kind\": \"solve\", \"params\": {\"name\": \"mb-run\", \"source\": \"motorBike\", \"to\": 2000, \"np\": 4}}\n{\"kind\": \"solve\", \"params\": {\"name\": \"verify-install\", \"template\": \"ahmed-body\", \"size\": \"coarse\", \"to\": 2000, \"np\": 6}}",
+        "code": "{\"kind\": \"repair\", \"params\": {\"source\": \"motorBike\", \"name\": \"mb\", \"profile\": \"openfoam\"}}\n{\"kind\": \"abtest\", \"params\": {\"name\": \"mb\", \"iters\": 200, \"init\": \"0.warm\", \"variant\": \"\"}}\n{\"kind\": \"abextend\", \"params\": {\"name\": \"mb\", \"to\": 1000}}\n{\"kind\": \"case\", \"params\": {\"template\": \"ahmed-body\", \"size\": \"coarse\", \"name\": \"ahmed\"}}\n{\"kind\": \"solve\", \"params\": {\"name\": \"ahmed\", \"to\": 2000, \"np\": 4}}\n{\"kind\": \"solve\", \"params\": {\"name\": \"mb-run\", \"source\": \"motorBike\", \"to\": 2000, \"np\": 4}}\n{\"kind\": \"solve\", \"params\": {\"name\": \"verify-install\", \"template\": \"ahmed-body\", \"size\": \"coarse\", \"to\": 2000, \"np\": 6}}\n{\"kind\": \"tplan\", \"params\": {\"name\": \"ahmed\"}}",
         "lang": "json"
       },
       {
-        "text": "A new repair or A/B test refuses to replace an existing run of the same name (`409 exists`) unless the request says `\"replace\": true`, because the copy step deletes the old run. A new case refuses a name that is taken in the cases folder; there `\"replace\": true` makes again only a case that an earlier case job made (it holds a `.meshdoctor-case.json`), never one you made. A solve runs only in a case Mesh Doctor made, once its mesh is made (`422 unsupported` for a case you made): while no iteration is written it splits the case and starts the flow with `potentialFoam`, and once one is written it continues from the latest, on the same split. A case you made is solved through a copy: with a `source`, the solve first makes `name` as a copy of its mesh and settings, not its results (no time past 0, no `processor*`, `postProcessing` or logs), with the marker naming the case it copied. The copy needs the mesh joined in `constant/polyMesh` (`409 not-ready` for one split onto processors only), a `0` or `0.orig` folder and a steady foamRun setup, a `solver` entry and `steadyState` time schemes (`422 unsupported` without them); one that fails or is cancelled is removed, so its name is free again. With a `template` (and a `size`, else the template's own), the solve first makes `name` from the template as a case job does, then solves it, in one job: its run says `meshing`, then the mesh's own step, while the case is made (Stop works once it solves; a cancel keeps the folder, as a case job's does), and its memory check is the mesh's. That is the web app's Verify install: the coarse Ahmed body solved to 2000 iterations and compared by `GET /runs/{name}/validation`. The old routes keep their old behaviour."
+        "text": "A new repair or A/B test refuses to replace an existing run of the same name (`409 exists`) unless the request says `\"replace\": true`, because the copy step deletes the old run. A new case refuses a name that is taken in the cases folder; there `\"replace\": true` makes again only a case that an earlier case job made (it holds a `.meshdoctor-case.json`), never one you made. A solve runs only in a case Mesh Doctor made, once its mesh is made (`422 unsupported` for a case you made): while no iteration is written it splits the case and starts the flow with `potentialFoam`, and once one is written it continues from the latest, on the same split. A case you made is solved through a copy: with a `source`, the solve first makes `name` as a copy of its mesh and settings, not its results (no time past 0, no `processor*`, `postProcessing` or logs), with the marker naming the case it copied. The copy needs the mesh joined in `constant/polyMesh` (`409 not-ready` for one split onto processors only), a `0` or `0.orig` folder and a steady foamRun setup, a `solver` entry and `steadyState` time schemes (`422 unsupported` without them); one that fails or is cancelled is removed, so its name is free again. With a `template` (and a `size`, else the template's own), the solve first makes `name` from the template as a case job does, then solves it, in one job: its run says `meshing`, then the mesh's own step, while the case is made (Stop works once it solves; a cancel keeps the folder, as a case job's does), and its memory check is the mesh's. That is the web app's Verify install: the coarse Ahmed body solved to 2000 iterations and compared by `GET /runs/{name}/validation`. A transient plan only reads its case, so it plans a case you made as well as a run; it needs a written result with its face flux (`409 not-ready` before one), and a new plan of a case replaces the last once it is whole. The old routes keep their old behaviour."
       },
       {
         "table": {

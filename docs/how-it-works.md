@@ -103,6 +103,8 @@ A steady run that plateaus on a physically unsteady flow (a wing-tip vortex, a t
 
 The case is only read: OpenFOAM runs in a temporary shadow case whose mesh, settings and flux are links to it. The answer is a versioned JSON document (`tplan` schema). DES and LES need max Co ≤ 1. URANS with enough outer correctors usually runs higher, so the plan shows both.
 
+In the web app, a solved run's page has Plan a transient run: the engine makes the same plan as a job and the page shows it, with the hours on the run's own processes.
+
 ## 6. Hotspots and the map
 
 `foamResidualHotspots` finds the cells where the solution still changes most:

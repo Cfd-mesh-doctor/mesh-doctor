@@ -23,6 +23,7 @@ import ramguard
 import schema
 import solve
 import templates
+import tplan
 import validate
 import version
 
@@ -633,6 +634,16 @@ def run_live(p, q, b):
     return _found(_live["run_live"](name), "run " + name)
 
 
+@route("GET", "/tplans/{name}", "The transient plan a tplan job made of a case: from its latest result, the time "
+       "step a transient run of it would need at each Courant number, which cells set it, and the steps and hours "
+       "such a run would take (API 1.6)", ok=_ref("tplan"))
+def transient_plan(p, q, b):
+    doc, why = tplan.of(_name(p["name"]))
+    if why:
+        raise ApiError(*why)
+    return doc
+
+
 @route("GET", "/variants", "Solver-setting variants an A/B second run can use",
        ok=_items({"type": "object", "required": ["name", "label"],
                   "properties": {"name": {"type": "string"}, "label": {"type": "string"}}}))
@@ -722,6 +733,15 @@ JOBS = {
                                                  "continuation keeps the run's own"}}, ["name"]),
         "start": lambda a: solve.start(a["name"], a["to"], a["np"], a.get("source"), a.get("template"), a.get("size")),
         "links": lambda n: {"run": f"{PREFIX}/runs/{n}"},
+    },
+    "tplan": {
+        "summary": "plan a transient run of a solved case: from its latest result, the time step its mesh allows at "
+                   "each Courant number, which cells set it, and the steps and hours such a run would take. The case "
+                   "is only read: OpenFOAM works in a throwaway shadow case of links to it",
+        "params": _params({"name": dict(NAME, description="a case in the cases folder with a solved result: a run "
+                                                          "(GET /runs), or a case you made (GET /cases)")}, ["name"]),
+        "start": lambda a: tplan.start(a["name"]),
+        "links": lambda n: {"tplan": f"{PREFIX}/tplans/{n}"},
     },
 }
 JOB_REQUEST = {"oneOf": [

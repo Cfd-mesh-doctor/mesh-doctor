@@ -563,6 +563,142 @@ class TransientPlanTest(unittest.TestCase):
         return schema
 
 
+class TransientPlanJobTest(unittest.TestCase):
+    """The transient plan as a job (POST /api/v1/jobs, kind "tplan") and its answer (GET /api/v1/tplans/{name}),
+    with the job runner and OpenFOAM stood in for."""
+
+    def setUp(self):
+        import api_v1, jobs, tplan
+        self.api, self.jobs, self.tp = api_v1, jobs, tplan
+        self.d = tempfile.mkdtemp(prefix="tplan_job_test_")
+        self.addCleanup(shutil.rmtree, self.d, True)
+        self.cases, self.ws = os.path.join(self.d, "cases"), os.path.join(self.d, "work")
+        os.makedirs(self.cases)
+        env = mock.patch.dict(os.environ, {"MESHDOCTOR_CASES": self.cases, "MESHDOCTOR_WORKSPACE": self.ws})
+        env.start()
+        self.addCleanup(env.stop)
+        self.launched, self.ram = [], []
+        for obj, attr, value in ((jobs, "_spawn", lambda argv: self.launched.append(argv) or 2 ** 22 + 9),
+                                 (jobs, "solver_running", lambda: False),
+                                 (jobs.ramguard, "check", lambda case, kind: self.ram.append((case, kind)) or (True, ""))):
+            patcher = mock.patch.object(obj, attr, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def solved(self, name, nproc=2):
+        """A case solved to iteration 300 on `nproc` processes: its face flux phi written there, as a run's is."""
+        case = os.path.join(self.cases, name)
+        os.makedirs(os.path.join(case, "system"))
+        with open(os.path.join(case, "system", "controlDict"), "w") as f:
+            f.write("deltaT          1;\n")
+        for p in range(nproc):
+            os.makedirs(os.path.join(case, f"processor{p}", "300"))
+            open(os.path.join(case, f"processor{p}", "300", "phi"), "w").close()
+        return case
+
+    def post(self, params):
+        return self.api.handle("POST", "/api/v1/jobs", {}, json.dumps({"kind": "tplan", "params": params}).encode(),
+                               "application/json")
+
+    def get(self, name):
+        st, doc, _ = self.api.handle("GET", f"/api/v1/tplans/{name}", {})
+        return st, doc
+
+    @staticmethod
+    def text(path):
+        with open(path) as f:
+            return f.read()
+
+    def test_a_tplan_job_plans_a_solved_case_from_its_latest_result_and_needs_memory_for_it(self):
+        case = self.solved("ahmed")
+        st, job, _ = self.post({"name": "ahmed"})
+        self.assertEqual(st, 202, job)
+        self.assertEqual((job["kind"], job["name"], job["params"]), ("tplan", "ahmed", {"name": "ahmed"}))
+        self.assertEqual((job["log"], job["result"]), (".tplans/ahmed.log", ".tplans/ahmed.json"))
+        self.assertEqual(job["links"]["tplan"], "/api/v1/tplans/ahmed")
+        self.assertEqual(self.ram, [(case, "post")])                  # foamPostProcess's memory, on its mesh
+        argv = self.launched[0]
+        self.assertEqual(argv[argv.index("--") + 1:], [sys.executable, os.path.join(self.tp.PKG, "tplan.py"), case,
+                                                       "-o", os.path.join(self.ws, ".tplans", "ahmed.json")])
+        self.solved("wing")
+        st, doc, _ = self.post({"name": "wing"})                          # one big job at a time
+        self.assertEqual((st, doc["error"]["code"]), (409, "busy"))
+        self.assertEqual(len(self.launched), 1)
+
+    def test_a_case_with_no_result_or_none_there_is_refused_and_nothing_starts(self):
+        fresh = os.path.join(self.cases, "fresh")
+        for sub in ("system", "0", "processor0/0"):                       # its initial fields only
+            os.makedirs(os.path.join(fresh, sub))
+        with open(os.path.join(fresh, "system", "controlDict"), "w") as f:
+            f.write("deltaT 1;\n")
+        for params, code, said in [
+                ({"name": "fresh"}, 409, "fresh has no solved result to plan from (a written time with its face "
+                                         "flux, phi): solve it first"),
+                ({"name": "nope"}, 404, "no case nope in the cases folder"),
+                ({"name": "../x"}, 400, None), ({}, 400, None), ({"name": "fresh", "co": [1]}, 400, None)]:
+            st, doc, _ = self.post(params)
+            self.assertEqual(st, code, (params, doc))
+            if said:
+                self.assertEqual(doc["error"]["message"], said)
+        self.assertEqual(self.launched, [])
+
+    def test_the_command_writes_the_plan_whole_the_route_answers_it_and_a_failed_plan_keeps_it(self):
+        case = self.solved("ahmed")
+        self.assertEqual(self.get("ahmed"), (404, {"error": {"code": "not-found",
+                                                             "message": "no transient plan of ahmed: a tplan job makes one"}}))
+        os.makedirs(os.path.join(self.ws, ".tplans"))
+        out = self.tp.plan_file("ahmed")
+
+        def post_process(into, t, nproc):            # foamPostProcess's fields: 10 cells a processor, one fast
+            for p in range(nproc):
+                d = os.path.join(into, f"processor{p}", t)
+                write_field(os.path.join(d, "Co"), [1.0] * 9 + [50.0 * (p + 1)])
+                write_field(os.path.join(d, "C"), [0.5 * i for i in range(30)], 3)
+                write_field(os.path.join(d, "Vc"), [1e-6] * 10)
+            log = os.path.join(into, "log.foamPostProcess")
+            open(log, "w").close()
+            return 0, log
+
+        with mock.patch.object(self.tp, "post_process", post_process), contextlib.redirect_stderr(io.StringIO()):
+            self.tp.main([case, "-o", out])
+        self.assertEqual(os.listdir(os.path.dirname(out)), ["ahmed.json"])      # nothing half-written left beside it
+        st, doc = self.get("ahmed")
+        self.assertEqual(st, 200, doc)
+        import schema
+        self.assertEqual(schema.validate(doc, "tplan"), [])
+        self.assertEqual((doc["case"], doc["time"], doc["cells"], doc["processors"]), ("ahmed", "300", 20, 2))
+        self.assertEqual(doc["courantPerSecond"]["max"], 100.0)
+        self.assertEqual([o["maxCo"] for o in doc["options"]], [1.0, 5.0, 20.0])
+        self.assertAlmostEqual(doc["options"][0]["deltaT"], 0.01)
+
+        def failing(into, t, nproc):
+            log = os.path.join(into, "log.foamPostProcess")
+            with open(log, "w") as f:
+                f.write("--> FOAM FATAL ERROR:\ncannot find phi\n")
+            return 1, log
+
+        before = self.text(out)
+        with mock.patch.object(self.tp, "post_process", failing), contextlib.redirect_stderr(io.StringIO()), \
+                self.assertRaisesRegex(SystemExit, "foamPostProcess failed"):
+            self.tp.main([case, "-o", out])
+        self.assertEqual((self.text(out), os.listdir(os.path.dirname(out))), (before, ["ahmed.json"]))
+
+    def test_the_route_says_plainly_when_there_is_no_plan_a_torn_one_a_newer_one_or_a_bad_name(self):
+        os.makedirs(os.path.join(self.ws, ".tplans"))
+        with open(self.tp.plan_file("later"), "w") as f:
+            json.dump({"schemaVersion": "2.0", "case": "later"}, f)
+        with open(self.tp.plan_file("torn"), "w") as f:
+            f.write('{"schemaVersion": "1.0", "ca')
+        for name, code, said in [("nope", 404, "no transient plan of nope: a tplan job makes one"),
+                                 ("torn", 404, "no transient plan of torn: a tplan job makes one"),
+                                 ("later", 409, "the transient plan of later: "), (".x", 400, None)]:
+            st, doc = self.get(name)
+            self.assertEqual(st, code, (name, doc))
+            if said:
+                self.assertIn(said, doc["error"]["message"])
+                self.assertNotIn(self.d, doc["error"]["message"])
+
+
 class SchemaTest(unittest.TestCase):
     """schema.py: version rules, the validator, and read/write."""
 

@@ -91,6 +91,36 @@ export const MATCHING = {
   comparable: true, matches: true,
 };
 
+/** GET /tplans/ahmed-coarse (a tplan job's plan, API 1.6) as the engine answered it of a real coarse Ahmed body solved
+ *  to 300 on 6 processes, to 6 digits: the time step at Courant numbers 1, 5 and 20, which cells set it, the cost. */
+export const PLAN = {
+  schemaVersion: "1.0", case: "ahmed-coarse", time: "300", processors: 6, cells: 478_901,
+  courantPerSecond: { median: 4329.14, p99: 15320.4, p999: 20357.4, p9999: 29466.6, max: 54448.3, withoutTop: 24803.3 },
+  top: 100, cellsWithin2x: 62,
+  regions: [
+    { nCells: 38, centre: [-0.0635271, 0.179941, 0.322101], h: 0.00264837, maxRate: 54448.3 },
+    { nCells: 26, centre: [-0.931042, 0.190741, 0.298457], h: 0.0025086, maxRate: 43727.2 },
+    { nCells: 33, centre: [-0.0525219, 0.177295, 0.0701108], h: 0.00219626, maxRate: 41831 },
+    { nCells: 3, centre: [-1.04556, 0.193505, 0.0518287], h: 0.00274267, maxRate: 27844.4 },
+  ],
+  speed: 40, length: 1.044, flowTime: 0.2088, flowTimeSource: "8 L/U", secondsPerIteration: 0.4, outerCorrectors: 3,
+  options: [
+    { maxCo: 1, deltaT: 1.83661e-5, deltaTWithoutTop: 4.03171e-5, stepsPerSecond: 54448.3, hoursPerFlowSecond: 18.1494,
+      steps: 11_369, hours: 3.78967, hoursWithoutTop: 1.72633 },
+    { maxCo: 5, deltaT: 9.18303e-5, deltaTWithoutTop: 2.01586e-4, stepsPerSecond: 10889.7, hoursPerFlowSecond: 3.62988,
+      steps: 2274, hours: 0.758, hoursWithoutTop: 0.345333 },
+    { maxCo: 20, deltaT: 3.67321e-4, deltaTWithoutTop: 8.06343e-4, stepsPerSecond: 2722.41,
+      hoursPerFlowSecond: 0.907471, steps: 569, hours: 0.189667, hoursWithoutTop: 0.0863333 },
+  ],
+  seconds: 1.5,
+  notes: [
+    "Courant numbers come from the steady flow; in the transient run the velocity fluctuates, so the real max Co is "
+      + "usually somewhat higher.",
+    "Hours assume one PIMPLE outer iteration costs about one steady iteration.",
+    "DES/LES need max Co <= 1; URANS with enough outer correctors usually runs higher.",
+  ],
+};
+
 /** GET /templates (API 1.5): the engine's two templates, the Ahmed body in three mesh sizes. */
 const TEMPLATES = {
   items: [
@@ -134,6 +164,10 @@ export async function mockEngine(
     runs?: RunDoc[];
     /** Verify install's comparison of a run (GET /runs/{name}/validation), by its name. */
     validations?: Record<string, unknown>;
+    /** The job kinds GET / lists (only repair by default, as from an engine of API 1.0). */
+    kinds?: string[];
+    /** The transient plans tplan jobs made (GET /tplans/{name}, API 1.6), by their case's name. */
+    tplans?: Record<string, unknown>;
   } = {},
 ): Promise<MockEngine> {
   const state: MockEngine = {
@@ -171,7 +205,16 @@ export async function mockEngine(
     if (opts.broken?.includes(path)) {
       return json(500, { error: { code: "internal", message: "internal error; details are in the server window" } });
     }
-    if (path === "/") return json(200, { apiVersion: state.apiVersion, version: "0.1.0", schemas: { repair: "1.0", job: "1.0" }, jobKinds: ["repair"] });
+    if (path === "/") {
+      return json(200, { apiVersion: state.apiVersion, version: "0.1.0", schemas: { repair: "1.0", job: "1.0" },
+        jobKinds: opts.kinds ?? ["repair"] });
+    }
+    const tplan = /^\/tplans\/([^/]+)$/.exec(path);
+    if (tplan) {
+      const name = decodeURIComponent(tplan[1]!);
+      const p = opts.tplans?.[name];
+      return p ? json(200, p) : json(404, { error: { code: "not-found", message: `no transient plan of ${name}: a tplan job makes one` } });
+    }
     if (path === "/cases") return json(200, { items: state.cases, ...(opts.made && { made: opts.made }) });
     // Its solves (API 1.6): Stop ends a running one at the iteration it has reached, and its job with it.
     if (path === "/runs" && opts.runs) return json(200, { items: [...runs.values()] });

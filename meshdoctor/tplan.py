@@ -17,11 +17,16 @@ largest one sets the time step:  dt = maxCo / max(Co/dt).
 
 The case is only read: OpenFOAM runs in a throwaway shadow case whose mesh,
 settings and flux are links to it, so the fields it writes land in a
-temporary folder.
+temporary folder.  The web app starts the same as a `tplan` job (POST
+/api/v1/jobs) on a case in the cases folder, which writes the plan to
+<workspace>/.tplans/<case>.json; GET /api/v1/tplans/{case} answers it.
 """
 import argparse, array, glob, gzip, json, math, os, re, shutil, statistics, sys, tempfile, time
 
-import caseinfo, prog, ramguard, schema
+import caseinfo, config, md_api, prog, ramguard, schema
+
+PKG = os.path.dirname(os.path.abspath(__file__))
+PLANS = ".tplans"              # in the workspace: <case>.json, the plan a tplan job made of that case, and its log
 
 TARGETS = (1.0, 5.0, 20.0)     # max Courant numbers to plan for: DES/LES need 1; URANS runs higher
 OUTER = 3                      # PIMPLE outer iterations per time step, for the cost estimate
@@ -284,6 +289,63 @@ def summary(p):
     return "\n".join(lines)
 
 
+# ---- the plan as a job (POST /api/v1/jobs, kind "tplan") and its answer (GET /api/v1/tplans/{name}) -----------
+def plan_file(name):
+    return os.path.join(config.settings()["workspace"], PLANS, name + ".json")
+
+
+def _case(name):
+    """Case `name` in the cases folder, as GET /judge?case= takes one: a folder with system/controlDict that
+    doesn't hold the workspace; else None."""
+    case = os.path.join(md_api.run_dir(), name)
+    ws = md_api.md_dir().rstrip("/")
+    if not os.path.isfile(os.path.join(case, "system", "controlDict")) or \
+            (ws + "/").startswith(case.rstrip("/") + "/"):
+        return None
+    return case
+
+
+def refusal(name):
+    """Why case `name` can't be planned now, as (code, message) with no paths, or None."""
+    if not md_api.SAFE.match(name):
+        return "bad-request", "bad case name"
+    case = _case(name)
+    if case is None:
+        return "not-found", f"no case {name} in the cases folder"
+    if latest_time(case)[0] is None:
+        return "not-ready", (f"{name} has no solved result to plan from (a written time with its face flux, phi): "
+                             "solve it first")
+    return None
+
+
+def start(name):
+    """Start a tplan job (POST /jobs, kind "tplan"): the job, or a refusal, as md_api's other starts answer.  It plans
+    from the case's latest result, only reads the case, and writes the plan to <workspace>/.tplans/<name>.json; a
+    plan made before stays until the new one is whole."""
+    why = refusal(name)
+    if why:
+        return md_api._refuse(*why)
+    ws = config.settings()["workspace"]
+    config.ensure_workspace(ws)
+    os.makedirs(os.path.join(ws, PLANS), mode=0o700, exist_ok=True)
+    case = _case(name)
+    cmd = [sys.executable, os.path.join(PKG, "tplan.py"), case, "-o", plan_file(name)]
+    return md_api._submit("tplan", {"name": name}, name, cmd, log=f"{PLANS}/{name}.log",
+                          result=f"{PLANS}/{name}.json", ram=(case, "post"))
+
+
+def of(name):
+    """GET /tplans/{name}: (the plan a tplan job made of case `name`, None), or (None, (code, message))."""
+    if not md_api.SAFE.match(name):
+        return None, ("bad-request", "bad case name")
+    try:
+        return schema.read(plan_file(name), "tplan"), None
+    except schema.SchemaError as e:
+        return None, ("schema-version", f"the transient plan of {name}: {getattr(e, 'why', 'newer file version')}")
+    except (OSError, ValueError):
+        return None, ("not-found", f"no transient plan of {name}: a tplan job makes one")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog=prog.name() + " transient-plan", description=__doc__.split("\n\n")[0])
     ap.add_argument("case", help="a steady case with a written result (only read)")
@@ -313,9 +375,11 @@ def main(argv=None):
     except (ValueError, RuntimeError, MemoryError) as e:
         sys.exit(f"transient-plan: {e}")
     print(summary(p), file=sys.stderr)
-    if a.out:
-        with open(a.out, "w") as f:
+    if a.out:                   # written whole, then put in place: a reader never sees half a plan
+        tmp = f"{a.out}.{os.getpid()}.tmp"
+        with open(tmp, "w") as f:
             json.dump(p, f, indent=1)
+        os.replace(tmp, a.out)
     else:
         json.dump(p, sys.stdout, indent=1)
         print()

@@ -512,6 +512,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tplans/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The transient plan a tplan job made of a case: from its latest result, the time step a transient run of it would need at each Courant number, which cells set it, and the steps and hours such a run would take (API 1.6) */
+        get: operations["transient_plan"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/variants": {
         parameters: {
             query?: never;
@@ -640,7 +657,7 @@ export interface components {
             /** @description local start time (yyyymmdd-hhmmss), kind, run name and a random suffix */
             id: string;
             /** @enum {unknown} */
-            kind: "repair" | "abtest" | "abextend" | "case" | "solve";
+            kind: "repair" | "abtest" | "abextend" | "case" | "solve" | "tplan";
             /** @description added by the API: where to follow the job and its run */
             links?: Record<string, unknown>;
             log: string;
@@ -1551,6 +1568,13 @@ export interface operations {
                          * @default 2000
                          */
                         to?: number;
+                    };
+                } | {
+                    /** @enum {unknown} */
+                    kind: "tplan";
+                    params: {
+                        /** @description a case in the cases folder with a solved result: a run (GET /runs), or a case you made (GET /cases) */
+                        name: string;
                     };
                 };
             };
@@ -2655,6 +2679,37 @@ export interface operations {
                             }[];
                         }[];
                     };
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    transient_plan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tplan"];
                 };
             };
             /** @description Error (the code says which; see STATUS in api_v1.py) */

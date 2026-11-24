@@ -76,6 +76,7 @@ CASEJOB = b'{"kind": "case", "params": {"template": "ahmed-body", "name": ".."}}
 SOLVEJOB = b'{"kind": "solve", "params": {"name": ".."}}'
 COPYJOB = b'{"kind": "solve", "params": {"name": "copy", "source": ".."}}'
 TEMPLATEJOB = b'{"kind": "solve", "params": {"name": "verify-install", "template": ".."}}'
+TPLANJOB = b'{"kind": "tplan", "params": {"name": ".."}}'
 JSON = "application/json"
 PAGES = ("/", "/run", "/meshdoctor", "/meshmap", "/report")
 APP_KEY = ""
@@ -125,6 +126,10 @@ CHECKS = [
      '"code": "bad-request"'),
     ("v1 a run's comparison refused to another site", "GET", "/api/v1/runs/x/validation",
      {"Origin": "http://evil.example"}, 403, "cross-site"),
+    ("v1 a case with no transient plan has none", "GET", "/api/v1/tplans/nope", {}, 404, '"code": "not-found"'),
+    ("v1 a transient plan takes no bad name", "GET", "/api/v1/tplans/.x", {}, 400, '"code": "bad-request"'),
+    ("v1 a transient plan refused to another site", "GET", "/api/v1/tplans/x", {"Origin": "http://evil.example"},
+     403, "cross-site"),
     ("v1 readiness check takes no POST", "POST", "/api/v1/check", {"X-MD-Token": TOKEN, "Content-Type": JSON}, 405,
      '"code": "method-not-allowed"', b"{}"),
     ("v1 unknown host refused", "GET", "/api/v1/cases", {"Host": f"evil.example:{PORT}"}, 403, '"code": "forbidden"'),
@@ -169,6 +174,10 @@ CHECKS = [
      TEMPLATEJOB),
     ("v1 a solve with a template without token refused", "POST", "/api/v1/jobs", {"Content-Type": JSON}, 403, "token",
      TEMPLATEJOB),
+    ("v1 a transient plan job takes no bad case name", "POST", "/api/v1/jobs",
+     {"Content-Type": JSON, "X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 400, '"code": "bad-request"', TPLANJOB),
+    ("v1 a transient plan job without token refused", "POST", "/api/v1/jobs", {"Content-Type": JSON}, 403, "token",
+     TPLANJOB),
     # page scripts: only plain names from web/js/
     ("shared page script is served", "GET", "/js/md.js", {}, 200, "MD.render"),
     ("unknown script is not served", "GET", "/js/nope.js", {}, 404, ""),

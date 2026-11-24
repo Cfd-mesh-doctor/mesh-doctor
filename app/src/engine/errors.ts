@@ -75,13 +75,13 @@ function memoryNumbers(message: string): string {
 
 const BUSY_KIND: Record<string, string> = {
   repair: "The repair", abtest: "The A/B test", abextend: "The A/B extension", case: "The new case",
-  solve: "The solve of",
+  solve: "The solve of", tplan: "The transient plan of",
 };
 
 /** The job in the way, from the engine's refusal ("job <id> (repair wing-fix) is running; one big job at a time"), as a
  * sentence; empty when it names none (an OpenFOAM run started elsewhere). */
 function busyJob(message: string): string {
-  const m = /\((repair|abtest|abextend|case|solve) ([^)\s]+)\) is (queued|running)/.exec(message);
+  const m = /\((repair|abtest|abextend|case|solve|tplan) ([^)\s]+)\) is (queued|running)/.exec(message);
   if (!m) return "";
   return `${BUSY_KIND[m[1]!]} ${m[2]} is ${m[3] === "queued" ? "waiting to start" : "running"}. `;
 }

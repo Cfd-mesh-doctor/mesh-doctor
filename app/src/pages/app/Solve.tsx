@@ -380,7 +380,10 @@ function ComingNext() {
       </CardHeader>
       <CardContent>
         <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-          <li>Transient runs: the time step, the Courant number and its worst cells, the averaging window and the transient judge.</li>
+          <li>
+            Transient runs: solving one, its averaging window and the transient judge. A solved run&apos;s page plans
+            one already: the time step at each Courant number, the cells that set it, and the hours.
+          </li>
         </ul>
       </CardContent>
     </Card>

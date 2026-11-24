@@ -232,6 +232,19 @@ export function useRunValidation(name: string, enabled: boolean, version: number
   });
 }
 
+/** The transient plan of case `name` (GET /tplans/{name}), asked for when `enabled`. `version` names its newest
+ * tplan job as it stands (its id and state), so a plan just made is asked for as its job ends. A not-found (no plan
+ * yet) isn't asked again until then. */
+export function useTransientPlan(name: string, enabled: boolean, version: string | null = null) {
+  const { transport } = useEngine();
+  return useQuery({
+    queryKey: [transport?.scope, "tplan", name, version],
+    queryFn: transport && enabled ? ({ signal }) => api.transientPlan(transport, name, signal) : skipToken,
+    retry: false,
+    staleTime: 5 * 60_000,
+  });
+}
+
 /** Stops a run: the solver writes the iteration it is at and ends. The run's answer goes into its page at once; then
  * it, the runs and the jobs are asked for again. */
 export function useStopRun() {

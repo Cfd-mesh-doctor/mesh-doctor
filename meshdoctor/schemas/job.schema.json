@@ -32,7 +32,8 @@
     "abtest",
     "abextend",
     "case",
-    "solve"
+    "solve",
+    "tplan"
    ]
   },
   "params": {

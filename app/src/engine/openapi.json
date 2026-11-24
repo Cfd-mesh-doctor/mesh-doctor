@@ -412,7 +412,8 @@
               "abtest",
               "abextend",
               "case",
-              "solve"
+              "solve",
+              "tplan"
             ]
           },
           "params": {
@@ -2973,6 +2974,36 @@
                       "params"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "description": "plan a transient run of a solved case: from its latest result, the time step its mesh allows at each Courant number, which cells set it, and the steps and hours such a run would take. The case is only read: OpenFOAM works in a throwaway shadow case of links to it",
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "tplan"
+                        ]
+                      },
+                      "params": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "description": "a case in the cases folder with a solved result: a run (GET /runs), or a case you made (GET /cases)",
+                            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "params"
+                    ],
+                    "type": "object"
                   }
                 ]
               }
@@ -5181,6 +5212,46 @@
           }
         },
         "summary": "Cases the engine can make (a `case` job): the templates in examples/, each with its mesh sizes and about how many cells each one makes (API 1.5)"
+      }
+    },
+    "/tplans/{name}": {
+      "get": {
+        "operationId": "transient_plan",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tplan"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "The transient plan a tplan job made of a case: from its latest result, the time step a transient run of it would need at each Courant number, which cells set it, and the steps and hours such a run would take (API 1.6)"
       }
     },
     "/variants": {

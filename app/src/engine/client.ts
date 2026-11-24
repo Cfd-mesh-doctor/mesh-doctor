@@ -5,7 +5,7 @@ import { NOT_THE_ENGINE, EngineError, isEngineCode } from "./errors";
 import { localAccessState } from "./permission";
 import type {
   AbtestDetail, AbtestList, AbtestLive, CaseJudge, CaseList, ClusterShape, EngineInfo, Job, JobList, JobRequest, JudgeAnswer,
-  MachineInfo, Readiness, RepairList, RunDetail, RunList, RunLive, RunValidation, TemplateList, VariantList,
+  MachineInfo, Readiness, RepairList, RunDetail, RunList, RunLive, RunValidation, TemplateList, TransientPlan, VariantList,
 } from "./types";
 import { API_MAJOR } from "./types";
 import type { Report } from "@/report/read";
@@ -135,6 +135,9 @@ export const api = {
   /** Verify install: a run of the Ahmed body template against the wind tunnel and the accuracy check's run. */
   runValidation: (t: Transport, name: string, signal?: AbortSignal) =>
     t.request<RunValidation>("GET", `/runs/${encodeURIComponent(name)}/validation`, undefined, signal),
+  /** The transient plan a tplan job made of a case (API 1.6); not-found before one. */
+  transientPlan: (t: Transport, name: string, signal?: AbortSignal) =>
+    t.request<TransientPlan>("GET", `/tplans/${encodeURIComponent(name)}`, undefined, signal),
   /** Stops a run: the solver writes the iteration it is at and ends, and a continuation starts from there. */
   stopRun: (t: Transport, name: string) => t.request<RunDetail>("POST", `/runs/${encodeURIComponent(name)}/stop`),
   /** The judge on a case's solve, over all its solver logs: is it converged? */

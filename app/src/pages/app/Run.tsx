@@ -5,7 +5,7 @@
 // iteration it has reached (POST /runs/{name}/stop), and Continue… solves on from the latest one written
 // (SolveDialog.tsx). A solve just started shows as starting until its job writes the run's status, and a copy of a
 // case you made as copying while its job makes it. While it solves the screen asks again every 3 s, so the charts
-// grow.
+// grow. Once it has ended, Plan a transient run (TransientPlan.tsx) says what a transient run of it would take.
 import { ArrowLeft, CircleStop, FastForward, ListChecks, Play } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
@@ -27,6 +27,7 @@ import { Section } from "@/pages/report/Section";
 import { tableRun } from "@/report/abtest";
 import { judgeOf } from "@/report/summary";
 import { SolveDialog } from "./SolveDialog";
+import { TransientPlanCard } from "./TransientPlan";
 import {
   current, madeFrom, madeOfJob, runShown, solveJobOf, solveStep, stretchFraction, stretchesText, totalForces,
 } from "./solveStart";
@@ -364,6 +365,12 @@ export function RunPage() {
       )}
       {!liveJudge && judge.isError && (
         <ErrorPanel className="mt-4" compact error={judge.error} onRetry={() => void judge.refetch()} retrying={judge.isFetching} />
+      )}
+
+      {ended && (
+        <Section title="Transient plan">
+          <div className="mt-4"><TransientPlanCard run={run} /></div>
+        </Section>
       )}
     </>
   );
