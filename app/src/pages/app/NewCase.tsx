@@ -22,15 +22,20 @@ import { OLD_ENGINE_CASES, checkCaseName, newCaseCommand, suggestName, takenCase
 import { stepMemory } from "./repairStart";
 
 /** The New case dialog. It is made afresh each time it opens, so nothing picked or typed last time stays. */
-export function NewCaseDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function NewCaseDialog({ open, onOpenChange, preset }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** The template and mesh size picked when it opens (Try it on the Ahmed body's), else the first template's own. */
+  preset?: { template: string; size: TemplateSize["name"] };
+}) {
   return (
     <JobDialog open={open} onOpenChange={onOpenChange}>
-      <NewCaseForm onDone={() => onOpenChange(false)} />
+      <NewCaseForm onDone={() => onOpenChange(false)} preset={preset} />
     </JobDialog>
   );
 }
 
-function NewCaseForm({ onDone }: { onDone: () => void }) {
+function NewCaseForm({ onDone, preset }: { onDone: () => void; preset?: { template: string; size: TemplateSize["name"] } }) {
   const { mode } = useEngine();
   const to = useAppPath();
   const navigate = useNavigate();
@@ -42,10 +47,10 @@ function NewCaseForm({ onDone }: { onDone: () => void }) {
   const id = useId();
 
   const list = templates.data?.items ?? [];
-  const [picked, setPicked] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string | null>(preset?.template ?? null);
   const template = list.find((t) => t.name === picked) ?? list[0] ?? null;
   // The size picked, while the template has it; else the template's own.
-  const [sized, setSized] = useState<TemplateSize["name"] | null>(null);
+  const [sized, setSized] = useState<TemplateSize["name"] | null>(preset?.size ?? null);
   const size = template?.sizes.find((s) => s.name === sized) ?? template?.sizes.find((s) => s.name === template.size)
     ?? template?.sizes[0] ?? null;
   const taken = useMemo(() => takenCaseNames(cases.data?.items, jobs.data?.items), [cases.data, jobs.data]);

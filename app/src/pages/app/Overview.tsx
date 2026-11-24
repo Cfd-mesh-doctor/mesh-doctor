@@ -2,17 +2,16 @@
 // The engine at a glance: what it is, its cases, its repair runs (each finished one opens its report) and what is
 // running now; on your own engine, until its first repair run, the steps to one (Getting started). Both start a repair
 // here (the repair dialog), and give the command that does the same in a terminal.
-import { ArrowRight, Check, Cpu, FolderOpen, ListChecks, Wrench } from "lucide-react";
-import { useId, useState, type ReactNode } from "react";
+import { ArrowRight, Cpu, FolderOpen, ListChecks, Wrench } from "lucide-react";
+import { useId, useState } from "react";
 import { Link } from "react-router";
-import { CopyBlock } from "@/components/shared/CopyBlock";
+import { StepList, type Step } from "@/components/shared/Steps";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { DashboardLink } from "@/components/shared/DashboardLink";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { NoJobsYet } from "@/components/shared/NoJobsYet";
 import { JobStateBadge, VerdictBadge } from "@/components/shared/badges";
 import { EmptyState, PageHeader, StatTile, TableSkeleton } from "@/components/shared/page";
-import { Badge, Dot } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardTitleRow, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/misc";
@@ -25,7 +24,6 @@ import { caseName, improvedCleanly, madeWorse, newestFirst, runStep, runUpdated 
 import { formatCells, formatCount, formatRelative } from "@/lib/format";
 import { DOCS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
-import { cn } from "@/lib/utils";
 import { FIRST_RUN_SETUP } from "@/pages/install/commands";
 import { jobOf, runLink, shownJobState } from "./runs";
 import { StartRepairDialog } from "./StartRepair";
@@ -43,37 +41,6 @@ const BLANKS = (
 const LINK = "font-medium text-primary underline-offset-4 hover:underline";
 /** How many repair runs the Overview lists: the newest. */
 const RUNS_SHOWN = 6;
-
-/** Where a Getting started step is: ticked off, the one to do now, under way (a repair job is waiting or running), or
- * waiting for the steps before it. */
-type StepState = "done" | "next" | "running" | "later";
-
-interface Step {
-  title: string;
-  state: StepState;
-  text: ReactNode;
-  /** A button that does it here, on the step to do now. */
-  action?: ReactNode;
-  /** What to run, on the step to do now: one command, or a few lines. */
-  command?: string;
-  block?: string;
-}
-
-/** Each state's round mark: a tick, else the step's number. */
-const MARK: Record<StepState, string> = {
-  done: "bg-success-soft text-success",
-  next: "bg-primary text-primary-foreground",
-  running: "bg-primary-soft text-primary",
-  later: "bg-surface-2 text-muted-foreground ring-1 ring-inset ring-border",
-};
-
-/** Each state in words, beside the step's title: not by colour alone. A step that waits has none. */
-function StepLabel({ state }: { state: StepState }) {
-  if (state === "done") return <Badge tone="success">Done</Badge>;
-  if (state === "next") return <Badge tone="primary">Next</Badge>;
-  if (state === "running") return <Badge tone="primary"><Dot tone="primary" pulse />Running</Badge>;
-  return null;
-}
 
 /**
  * A newcomer's three steps to a first repair, each ticked off from what the engine lists: 1. the engine answers (it
@@ -175,35 +142,13 @@ function GettingStarted({ cases, repairing }: { cases: readonly string[]; repair
             {done} of {steps.length} done
           </span>
         </CardTitleRow>
-        <CardDescription>Three steps to your first repair. Each ticks itself off once the engine lists it.</CardDescription>
+        <CardDescription>
+          Three steps to your first repair. Each ticks itself off once the engine lists it. Or{" "}
+          <Link to={to("/first-run")} className={LINK}>try it on the Ahmed body</Link>: a case made from a template,
+          solved, repaired and A/B tested, each step started here.
+        </CardDescription>
       </CardHeader>
-      <ol className="divide-y divide-border border-t border-border">
-        {steps.map((s, i) => (
-          <li key={s.title} aria-current={s.state === "next" ? "step" : undefined} className="flex gap-3 px-5 py-3.5">
-            <span aria-hidden
-              className={cn("grid size-6 shrink-0 place-items-center rounded-full text-xs font-semibold", MARK[s.state])}>
-              {s.state === "done" ? <Check className="size-3.5" /> : i + 1}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1">
-                <h3 className={cn("text-sm font-medium", s.state === "later" && "text-muted-foreground")}>{s.title}</h3>
-                <StepLabel state={s.state} />
-              </div>
-              <p className="mt-0.5 text-[13px] text-muted-foreground">{s.text}</p>
-              {/* The way here, then the command for a terminal, as the text names them: side by side where both
-                  fit, so the step is no taller for its button (on a laptop's screen, the tour's box stays clear of
-                  the command); on a phone the command goes under it. */}
-              {(s.action || s.command) && (
-                <div className="mt-3 flex max-w-3xl flex-wrap items-center gap-2">
-                  {s.action}
-                  {s.command && <CopyCommand command={s.command} className="max-w-xl min-w-0 flex-1 basis-72" />}
-                </div>
-              )}
-              {s.block && <CopyBlock code={s.block} className="mt-3 max-w-3xl" />}
-            </div>
-          </li>
-        ))}
-      </ol>
+      <StepList steps={steps} />
       <StartRepairDialog open={starting} onOpenChange={setStarting} />
     </Card>
   );

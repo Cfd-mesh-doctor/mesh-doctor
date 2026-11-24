@@ -29,6 +29,8 @@ import {
 export interface SolveTarget {
   name: string;
   run: Pick<Run, "written" | "nProcs"> | null;
+  /** The iteration to suggest (Try it on the Ahmed body's short solve), when past what is written. */
+  to?: number;
 }
 
 /** The Solve dialog, for a first solve or a continuation. It is made afresh each time it opens. */
@@ -194,7 +196,7 @@ function SolveForm({ target, onDone }: { target: SolveTarget; onDone: () => void
   const { name } = target;
   const written = target.run?.written ?? 0;
   const first = written === 0;
-  const [typed, setTyped] = useState(() => String(suggestedTo(written)));
+  const [typed, setTyped] = useState(() => String(target.to != null && target.to > written ? target.to : suggestedTo(written)));
   const problem = toProblem(typed, written);
   const [picked, setPicked] = useState<number | null>(null);
   const np = picked ?? suggestedProcs(s.cores);

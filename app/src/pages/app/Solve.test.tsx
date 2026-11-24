@@ -162,11 +162,14 @@ describe("the Solve screen's Ready to solve?", () => {
 });
 
 describe("the Solve screen's other parts", () => {
-  it("lists what comes next on it, and the worked example until then", () => {
+  it("lists what comes next on it, and where a first run is until then: the guided one, and the worked example", () => {
     renderScreen(<Solve />, { path, transport: engine(withChecks({})) });
     const next = within(screen.getByRole("heading", { name: "Coming next on this screen" }).closest("section")!);
-    expect(next.getAllByRole("listitem")).toHaveLength(1);
-    expect(next.getByRole("link", { name: /the Ahmed body/ })).toHaveAttribute("href", expect.stringContaining("examples/ahmed-body"));
+    expect(next.getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      expect.stringMatching(/^Verify install: /), expect.stringMatching(/^Transient runs: /),
+    ]);
+    expect(next.getByRole("link", { name: "Try it on the Ahmed body" })).toHaveAttribute("href", "/app/first-run");
+    expect(next.getByRole("link", { name: /^the Ahmed body/ })).toHaveAttribute("href", expect.stringContaining("examples/ahmed-body"));
   });
 
   it("makes a case from a template with New case", async () => {

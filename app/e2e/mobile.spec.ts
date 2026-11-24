@@ -118,7 +118,7 @@ test("on the smallest phones your own app's screens don't scroll sideways", asyn
   for (const width of [360, 320]) {
     await page.setViewportSize({ width, height: 800 });
     for (const [path, part] of [
-      ["/app", "Getting started"], ["/app/jobs", "wing-fix"], ["/app/cases", "motorBike"], ["/app/solve", "Ready to solve?"],
+      ["/app", "Getting started"], ["/app/jobs", "wing-fix"], ["/app/cases", "motorBike"], ["/app/solve", "Ready to solve?"], ["/app/first-run", "Make a coarse Ahmed case"],
       ["/app/estimate?cells=31.1", "Size estimator"], ["/app/settings", "Appearance"],
     ] as const) {
       await page.goto(path);
@@ -216,6 +216,7 @@ test("on a phone a card's description runs across the card, under its title and 
   for (const [path, title, beside, description] of [
     ["/app/settings", "Engine", "Connected", "Mesh Doctor on this computer."],
     ["/app", "Getting started", "of 3 done", "Three steps to your first repair."],
+    ["/app/first-run", "Steps", "of 6 done", "Each starts here, and ticks itself off"],
     ["/app", "Recent jobs", "All jobs", "Repairs and A/B tests, newest first"],
     ["/app", "Repair runs", "All repairs", "Newest first. The verdict compares"],
     ["/demo/settings", "Engine", "Demo data", "The demo shows data recorded"],

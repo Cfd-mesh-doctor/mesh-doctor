@@ -37,6 +37,11 @@ function screens(home: string): RouteObject[] {
       lazy: async () => ({ Component: (await import("@/pages/app/AbTest")).AbTest }),
     },
     { path: "solve/:name", handle: h("Run"), lazy: async () => ({ Component: (await import("@/pages/app/Run")).RunPage }) },
+    {
+      path: "first-run",
+      handle: h("First run"),
+      lazy: async () => ({ Component: (await import("@/pages/app/FirstRun")).FirstRun }),
+    },
     { path: "*", handle: h("Not found"), element: <NotFound home={home} /> },
   ];
 }

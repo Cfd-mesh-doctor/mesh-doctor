@@ -92,6 +92,8 @@ describe("the Overview before anything has run", () => {
     expect(dashboard).toHaveAttribute("href", "http://localhost:8765/meshdoctor");
     expect(dashboard).toHaveAttribute("target", "_blank");
     expect(await screen.findByRole("region", { name: "Getting started" })).toBeInTheDocument();
+    // Or a first run from start to finish, each step started in the app: Try it on the Ahmed body.
+    expect(screen.getByRole("link", { name: "try it on the Ahmed body" })).toHaveAttribute("href", "/app/first-run");
     // The empty list of runs says what will show in it: Getting started, at the top, has the steps to the first.
     expect(screen.getByRole("heading", { name: "No repair runs yet" }).parentElement)
       .toHaveTextContent("Each repair shows here once its copy is made, and its verdict and report when it finishes.");

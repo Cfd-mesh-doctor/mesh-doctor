@@ -302,6 +302,7 @@ function Runs() {
   const runs = useRuns(active);
   const [solving, setSolving] = useState<string | null>(null);
   const [copying, setCopying] = useState(false);
+  const to = useAppPath();
   const old = runs.isError && !runs.data && asEngineError(runs.error).code === "not-found";
   const rows = useMemo(() => runRows(cases.data?.made, runs.data?.items, jobs.data?.items), [cases.data, runs.data, jobs.data]);
   const loading = runs.isPending || cases.isPending;
@@ -327,7 +328,9 @@ function Runs() {
           </div>
         ) : rows.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Nothing to solve here yet: make a case with New case above, or solve a copy of a case you made.
+            Nothing to solve here yet: make a case with New case above, or solve a copy of a case you made. New
+            here? <Link to={to("/first-run")} className="font-medium text-primary underline-offset-4 hover:underline">
+            Try it on the Ahmed body</Link>, step by step.
           </p>
         ) : (
           <ul className="-my-3 divide-y divide-border" aria-label="Runs">
@@ -359,12 +362,15 @@ function Runs() {
 
 /** What this screen does next, until it does. */
 function ComingNext() {
+  const to = useAppPath();
   return (
     <Card className="mt-6">
       <CardHeader className="block">
         <CardTitle>Coming next on this screen</CardTitle>
         <CardDescription>
-          Until then, the worked example shows a first run from start to finish, in a terminal:{" "}
+          A first run from start to finish is on{" "}
+          <Link to={to("/first-run")} className="font-medium text-primary underline-offset-4 hover:underline">
+            Try it on the Ahmed body</Link>, each step started here; in a terminal, the worked example shows the same:{" "}
           <a href={DOCS.example} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
             the Ahmed body <ExternalLink className="size-3.5" aria-hidden />
           </a>
@@ -372,7 +378,8 @@ function ComingNext() {
       </CardHeader>
       <CardContent>
         <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-          <li>A first run, guided from start to finish: the Ahmed body made and solved, then a repair and an A/B test of it.</li>
+          <li>Verify install: the coarse Ahmed body&apos;s drag against the wind tunnel&apos;s, beside the accuracy check.</li>
+          <li>Transient runs: the time step, the Courant number and its worst cells, the averaging window and the transient judge.</li>
         </ul>
       </CardContent>
     </Card>
