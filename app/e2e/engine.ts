@@ -220,6 +220,8 @@ export async function mockEngine(
     runs?: RunDoc[];
     /** Verify install's comparison of a run (GET /runs/{name}/validation), by its name. */
     validations?: Record<string, unknown>;
+    /** Each case's latest written time with its face flux (GET /cases' `results`, API 1.8), by name. */
+    results?: Record<string, string | null>;
     /** The job kinds GET / lists (only repair by default, as from an engine of API 1.0). */
     kinds?: string[];
     /** The transient plans tplan jobs made (GET /tplans/{name}, API 1.6), by their case's name. */
@@ -273,7 +275,9 @@ export async function mockEngine(
       const p = opts.tplans?.[name];
       return p ? json(200, p) : json(404, { error: { code: "not-found", message: `no transient plan of ${name}: a tplan job makes one` } });
     }
-    if (path === "/cases") return json(200, { items: state.cases, ...(opts.made && { made: opts.made }) });
+    if (path === "/cases") {
+      return json(200, { items: state.cases, ...(opts.made && { made: opts.made }), ...(opts.results && { results: opts.results }) });
+    }
     // Its solves (API 1.6): Stop ends a running one at the iteration it has reached, and its job with it.
     if (path === "/runs" && opts.runs) return json(200, { items: [...runs.values()] });
     const solve = /^\/runs\/([^/]+)(\/live|\/stop|\/validation)?$/.exec(path);

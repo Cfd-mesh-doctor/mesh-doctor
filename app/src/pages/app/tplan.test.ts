@@ -106,6 +106,7 @@ describe("a transient plan in words", () => {
 
   it("says what it was planned from, and whether the run has been solved further since", () => {
     expect(planMade(PLAN)).toBe("Planned from iteration 300 of this run, in 12 s.");
+    expect(planMade(PLAN, "case")).toBe("Planned from its result at time 300, in 12 s.");     // a case you made's
     expect([planStale(PLAN, { written: 300 }), planStale(PLAN, { written: 600 })]).toEqual([false, true]);
     expect([planIteration({ ...PLAN, time: "0.25" }), planIteration({ ...PLAN, time: "" })]).toEqual([0.25, null]);
     expect(planMade({ ...PLAN, time: "latest", seconds: undefined })).toBe("Planned from time latest of this run.");

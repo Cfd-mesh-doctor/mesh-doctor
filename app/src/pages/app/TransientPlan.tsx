@@ -6,7 +6,9 @@
 // would cost (GET /tplans/{name}). While it plans, the card says so; once made, it shows the plan, and
 // says when the run has been solved further since. The case is only read. With a plan, Start a transient run… starts
 // one (TransientDialog in SolveDialog.tsx): a new case of the run's mesh, settings and latest result, solved in time;
-// the transient runs made of the run are listed under the plan.
+// the transient runs made of the run are listed under the plan. The Cases screen plans a case you made that has a
+// result (GET /cases' `results`, API 1.8) the same way, in a dialog (CasePlanDialog): planned only, as a transient run
+// starts from a solved run of a case Mesh Doctor made.
 import { Hourglass, RotateCw, Waves } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
@@ -14,6 +16,7 @@ import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { TextWithCode } from "@/components/shared/InlineCode";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { DialogActions, DialogClose, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/misc";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { useAppPath, useEngine } from "@/engine/context";
@@ -21,8 +24,11 @@ import { asEngineError } from "@/engine/errors";
 import { useCases, useEngineInfo, useJobs, useStartJob, useTransientPlan } from "@/engine/hooks";
 import { isActive, type RunDetail, type TransientPlan } from "@/engine/types";
 import { formatInt } from "@/lib/format";
+import { JobDialog } from "./dialogParts";
 import { TransientDialog } from "./SolveDialog";
-import { cellSetLine, planHeadline, planJobOf, planMade, planProcs, planRows, planStale, regionLines, setBy } from "./tplan";
+import {
+  cellSetLine, planHeadline, planIteration, planJobOf, planMade, planProcs, planRows, planStale, regionLines, setBy,
+} from "./tplan";
 
 const LINK = "font-medium text-primary underline-offset-4 hover:underline";
 const NUM = "text-right tabular-nums";
@@ -31,7 +37,9 @@ const NUM = "text-right tabular-nums";
 export const OLD_ENGINE_TPLAN = "Your engine is older than this page and can't plan a transient run from here yet. "
   + "Update Mesh Doctor (`git pull` in its folder) and restart the engine.";
 
-function PlanView({ plan, run }: { plan: TransientPlan; run: RunDetail }) {
+/** The plan: its time step and hours at each largest Courant number, which cells set it, and where it came from;
+ * `since`: what has been solved or written since, when the plan is from an earlier result. */
+function PlanView({ plan, what, since }: { plan: TransientPlan; what: "run" | "case"; since: string | null }) {
   const rows = planRows(plan);
   const regions = regionLines(plan);
   const saved = cellSetLine(plan);
@@ -78,12 +86,61 @@ function PlanView({ plan, run }: { plan: TransientPlan; run: RunDetail }) {
         </ul>
       )}
       <p className="text-[13px] text-muted-foreground">
-        {planMade(plan)}
-        {planStale(plan, run) && (
-          <> The run has been solved to iteration {formatInt(run.written)} since: Plan again plans from there.</>
-        )}
+        {planMade(plan, what)}
+        {since && <> {since}</>}
       </p>
     </div>
+  );
+}
+
+/** The transient plan of case `name` as it stands: whether the engine plans (API 1.6), its newest tplan job, the plan
+ * that job made, and Plan (`begin`: a new tplan job). */
+function usePlanOf(name: string) {
+  const info = useEngineInfo();
+  const jobs = useJobs();
+  const start = useStartJob();
+  const job = planJobOf(jobs.data?.items, name);
+  const planning = job != null && isActive(job.state);
+  const can = info.data?.jobKinds?.includes("tplan") ?? false;
+  const old = info.data != null && !can;
+  const plan = useTransientPlan(name, can, job ? `${job.id}:${job.state}` : null);
+  const code = plan.isError ? asEngineError(plan.error).code : null;
+  const shown = plan.data;
+  const failed = !planning && job?.state === "failed" ? job : undefined;
+  const cancelled = !planning && !shown && job?.state === "cancelled";
+  const begin = () => start.mutate({ kind: "tplan", params: { name } });
+  return { can, old, job, planning, plan, code, shown, failed, cancelled, start, begin };
+}
+
+/** What the plan's job is doing, how it ended, or why there is no plan: a run's card and a case's dialog say it. */
+function PlanStatus({ p, name, what }: { p: ReturnType<typeof usePlanOf>; name: string; what: "run" | "case" }) {
+  const to = useAppPath();
+  const { old, planning, job, failed, cancelled, start, code, plan } = p;
+  return (
+    <>
+      {old && <p className="text-sm text-muted-foreground"><TextWithCode text={OLD_ENGINE_TPLAN} /></p>}
+      {planning && job && (
+        <div className="text-sm">
+          <p>
+            {job.state === "queued" ? "Waiting to start" : "Planning"}: OpenFOAM works out each cell&apos;s Courant
+            number from this {what}&apos;s result, in a throwaway case of links to it.{" "}
+            <Link to={to(`/jobs?job=${encodeURIComponent(job.id)}`)} className={LINK}>Its job</Link>
+          </p>
+          <Progress className="mt-2 max-w-sm" value={undefined} label={`Planning a transient run of ${name}`} />
+        </div>
+      )}
+      {failed && (
+        <p className="text-sm text-danger">
+          The plan stopped with an error: {failed.error || `exit code ${failed.exitCode ?? "?"}`}. See{" "}
+          <Link to={to(`/jobs?job=${encodeURIComponent(failed.id)}`)} className={LINK}>its job</Link> for its log.
+        </p>
+      )}
+      {cancelled && <p className="text-sm text-muted-foreground">Its job was cancelled before the plan was made.</p>}
+      {start.isError && <ErrorPanel compact error={start.error} />}
+      {code != null && code !== "not-found" && (
+        <ErrorPanel compact error={plan.error} onRetry={() => void plan.refetch()} retrying={plan.isFetching} />
+      )}
+    </>
   );
 }
 
@@ -91,18 +148,8 @@ function PlanView({ plan, run }: { plan: TransientPlan; run: RunDetail }) {
 export function TransientPlanCard({ run }: { run: RunDetail }) {
   const to = useAppPath();
   const { mode } = useEngine();
-  const info = useEngineInfo();
-  const jobs = useJobs();
-  const start = useStartJob();
-  const job = planJobOf(jobs.data?.items, run.name);
-  const planning = job != null && isActive(job.state);
-  const can = info.data?.jobKinds?.includes("tplan") ?? false;
-  const old = info.data != null && !can;
-  const plan = useTransientPlan(run.name, can, job ? `${job.id}:${job.state}` : null);
-  const code = plan.isError ? asEngineError(plan.error).code : null;
-  const shown = plan.data;
-  const failed = !planning && job?.state === "failed" ? job : undefined;
-  const cancelled = !planning && !shown && job?.state === "cancelled";
+  const p = usePlanOf(run.name);
+  const { can, old, planning, code, shown, failed, cancelled, start } = p;
   const cases = useCases();
   // The transient runs made of this run (GET /cases' `made`: `transientOf`), by name.
   const made = Object.entries(cases.data?.made ?? {}).filter(([, m]) => m.transientOf === run.name).map(([n]) => n).sort();
@@ -124,29 +171,11 @@ export function TransientPlanCard({ run }: { run: RunDetail }) {
       </CardHeader>
       {body && (
         <CardContent className="space-y-4">
-          {old && <p className="text-sm text-muted-foreground"><TextWithCode text={OLD_ENGINE_TPLAN} /></p>}
-          {planning && job && (
-            <div className="text-sm">
-              <p>
-                {job.state === "queued" ? "Waiting to start" : "Planning"}: OpenFOAM works out each cell&apos;s Courant
-                number from this run&apos;s result, in a throwaway case of links to it.{" "}
-                <Link to={to(`/jobs?job=${encodeURIComponent(job.id)}`)} className={LINK}>Its job</Link>
-              </p>
-              <Progress className="mt-2 max-w-sm" value={undefined} label={`Planning a transient run of ${run.name}`} />
-            </div>
+          <PlanStatus p={p} name={run.name} what="run" />
+          {shown && (
+            <PlanView plan={shown} what="run" since={planStale(shown, run)
+              ? `The run has been solved to iteration ${formatInt(run.written)} since: Plan again plans from there.` : null} />
           )}
-          {failed && (
-            <p className="text-sm text-danger">
-              The plan stopped with an error: {failed.error || `exit code ${failed.exitCode ?? "?"}`}. See{" "}
-              <Link to={to(`/jobs?job=${encodeURIComponent(failed.id)}`)} className={LINK}>its job</Link> for its log.
-            </p>
-          )}
-          {cancelled && <p className="text-sm text-muted-foreground">Its job was cancelled before the plan was made.</p>}
-          {start.isError && <ErrorPanel compact error={start.error} />}
-          {code != null && code !== "not-found" && (
-            <ErrorPanel compact error={plan.error} onRetry={() => void plan.refetch()} retrying={plan.isFetching} />
-          )}
-          {shown && <PlanView plan={shown} run={run} />}
           {made.length > 0 && (
             <p className="text-sm">
               Transient {made.length === 1 ? "run" : "runs"} of it:{" "}
@@ -167,8 +196,7 @@ export function TransientPlanCard({ run }: { run: RunDetail }) {
           </Button>
         )}
         <Button size="sm" variant={shown ? "secondary" : "primary"}
-          disabled={!can || planning || start.isPending || mode === "demo"}
-          onClick={() => start.mutate({ kind: "tplan", params: { name: run.name } })}>
+          disabled={!can || planning || start.isPending || mode === "demo"} onClick={p.begin}>
           {shown ? <RotateCw aria-hidden /> : <Hourglass aria-hidden />} {shown ? "Plan again" : "Plan a transient run"}
         </Button>
         <span className="text-muted-foreground">
@@ -177,5 +205,54 @@ export function TransientPlanCard({ run }: { run: RunDetail }) {
       </CardFooter>
       {shown && <TransientDialog open={starting} onOpenChange={setStarting} target={{ run, plan: shown }} />}
     </Card>
+  );
+}
+
+/**
+ * The Cases screen's Plan a transient run of a case you made, once it has a result (`result`: its latest written time
+ * with its face flux, GET /cases' `results`, API 1.8): the plan a tplan job makes of it, as of a run. A transient run
+ * starts from a solved run of a case Mesh Doctor made, so a case you made is planned only: Solve a case you made…, on
+ * the Solve screen, solves a copy of it, and that run's page starts one.
+ */
+export function CasePlanDialog({ name, result, open, onOpenChange }: {
+  name: string;
+  result: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const to = useAppPath();
+  const { mode } = useEngine();
+  const p = usePlanOf(name);
+  const { can, planning, shown, start } = p;
+  const t = shown ? planIteration(shown) : null;
+  const later = t != null && Number(result) > t;
+  return (
+    <JobDialog open={open} onOpenChange={onOpenChange} wide>
+      <DialogTitle>Plan a transient run of {name}</DialogTitle>
+      <DialogDescription>
+        From its result at time {result}: the time step a transient run would need at each largest Courant number,
+        which cells set it, and how long it would take. It only reads the case: about 2 s for half a million cells.
+      </DialogDescription>
+      <div className="mt-4 space-y-4">
+        <PlanStatus p={p} name={name} what="case" />
+        {shown && (
+          <PlanView plan={shown} what="case"
+            since={later ? `The case has a later result since, at time ${result}: Plan again plans from there.` : null} />
+        )}
+        <p className="text-[13px] text-muted-foreground">
+          A transient run starts from a solved run of a case Mesh Doctor made: Solve a case you made…, on the{" "}
+          <Link to={to("/solve")} className={LINK}>Solve screen</Link>, solves a copy of this one, and that run&apos;s
+          page starts one.
+        </p>
+      </div>
+      <DialogActions>
+        <DialogClose asChild>
+          <Button variant="secondary">Done</Button>
+        </DialogClose>
+        <Button disabled={!can || planning || start.isPending || mode === "demo"} onClick={p.begin}>
+          {shown ? <RotateCw aria-hidden /> : <Hourglass aria-hidden />} {shown ? "Plan again" : "Plan"}
+        </Button>
+      </DialogActions>
+    </JobDialog>
   );
 }

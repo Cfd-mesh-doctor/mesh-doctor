@@ -304,3 +304,20 @@ test("the demo has no solves, and says so", async ({ page }) => {
   await page.goto("/demo/solve/ahmed25-medium");
   await expect(page.getByText("The engine has no solve of this case.")).toBeVisible();
 });
+
+test("the Cases screen plans a transient run of a case you made that has a result", async ({ page }) => {
+  await mockEngine(page, { results: { motorBike: "300", wing: null }, noJobs: true,
+    kinds: ["repair", "case", "solve", "tplan"], tplans: { motorBike: { ...PLAN, case: "motorBike" } } });
+  await pair(page);
+  await page.goto("/app/cases");
+  await page.getByRole("button", { name: "Plan a transient run of motorBike" }).click();
+  const dialog = page.getByRole("dialog", { name: "Plan a transient run of motorBike" });
+  await expect(dialog.getByText(/^From its result at time 300: the time step a transient run would need/)).toBeVisible();
+  await expect(dialog.getByRole("table", { name: /^The time step and time of a transient run/ })).toBeVisible();
+  await expect(dialog.getByText(/^Planned from its result at time 300/)).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Plan again" })).toBeEnabled();
+  await dialog.getByRole("button", { name: "Done" }).click();
+  await expect(dialog).toBeHidden();
+  // A case with no result yet has none to plan from.
+  await expect(page.getByRole("button", { name: "Plan a transient run of wing" })).toHaveCount(0);
+});

@@ -27,7 +27,7 @@ import tplan
 import validate
 import version
 
-API_VERSION = "1.7"
+API_VERSION = "1.8"
 PREFIX = "/api/v1"
 MAX_BODY = 64 * 1024
 
@@ -151,12 +151,25 @@ def result_schema(p, q, b):
                             "transientOf": {"type": "string",
                                             "description": "the steady run a solve job made it a transient run of"}}},
                     "description": "the cases Mesh Doctor made, each with what from: a template, or a case you made "
-                                   "(a copy of it, to solve); the cases a solve job takes (API 1.6)"}}})
+                                   "(a copy of it, to solve); the cases a solve job takes (API 1.6)"},
+           "results": {"type": "object", "additionalProperties": {"type": ["string", "null"]},
+                       "description": "each case's latest written time with its face flux (phi), the result a "
+                                      "transient plan starts from (a tplan job); null before one (API 1.8)"}}})
 def cases(p, q, b):
     names = md_api.sources()
     root = md_api.run_dir()
     made = {n: m for n, m in ((n, md_api.made(os.path.join(root, n))) for n in names) if m is not None}
-    return {"items": names, "cells": {n: ramguard.mesh_cells(os.path.join(root, n)) for n in names}, "made": made}
+    return {"items": names, "cells": {n: ramguard.mesh_cells(os.path.join(root, n)) for n in names}, "made": made,
+            "results": {n: _result(os.path.join(root, n)) for n in names}}
+
+
+def _result(case):
+    """The case's latest written time with its face flux (tplan.latest_time), or None; None too when it can't be
+    read, as a case removed while it was listed."""
+    try:
+        return tplan.latest_time(case)[0]
+    except (OSError, ValueError):
+        return None
 
 
 @route("GET", "/repairs", "Repair runs in the workspace, with their status and verdict",

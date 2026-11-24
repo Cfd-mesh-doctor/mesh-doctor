@@ -1393,6 +1393,10 @@ export interface operations {
                                 transientOf?: string;
                             };
                         };
+                        /** @description each case's latest written time with its face flux (phi), the result a transient plan starts from (a tplan job); null before one (API 1.8) */
+                        results?: {
+                            [key: string]: string | null;
+                        };
                     };
                 };
             };

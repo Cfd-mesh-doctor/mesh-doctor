@@ -33,16 +33,18 @@ export function Note({ tone, children }: { tone: "ok" | "warn" | "info"; childre
  * stays. Radix gives the focus back only to a Dialog.Trigger: this gives it back to the button that opened the
  * dialog, unless that is gone, as after a start that moved on to another screen.
  */
-export function JobDialog({ open, onOpenChange, children }: {
+export function JobDialog({ open, onOpenChange, children, wide = false }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: ReactNode;
+  /** Wider, for a table: a transient plan's. */
+  wide?: boolean;
 }) {
   const opener = useRef<HTMLElement | null>(null);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-lg"
+        className={wide ? "max-w-3xl" : "max-w-lg"}
         onOpenAutoFocus={() => {
           const active = document.activeElement;
           opener.current = active instanceof HTMLElement && active !== document.body ? active : null;

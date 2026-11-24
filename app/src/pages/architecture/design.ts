@@ -265,7 +265,7 @@ export const DESIGN: DocSection[] = [
             [
               "`GET /cases`",
               "`/api/md/sources`",
-              "source cases the worker may read, with each one's cell count from its mesh's owner header (null when the header doesn't say; API 1.2); a new case from a template is listed once its mesh is made, and `made` names the cases Mesh Doctor made, with what each was made from: a template (`template`), a case you made (`copyOf`: a solve job's copy of it), or a steady run (`transientOf`: a transient run of it): the ones a solve takes (API 1.6)"
+              "source cases the worker may read, with each one's cell count from its mesh's owner header (null when the header doesn't say; API 1.2); a new case from a template is listed once its mesh is made, and `made` names the cases Mesh Doctor made, with what each was made from: a template (`template`), a case you made (`copyOf`: a solve job's copy of it), or a steady run (`transientOf`: a transient run of it): the ones a solve takes (API 1.6); `results` gives each one's latest written time with its face flux (`phi`), the result a transient plan starts from, or null before one (API 1.8)"
             ],
             [
               "`GET /repairs`, `GET /repairs/{name}`",

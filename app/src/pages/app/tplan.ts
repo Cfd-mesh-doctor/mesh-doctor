@@ -144,11 +144,13 @@ export function planStale(p: TransientPlan, run: Pick<RunDetail, "written">): bo
   return t != null && t < run.written;
 }
 
-/** Where the plan came from and how long it took: "Planned from iteration 300 of this run, in 12 s." */
-export function planMade(p: TransientPlan): string {
+/** Where the plan came from and how long it took: "Planned from iteration 300 of this run, in 12 s."; a case you made
+ * (`what`), steady or not: "Planned from its result at time 300, in 12 s." */
+export function planMade(p: TransientPlan, what: "run" | "case" = "run"): string {
   const t = planIteration(p);
-  return `Planned from ${t != null ? `iteration ${formatInt(t)}` : `time ${p.time}`} of this run`
-    + `${p.seconds != null ? `, in ${formatDuration(p.seconds)}` : ""}.`;
+  const from = what === "case" ? `its result at time ${p.time}`
+    : `${t != null ? `iteration ${formatInt(t)}` : `time ${p.time}`} of this run`;
+  return `Planned from ${from}${p.seconds != null ? `, in ${formatDuration(p.seconds)}` : ""}.`;
 }
 
 /** The newest tplan job of case `name` (the jobs come newest first). */

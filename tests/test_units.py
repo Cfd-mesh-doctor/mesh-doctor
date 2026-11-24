@@ -1003,13 +1003,27 @@ class ApiV1Test(unittest.TestCase):
         self.assertIn(text, doc["error"]["message"])
 
     def test_reads(self):
-        self.assertEqual(self.get("/cases")[:2], (200, {"items": ["c1"], "cells": {"c1": None}, "made": {}}))
+        self.assertEqual(self.get("/cases")[:2], (200, {"items": ["c1"], "cells": {"c1": None}, "made": {},
+                                                        "results": {"c1": None}}))
         with open(os.path.join(self.src, "constant", "polyMesh", "owner"), "w") as f:
             f.write("FoamFile\n{\n    note \"nPoints:1200 nCells:1000 nFaces:3400 nInternalFaces:2600\";\n}\n")
         self.assertEqual(self.get("/cases")[1]["cells"], {"c1": 1000})
         st, doc, _ = self.get("/repairs/r1")
         self.assertEqual((st, doc["source"]), (200, self.src))
         self.assertEqual(self.get("/repairs")[1]["items"][0]["name"], "r1")
+
+    def test_cases_say_each_ones_latest_result(self):
+        # A written time with its face flux, the latest, which a transient plan starts from; processor0's when it's split
+        self.assertEqual(self.get("/cases")[1]["results"], {"c1": None})
+        for t in ("100", "300"):
+            os.makedirs(os.path.join(self.src, t))
+            open(os.path.join(self.src, t, "phi"), "w").close()
+        os.makedirs(os.path.join(self.src, "500"))                      # a time with no flux isn't a result
+        self.assertEqual(self.get("/cases")[1]["results"], {"c1": "300"})
+        os.makedirs(os.path.join(self.src, "processor0", "400"))
+        open(os.path.join(self.src, "processor0", "400", "phi.gz"), "w").close()
+        self.assertEqual(self.get("/cases")[1]["results"], {"c1": "400"})
+        self.assertNotIn(self.src, json.dumps(self.get("/cases")[1]))     # never this machine's folders
         self.assertEqual(self.get("/")[1]["schemas"], self.schema.VERSIONS)
         self.assertEqual(self.get("/schemas/judge")[1]["$id"], self.schema.schema("judge")["$id"])
         st, rep, _ = self.get("/repairs/r1/report")

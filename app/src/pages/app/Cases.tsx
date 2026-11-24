@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The source cases the engine may read, with what has been done to each so far, the report of each one's latest
 // finished repair, the size estimate for its mesh, a Repair button that starts a repair of a copy of it (its dialog
-// is in StartRepair.tsx), and the command that does the same in a terminal. What's typed in the filter box
-// stays in the address (?q=), as in the site's other search boxes, so a reload or a link keeps it.
-import { Check, Copy, FolderOpen, Search, Wrench } from "lucide-react";
+// is in StartRepair.tsx), and the command that does the same in a terminal; under a case you made that has a result
+// (API 1.8), Plan a transient run (CasePlanDialog in TransientPlan.tsx). What's typed in the filter box stays in the
+// address (?q=), as in the site's other search boxes, so a reload or a link keeps it.
+import { Check, Copy, FolderOpen, Hourglass, Search, Wrench } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { CopyBlock } from "@/components/shared/CopyBlock";
@@ -29,6 +30,7 @@ import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
 import { FIRST_RUN_SETUP } from "@/pages/install/commands";
 import { StartRepairDialog } from "./StartRepair";
+import { CasePlanDialog } from "./TransientPlan";
 
 interface Row {
   name: string;
@@ -38,6 +40,9 @@ interface Row {
   cells: number | null;
   /** the command that repairs a copy of it; none until the runs are known, as the copy's name must be a new one */
   command: string | null;
+  /** a case you made: its latest written time with its face flux, which a transient plan starts from (API 1.8); null
+   * before one, for an engine that doesn't say, and for a case Mesh Doctor made, whose run's page plans it */
+  result: string | null;
 }
 
 const LINK = "font-medium text-primary hover:underline";
@@ -94,6 +99,8 @@ export function Cases() {
   const repairs = useRepairs();
   // The case whose repair dialog is open, if any.
   const [repairing, setRepairing] = useState<string | null>(null);
+  // The case you made whose transient plan is open, with its latest result.
+  const [planning, setPlanning] = useState<{ name: string; result: string } | null>(null);
   const [params, setParams] = useSearchParams();
   const query = params.get("q") ?? "";
   const setQuery = (q: string) => setParams(q ? { q } : {}, ADDRESS_FIELD);
@@ -113,7 +120,8 @@ export function Cases() {
       const runs = (bySource.get(name) ?? []).sort((a, b) => (b.finished ?? "").localeCompare(a.finished ?? ""));
       // An engine older than API 1.2 doesn't say a case's size: its repairs counted the same mesh.
       const cells = cases.data?.cells?.[name] ?? runs.find((r) => r.nCells != null)?.nCells ?? null;
-      return { name, runs, latest: runs[0], cells, command: repairs.data ? repairCommand(name, names) : null };
+      const result = cases.data?.made?.[name] ? null : cases.data?.results?.[name] ?? null;
+      return { name, runs, latest: runs[0], cells, command: repairs.data ? repairCommand(name, names) : null, result };
     });
   }, [cases.data, repairs.data]);
 
@@ -240,18 +248,33 @@ export function Cases() {
                             {cellsField(r.cells) && <> · <EstimateLink name={r.name} cells={r.cells} /></>}
                           </div>
                         )}
-                        {r.command && (
+                        {(r.command || r.result) && (
                           <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-                            <button
-                              type="button"
-                              onClick={() => setRepairing(r.name)}
-                              aria-label={`Repair ${r.name}`}
-                              className="inline-flex items-center gap-1 text-xs font-medium text-primary underline-offset-4 hover:underline"
-                            >
-                              <Wrench className="size-3.5 shrink-0" aria-hidden />
-                              Repair
-                            </button>
-                            <CopyRepairCommand command={r.command} />
+                            {r.command && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => setRepairing(r.name)}
+                                  aria-label={`Repair ${r.name}`}
+                                  className="inline-flex items-center gap-1 text-xs font-medium text-primary underline-offset-4 hover:underline"
+                                >
+                                  <Wrench className="size-3.5 shrink-0" aria-hidden />
+                                  Repair
+                                </button>
+                                <CopyRepairCommand command={r.command} />
+                              </>
+                            )}
+                            {r.result && (
+                              <button
+                                type="button"
+                                onClick={() => setPlanning({ name: r.name, result: r.result! })}
+                                aria-label={`Plan a transient run of ${r.name}`}
+                                className="inline-flex items-center gap-1 text-xs font-medium text-primary underline-offset-4 hover:underline"
+                              >
+                                <Hourglass className="size-3.5 shrink-0" aria-hidden />
+                                Plan a transient run
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -287,6 +310,10 @@ export function Cases() {
         )}
       </Card>
       <StartRepairDialog open={repairing !== null} onOpenChange={(o) => { if (!o) setRepairing(null); }} source={repairing} />
+      {planning && (
+        <CasePlanDialog open name={planning.name} result={planning.result}
+          onOpenChange={(o) => { if (!o) setPlanning(null); }} />
+      )}
     </>
   );
 }

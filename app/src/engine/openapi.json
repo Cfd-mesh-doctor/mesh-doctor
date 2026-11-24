@@ -1755,7 +1755,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.7"
+    "version": "1.8"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -2561,6 +2561,16 @@
                         "type": "object"
                       },
                       "description": "the cases Mesh Doctor made, each with what from: a template, or a case you made (a copy of it, to solve); the cases a solve job takes (API 1.6)",
+                      "type": "object"
+                    },
+                    "results": {
+                      "additionalProperties": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "description": "each case's latest written time with its face flux (phi), the result a transient plan starts from (a tplan job); null before one (API 1.8)",
                       "type": "object"
                     }
                   },

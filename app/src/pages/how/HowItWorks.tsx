@@ -362,7 +362,8 @@ export function HowItWorks() {
               <p>
                 In the web app, a solved run's page has Plan a transient run: the engine makes the same plan as a job
                 and the page shows it, with the hours on the run's own processes and where the fastest cells are. The
-                job saves their cell set in the workspace, in <code>.tplans/&lt;case&gt;.sets</code>.
+                job saves their cell set in the workspace, in <code>.tplans/&lt;case&gt;.sets</code>. The Cases screen
+                plans a case you made the same way once it has a result: Plan a transient run, under its name.
               </p>
               <p>
                 <strong>The transient run itself:</strong> <code>meshdoctor solve &lt;name&gt; --steady &lt;run&gt;</code>{" "}
