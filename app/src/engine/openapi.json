@@ -414,7 +414,8 @@
               "abextend",
               "case",
               "solve",
-              "tplan"
+              "tplan",
+              "pictures"
             ]
           },
           "params": {
@@ -1759,7 +1760,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.14"
+    "version": "1.15"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -3746,6 +3747,48 @@
                           "name": {
                             "description": "a case in the cases folder with a solved result: a run (GET /runs), or a case you made (GET /cases)",
                             "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "params"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "description": "make pictures of a solved case's flow with ParaView, offscreen, at a written time: cuts from its cut list (cuts.json), its vortices and the spots of low pressure on its walls. The case is only read: ParaView reads it through a folder of links, and the pictures go in the workspace, with a list of them (API 1.15)",
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "pictures"
+                        ]
+                      },
+                      "params": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kinds": {
+                            "default": "cuts,vortices,spots",
+                            "description": "what to make, comma-separated: cuts, vortices, spots",
+                            "pattern": "^(cuts|vortices|spots)(,(cuts|vortices|spots))*$",
+                            "type": "string"
+                          },
+                          "name": {
+                            "description": "a case in the cases folder with a written result: a run (GET /runs), or a case you made (GET /cases)",
+                            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+                            "type": "string"
+                          },
+                          "time": {
+                            "default": "",
+                            "description": "the written time to picture, as its folder says it (default: the latest on the case's whole mesh)",
+                            "pattern": "^([0-9][0-9.eE+-]*)?$",
                             "type": "string"
                           }
                         },

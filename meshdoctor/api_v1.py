@@ -19,6 +19,7 @@ import json, math, os, re, threading, time
 
 import jobs
 import md_api
+import pictures
 import ramguard
 import schema
 import solve
@@ -27,7 +28,7 @@ import tplan
 import validate
 import version
 
-API_VERSION = "1.14"
+API_VERSION = "1.15"
 PREFIX = "/api/v1"
 WRITES_MAX = solve.transient.MAX_WRITES   # the most times a stretch of a transient run writes
 MAX_BODY = 64 * 1024
@@ -841,6 +842,23 @@ JOBS = {
                                                           "(GET /runs), or a case you made (GET /cases)")}, ["name"]),
         "start": lambda a: tplan.start(a["name"]),
         "links": lambda n: {"tplan": f"{PREFIX}/tplans/{n}"},
+    },
+    "pictures": {
+        "summary": "make pictures of a solved case's flow with ParaView, offscreen, at a written time: cuts from its "
+                   "cut list (cuts.json), its vortices and the spots of low pressure on its walls. The case is only "
+                   "read: ParaView reads it through a folder of links, and the pictures go in the workspace, with a "
+                   "list of them (API 1.15)",
+        "params": _params({"name": dict(NAME, description="a case in the cases folder with a written result: a run "
+                                                          "(GET /runs), or a case you made (GET /cases)"),
+                           "time": {"type": "string", "default": "", "pattern": r"^([0-9][0-9.eE+-]*)?$",
+                                    "description": "the written time to picture, as its folder says it (default: "
+                                                   "the latest on the case's whole mesh)"},
+                           "kinds": {"type": "string", "default": ",".join(pictures.KINDS),
+                                     "pattern": r"^(cuts|vortices|spots)(,(cuts|vortices|spots))*$",
+                                     "description": "what to make, comma-separated: cuts, vortices, spots"}},
+                          ["name"]),
+        "start": lambda a: pictures.start(a["name"], a["time"] or None, tuple(dict.fromkeys(a["kinds"].split(",")))),
+        "links": lambda n: {},
     },
 }
 JOB_REQUEST = {"oneOf": [

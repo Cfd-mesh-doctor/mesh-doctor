@@ -133,6 +133,8 @@ describe("httpTransport", () => {
       .toMatch(/^The new case ahmed-coarse is running\. Wait/);
     expect(explain(new EngineError("busy", job.replace("(repair wing-fix)", "(solve ahmed-coarse)"), 409)).hint)
       .toMatch(/^The solve of ahmed-coarse is running\. Wait/);
+    expect(explain(new EngineError("busy", job.replace("(repair wing-fix)", "(pictures ahmed-coarse)"), 409)).hint)
+      .toMatch(/^The picture job of ahmed-coarse is running\. Wait/);
     expect(explain(new EngineError("busy", "another OpenFOAM job is running; one big job at a time (RAM)", 409)).hint)
       .toBe("Wait for it to finish, or cancel it on the Jobs page.");
   });

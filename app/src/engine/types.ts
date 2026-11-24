@@ -92,4 +92,5 @@ export const JOB_KIND_LABEL: Record<JobKind, string> = {
   case: "New case",
   solve: "Solve",
   tplan: "Transient plan",
+  pictures: "Pictures",
 };

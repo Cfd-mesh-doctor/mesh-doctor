@@ -22,7 +22,9 @@ import glob, gzip, os, re
 
 import config
 
-KB_PER_CELL = {"repair": 1.5, "solve": 1.35, "post": 0.5, "mesh": 2.2}
+# pictures: ParaView reading a case with its cell data made point data, as the picture scripts do (18 GB at 31M
+# cells, 7 GB at 12M: skills/paraview-post)
+KB_PER_CELL = {"repair": 1.5, "solve": 1.35, "post": 0.5, "mesh": 2.2, "pictures": 0.6}
 HEADROOM_MB = 512
 
 

@@ -4118,6 +4118,195 @@ class SelfCheckTest(unittest.TestCase):
         self.assertEqual(api_v1.handle("POST", "/api/v1/check", {}, b"{}", "application/json")[0], 405)
 
 
+class PicturesTest(unittest.TestCase):
+    """meshdoctor pictures and the `pictures` job (app item 250a): ParaView reads the case through a folder of links
+    in the workspace, and the pictures and their list go there too; a stand-in pvbatch writes what each script
+    would."""
+
+    STAND_IN = """#!/usr/bin/env python3
+import os, sys
+a = sys.argv[1:]
+if a == ["--version"]:
+    print("paraview version 5.10.0")
+    sys.exit(0)
+script, foam = os.path.basename(a[1]), a[2]
+view = os.path.dirname(foam)
+with open(os.path.join(os.path.dirname(view), "seen"), "a") as f:
+    f.write(script + " " + os.environ.get("PYTHONPATH", "") + " " + " ".join(sorted(os.listdir(view))) + "\\n")
+out = a[3] if script == "vortex_views.py" else a[4]
+for n in {"cut_views.py": ["c1_side_centre_U", "c1_side_centre_Cpt"], "vortex_views.py": ["Q21000_rear34",
+          "Q21000_top"], "pressure_spots.py": ["spots_worst"]}[script]:
+    open(os.path.join(out, n + ".png"), "wb").close()
+"""
+    FRAME = {"total": "forcesTotal", "flowAxis": 0, "flowSign": -1, "upAxis": 2, "Uinf": 40.0, "rho": 1.205}
+
+    def setUp(self):
+        import pictures
+        self.p = pictures
+        self.tmp = tempfile.mkdtemp(prefix="md_pictures_")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        bin_ = os.path.join(self.tmp, "bin")
+        os.mkdir(bin_)
+        with open(os.path.join(bin_, "pvbatch"), "w") as f:
+            f.write(self.STAND_IN)
+        os.chmod(os.path.join(bin_, "pvbatch"), 0o755)
+        self.path = bin_ + os.pathsep + "/usr/bin:/bin"
+        self.frame = dict(self.FRAME)
+        for patch in (mock.patch.dict(os.environ, {"PATH": self.path}),
+                      mock.patch("sys.stdout", new_callable=io.StringIO),     # make() says each kind, for a job's log
+                      mock.patch.object(pictures.caseinfo, "describe", side_effect=lambda case: dict(self.frame))):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def case(self, cuts=True, times=("200",)):
+        case = os.path.join(self.tmp, "cases", "ahmedP")
+        for d in ("system", os.path.join("constant", "polyMesh")) + tuple(times):
+            os.makedirs(os.path.join(case, d))
+        with open(os.path.join(case, "system", "controlDict"), "w") as f:
+            f.write("application foamRun;\nfunctions\n{\n    forcesTotal   // the whole body\n    {\n"
+                    "        type forces;\n        patches (ahmedGroup);\n    }\n}\n")
+        with open(os.path.join(case, "constant", "polyMesh", "boundary"), "w") as f:
+            f.write("FoamFile\n{\n    class polyBoundaryMesh;\n}\n3\n(\n    inlet\n    {\n        type patch;\n    }\n"
+                    "    ahmed\n    {\n        type wall;\n        inGroups List<word> 2(ahmedGroup wall);\n    }\n"
+                    "    ground\n    {\n        type wall;\n        inGroups 1(wall);\n    }\n)\n")
+        for t in times:
+            for field in ("U", "p"):
+                open(os.path.join(case, t, field), "w").close()
+        if cuts:
+            shutil.copy(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "examples", "ahmed-body",
+                                     "cuts.json"), case)
+        return case
+
+    @staticmethod
+    def files(folder):
+        return sorted(os.path.relpath(os.path.join(d, f), folder) for d, _, fs in os.walk(folder) for f in fs)
+
+    def test_the_vortex_levels_go_as_the_speed_squared(self):
+        self.assertEqual(self.p.q_levels(15), [3000, 10000, 30000])
+        self.assertEqual(self.p.q_levels(40), [21000, 71000, 210000])    # the Ahmed README's 20,000, 70,000, 200,000
+
+    def test_the_walls_are_the_total_force_groups_patches(self):
+        case = self.case()
+        self.assertEqual(self.p.walls(case, "forcesTotal"), ["ahmed"])   # its group, not the ground beside it
+        self.assertEqual(self.p.walls(case, "forcesWing"), [])
+        cmds, notes = self.p.plan(case, "/view", "/set", self.p.KINDS, "pvbatch")
+        self.assertEqual(notes, [])
+        v = cmds["vortices"]
+        self.assertEqual((v[0], v[1], v[2].endswith("vortex_views.py"), v[3:6]),
+                         ("pvbatch", "--force-offscreen-rendering", True,
+                          ["/view/case.foam", "/set/vortices", "21000,71000,210000"]))
+        self.assertEqual(v[v.index("--walls") + 1], "ahmed")
+        self.assertEqual(cmds["cuts"][cmds["cuts"].index("--uinf") + 1], "40")
+
+    def test_a_set_is_made_in_the_workspace_and_the_case_only_read(self):
+        case = self.case()
+        before = self.files(case)
+        out = os.path.join(self.tmp, "work", ".pictures", "ahmedP", "200")
+        os.makedirs(os.path.dirname(out))
+        doc = self.p.make(case, out, "200", self.p.KINDS)
+        self.assertEqual([p["file"] for p in doc["pictures"]],
+                         ["cuts/c1_side_centre_Cpt.png", "cuts/c1_side_centre_U.png", "vortices/Q21000_rear34.png",
+                          "vortices/Q21000_top.png", "spots/spots_worst.png"])
+        self.assertEqual([p["title"] for p in doc["pictures"]][1:3],
+                         ["Side cut on the centreline, seen from the side (+y), nose to the left: speed",
+                          "Vortices, Q = 21,000 1/s², from behind"])
+        self.assertEqual((doc["case"], doc["time"], doc["notes"]), ("ahmedP", "200", []))
+        with open(os.path.join(out, "pictures.json")) as f:
+            self.assertEqual(json.load(f), doc)
+        with open(os.path.join(out, "seen")) as f:
+            seen = f.read().splitlines()
+        self.assertEqual(seen, [f"{s} /usr/lib/python3/dist-packages 200 case.foam constant system"
+                                for s in ("cut_views.py", "vortex_views.py", "pressure_spots.py")])
+        self.assertFalse(os.path.exists(os.path.join(out, "view")) or os.path.exists(out + ".new"))
+        self.assertEqual(self.files(case), before)                       # nothing written in the case
+        # Made again: the new set replaces the old one once it's whole
+        doc = self.p.make(case, out, "200", ("vortices",))
+        self.assertEqual(sorted(os.listdir(out)), [self.p.MARK, "pictures.json", "seen", "vortices"])
+
+    def test_without_a_cut_list_the_cuts_are_left_out_and_said(self):
+        case = self.case(cuts=False)
+        out = os.path.join(self.tmp, "set")
+        doc = self.p.make(case, out, "200", ("cuts", "vortices"))
+        self.assertEqual(doc["notes"], ["no cuts: ahmedP has no cut list (cuts.json at its root)"])
+        self.assertEqual({p["kind"] for p in doc["pictures"]}, {"vortices"})
+        with self.assertRaisesRegex(RuntimeError, r"^no picture was made: no cuts: ahmedP has no cut list"):
+            self.p.make(case, os.path.join(self.tmp, "none"), "200", ("cuts",))
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "none")))
+
+    def test_a_case_that_cant_be_pictured_says_why(self):
+        self.assertEqual(self.p.why_not(self.case(times=()))[0], "not-ready")
+        shutil.rmtree(os.path.join(self.tmp, "cases"))
+        case = self.case(times=("100", "200"))
+        self.assertIsNone(self.p.why_not(case))
+        self.assertEqual(self.p.times(case), ["100", "200"])
+        self.assertEqual(self.p.why_not(case, "300"),
+                         ("bad-request", "ahmedP has no time 300 on its whole mesh; its latest are 100, 200"))
+        self.frame.update(flowSign=1)
+        self.assertRegex(self.p.why_not(case)[1], r"^ahmedP's flow goes toward \+x, with z up: the picture scripts' "
+                                                   r"cameras need it toward -x, with z up$")
+        self.frame.update(flowSign=-1, total="forcesWing")
+        self.assertRegex(self.p.why_not(case)[1], r"^ahmedP's model isn't found")
+        self.frame.update(total="forcesTotal")
+        with mock.patch.dict(os.environ, {"PATH": "/nonexistent"}):
+            self.assertRegex(self.p.why_not(case)[1], r"^ParaView isn't installed")
+
+    def test_a_folder_that_isnt_a_set_is_refused_and_left_as_it_is(self):
+        case, out = self.case(), os.path.join(self.tmp, "mine")
+        os.makedirs(out)
+        with open(os.path.join(out, "notes.txt"), "w") as f:
+            f.write("mine\n")
+        with self.assertRaisesRegex(RuntimeError, r"mine is in the way: it isn't a set of pictures Mesh Doctor made"):
+            self.p.make(case, out, "200", self.p.KINDS)
+        self.assertEqual((os.listdir(out), os.path.exists(out + ".new")), (["notes.txt"], False))
+        os.remove(os.path.join(out, "notes.txt"))                         # an empty folder is no one's
+        self.assertEqual(len(self.p.make(case, out, "200", ("spots",))["pictures"]), 1)
+        os.makedirs(out + ".new")                                         # one cut short: its mark goes in first
+        open(os.path.join(out + ".new", self.p.MARK), "w").close()
+        self.assertEqual(len(self.p.make(case, out, "200", ("vortices",))["pictures"]), 2)
+
+    def test_the_job_pictures_a_case_of_the_cases_folder_into_the_workspace(self):
+        import api_v1, jobs, schema
+        case, ws = self.case(times=("100", "200")), os.path.join(self.tmp, "work")
+        launched, ram = [], []
+        for patch in (mock.patch.dict(os.environ, {"MESHDOCTOR_CASES": os.path.dirname(case),
+                                                   "MESHDOCTOR_WORKSPACE": ws}),
+                      mock.patch.object(jobs, "_spawn", lambda argv: launched.append(argv) or 2 ** 22 + 9),
+                      mock.patch.object(jobs, "solver_running", lambda: False),
+                      mock.patch.object(jobs.ramguard, "check", lambda c, kind: ram.append((c, kind)) or (True, ""))):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+        def post(params):
+            body = json.dumps({"kind": "pictures", "params": params}).encode()
+            return api_v1.handle("POST", "/api/v1/jobs", {}, body, "application/json")
+
+        st, job, _ = post({"name": "ahmedP", "kinds": "vortices,spots,vortices"})
+        self.assertEqual(st, 202, job)
+        self.assertEqual((job["kind"], job["params"]),
+                         ("pictures", {"name": "ahmedP", "time": "200", "kinds": ["vortices", "spots"]}))
+        self.assertEqual((job["log"], job["result"]),
+                         (".pictures/ahmedP/200.log", ".pictures/ahmedP/200/pictures.json"))
+        self.assertEqual(ram, [(case, "pictures")])                       # ParaView's memory, on the case's mesh
+        argv = launched[0]
+        self.assertEqual(argv[argv.index("--") + 1:], [sys.executable, os.path.join(self.p.PKG, "pictures.py"), case,
+                                                       "--time", "200", "--kinds", "vortices,spots", "--out",
+                                                       os.path.join(ws, ".pictures", "ahmedP", "200")])
+        st, doc, _ = post({"name": "ahmedP", "time": "300"})
+        self.assertEqual((st, doc["error"]["message"]),
+                         (400, "ahmedP has no time 300 on its whole mesh; its latest are 100, 200"))
+        st, doc, _ = post({"name": "ahmedP", "time": "100"})               # one big job at a time
+        self.assertEqual((st, doc["error"]["code"], len(launched)), (409, "busy", 1))
+        self.assertEqual(schema.validate(jobs.get(job["id"]), "job"), [])  # the job schema has the kind
+
+    def test_the_job_takes_a_time_and_the_kinds(self):
+        import api_v1, schema
+        params = api_v1.JOBS["pictures"]["params"]
+        for good in ({"name": "ahmed"}, {"name": "ahmed", "time": "0.0012", "kinds": "cuts,spots"}):
+            self.assertEqual(schema.check(good, params), [], good)
+        for bad in ({"name": "ahmed", "kinds": "cuts,photos"}, {"name": "ahmed", "time": "../0"}):
+            self.assertNotEqual(schema.check(bad, params), [], bad)
+
+
 class CommandHelpTest(unittest.TestCase):
     """Each command's own help gives commands as they are typed here, as the main help does (item 160)."""
 

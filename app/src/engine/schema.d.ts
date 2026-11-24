@@ -742,7 +742,7 @@ export interface components {
             /** @description local start time (yyyymmdd-hhmmss), kind, run name and a random suffix */
             id: string;
             /** @enum {unknown} */
-            kind: "repair" | "abtest" | "abextend" | "case" | "solve" | "tplan";
+            kind: "repair" | "abtest" | "abextend" | "case" | "solve" | "tplan" | "pictures";
             /** @description added by the API: where to follow the job and its run */
             links?: Record<string, unknown>;
             log: string;
@@ -1979,6 +1979,23 @@ export interface operations {
                     params: {
                         /** @description a case in the cases folder with a solved result: a run (GET /runs), or a case you made (GET /cases) */
                         name: string;
+                    };
+                } | {
+                    /** @enum {unknown} */
+                    kind: "pictures";
+                    params: {
+                        /**
+                         * @description what to make, comma-separated: cuts, vortices, spots
+                         * @default cuts,vortices,spots
+                         */
+                        kinds?: string;
+                        /** @description a case in the cases folder with a written result: a run (GET /runs), or a case you made (GET /cases) */
+                        name: string;
+                        /**
+                         * @description the written time to picture, as its folder says it (default: the latest on the case's whole mesh)
+                         * @default
+                         */
+                        time?: string;
                     };
                 };
             };

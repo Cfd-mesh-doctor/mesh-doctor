@@ -244,6 +244,23 @@ describe("the Jobs screen", () => {
     expect(within(details).getByRole("link", { name: "Open the run" })).toHaveAttribute("href", "/demo/solve/ahmed-coarse");
   });
 
+  it("names a picture job, and links it to no report, from its row or its details", async () => {
+    const answers = structuredClone(DEMO_ANSWERS);
+    const items = (answers["/jobs"] as JobList).items;
+    const done = items.find((j) => j.state === "done")!;
+    const id = "20261124-150000-pictures-ahmed-coarse-0004";
+    items.unshift({ ...done, id, kind: "pictures", name: "ahmed-coarse",
+                    params: { name: "ahmed-coarse", time: "300", kinds: ["cuts", "vortices", "spots"] } });
+    const view = renderScreen(<Jobs />, { path, at: path, transport: demoTransport(answers, 0) });
+    expect(await screen.findAllByText("Pictures")).toHaveLength(1);                             // its kind
+    expect(screen.queryByRole("link", { name: "Report of ahmed-coarse" })).toBeNull();          // a repair's, not its
+    view.unmount();
+    renderScreen(<Jobs />, { path, at: `${path}?job=${id}`, transport: demoTransport(answers, 0) });
+    const details = await screen.findByRole("dialog", { name: "ahmed-coarse" });
+    expect(within(details).getByText("Pictures")).toBeInTheDocument();
+    expect(within(details).queryByRole("link", { name: "Open report" })).toBeNull();
+  });
+
   it("shows every job when the address names a filter it doesn't know", async () => {
     open(`${path}?show=nonsense`);
     expect(await screen.findAllByRole("button", { name: "ahmed25-medium-fix" })).toHaveLength(2);

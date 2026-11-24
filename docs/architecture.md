@@ -32,6 +32,7 @@ Rules between layers:
 |---|---|---|
 | `caseinfo.py`, `ramguard.py`, `diskguard.py`, `config.py`, `mapdata.py` | core | already free of HTTP and UI |
 | `tplan.py` | core + CLI | the transient plan: `plan()` returns a `tplan` document, from Mesh Doctor's `foamCourantCells` (OpenFOAM's `CourantNo` where it isn't built); it runs OpenFOAM only in a throwaway shadow case, so the case is only read. A `tplan` job (`start()`) writes it to `<workspace>/.tplans/<case>.json`, which `GET /tplans/{name}` answers, and the cell set of the fastest cells to `<workspace>/.tplans/<case>.sets` (a split case's for its whole mesh too, where it has the one it was split from, each cell found by its processor's `cellProcAddressing`) |
+| `pictures.py` | core + CLI | pictures of a solved case's flow: `make()` runs the paraview-post scripts with ParaView's `pvbatch`, offscreen, on a folder of links to the case in the workspace (its `constant`, `system` and the time pictured), so the case is only read; the pictures and `pictures.json`, their list, go in the workspace's `.pictures/<case>/<time>/`. A `pictures` job runs it (API 1.15) |
 | `repair.py`, `abtest.py` | core + CLI | the library functions (`full`, `fix`, `judge`, `run_one`, ...) are core; their `main()` is CLI |
 | `md_api.py` | api | reads results; checks job requests and hands them to `jobs.py`; refusals carry an error code |
 | `jobs.py`, `jobrun.py` | jobs | job files, admission (one big job, RAM guard, disk guard), the LocalRunner and its wrapper, cancel |
@@ -55,6 +56,7 @@ Every file Mesh Doctor writes for another program to read carries `"schemaVersio
 | `<name>_ab/ab_result.json` | A/B test | dashboard, reports |
 | judge output | `judge` (CLI, API) | dashboard live pages, reports |
 | transient plan | `transient-plan` (CLI), a `tplan` job | people deciding on a transient run; the web app's run page |
+| pictures | `pictures` (CLI), a `pictures` job | people looking at a solved case's flow; the web app's Pictures screen (coming) |
 | `meshDoctor/map.json` | map | repair map page, reports |
 | `.jobs/<id>.json` | job runner (`jobs.py`, `jobrun.py`) | API, `meshdoctor jobs`, dashboard |
 | `<name>.mdreport.json` | `meshdoctor report` (`report.py`) | the report viewer, anywhere |

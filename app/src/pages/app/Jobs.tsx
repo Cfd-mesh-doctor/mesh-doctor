@@ -41,12 +41,14 @@ const isRunJob = (job: Job) => job.kind === "solve" || job.kind === "tplan";
  * test's page, running or not: it follows a running test, and says how a stopped one ended. A solve's and a transient
  * plan's is the run's page, running or not too: it follows the solve (or says it is starting, or why it didn't), and
  * shows the plan (or that it is being made). A repair's is its run's report, once the repair is done
- * (GET /repairs/{name}/report). A new case's is the case on Cases, once it has its mesh. */
+ * (GET /repairs/{name}/report). A new case's is the case on Cases, once it has its mesh. A picture job's pictures
+ * have no page yet (the Pictures screen is to come), so it has none. */
 function runPath(job: Job): string | null {
   if (isAbJob(job)) return `/abtests/${encodeURIComponent(job.name)}`;
   if (isRunJob(job)) return `/solve/${encodeURIComponent(job.name)}`;
   if (job.state !== "done") return null;
-  return job.kind === "case" ? `/cases?q=${encodeURIComponent(job.name)}` : `/repairs/${encodeURIComponent(job.name)}/report`;
+  if (job.kind === "case") return `/cases?q=${encodeURIComponent(job.name)}`;
+  return job.kind === "repair" ? `/repairs/${encodeURIComponent(job.name)}/report` : null;
 }
 
 /** The table's link to where a job's run shows, named like the Overview's report links and the A/B tests list's

@@ -33,6 +33,7 @@ meshdoctor solve  <srcCase> <name> [--to N] [--np P] solve a copy of a case you 
 meshdoctor solve  <name> --template T [--size S]     make a case from a template, then solve it (verify install)
 meshdoctor solve  <name> --steady <run> [--to S]     a transient run (DDES) of a solved steady run, to S seconds
 meshdoctor transient-plan <case> [--co 1,5,20]       a transient run's time step, hours, and the cells that set it
+meshdoctor pictures <case> [--time T] [--kinds ...]  pictures of its flow with ParaView: cuts, vortices, low-pressure spots
 meshdoctor serve  [--port 8765] [--case <live>]      local dashboard at http://localhost:8765
 meshdoctor experimental ratchet <src> <name>         push max non-ortho below the 65 deg target, pass by pass
 meshdoctor experimental polish  <src> <name> [--tets] [--tet-cap 1]   gradient polish of the worst clusters

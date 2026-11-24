@@ -77,6 +77,8 @@ SOLVEJOB = b'{"kind": "solve", "params": {"name": ".."}}'
 COPYJOB = b'{"kind": "solve", "params": {"name": "copy", "source": ".."}}'
 TEMPLATEJOB = b'{"kind": "solve", "params": {"name": "verify-install", "template": ".."}}'
 TPLANJOB = b'{"kind": "tplan", "params": {"name": ".."}}'
+PICTURESJOB = b'{"kind": "pictures", "params": {"name": ".."}}'
+PICTURESTIME = b'{"kind": "pictures", "params": {"name": "ahmed", "time": "../0"}}'
 TRANSIENTJOB = b'{"kind": "solve", "params": {"name": "transient", "steady": ".."}}'
 NANJOB = b'{"kind": "solve", "params": {"name": "transient", "steady": "steady", "to": NaN}}'
 JSON = "application/json"
@@ -182,6 +184,14 @@ CHECKS = [
      {"Content-Type": JSON, "X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 400, '"code": "bad-request"', TPLANJOB),
     ("v1 a transient plan job without token refused", "POST", "/api/v1/jobs", {"Content-Type": JSON}, 403, "token",
      TPLANJOB),
+    ("v1 a picture job takes no bad case name", "POST", "/api/v1/jobs",
+     {"Content-Type": JSON, "X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 400, '"code": "bad-request"',
+     PICTURESJOB),
+    ("v1 a picture job takes no time that is a path", "POST", "/api/v1/jobs",
+     {"Content-Type": JSON, "X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 400, '"code": "bad-request"',
+     PICTURESTIME),
+    ("v1 a picture job without token refused", "POST", "/api/v1/jobs", {"Content-Type": JSON}, 403, "token",
+     PICTURESJOB),
     ("v1 a transient solve takes no bad steady run name", "POST", "/api/v1/jobs",
      {"Content-Type": JSON, "X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 400, '"code": "bad-request"',
      TRANSIENTJOB),
