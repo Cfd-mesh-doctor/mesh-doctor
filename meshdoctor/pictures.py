@@ -12,12 +12,14 @@ from its model's size; vortices and spots of unphysical pressure on the walls (C
 only the case.  The scripts' cameras need the flow toward -x and z up.  With --mean they picture a transient run's
 mean flow (UMean and pMean, written once its averaging is on) in place of the flow at that time, into
 .pictures/<case>/<time>_mean/.  A computer's first set starts with the vortex script's self test (a test vortex that
-must come out red), in .pictures/.selftest/, which is kept once it has passed.
+must come out red), in .pictures/.selftest/, which is kept once it has passed.  The API serves the sets (sets(),
+one(), picture(), delete()): only a picture a set's list names is read, in the set's own folders, never through a link.
 """
-import argparse, json, math, os, re, shutil, subprocess, sys, time
+import argparse, json, math, os, re, shutil, stat, subprocess, sys, time
 
 import caseinfo
 import config
+import jobs
 import md_api
 import prog
 import selfcheck
@@ -40,6 +42,10 @@ WORDS = {"U": "speed", "Cp": "pressure coefficient Cp", "Cpt": "total pressure c
 SPOT_CP = -5                    # pressure_spots.py's LIM: a wall face with Cp below it is a spot of unphysical pressure
 SPOT_VIEWS = {"closeup": "close up, with the surface mesh", "normal": "further back",
               "side": "from the side of the model"}
+SET = re.compile(r"^[0-9][0-9.eE+-]{0,39}(_mean)?$")              # a set's folder: the time pictured (_mean: its mean)
+FILE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}\.png$")     # a picture's file, in its kind's folder of its set
+PNG = b"\x89PNG\r\n\x1a\n"      # the first bytes of every PNG file
+MAX_PNG = 32 << 20              # the largest picture served: ParaView's 1920 x 1080 PNGs are well under 1 MB
 
 
 def _num(text):
@@ -369,6 +375,182 @@ def start(name, at=None, kinds=KINDS, mean=False):
            "--out", os.path.join(ws, rel)] + (["--mean"] if mean else [])
     return md_api._submit("pictures", {"name": name, "time": at, "kinds": list(kinds), "mean": mean}, name, cmd,
                           log=f"{rel}.log", result=f"{rel}/pictures.json", ram=(case, "pictures"))
+
+
+# --------------------------------------------------------------------------
+# the sets made, for the API: the sets, a set, one picture, and deleting a set
+
+def root():
+    """The workspace's folder of sets of pictures."""
+    return os.path.join(config.settings()["workspace"], PICTURES)
+
+
+def _plain(*parts):
+    """The path to `parts` in root(), or None when one of them is a link: a set is only ever read in folders of its
+    own."""
+    path = os.path.join(root(), *parts)
+    return path if os.path.realpath(path) == os.path.join(os.path.realpath(root()), *parts) else None
+
+
+def _made(folder):
+    """The pictures.json of a set Mesh Doctor made in `folder` (it has the mark), or None."""
+    if not folder or not os.path.isfile(os.path.join(folder, MARK)):
+        return None
+    try:
+        with open(os.path.join(folder, "pictures.json"), encoding="utf-8") as f:
+            doc = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return doc if isinstance(doc, dict) and isinstance(doc.get("pictures"), list) else None
+
+
+def _latest(case=None):
+    """{(case, set): the latest pictures job of that set}, of one case or all."""
+    out = {}
+    for job in jobs.list_jobs(limit=1000):                      # newest first
+        p = job.get("params") if isinstance(job.get("params"), dict) else {}
+        if job.get("kind") == "pictures" and isinstance(p.get("time"), str) and (case is None or job["name"] == case):
+            out.setdefault((job["name"], set_name(p["time"], p.get("mean") is True)), job)
+    return out
+
+
+def _kinds(kinds):
+    """The kinds a set (or its job) names, in its order: those of KINDS only."""
+    return list(dict.fromkeys(k for k in kinds if k in KINDS)) if isinstance(kinds, list) else []
+
+
+def _shown(doc):
+    """The pictures of a set that are served: each {file, kind, title}, its file <kind>/<a plain .png name>."""
+    out = []
+    for p in doc["pictures"]:
+        kind, file = (p.get("kind"), p.get("file")) if isinstance(p, dict) else (None, None)
+        if kind in KINDS and isinstance(file, str) and file.startswith(kind + "/") and isinstance(p.get("title"), str) \
+                and FILE.match(file[len(kind) + 1:]):
+            out.append({"file": file, "kind": kind, "title": p["title"]})
+    return out
+
+
+def _about(name, at, doc):
+    """What a set's folder says, and its pictures.json (or its job's params): {case, set, time, mean, kinds, made}."""
+    return {"case": name, "set": at, "time": at[:-len("_mean")] if at.endswith("_mean") else at,
+            "mean": at.endswith("_mean"), "kinds": _kinds(doc.get("kinds")),
+            "made": doc["made"] if isinstance(doc.get("made"), str) else None}
+
+
+def sets(case=None):
+    """GET /pictures: the sets of pictures in the workspace, of one case or all, newest first: each set made, and each
+    one a job is making for the first time (its count and made null until then), each with its latest job."""
+    made = {}
+    try:
+        names = [case] if case else sorted(os.listdir(root()))
+    except OSError:
+        names = []
+    for name in names:
+        folder = _plain(name) if md_api.SAFE.match(name) else None     # (.selftest, the self test's, is no case's)
+        try:
+            ats = os.listdir(folder) if folder else []
+        except OSError:
+            ats = []
+        for at in ats:
+            doc = _made(_plain(name, at)) if SET.match(at) else None
+            if doc is not None:
+                made[(name, at)] = doc
+    latest = _latest(case)
+    out = []
+    for key in sorted(set(made) | {k for k, j in latest.items() if j["state"] in jobs.ACTIVE}):
+        doc, job = made.get(key), latest.get(key)
+        out.append(dict(_about(*key, doc if doc is not None else job["params"]),
+                        count=None if doc is None else len(_shown(doc)),
+                        job={"id": job["id"], "state": job["state"]} if job else None))
+    out.sort(key=lambda s: s["made"] or "~", reverse=True)       # those being made first, then the newest made
+    return out
+
+
+def _bad_set(name, at):
+    if not md_api.SAFE.match(name) or not SET.match(at):
+        return "bad-request", "bad set: a case's name, then the time pictured (with _mean for its mean flow)"
+    return None
+
+
+def _making(name, at):
+    """The job making set `at` of case `name` now, or None."""
+    job = _latest(name).get((name, at))
+    return job if job and job["state"] in jobs.ACTIVE else None
+
+
+def one(name, at):
+    """GET /pictures/{case}/{set}: (the set: _about's fields, its notes and the pictures it serves, None), or (None,
+    (code, message)) why not."""
+    why = _bad_set(name, at)
+    if why:
+        return None, why
+    doc = _made(_plain(name, at))
+    if doc is None:
+        job = _making(name, at)
+        return None, (("not-ready", f"the pictures {at} of {name} are being made: job {job['id']} is {job['state']}")
+                      if job else ("not-found", f"no set of pictures {at} of {name}"))
+    shown = _shown(doc)
+    notes = [n for n in doc["notes"] if isinstance(n, str)] if isinstance(doc.get("notes"), list) else []
+    if len(shown) < len(doc["pictures"]):
+        notes.append(f"{len(doc['pictures']) - len(shown)} of its pictures aren't shown: a picture's file is named "
+                     "with letters, digits, _, . and - only")
+    return dict(_about(name, at, doc), notes=notes, pictures=shown), None
+
+
+def picture(name, at, kind, file):
+    """GET /pictures/{case}/{set}/{kind}/{file}: (the PNG file's bytes, None), or (None, (code, message)).  Only a
+    picture its set lists is read, in the set's own folders (never through a link), and only if it is a PNG file."""
+    if kind not in KINDS or not FILE.match(file):
+        return None, ("bad-request", f"bad picture: its kind ({', '.join(KINDS)}), then its file, a plain .png name")
+    doc, why = one(name, at)
+    if why:
+        return None, why
+    if f"{kind}/{file}" not in [p["file"] for p in doc["pictures"]]:
+        return None, ("not-found", f"the set {at} of {name} lists no picture {kind}/{file}")
+    path, fd = _plain(name, at, kind, file), -1
+    try:                                    # not through a link, and no pipe or device to wait on
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)) if path else -1
+    except OSError:
+        pass
+    if fd < 0:
+        return None, ("not-found", f"the picture {kind}/{file} of the set {at} of {name} isn't there")
+    with os.fdopen(fd, "rb") as f:
+        info = os.fstat(f.fileno())
+        data = f.read(MAX_PNG + 1) if stat.S_ISREG(info.st_mode) and info.st_size <= MAX_PNG else b""
+    if not data.startswith(PNG) or len(data) > MAX_PNG:
+        return None, ("unsupported", f"the picture {kind}/{file} of the set {at} of {name} isn't a PNG file of at "
+                                     f"most {MAX_PNG >> 20} MB")
+    return data, None
+
+
+def delete(name, at):
+    """POST /pictures/{case}/{set}/delete: delete a set Mesh Doctor made, with its job's log and any copy of it cut
+    short, but not while a job makes it: ({case, set, deleted: its pictures}, None), or (None, (code, message))."""
+    why = _bad_set(name, at)
+    if why:
+        return None, why
+    job = _making(name, at)
+    if job:
+        return None, ("busy", f"the pictures {at} of {name} are being made: job {job['id']} is {job['state']}; cancel "
+                              "it first")
+    folder = _plain(name, at)
+    if folder is not None and not os.path.lexists(folder):
+        return None, ("not-found", f"no set of pictures {at} of {name}")
+    if folder is None or not os.path.isdir(folder) or not os.path.isfile(os.path.join(folder, MARK)):
+        return None, ("unsupported", f"{at} of {name} in the workspace's {PICTURES} isn't a set of pictures Mesh "
+                                     "Doctor made, so it is left as it is")
+    doc = _made(folder)
+    shutil.rmtree(folder)
+    new, log = _plain(name, at + ".new"), _plain(name, at + ".log")
+    if new and _replaceable(new):
+        shutil.rmtree(new, ignore_errors=True)
+    if log and os.path.isfile(log):
+        os.unlink(log)
+    try:
+        os.rmdir(_plain(name))              # the case's folder, once it has no set left
+    except OSError:
+        pass
+    return {"case": name, "set": at, "deleted": len(_shown(doc)) if doc else 0}, None
 
 
 def main(argv=None):

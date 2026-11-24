@@ -4430,6 +4430,7 @@ for n in names:
                           ".pictures/ahmedP/0.0006_mean.log"))
         self.assertEqual(launched[0][-3:], ["--out", os.path.join(ws, ".pictures", "ahmedP", "0.0006_mean"),
                                             "--mean"])
+        self.assertEqual(job["links"]["pictures"], "/api/v1/pictures/ahmedP/0.0006_mean")     # the set it makes
 
     def test_the_job_takes_a_time_and_the_kinds(self):
         import api_v1, schema
@@ -4439,6 +4440,140 @@ for n in names:
         for bad in ({"name": "ahmed", "kinds": "cuts,photos"}, {"name": "ahmed", "time": "../0"},
                     {"name": "ahmed", "mean": "yes"}):
             self.assertNotEqual(schema.check(bad, params), [], bad)
+
+    def made(self, case, ws, at, mean=False, kinds=("vortices",), when=None):
+        """A set of `case` at time `at` made in the workspace `ws`, as a job makes one; `when`: when it says it was
+        made (UTC)."""
+        out = os.path.join(ws, ".pictures", os.path.basename(case), self.p.set_name(at, mean))
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        doc = self.p.make(case, out, at, kinds, mean)
+        if when:
+            doc["made"] = when
+            with open(os.path.join(out, "pictures.json"), "w") as f:
+                json.dump(doc, f)
+        return out, doc
+
+    def test_the_sets_are_listed_newest_first_each_with_its_latest_job(self):
+        import api_v1, schema
+        case = self.case(times=("100", "200"), mean={"200": "50"})
+        ws, _, _, post = self.jobs_here(case)
+        self.made(case, ws, "100", when="2026-11-24T10:00:00Z")
+        self.made(case, ws, "200", mean=True, kinds=("vortices", "spots"), when="2026-11-24T11:00:00Z")
+        top = os.path.join(ws, ".pictures")
+        listed = os.path.join(top, "ahmedP", "100", "pictures.json")
+        for odd in ("ahmedP/200.new", "ahmedP/300", self.p.SELFTEST):     # cut short; not Mesh Doctor's; the self test
+            os.makedirs(os.path.join(top, odd))
+            shutil.copy(listed, os.path.join(top, odd))
+        for marked in ("ahmedP/200.new", self.p.SELFTEST):
+            open(os.path.join(top, marked, self.p.MARK), "w").close()
+        open(os.path.join(top, "ahmedP", "100.log"), "w").close()
+        os.symlink(os.path.join(top, "ahmedP", "100"), os.path.join(top, "ahmedP", "400"))   # links: never read
+        os.symlink(os.path.join(top, "ahmedP"), os.path.join(top, "other"))
+        st, job, _ = post({"name": "ahmedP", "time": "200"})
+        self.assertEqual(st, 202, job)
+        self.assertEqual(job["links"]["pictures"], "/api/v1/pictures/ahmedP/200")
+        st, doc, _ = api_v1.handle("GET", "/api/v1/pictures")
+        self.assertEqual(st, 200)
+        self.assertEqual(doc["items"], [
+            {"case": "ahmedP", "set": "200", "time": "200", "mean": False, "kinds": list(self.p.KINDS), "made": None,
+             "count": None, "job": {"id": job["id"], "state": "queued"}},           # being made: first
+            {"case": "ahmedP", "set": "200_mean", "time": "200", "mean": True, "kinds": ["vortices", "spots"],
+             "made": "2026-11-24T11:00:00Z", "count": 6, "job": None},               # made in a terminal: no job
+            {"case": "ahmedP", "set": "100", "time": "100", "mean": False, "kinds": ["vortices"],
+             "made": "2026-11-24T10:00:00Z", "count": 3, "job": None}])
+        self.assertEqual(schema.check(doc, api_v1._items(api_v1.PICTURE_SETS)), [])
+        self.assertEqual(api_v1.handle("GET", "/api/v1/pictures", {"case": "ahmedP"})[1], doc)
+        self.assertEqual(api_v1.handle("GET", "/api/v1/pictures", {"case": "nope"})[:2], (200, {"items": []}))
+        st, err, _ = api_v1.handle("GET", "/api/v1/pictures", {"case": self.p.SELFTEST})
+        self.assertEqual((st, err["error"]["code"]), (400, "bad-request"))
+
+    def test_a_set_and_its_pictures_are_served_only_from_its_list(self):
+        import api_v1, schema
+        case = self.case(times=("100", "200"))
+        ws, _, _, post = self.jobs_here(case)
+        out, doc = self.made(case, ws, "200", kinds=("cuts", "vortices"))
+        get = lambda path: api_v1.handle("GET", "/api/v1/pictures/" + path)
+        st, one, _ = get("ahmedP/200")
+        self.assertEqual((st, one), (200, {"case": "ahmedP", "set": "200", "time": "200", "mean": False,
+                                           "kinds": ["cuts", "vortices"], "made": doc["made"], "notes": [],
+                                           "pictures": doc["pictures"]}))
+        self.assertEqual(schema.check(one, api_v1.PICTURE_SET), [])
+        png = self.p.PNG + b"a picture"
+        with open(os.path.join(out, "vortices", "Q21000_top.png"), "wb") as f:
+            f.write(png)
+        st, raw, _ = get("ahmedP/200/vortices/Q21000_top.png")
+        self.assertEqual((st, raw.ctype, raw.data), (200, "image/png", png))
+        with open(os.path.join(out, "vortices", "secret.png"), "wb") as f:   # there, but not in the set's list
+            f.write(png)
+        elsewhere = os.path.join(self.tmp, "elsewhere.png")
+        with open(elsewhere, "wb") as f:
+            f.write(png)
+        os.remove(os.path.join(out, "cuts", "c1_side_centre_U.png"))
+        os.symlink(elsewhere, os.path.join(out, "cuts", "c1_side_centre_U.png"))     # listed, but a link
+        os.symlink(out, os.path.join(os.path.dirname(out), "250"))                    # a set's folder that is a link
+        for path, status, code, text in (
+                ("ahmedP/200/vortices/secret.png", 404, "not-found", "the set 200 of ahmedP lists no picture "
+                                                                     "vortices/secret.png"),
+                ("ahmedP/200/cuts/c1_side_centre_U.png", 404, "not-found", "isn't there"),
+                ("ahmedP/250/vortices/Q21000_top.png", 404, "not-found", "no set of pictures 250 of ahmedP"),
+                ("ahmedP/200/vortices/Q21000_rear34.png", 422, "unsupported", "isn't a PNG file of at most 32 MB"),
+                ("ahmedP/200/photos/Q21000_top.png", 400, "bad-request", "bad picture"),
+                ("ahmedP/200/vortices/..", 400, "bad-request", "bad picture"),
+                ("ahmedP/200/vortices/Q21000_top.jpg", 400, "bad-request", "bad picture"),
+                ("../200/vortices/Q21000_top.png", 400, "bad-request", "bad name"),
+                ("ahmedP/../vortices/Q21000_top.png", 400, "bad-request", "bad set"),
+                ("ahmedP/latest", 400, "bad-request", "bad set"),
+                ("ahmedP/300", 404, "not-found", "no set of pictures 300 of ahmedP")):
+            st, err, _ = get(path)
+            self.assertEqual((st, err["error"]["code"]), (status, code), path)
+            self.assertIn(text, err["error"]["message"], path)
+        with mock.patch.object(self.p, "MAX_PNG", len(png) - 1):                  # too large to be one
+            self.assertEqual(get("ahmedP/200/vortices/Q21000_top.png")[0], 422)
+        st, job, _ = post({"name": "ahmedP", "time": "100"})                      # being made for the first time
+        self.assertEqual(st, 202, job)
+        st, err, _ = get("ahmedP/100")
+        self.assertEqual((st, err["error"]["message"]),
+                         (409, f"the pictures 100 of ahmedP are being made: job {job['id']} is queued"))
+        op = api_v1.openapi()["paths"]["/pictures/{case}/{set}/{kind}/{file}"]["get"]
+        self.assertEqual(list(op["responses"]["200"]["content"]), ["image/png"])
+        self.assertEqual([p["schema"].get("enum") for p in op["parameters"]], [None, None, list(self.p.KINDS), None])
+
+    def test_a_set_made_is_deleted_with_its_log_but_not_while_a_job_makes_it(self):
+        import api_v1, jobs
+        case = self.case(times=("100", "200"))
+        ws, _, _, post = self.jobs_here(case)
+        top = os.path.join(ws, ".pictures", "ahmedP")
+        for at in ("100", "200"):
+            self.made(case, ws, at)
+            open(os.path.join(top, at + ".log"), "w").close()
+        os.makedirs(os.path.join(top, "200.new"))                                 # a remake cut short
+        open(os.path.join(top, "200.new", self.p.MARK), "w").close()
+        delete = lambda at: api_v1.handle("POST", f"/api/v1/pictures/ahmedP/{at}/delete")
+        self.assertEqual(delete("200")[:2], (200, {"case": "ahmedP", "set": "200", "deleted": 3}))
+        self.assertEqual(sorted(os.listdir(top)), ["100", "100.log"])
+        os.makedirs(os.path.join(top, "300"))                                     # not a set Mesh Doctor made
+        os.symlink(os.path.join(top, "100"), os.path.join(top, "400"))            # a link to one
+        st, job, _ = post({"name": "ahmedP", "time": "100"})
+        self.assertEqual(st, 202, job)
+        for at, status, code, text in (
+                ("100", 409, "busy", f"the pictures 100 of ahmedP are being made: job {job['id']} is queued; cancel "
+                                     "it first"),
+                ("300", 422, "unsupported", "300 of ahmedP in the workspace's .pictures isn't a set of pictures Mesh "
+                                            "Doctor made, so it is left as it is"),
+                ("400", 422, "unsupported", "isn't a set of pictures Mesh Doctor made"),
+                ("500", 404, "not-found", "no set of pictures 500 of ahmedP"),
+                ("..", 400, "bad-request", "bad set")):
+            st, err, _ = delete(at)
+            self.assertEqual((st, err["error"]["code"]), (status, code), at)
+            self.assertIn(text, err["error"]["message"], at)
+        self.assertEqual(sorted(os.listdir(top)), ["100", "100.log", "300", "400"])     # each left as it was
+        self.assertEqual(len(os.listdir(os.path.join(top, "100", "vortices"))), 3)
+        jobs.update(jobs.path_of(job["id"]), state="done")                        # once its job has ended
+        os.rmdir(os.path.join(top, "300"))
+        os.unlink(os.path.join(top, "400"))
+        self.assertEqual(delete("100")[:2], (200, {"case": "ahmedP", "set": "100", "deleted": 3}))
+        self.assertFalse(os.path.exists(top))                                     # the case's folder too, once empty
+        self.assertEqual(api_v1.handle("GET", "/api/v1/pictures/ahmedP/100/delete")[0], 405)
 
 
 class CommandHelpTest(unittest.TestCase):

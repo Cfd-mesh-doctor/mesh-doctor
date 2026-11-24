@@ -1760,7 +1760,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.16"
+    "version": "1.17"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -4533,6 +4533,420 @@
           }
         },
         "summary": "This API described in OpenAPI 3.1"
+      }
+    },
+    "/pictures": {
+      "get": {
+        "operationId": "list_pictures",
+        "parameters": [
+          {
+            "description": "only this case's sets",
+            "in": "query",
+            "name": "case",
+            "required": false,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "case": {
+                            "description": "the case pictured, in the cases folder",
+                            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+                            "type": "string"
+                          },
+                          "count": {
+                            "description": "its pictures; null while a job makes it for the first time",
+                            "minimum": 0,
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "job": {
+                            "description": "its latest picture job (GET /jobs/{job}): one that made it, or makes it again now; null when none did (meshdoctor pictures in a terminal)",
+                            "properties": {
+                              "id": {
+                                "pattern": "^[0-9]{8}-[0-9]{6}-[a-z]+-[A-Za-z0-9_.-]{1,80}-[0-9a-f]{4}$",
+                                "type": "string"
+                              },
+                              "state": {
+                                "enum": [
+                                  "queued",
+                                  "running",
+                                  "done",
+                                  "failed",
+                                  "cancelled"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "state"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "kinds": {
+                            "description": "what it has, in order",
+                            "items": {
+                              "enum": [
+                                "cuts",
+                                "vortices",
+                                "spots"
+                              ]
+                            },
+                            "type": "array"
+                          },
+                          "made": {
+                            "description": "when it was made (UTC, ISO 8601); null while a job makes it for the first time",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "mean": {
+                            "description": "of a transient run's mean flow (UMean and pMean), not of the flow at that time",
+                            "type": "boolean"
+                          },
+                          "set": {
+                            "description": "a set of pictures: the written time pictured, as its folder says it (with _mean: its mean flow)",
+                            "pattern": "^[0-9][0-9.eE+-]{0,39}(_mean)?$",
+                            "type": "string"
+                          },
+                          "time": {
+                            "description": "the written time pictured, as its folder says it",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "case",
+                          "set",
+                          "time",
+                          "mean",
+                          "kinds",
+                          "made",
+                          "count",
+                          "job"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "The sets of pictures of the flow in the workspace, newest first: each set made, with its case, the time pictured, whether it is of a transient run's mean flow, its kinds, how many pictures it has and when it was made, and each one a picture job is making for the first time; each with its latest job (API 1.17)"
+      }
+    },
+    "/pictures/{case}/{set}": {
+      "get": {
+        "operationId": "picture_set",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case",
+            "required": true,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "set",
+            "required": true,
+            "schema": {
+              "description": "a set of pictures: the written time pictured, as its folder says it (with _mean: its mean flow)",
+              "pattern": "^[0-9][0-9.eE+-]{0,39}(_mean)?$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "case": {
+                      "description": "the case pictured, in the cases folder",
+                      "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+                      "type": "string"
+                    },
+                    "kinds": {
+                      "description": "what it has, in order",
+                      "items": {
+                        "enum": [
+                          "cuts",
+                          "vortices",
+                          "spots"
+                        ]
+                      },
+                      "type": "array"
+                    },
+                    "made": {
+                      "description": "when it was made (UTC, ISO 8601); null while a job makes it for the first time",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mean": {
+                      "description": "of a transient run's mean flow (UMean and pMean), not of the flow at that time",
+                      "type": "boolean"
+                    },
+                    "notes": {
+                      "description": "what was left out, and why",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "pictures": {
+                      "items": {
+                        "properties": {
+                          "file": {
+                            "description": "<kind>/<file>, which GET /pictures/{case}/{set}/{kind}/{file} serves",
+                            "pattern": "^(cuts|vortices|spots)/[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}\\.png$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "enum": [
+                              "cuts",
+                              "vortices",
+                              "spots"
+                            ]
+                          },
+                          "title": {
+                            "description": "what it shows",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "file",
+                          "kind",
+                          "title"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "set": {
+                      "description": "a set of pictures: the written time pictured, as its folder says it (with _mean: its mean flow)",
+                      "pattern": "^[0-9][0-9.eE+-]{0,39}(_mean)?$",
+                      "type": "string"
+                    },
+                    "time": {
+                      "description": "the written time pictured, as its folder says it",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "case",
+                    "set",
+                    "time",
+                    "mean",
+                    "kinds",
+                    "made",
+                    "notes",
+                    "pictures"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "A set of pictures: each one's file and what it shows, and the notes on what was left out and why; 409 not-ready while a job makes it for the first time (API 1.17)"
+      }
+    },
+    "/pictures/{case}/{set}/delete": {
+      "post": {
+        "operationId": "delete_pictures",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case",
+            "required": true,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "set",
+            "required": true,
+            "schema": {
+              "description": "a set of pictures: the written time pictured, as its folder says it (with _mean: its mean flow)",
+              "pattern": "^[0-9][0-9.eE+-]{0,39}(_mean)?$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "case": {
+                      "description": "the case pictured, in the cases folder",
+                      "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+                      "type": "string"
+                    },
+                    "deleted": {
+                      "description": "how many pictures it had",
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "set": {
+                      "description": "a set of pictures: the written time pictured, as its folder says it (with _mean: its mean flow)",
+                      "pattern": "^[0-9][0-9.eE+-]{0,39}(_mean)?$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "case",
+                    "set",
+                    "deleted"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "Delete a set of pictures Mesh Doctor made, with its job's log; not while a job makes it (409 busy), and never a folder it didn't make (422 unsupported).  Needs the token or pairing key (API 1.17)"
+      }
+    },
+    "/pictures/{case}/{set}/{kind}/{file}": {
+      "get": {
+        "operationId": "picture",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case",
+            "required": true,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "set",
+            "required": true,
+            "schema": {
+              "description": "a set of pictures: the written time pictured, as its folder says it (with _mean: its mean flow)",
+              "pattern": "^[0-9][0-9.eE+-]{0,39}(_mean)?$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "cuts",
+                "vortices",
+                "spots"
+              ]
+            }
+          },
+          {
+            "in": "path",
+            "name": "file",
+            "required": true,
+            "schema": {
+              "description": "a plain .png name",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}\\.png$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/png": {
+                "schema": {
+                  "contentMediaType": "image/png",
+                  "description": "the PNG file",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "One picture of a set: the PNG file ParaView made (image/png, the one answer that isn't JSON).  Only a picture its set lists is read, in the set's own folders and never through a link, and only a PNG file (API 1.17)"
       }
     },
     "/repairs": {

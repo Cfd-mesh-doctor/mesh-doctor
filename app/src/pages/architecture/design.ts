@@ -61,7 +61,7 @@ export const DESIGN: DocSection[] = [
             [
               "`pictures.py`",
               "core + CLI",
-              "pictures of a solved case's flow: `make()` runs the paraview-post scripts with ParaView's `pvbatch`, offscreen, on a folder of links to the case in the workspace (its `constant`, `system` and the time pictured), so the case is only read; the pictures and `pictures.json`, their list, go in the workspace's `.pictures/<case>/<time>/` (`<time>_mean/` for a transient run's mean flow); a computer's first set starts with the vortex script's self test, in `.pictures/.selftest/`, kept once it has passed. A `pictures` job runs it (API 1.15; the mean flow and the self test, API 1.16)"
+              "pictures of a solved case's flow: `make()` runs the paraview-post scripts with ParaView's `pvbatch`, offscreen, on a folder of links to the case in the workspace (its `constant`, `system` and the time pictured), so the case is only read; the pictures and `pictures.json`, their list, go in the workspace's `.pictures/<case>/<time>/` (`<time>_mean/` for a transient run's mean flow); a computer's first set starts with the vortex script's self test, in `.pictures/.selftest/`, kept once it has passed. A `pictures` job runs it (API 1.15; the mean flow and the self test, API 1.16), and `GET /pictures` lists the sets, whose lists and pictures the API serves (API 1.17)"
             ],
             [
               "`repair.py`, `abtest.py`",
@@ -245,11 +245,11 @@ export const DESIGN: DocSection[] = [
     "title": "API v1",
     "blocks": [
       {
-        "text": "All routes live under `/api/v1` (`meshdoctor/api_v1.py`). The routes are a table that knows nothing about the HTTP server: `handle(method, path, query, body, content_type)` returns a status and a JSON document. `server.py` runs the security checks first and then hands the request over, so another server, or a test, can use the same table."
+        "text": "All routes live under `/api/v1` (`meshdoctor/api_v1.py`). The routes are a table that knows nothing about the HTTP server: `handle(method, path, query, body, content_type)` returns a status and a JSON document, or a picture's bytes for the one route that serves a file. `server.py` runs the security checks first and then hands the request over, so another server, or a test, can use the same table."
       },
       {
         "list": [
-          "Responses are JSON. Errors are always `{\"error\": {\"code\": \"...\", \"message\": \"...\"}}`, with the HTTP status that the code maps to (below). Messages never contain the worker's file paths.",
+          "Responses are JSON, but a picture: `GET /pictures/{case}/{set}/{kind}/{file}` answers its PNG file (`image/png`). Errors are always `{\"error\": {\"code\": \"...\", \"message\": \"...\"}}`, with the HTTP status that the code maps to (below). Messages never contain the worker's file paths.",
           "`GET /api/v1/openapi.json` describes the API in OpenAPI 3.1. It is built from the same table, so it cannot drift from the code. The result documents refer to `GET /api/v1/schemas/{kind}`, the JSON Schemas above.",
           "List answers are objects, `{\"items\": [...]}`, so fields can be added later without breaking clients."
         ]
@@ -401,6 +401,26 @@ export const DESIGN: DocSection[] = [
               "`GET /tplans/{name}`",
               "(new)",
               "the transient plan a `tplan` job made of a case in the cases folder, from its latest result (`tplan` schema): the time step a transient run would need at each max Courant number, which cells set it (where they are, their nearest wall, the flow's speed and their shape there, and the cell set of them the job wrote, and whether it is for the whole mesh), and the steps and hours such a run would take; `404 not-found` before a plan (API 1.6)"
+            ],
+            [
+              "`GET /pictures?case=`",
+              "(new)",
+              "the sets of pictures of the flow in the workspace (`.pictures/<case>/<set>/`, a set named by the time pictured, `<time>_mean` for a transient run's mean flow), newest first: each set made, with its case, time, kinds, how many pictures it has and when it was made, and each one a `pictures` job is making for the first time (`count` and `made` null until it has made it), each with its latest job and that job's state; `case` keeps one case's (API 1.17)"
+            ],
+            [
+              "`GET /pictures/{case}/{set}`",
+              "(new)",
+              "one set: each picture's file (`<kind>/<name>.png`) and what it shows, and the notes on what was left out and why; `409 not-ready` while a job makes it for the first time (API 1.17)"
+            ],
+            [
+              "`GET /pictures/{case}/{set}/{kind}/{file}`",
+              "(new)",
+              "one picture: the PNG file ParaView made (`image/png`, the one answer that isn't JSON). Only a file the set's list names is read, in the set's own folders and never through a link, and only a PNG file (API 1.17)"
+            ],
+            [
+              "`POST /pictures/{case}/{set}/delete`",
+              "",
+              "delete a set Mesh Doctor made, with its job's log; `409 busy` while a job makes it, and `422 unsupported` for a folder Mesh Doctor didn't make, which is left as it is (API 1.17)"
             ]
           ]
         }

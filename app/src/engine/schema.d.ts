@@ -393,6 +393,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/pictures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The sets of pictures of the flow in the workspace, newest first: each set made, with its case, the time pictured, whether it is of a transient run's mean flow, its kinds, how many pictures it has and when it was made, and each one a picture job is making for the first time; each with its latest job (API 1.17) */
+        get: operations["list_pictures"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pictures/{case}/{set}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A set of pictures: each one's file and what it shows, and the notes on what was left out and why; 409 not-ready while a job makes it for the first time (API 1.17) */
+        get: operations["picture_set"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pictures/{case}/{set}/{kind}/{file}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One picture of a set: the PNG file ParaView made (image/png, the one answer that isn't JSON).  Only a picture its set lists is read, in the set's own folders and never through a link, and only a PNG file (API 1.17) */
+        get: operations["picture"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pictures/{case}/{set}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Delete a set of pictures Mesh Doctor made, with its job's log; not while a job makes it (409 busy), and never a folder it didn't make (422 unsupported).  Needs the token or pairing key (API 1.17) */
+        post: operations["delete_pictures"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/repairs": {
         parameters: {
             query?: never;
@@ -2419,6 +2487,189 @@ export interface operations {
                 };
                 content: {
                     "application/json": Record<string, unknown>;
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_pictures: {
+        parameters: {
+            query?: {
+                /** @description only this case's sets */
+                case?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: {
+                            /** @description the case pictured, in the cases folder */
+                            case: string;
+                            /** @description its pictures; null while a job makes it for the first time */
+                            count: number | null;
+                            /** @description its latest picture job (GET /jobs/{job}): one that made it, or makes it again now; null when none did (meshdoctor pictures in a terminal) */
+                            job: {
+                                id: string;
+                                /** @enum {unknown} */
+                                state: "queued" | "running" | "done" | "failed" | "cancelled";
+                            } | null;
+                            /** @description what it has, in order */
+                            kinds: ("cuts" | "vortices" | "spots")[];
+                            /** @description when it was made (UTC, ISO 8601); null while a job makes it for the first time */
+                            made: string | null;
+                            /** @description of a transient run's mean flow (UMean and pMean), not of the flow at that time */
+                            mean: boolean;
+                            /** @description a set of pictures: the written time pictured, as its folder says it (with _mean: its mean flow) */
+                            set: string;
+                            /** @description the written time pictured, as its folder says it */
+                            time: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    picture_set: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case: string;
+                set: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description the case pictured, in the cases folder */
+                        case: string;
+                        /** @description what it has, in order */
+                        kinds: ("cuts" | "vortices" | "spots")[];
+                        /** @description when it was made (UTC, ISO 8601); null while a job makes it for the first time */
+                        made: string | null;
+                        /** @description of a transient run's mean flow (UMean and pMean), not of the flow at that time */
+                        mean: boolean;
+                        /** @description what was left out, and why */
+                        notes: string[];
+                        pictures: {
+                            /** @description <kind>/<file>, which GET /pictures/{case}/{set}/{kind}/{file} serves */
+                            file: string;
+                            /** @enum {unknown} */
+                            kind: "cuts" | "vortices" | "spots";
+                            /** @description what it shows */
+                            title: string;
+                        }[];
+                        /** @description a set of pictures: the written time pictured, as its folder says it (with _mean: its mean flow) */
+                        set: string;
+                        /** @description the written time pictured, as its folder says it */
+                        time: string;
+                    };
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    picture: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case: string;
+                file: string;
+                kind: "cuts" | "vortices" | "spots";
+                set: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    delete_pictures: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case: string;
+                set: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description the case pictured, in the cases folder */
+                        case: string;
+                        /** @description how many pictures it had */
+                        deleted: number;
+                        /** @description a set of pictures: the written time pictured, as its folder says it (with _mean: its mean flow) */
+                        set: string;
+                    };
                 };
             };
             /** @description Error (the code says which; see STATUS in api_v1.py) */

@@ -7,12 +7,32 @@
 
 It never starts a job: the only accepted job request it sends uses the copy
 name "..", which the API must refuse.  With --start the server gets empty
-temporary cases and workspace folders and no config file.
+temporary cases and workspace folders and no config file, but for two sets of
+pictures in the workspace (one of them deleted by the checks).
 """
-import atexit, http.client, os, re, shutil, socket, subprocess, sys, tempfile, time
+import atexit, http.client, json, os, re, shutil, socket, subprocess, sys, tempfile, time
 
 APP = "https://app.example.test"      # the web app's address the --start server allows (app_origins)
 START = "--start" in sys.argv
+PNG = b"\x89PNG\r\n\x1a\n"
+
+
+def _pictures(work, key_file):
+    """Two sets of pictures of ahmed in the workspace, as a picture job leaves them: in each, a picture that is
+    served, a file its list doesn't name, and a picture it lists that is a link to the pairing key."""
+    for at in ("2000", "1000"):
+        folder = os.path.join(work, ".pictures", "ahmed", at)
+        os.makedirs(os.path.join(folder, "cuts"), mode=0o700)
+        open(os.path.join(folder, ".meshdoctor-pictures"), "w").close()
+        with open(os.path.join(folder, "pictures.json"), "w") as f:
+            json.dump({"case": "ahmed", "time": at, "mean": False, "kinds": ["cuts"], "made": "2026-11-24T00:00:00Z",
+                       "notes": [], "pictures": [{"file": f"cuts/{n}.png", "kind": "cuts", "title": n}
+                                                 for n in ("side_U", "key")]}, f)
+        for name, text in (("side_U", b"a picture"), ("unlisted", b"not in the list")):
+            with open(os.path.join(folder, "cuts", name + ".png"), "wb") as f:
+                f.write(PNG + text)
+        os.symlink(key_file, os.path.join(folder, "cuts", "key.png"))
+    os.chmod(work, 0o700)
 
 
 def _start_server():
@@ -24,6 +44,7 @@ def _start_server():
     _start_server.key_file = env["MESHDOCTOR_KEY_FILE"]
     _start_server.cases = env["MESHDOCTOR_CASES"]
     os.makedirs(os.path.join(env["MESHDOCTOR_CASES"], "mine"))     # a case you made, which a new case never replaces
+    _pictures(env["MESHDOCTOR_WORKSPACE"], env["MESHDOCTOR_KEY_FILE"])
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     p = subprocess.Popen([sys.executable, "-m", "meshdoctor", "serve", "--port", str(port)], cwd=repo, env=env,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -135,6 +156,24 @@ CHECKS = [
     ("v1 a transient plan takes no bad name", "GET", "/api/v1/tplans/.x", {}, 400, '"code": "bad-request"'),
     ("v1 a transient plan refused to another site", "GET", "/api/v1/tplans/x", {"Origin": "http://evil.example"},
      403, "cross-site"),
+    ("v1 picture sets list works", "GET", "/api/v1/pictures", {}, 200, '"items"'),
+    ("v1 a set of pictures takes no '..'", "GET", "/api/v1/pictures/../2000", {}, 400, '"code": "bad-request"'),
+    ("v1 a set is named by a time only", "GET", "/api/v1/pictures/ahmed/secret", {}, 400, '"code": "bad-request"'),
+    ("v1 a picture takes no '..'", "GET", "/api/v1/pictures/ahmed/2000/../pictures.json", {}, 400,
+     '"code": "bad-request"'),
+    ("v1 a picture takes no encoded path", "GET", "/api/v1/pictures/ahmed/2000/cuts/..%2f..%2fpictures.json", {},
+     400, '"code": "bad-request"'),
+    ("v1 a picture is a .png file only", "GET", "/api/v1/pictures/ahmed/2000/cuts/pictures.json", {}, 400,
+     '"code": "bad-request"'),
+    ("v1 a picture refused to another site", "GET", "/api/v1/pictures/ahmed/2000/cuts/side_U.png",
+     {"Origin": "http://evil.example"}, 403, "cross-site"),
+    ("v1 deleting a set without token refused", "POST", "/api/v1/pictures/ahmed/1000/delete", {}, 403, "token"),
+    ("v1 deleting a set from another site refused, even with token", "POST", "/api/v1/pictures/ahmed/1000/delete",
+     {"X-MD-Token": TOKEN, "Origin": "http://evil.example"}, 403, "cross-site"),
+    ("v1 deleting a set takes no bad name", "POST", "/api/v1/pictures/ahmed/../delete",
+     {"X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 400, '"code": "bad-request"'),
+    ("v1 deleting a set takes POST only", "GET", "/api/v1/pictures/ahmed/1000/delete", {}, 405,
+     '"code": "method-not-allowed"'),
     ("v1 readiness check takes no POST", "POST", "/api/v1/check", {"X-MD-Token": TOKEN, "Content-Type": JSON}, 405,
      '"code": "method-not-allowed"', b"{}"),
     ("v1 unknown host refused", "GET", "/api/v1/cases", {"Host": f"evil.example:{PORT}"}, 403, '"code": "forbidden"'),
@@ -248,6 +287,23 @@ APP_CHECKS = [
      {"Origin": APP.replace("https:", "http:"), "X-MD-Key": APP_KEY}, 403, "cross-site"),
 ] if START else []
 
+# The sets of pictures the --start server's workspace has (_pictures): served only from their lists, never a link
+PIC = "/api/v1/pictures/ahmed/2000/cuts/side_U.png"
+SET_CHECKS = [
+    ("v1 the picture sets are listed", "GET", "/api/v1/pictures", {}, 200, '"set": "2000"'),
+    ("v1 a set of pictures is served", "GET", "/api/v1/pictures/ahmed/2000", {}, 200, '"cuts/side_U.png"'),
+    ("v1 a picture the set lists is served", "GET", PIC, {}, 200, "a picture"),
+    ("v1 a picture the set doesn't list is not served", "GET", "/api/v1/pictures/ahmed/2000/cuts/unlisted.png", {},
+     404, '"code": "not-found"'),
+    ("v1 a picture the set lists that is a link is not served", "GET", "/api/v1/pictures/ahmed/2000/cuts/key.png",
+     {}, 404, '"code": "not-found"'),
+    ("app: a picture without the pairing key refused", "GET", PIC, {"Origin": APP}, 403, "pairing key"),
+    ("app: a picture with the key is served", "GET", PIC, {"Origin": APP, "X-MD-Key": APP_KEY}, 200, "a picture"),
+    ("v1 deleting a set with token deletes it", "POST", "/api/v1/pictures/ahmed/1000/delete",
+     {"X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 200, '"deleted": 2'),
+    ("v1 a deleted set is gone", "GET", "/api/v1/pictures/ahmed/1000", {}, 404, '"code": "not-found"'),
+] if START else []
+
 
 def header(path, name, method="GET", headers=None):
     req(method, path, headers)
@@ -307,11 +363,17 @@ if START:
          lambda: header("/api/v1/cases", "Access-Control-Allow-Credentials",
                         headers={"Origin": APP, "X-MD-Key": APP_KEY}) == ""),
         ("app: the key file is readable by its owner only", _key_file_private),
+        ("v1 a picture is sent as image/png, never sniffed",
+         lambda: header(PIC, "Content-Type") == "image/png" and header(PIC, "X-Content-Type-Options") == "nosniff"),
+        ("app: a picture's answer names the app's own address, as every answer does",
+         lambda: header(PIC, "Access-Control-Allow-Origin", headers={"Origin": APP, "X-MD-Key": APP_KEY}) == APP),
+        ("v1 a picture that is a link to the pairing key never shows the key",
+         lambda: APP_KEY not in req("GET", "/api/v1/pictures/ahmed/2000/cuts/key.png")[1]),
     ]
 
 failed = 0
 print(f"token found in page: {'yes' if TOKEN else 'NO'} (page status {page_status})")
-CHECKS += APP_CHECKS
+CHECKS += APP_CHECKS + SET_CHECKS
 for desc, method, path, headers, want, text, *send in CHECKS:
     got, body = req(method, path, headers, *send)
     ok = got == want and (text in body)

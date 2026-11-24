@@ -903,6 +903,8 @@ class H(http.server.BaseHTTPRequestHandler):
             code, doc, headers = api_v1.handle(method, u.path, q, body, self.headers.get("Content-Type", ""))
         except Exception:
             return self._fail(u.path)
+        if isinstance(doc, api_v1.Raw):                 # a picture: its own bytes, as their own type
+            return self._send(code, doc.ctype, doc.data, headers)
         self._json(doc, code, headers)
 
     def do_OPTIONS(self):

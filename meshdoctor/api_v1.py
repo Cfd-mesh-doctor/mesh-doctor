@@ -8,7 +8,8 @@ A table of routes that knows nothing about the HTTP server:
 
 server.py runs the security checks first (host, origin, launch token) and then
 hands every /api/v1 request here, so another server (or a test) can use the
-same table.  Every answer is JSON.  Errors always look like
+same table.  Every answer is JSON but a picture's (a Raw: a file's bytes and their
+media type).  Errors always look like
 
     {"error": {"code": "busy", "message": "another OpenFOAM job is running; ..."}}
 
@@ -28,7 +29,7 @@ import tplan
 import validate
 import version
 
-API_VERSION = "1.16"
+API_VERSION = "1.17"
 PREFIX = "/api/v1"
 WRITES_MAX = solve.transient.MAX_WRITES   # the most times a stretch of a transient run writes
 MAX_BODY = 64 * 1024
@@ -54,6 +55,12 @@ class ApiError(Exception):
         self.code, self.message, self.headers = code, message, headers or {}
 
 
+class Raw:
+    """An answer that isn't JSON: a file's bytes and their media type (a picture: GET /pictures/.../{file})."""
+    def __init__(self, data, ctype):
+        self.data, self.ctype = data, ctype
+
+
 def error_doc(code, message):
     return {"error": {"code": code, "message": message}}
 
@@ -67,9 +74,10 @@ def provide(**funcs):
 # the route table
 
 class Route:
-    def __init__(self, method, template, func, summary, query, ok, status, body):
+    def __init__(self, method, template, func, summary, query, ok, status, body, params=None, ctype="application/json"):
         self.method, self.template, self.func, self.summary = method, template, func, summary
         self.query, self.ok, self.status, self.body = query, ok, status, body
+        self.params, self.ctype = params or {}, ctype       # path parameters' own schemas; the answer's media type
         self.names = re.findall(r"{(\w+)}", template)
         parts = re.split(r"({\w+})", template)
         self.rx = re.compile("^" + "".join(f"(?P<{x[1:-1]}>[^/]+)" if x.startswith("{") else re.escape(x)
@@ -80,10 +88,12 @@ class Route:
 ROUTES = []
 
 
-def route(method, template, summary, query=None, ok=None, status=200, body=None):
-    """Register a handler f(path_args, query_args, body) -> document."""
+def route(method, template, summary, query=None, ok=None, status=200, body=None, params=None,
+          ctype="application/json"):
+    """Register a handler f(path_args, query_args, body) -> document (a Raw, for a ctype that isn't JSON).  `params`:
+    a path parameter's schema, where its name alone doesn't say it."""
     def deco(f):
-        ROUTES.append(Route(method, template, f, summary, query or {}, ok, status, body))
+        ROUTES.append(Route(method, template, f, summary, query or {}, ok, status, body, params, ctype))
         return f
     return deco
 
@@ -729,6 +739,85 @@ def variants(p, q, b):
     return {"items": md_api.variants()}
 
 
+# --- pictures of the flow (pictures.py): the sets made, a set, one picture -------------------------------------
+SET_NAME = {"type": "string", "pattern": pictures.SET.pattern,
+            "description": "a set of pictures: the written time pictured, as its folder says it (with _mean: its "
+                           "mean flow)"}
+_SET = {"case": dict(NAME, description="the case pictured, in the cases folder"), "set": SET_NAME,
+        "time": {"type": "string", "description": "the written time pictured, as its folder says it"},
+        "mean": {"type": "boolean",
+                 "description": "of a transient run's mean flow (UMean and pMean), not of the flow at that time"},
+        "kinds": {"type": "array", "items": {"enum": list(pictures.KINDS)}, "description": "what it has, in order"},
+        "made": {"type": ["string", "null"],
+                 "description": "when it was made (UTC, ISO 8601); null while a job makes it for the first time"}}
+PICTURE_SETS = {"type": "object", "required": list(_SET) + ["count", "job"], "properties": dict(_SET, **{
+    "count": {"type": ["integer", "null"], "minimum": 0,
+              "description": "its pictures; null while a job makes it for the first time"},
+    "job": {"type": ["object", "null"], "required": ["id", "state"],
+            "description": "its latest picture job (GET /jobs/{job}): one that made it, or makes it again now; null "
+                           "when none did (meshdoctor pictures in a terminal)",
+            "properties": {"id": {"type": "string", "pattern": jobs.ID.pattern},
+                           "state": {"enum": ["queued", "running", "done", "failed", "cancelled"]}}}})}
+PICTURE_SET = {"type": "object", "required": list(_SET) + ["notes", "pictures"], "properties": dict(_SET, **{
+    "notes": {"type": "array", "items": {"type": "string"}, "description": "what was left out, and why"},
+    "pictures": {"type": "array", "items": {"type": "object", "required": ["file", "kind", "title"], "properties": {
+        "file": {"type": "string", "pattern": f"^({'|'.join(pictures.KINDS)})/" + pictures.FILE.pattern[1:],
+                 "description": "<kind>/<file>, which GET /pictures/{case}/{set}/{kind}/{file} serves"},
+        "kind": {"enum": list(pictures.KINDS)},
+        "title": {"type": "string", "description": "what it shows"}}}}})}
+
+
+def _set(v):
+    if not pictures.SET.match(v):
+        raise ApiError("bad-request", "bad set: " + SET_NAME["description"])
+    return v
+
+
+def _answer(answer):
+    """The document of a (document, why not) answer, or the refusal."""
+    doc, why = answer
+    if why:
+        raise ApiError(*why)
+    return doc
+
+
+@route("GET", "/pictures", "The sets of pictures of the flow in the workspace, newest first: each set made, with its "
+       "case, the time pictured, whether it is of a transient run's mean flow, its kinds, how many pictures it has "
+       "and when it was made, and each one a picture job is making for the first time; each with its latest job "
+       "(API 1.17)", query={"case": {"schema": NAME, "description": "only this case's sets"}},
+       ok=_items(PICTURE_SETS))
+def list_pictures(p, q, b):
+    return {"items": pictures.sets(q.get("case"))}
+
+
+@route("GET", "/pictures/{case}/{set}", "A set of pictures: each one's file and what it shows, and the notes on what "
+       "was left out and why; 409 not-ready while a job makes it for the first time (API 1.17)", ok=PICTURE_SET,
+       params={"set": SET_NAME})
+def picture_set(p, q, b):
+    return _answer(pictures.one(_name(p["case"]), _set(p["set"])))
+
+
+@route("GET", "/pictures/{case}/{set}/{kind}/{file}", "One picture of a set: the PNG file ParaView made (image/png, "
+       "the one answer that isn't JSON).  Only a picture its set lists is read, in the set's own folders and never "
+       "through a link, and only a PNG file (API 1.17)",
+       ok={"type": "string", "contentMediaType": "image/png", "description": "the PNG file"}, ctype="image/png",
+       params={"set": SET_NAME, "kind": {"enum": list(pictures.KINDS)},
+               "file": {"type": "string", "pattern": pictures.FILE.pattern, "description": "a plain .png name"}})
+def picture(p, q, b):
+    return Raw(_answer(pictures.picture(_name(p["case"]), _set(p["set"]), p["kind"], p["file"])), "image/png")
+
+
+@route("POST", "/pictures/{case}/{set}/delete", "Delete a set of pictures Mesh Doctor made, with its job's log; not "
+       "while a job makes it (409 busy), and never a folder it didn't make (422 unsupported).  Needs the token or "
+       "pairing key (API 1.17)",
+       ok={"type": "object", "required": ["case", "set", "deleted"], "properties": {
+           "case": _SET["case"], "set": SET_NAME,
+           "deleted": {"type": "integer", "minimum": 0, "description": "how many pictures it had"}}},
+       params={"set": SET_NAME})
+def delete_pictures(p, q, b):
+    return _answer(pictures.delete(_name(p["case"]), _set(p["set"])))
+
+
 # --- jobs -----------------------------------------------------------------
 # One entry per kind: the params it takes (a JSON Schema, also used in the
 # OpenAPI document) and how to start it.  Every job works on copies.
@@ -739,6 +828,15 @@ def _params(props, required):
 
 REPLACE = {"type": "boolean", "default": False,
            "description": "replace an existing run of the same name (its results are deleted)"}
+
+
+def _set_link(n, p):
+    """A picture job's link to the set it makes (GET /pictures/{case}/{set})."""
+    at = p.get("time")
+    return {"pictures": f"{PREFIX}/pictures/{n}/{pictures.set_name(at, p.get('mean') is True)}"} \
+        if isinstance(at, str) else {}
+
+
 JOBS = {
     "repair": {
         "summary": "copy a source case, checkMesh, repair the copy, checkMesh again",
@@ -747,7 +845,7 @@ JOBS = {
                            "profile": {"enum": ["openfoam", "strict"], "default": "openfoam"},
                            "replace": REPLACE}, ["source", "name"]),
         "start": lambda a: md_api.start(a["source"], a["name"], a["profile"], replace=a["replace"]),
-        "links": lambda n: {"repair": f"{PREFIX}/repairs/{n}", "log": f"{PREFIX}/repairs/{n}/log"},
+        "links": lambda n, p: {"repair": f"{PREFIX}/repairs/{n}", "log": f"{PREFIX}/repairs/{n}/log"},
     },
     "abtest": {
         "summary": "solve the original and the repaired mesh with the same settings and compare",
@@ -760,7 +858,7 @@ JOBS = {
                                        "description": "solver-setting variant for the second run (GET /variants)"},
                            "replace": REPLACE}, ["name"]),
         "start": lambda a: md_api.ab_start(a["name"], a["iters"], a["init"], a["variant"], replace=a["replace"]),
-        "links": lambda n: {"abtest": f"{PREFIX}/abtests/{n}", "live": f"{PREFIX}/abtests/{n}/live"},
+        "links": lambda n, p: {"abtest": f"{PREFIX}/abtests/{n}", "live": f"{PREFIX}/abtests/{n}/live"},
     },
     "abextend": {
         "summary": "continue the second run of a finished A/B test and judge it again",
@@ -770,7 +868,7 @@ JOBS = {
                                                  "now (the A/B test's iterations, or where an earlier extension "
                                                  "ended)"}}, ["name", "to"]),
         "start": lambda a: md_api.ab_extend(a["name"], a["to"]),
-        "links": lambda n: {"abtest": f"{PREFIX}/abtests/{n}", "live": f"{PREFIX}/abtests/{n}/live"},
+        "links": lambda n, p: {"abtest": f"{PREFIX}/abtests/{n}", "live": f"{PREFIX}/abtests/{n}/live"},
     },
     "case": {
         "summary": "make a new case from a template: copy it into the cases folder under a new name and mesh it",
@@ -784,7 +882,7 @@ JOBS = {
                                                       "made (deleted first, with everything in it); a case Mesh "
                                                       "Doctor didn't make is never replaced"}}, ["template", "name"]),
         "start": lambda a: templates.start(a["template"], a["size"], a["name"], replace=a["replace"]),
-        "links": lambda n: {"cases": f"{PREFIX}/cases"},
+        "links": lambda n, p: {"cases": f"{PREFIX}/cases"},
     },
     "solve": {
         "summary": "solve a case Mesh Doctor made to an iteration: while none is written it splits the case, starts "
@@ -831,7 +929,7 @@ JOBS = {
         "start": lambda a: solve.start(a["name"], a.get("to"), a["np"], a.get("source"), a.get("template"),
                                        a.get("size"), a.get("steady"), a.get("maxCo"), a.get("model"),
                                        a.get("writes")),
-        "links": lambda n: {"run": f"{PREFIX}/runs/{n}"},
+        "links": lambda n, p: {"run": f"{PREFIX}/runs/{n}"},
     },
     "tplan": {
         "summary": "plan a transient run of a solved case: from its latest result, the time step its mesh allows at "
@@ -841,7 +939,7 @@ JOBS = {
         "params": _params({"name": dict(NAME, description="a case in the cases folder with a solved result: a run "
                                                           "(GET /runs), or a case you made (GET /cases)")}, ["name"]),
         "start": lambda a: tplan.start(a["name"]),
-        "links": lambda n: {"tplan": f"{PREFIX}/tplans/{n}"},
+        "links": lambda n, p: {"tplan": f"{PREFIX}/tplans/{n}"},
     },
     "pictures": {
         "summary": "make pictures of a solved case's flow with ParaView, offscreen, at a written time, or of a "
@@ -866,7 +964,7 @@ JOBS = {
                           ["name"]),
         "start": lambda a: pictures.start(a["name"], a["time"] or None, tuple(dict.fromkeys(a["kinds"].split(","))),
                                           a["mean"]),
-        "links": lambda n: {},
+        "links": _set_link,
     },
 }
 JOB_REQUEST = {"oneOf": [
@@ -876,7 +974,8 @@ JOB_REQUEST = {"oneOf": [
 def _job_out(job):
     """A job document with the links a client follows (the job, cancelling it, its run)."""
     me = f"{PREFIX}/jobs/{job['id']}"
-    return dict(job, links={"self": me, "cancel": me + "/cancel", **JOBS[job["kind"]]["links"](job["name"])})
+    params = job.get("params") if isinstance(job.get("params"), dict) else {}
+    return dict(job, links={"self": me, "cancel": me + "/cancel", **JOBS[job["kind"]]["links"](job["name"], params)})
 
 
 def _job(job_id):
@@ -1210,7 +1309,7 @@ def _finite(text):
 
 
 def handle(method, path, query=None, body=b"", content_type=""):
-    """(HTTP status, JSON document, extra headers) for one request below PREFIX.
+    """(HTTP status, JSON document or a Raw, extra headers) for one request below PREFIX.
     `query` is {name: first value}.  Unexpected exceptions are the caller's to log."""
     try:
         return _handle(method, path, query or {}, body, content_type)
@@ -1251,11 +1350,12 @@ def openapi():
     for r in ROUTES:
         op = {"operationId": r.op, "summary": r.summary, "parameters": [], "responses": {
             str(r.status): {"description": "OK" if r.status == 200 else "Accepted",
-                            "content": {"application/json": {"schema": r.ok or {"type": "object"}}}},
+                            "content": {r.ctype: {"schema": r.ok or {"type": "object"}}}},
             "default": {"description": "Error (the code says which; see STATUS in api_v1.py)",
                         "content": {"application/json": {"schema": err}}}}}
         for n in r.names:
-            sch = {"type": "string", "pattern": r"^[0-9]{1,9}$"} if n == "id" else \
+            sch = r.params[n] if n in r.params else \
+                {"type": "string", "pattern": r"^[0-9]{1,9}$"} if n == "id" else \
                 {"enum": sorted(schema.VERSIONS)} if n == "kind" else \
                 {"type": "string", "pattern": jobs.ID.pattern} if n == "job" else NAME
             op["parameters"].append({"name": n, "in": "path", "required": True, "schema": sch})
