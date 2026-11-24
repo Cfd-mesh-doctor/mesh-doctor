@@ -4134,8 +4134,12 @@ view = os.path.dirname(foam)
 with open(os.path.join(os.path.dirname(view), "seen"), "a") as f:
     f.write(script + " " + os.environ.get("PYTHONPATH", "") + " " + " ".join(sorted(os.listdir(view))) + "\\n")
 out = a[3] if script == "vortex_views.py" else a[4]
-for n in {"cut_views.py": ["c1_side_centre_U", "c1_side_centre_Cpt"], "vortex_views.py": ["Q21000_rear34",
-          "Q21000_top"], "pressure_spots.py": ["spots_worst"]}[script]:
+if script == "pressure_spots.py" and os.environ.get("MD_TEST_NO_SPOTS"):
+    print("ahmed: 17510 faces, 0.763 m2, pressure force (-12.80, 66.43, 21.85) N, Cp -2.0 .. 1.00")
+    sys.exit(0)
+for n in {"cut_views.py": ["c1_side_centre_U", "c1_side_centre_Cpt"], "vortex_views.py": ["Q210000_rear34",
+          "Q21000_rear34", "Q21000_top"], "pressure_spots.py": ["spots_Cp_spot_closeup", "spots_Cp_spot_normal",
+          "spots_Cp_spot_side"]}[script]:
     open(os.path.join(out, n + ".png"), "wb").close()
 """
     FRAME = {"total": "forcesTotal", "flowAxis": 0, "flowSign": -1, "upAxis": 2, "Uinf": 40.0, "rho": 1.205}
@@ -4188,7 +4192,9 @@ for n in {"cut_views.py": ["c1_side_centre_U", "c1_side_centre_Cpt"], "vortex_vi
     def test_the_walls_are_the_total_force_groups_patches(self):
         case = self.case()
         self.assertEqual(self.p.walls(case, "forcesTotal"), ["ahmed"])   # its group, not the ground beside it
-        self.assertEqual(self.p.walls(case, "forcesWing"), [])
+        self.frame.update(total=None)                                    # no force history (postProcessing):
+        self.assertEqual(self.p.walls(case), ["ahmed"])                  # every force function object's patches
+        self.frame.update(total="forcesTotal")
         cmds, notes = self.p.plan(case, "/view", "/set", self.p.KINDS, "pvbatch")
         self.assertEqual(notes, [])
         v = cmds["vortices"]
@@ -4206,10 +4212,14 @@ for n in {"cut_views.py": ["c1_side_centre_U", "c1_side_centre_Cpt"], "vortex_vi
         doc = self.p.make(case, out, "200", self.p.KINDS)
         self.assertEqual([p["file"] for p in doc["pictures"]],
                          ["cuts/c1_side_centre_Cpt.png", "cuts/c1_side_centre_U.png", "vortices/Q21000_rear34.png",
-                          "vortices/Q21000_top.png", "spots/spots_worst.png"])
+                          "vortices/Q21000_top.png", "vortices/Q210000_rear34.png",      # by Q, not as text
+                          "spots/spots_Cp_spot_closeup.png", "spots/spots_Cp_spot_normal.png",
+                          "spots/spots_Cp_spot_side.png"])
         self.assertEqual([p["title"] for p in doc["pictures"]][1:3],
                          ["Side cut on the centreline, seen from the side (+y), nose to the left: speed",
                           "Vortices, Q = 21,000 1/s², from behind"])
+        self.assertEqual(doc["pictures"][5]["title"],
+                         "The worst spot of unphysical pressure (Cp below -5), close up, with the surface mesh")
         self.assertEqual((doc["case"], doc["time"], doc["notes"]), ("ahmedP", "200", []))
         with open(os.path.join(out, "pictures.json")) as f:
             self.assertEqual(json.load(f), doc)
@@ -4233,6 +4243,16 @@ for n in {"cut_views.py": ["c1_side_centre_U", "c1_side_centre_Cpt"], "vortex_vi
             self.p.make(case, os.path.join(self.tmp, "none"), "200", ("cuts",))
         self.assertFalse(os.path.exists(os.path.join(self.tmp, "none")))
 
+    def test_with_no_spot_of_unphysical_pressure_the_set_says_so(self):
+        case, out = self.case(), os.path.join(self.tmp, "set")
+        with mock.patch.dict(os.environ, {"MD_TEST_NO_SPOTS": "1"}):
+            doc = self.p.make(case, out, "200", ("spots",))             # nothing to show, and still a set
+        self.assertEqual(doc["pictures"], [])
+        self.assertEqual(doc["notes"], ["no spots: no wall face has unphysical pressure (Cp below -5); the lowest "
+                                        "Cp is -2.0"])
+        with open(os.path.join(out, "pictures.json")) as f:
+            self.assertEqual(json.load(f), doc)
+
     def test_a_case_that_cant_be_pictured_says_why(self):
         self.assertEqual(self.p.why_not(self.case(times=()))[0], "not-ready")
         shutil.rmtree(os.path.join(self.tmp, "cases"))
@@ -4244,11 +4264,12 @@ for n in {"cut_views.py": ["c1_side_centre_U", "c1_side_centre_Cpt"], "vortex_vi
         self.frame.update(flowSign=1)
         self.assertRegex(self.p.why_not(case)[1], r"^ahmedP's flow goes toward \+x, with z up: the picture scripts' "
                                                    r"cameras need it toward -x, with z up$")
-        self.frame.update(flowSign=-1, total="forcesWing")
-        self.assertRegex(self.p.why_not(case)[1], r"^ahmedP's model isn't found")
-        self.frame.update(total="forcesTotal")
+        self.frame.update(flowSign=-1)
         with mock.patch.dict(os.environ, {"PATH": "/nonexistent"}):
             self.assertRegex(self.p.why_not(case)[1], r"^ParaView isn't installed")
+        with open(os.path.join(case, "system", "controlDict"), "w") as f:
+            f.write("application foamRun;\n")                           # no force function object at all
+        self.assertRegex(self.p.why_not(case)[1], r"^ahmedP's model isn't found")
 
     def test_a_folder_that_isnt_a_set_is_refused_and_left_as_it_is(self):
         case, out = self.case(), os.path.join(self.tmp, "mine")
@@ -4259,10 +4280,10 @@ for n in {"cut_views.py": ["c1_side_centre_U", "c1_side_centre_Cpt"], "vortex_vi
             self.p.make(case, out, "200", self.p.KINDS)
         self.assertEqual((os.listdir(out), os.path.exists(out + ".new")), (["notes.txt"], False))
         os.remove(os.path.join(out, "notes.txt"))                         # an empty folder is no one's
-        self.assertEqual(len(self.p.make(case, out, "200", ("spots",))["pictures"]), 1)
+        self.assertEqual(len(self.p.make(case, out, "200", ("spots",))["pictures"]), 3)
         os.makedirs(out + ".new")                                         # one cut short: its mark goes in first
         open(os.path.join(out + ".new", self.p.MARK), "w").close()
-        self.assertEqual(len(self.p.make(case, out, "200", ("vortices",))["pictures"]), 2)
+        self.assertEqual(len(self.p.make(case, out, "200", ("vortices",))["pictures"]), 3)
 
     def test_the_job_pictures_a_case_of_the_cases_folder_into_the_workspace(self):
         import api_v1, jobs, schema

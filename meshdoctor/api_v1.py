@@ -845,9 +845,9 @@ JOBS = {
     },
     "pictures": {
         "summary": "make pictures of a solved case's flow with ParaView, offscreen, at a written time: cuts from its "
-                   "cut list (cuts.json), its vortices and the spots of low pressure on its walls. The case is only "
-                   "read: ParaView reads it through a folder of links, and the pictures go in the workspace, with a "
-                   "list of them (API 1.15)",
+                   "cut list (cuts.json), its vortices, and any spot of unphysical pressure on its walls (Cp below "
+                   "-5: a numerical error). The case is only read: ParaView reads it through a folder of links, and "
+                   "the pictures go in the workspace, with a list of them (API 1.15)",
         "params": _params({"name": dict(NAME, description="a case in the cases folder with a written result: a run "
                                                           "(GET /runs), or a case you made (GET /cases)"),
                            "time": {"type": "string", "default": "", "pattern": r"^([0-9][0-9.eE+-]*)?$",

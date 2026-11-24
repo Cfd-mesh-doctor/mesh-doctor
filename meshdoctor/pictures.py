@@ -7,8 +7,9 @@
 The case (a run Mesh Doctor made, or a case you made, in the cases folder) is only read: ParaView reads it through
 a folder of links in the workspace (its constant, system and the time pictured, and an empty case.foam), and the
 pictures go in the workspace too, in .pictures/<case>/<time>/, with pictures.json listing them.  Cuts need the
-case's cut list (cuts.json at its root, as a case made from the Ahmed body template has); vortices and the spots
-of low pressure on the walls need only the case.  The scripts' cameras need the flow toward -x and z up.
+case's cut list (cuts.json at its root, as a case made from the Ahmed body template has); vortices and spots of
+unphysical pressure on the walls (Cp below -5: a numerical error) need only the case.  The scripts' cameras need the
+flow toward -x and z up.
 """
 import argparse, json, math, os, re, shutil, subprocess, sys, time
 
@@ -29,7 +30,11 @@ CUTS = "cuts.json"
 MARK = ".meshdoctor-pictures"  # in a set (and one being made): make() replaces only a folder that has it
 Q_AT_15 = (3000, 10000, 30000)  # Q levels (1/s²) that showed a car's vortices at 15 m/s; Q goes as the speed²
 VIEWS = {"rear34": "from behind", "top": "from above", "side": "from the side"}
+FORCE_OBJECT = re.compile(r"([A-Za-z_][\w.:-]*)\s*\{[^{}]*\btype\s+(?:forces|forceCoeffs)\s*;")
 WORDS = {"U": "speed", "Cp": "pressure coefficient Cp", "Cpt": "total pressure coefficient Cp,t"}
+SPOT_CP = -5                    # pressure_spots.py's LIM: a wall face with Cp below it is a spot of unphysical pressure
+SPOT_VIEWS = {"closeup": "close up, with the surface mesh", "normal": "further back",
+              "side": "from the side of the model"}
 
 
 def _num(text):
@@ -68,19 +73,30 @@ def _fits(pattern, name):
         return False
 
 
+def _patches(texts, names):
+    """The `patches` of these function objects, the first found of each, in order."""
+    out = []
+    for name in names:
+        for text in texts:
+            span = transient.block(text, name)
+            m = re.search(r"\bpatches\s*\(([^)]*)\)", text[span[0]:span[1]]) if span else None
+            if m:
+                out += [w.strip('"') for w in m.group(1).split()]
+                break
+    return out
+
+
 def walls(case, total=None):
     """The model's wall patches: the `patches` of its total force group's function object (caseinfo.describe's
-    `total`, in system/controlDict or system/functions), groups and patterns turned into the boundary's patches;
-    [] when they can't be found."""
+    `total`: of its force history, the group with the most drag), else of every forces or forceCoeffs function
+    object (a case without its force history, as a copy may be), in system/controlDict or system/functions; groups
+    and patterns turned into the boundary's patches; [] when there are none."""
     total = total or caseinfo.describe(case)["total"]
-    named = []
-    for f in ("controlDict", "functions"):
-        text = transient.blank(transient.read(os.path.join(case, "system", f)) or "")
-        span = transient.block(text, total) if total else None
-        m = re.search(r"\bpatches\s*\(([^)]*)\)", text[span[0]:span[1]]) if span else None
-        if m:
-            named = [w.strip('"') for w in m.group(1).split()]
-            break
+    texts = [transient.blank(transient.read(os.path.join(case, "system", f)) or "")
+             for f in ("controlDict", "functions")]
+    named = _patches(texts, [total]) if total else []
+    if not named:
+        named = _patches(texts, [m.group(1) for t in texts for m in FORCE_OBJECT.finditer(t)])
     b, out = boundary(case), []
     for w in named:
         hit = [p for p, (_, g) in b.items() if p == w or w in g] or [p for p in b if _fits(w, p)]
@@ -116,7 +132,7 @@ def why_not(case, at=None):
         return "not-ready", f"{name}'s free-stream speed isn't found (its 0/U), which the pictures' colours need"
     if not walls(case, d["total"]):
         return "not-ready", (f"{name}'s model isn't found: the pictures take its walls from the patches of its "
-                             "force function object, and it has none")
+                             "force function objects (forces or forceCoeffs), and it has none")
     if not selfcheck.paraview()[1]:
         return "not-ready", ("ParaView isn't installed, or pvbatch doesn't start: Ready to solve? on the Solve "
                              "screen says how to install it")
@@ -165,9 +181,8 @@ def listing(case, folder):
     out = []
     for kind in KINDS:
         d = os.path.join(folder, kind)
-        for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
-            if not f.endswith(".png"):
-                continue
+        files = sorted(f for f in (os.listdir(d) if os.path.isdir(d) else []) if f.endswith(".png"))
+        for f in sorted(files, key=_vortex_order) if kind == "vortices" else files:
             stem, title = f[:-4], f[:-4]
             if kind == "cuts":
                 cut, _, colour = stem.rpartition("_")
@@ -177,9 +192,19 @@ def listing(case, folder):
                 if m:
                     title = f"Vortices, Q = {float(m.group(1)):,.0f} 1/s², {VIEWS.get(m.group(2), m.group(2))}"
             else:
-                title = f"Low pressure on the walls: {stem.replace('_', ' ')}"
+                m = re.fullmatch(r".*_Cp_spot_(\w+)", stem)
+                title = (f"The worst spot of unphysical pressure (Cp below {SPOT_CP}), "
+                         + (SPOT_VIEWS.get(m.group(1), m.group(1)) if m else stem))
             out.append({"file": f"{kind}/{f}", "kind": kind, "title": title})
     return out
+
+
+def _vortex_order(f):
+    """A vortex picture's place in its set: by Q level, then by view as VIEWS has them."""
+    m = re.fullmatch(r"Q([0-9.e+]+)_(\w+)\.png", f)
+    if not m:
+        return (math.inf, len(VIEWS), f)
+    return (float(m.group(1)), list(VIEWS).index(m.group(2)) if m.group(2) in VIEWS else len(VIEWS), f)
 
 
 def _replaceable(folder):
@@ -189,6 +214,18 @@ def _replaceable(folder):
     if not os.path.exists(folder):
         return True
     return os.path.isdir(folder) and (not os.listdir(folder) or os.path.isfile(os.path.join(folder, MARK)))
+
+
+def _run(cmd, env, cwd):
+    """Run a pvbatch command, its output passed on as it comes (a job's log has it): (its exit code, its output)."""
+    said = []
+    with subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, env=env, cwd=cwd, text=True,
+                          errors="replace") as p:
+        for line in p.stdout:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            said.append(line)
+    return p.returncode, "".join(said)
 
 
 def make(case, out, at, kinds):
@@ -206,7 +243,7 @@ def make(case, out, at, kinds):
     shutil.rmtree(new, ignore_errors=True)
     os.makedirs(new, mode=0o700)
     open(os.path.join(new, MARK), "w").close()      # first, so that a set cut short can be replaced
-    view, links, cmds, notes = os.path.join(new, "view"), [], {}, []
+    view, links, cmds, notes, ran = os.path.join(new, "view"), [], {}, [], []
     env = dict(os.environ, PYTHONPATH=selfcheck.PV_PYTHONPATH)
     try:
         os.mkdir(view, 0o700)
@@ -218,9 +255,15 @@ def make(case, out, at, kinds):
         for kind, cmd in cmds.items():
             print(f"pictures: {kind}", flush=True)
             os.makedirs(os.path.join(new, kind))
-            rc = subprocess.run(cmd, stdin=subprocess.DEVNULL, env=env, cwd=new).returncode
+            rc, said = _run(cmd, env, new)
             if rc:
                 notes.append(f"{kind}: ParaView stopped (exit {rc}); the job's log says why")
+                continue
+            ran.append(kind)
+            if kind == "spots" and not os.listdir(os.path.join(new, kind)):
+                low = [float(v) for v in re.findall(r"\bCp (-?[0-9]+(?:\.[0-9]*)?) \.\.", said)]
+                notes.append(f"no spots: no wall face has unphysical pressure (Cp below {SPOT_CP})"
+                             + (f"; the lowest Cp is {min(low):.1f}" if low else ""))
     finally:
         for link in links:                          # the links first: nothing in the case is touched
             if os.path.islink(link):
@@ -229,7 +272,7 @@ def make(case, out, at, kinds):
     doc = {"case": os.path.basename(os.path.normpath(case)), "time": at, "kinds": list(kinds),
            "made": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "notes": notes,
            "pictures": listing(case, new)}
-    if not doc["pictures"]:
+    if not doc["pictures"] and not ran:             # (a set with no spot to show is still a set)
         shutil.rmtree(new, ignore_errors=True)
         raise RuntimeError("no picture was made" + (": " + "; ".join(notes) if notes else ""))
     with open(os.path.join(new, "pictures.json"), "w") as f:
