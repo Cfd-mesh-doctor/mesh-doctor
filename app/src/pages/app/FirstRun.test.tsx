@@ -80,6 +80,10 @@ describe("Try it on the Ahmed body", () => {
     page({ made: true });
     expect(await screen.findByText("2 of 6 done")).toBeInTheDocument();
     expect(step("Make a coarse Ahmed case")).toHaveTextContent("ahmed-coarse, made from the Ahmed body template: about 478,901 cells");
+    // its name kept whole on a line, with the comma after it (InlineCode)
+    const made = within(step("Make a coarse Ahmed case")).getByText("ahmed-coarse", { selector: "code" });
+    expect(made.parentElement).toHaveClass("code-box");
+    expect(made.parentElement).toHaveTextContent(/^ahmed-coarse,$/);
     await user.click(screen.getByRole("button", { name: "Solve…" }));
     expect(await dialog().findByRole("textbox", { name: "Solve to iteration" })).toHaveValue("1000");
   });
@@ -101,6 +105,8 @@ describe("Try it on the Ahmed body", () => {
     expect(await screen.findByText("5 of 6 done")).toBeInTheDocument();
     expect(within(step("Repair a copy of it")).getByRole("link", { name: "report" }))
       .toHaveAttribute("href", "/app/repairs/ahmed-coarse-fix/report");
+    expect(within(step("Repair a copy of it")).getByText("ahmed-coarse-fix", { selector: "code" }).parentElement)
+      .toHaveTextContent(/^ahmed-coarse-fix:$/);
     await user.click(screen.getByRole("button", { name: "A/B test it…" }));
     expect(await dialog().findByRole("heading", { name: /A\/B test/ })).toBeInTheDocument();
     view.unmount();

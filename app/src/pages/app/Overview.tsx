@@ -9,6 +9,7 @@ import { StepList, type Step } from "@/components/shared/Steps";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { DashboardLink } from "@/components/shared/DashboardLink";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
+import { InlineCode, TextWithCode } from "@/components/shared/InlineCode";
 import { NoJobsYet } from "@/components/shared/NoJobsYet";
 import { JobStateBadge, VerdictBadge } from "@/components/shared/badges";
 import { EmptyState, PageHeader, StatTile, TableSkeleton } from "@/components/shared/page";
@@ -30,12 +31,13 @@ import { StartRepairDialog } from "./StartRepair";
 
 /** Repairs a copy of a case, in WSL or a Linux terminal: what the app's repair dialog does. */
 const REPAIR_COMMAND = "meshdoctor full <case> <name>";
-/** What the command's two blanks stand for: `<name>` could be read as your own name. */
-const BLANKS = (
-  <>
-    (putting a case's name in place of <code className="font-mono text-[12px]">&lt;case&gt;</code>, and a name for
-    the repaired copy in place of <code className="font-mono text-[12px]">&lt;name&gt;</code>)
-  </>
+/** What the command's two blanks stand for (`<name>` could be read as your own name), with the mark that ends the
+ * sentence there: each blank is kept whole on a line with what's written against it ("<case>," and "<name>).": the
+ * mark isn't left at the start of a line). */
+const blanks = (end: "." | ",") => (
+  <TextWithCode
+    text={"(putting a case's name in place of `<case>`, and a name for the repaired copy in place of `<name>`)" + end}
+  />
 );
 
 const LINK = "font-medium text-primary underline-offset-4 hover:underline";
@@ -84,7 +86,7 @@ function GettingStarted({ cases, repairing }: { cases: readonly string[]; repair
             text: (
               <>
                 Start it here, or run this in a WSL or Linux terminal. It repairs a copy of{" "}
-                <code className="font-mono text-[12px]">{first}</code>, never the case itself. The run shows on this page
+                <InlineCode text={first} trail="," /> never the case itself. The run shows on this page
                 once the copy is made, and its verdict when it finishes.
                 {cases.length > 1 && <> Each other case has its own command on the {casesScreen("Cases screen")}.</>}
               </>
@@ -98,7 +100,7 @@ function GettingStarted({ cases, repairing }: { cases: readonly string[]; repair
             command: REPAIR_COMMAND,
             text: (
               <>
-                Start it here, or run this in a WSL or Linux terminal {BLANKS}. It repairs a copy, never the case itself. The run shows on
+                Start it here, or run this in a WSL or Linux terminal {blanks(".")} It repairs a copy, never the case itself. The run shows on
                 this page once the copy is made, and its verdict when it finishes.
               </>
             ),
@@ -352,7 +354,7 @@ export function Overview() {
               action={<CopyCommand command={REPAIR_COMMAND} className="max-w-full text-left" />}>
               Repair a copy of one of{" "}
               <Link to={to("/cases")} className="font-medium text-primary underline-offset-4 hover:underline">your cases</Link>{" "}
-              with this in a WSL or Linux terminal {BLANKS}, or from the engine's dashboard: the run shows here once its
+              with this in a WSL or Linux terminal {blanks(",")} or from the engine's dashboard: the run shows here once its
               copy is made.{" "}
               {ownCommands}
             </EmptyState>
@@ -420,7 +422,7 @@ export function Overview() {
             <CardDescription>
               Pick one of your cases with New repair: the engine repairs a copy of it, so the case itself is never
               changed, and the run shows under Repair runs once the copy is made. Or start one from <DashboardLink />,
-              or with this command in a WSL or Linux terminal {BLANKS}. {ownCommands}
+              or with this command in a WSL or Linux terminal {blanks(".")} {ownCommands}
             </CardDescription>
           </div>
           <div className="flex flex-col items-start gap-2 sm:w-80">

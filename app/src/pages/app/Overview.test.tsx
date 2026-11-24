@@ -219,6 +219,12 @@ describe("the Overview before anything has run", () => {
       + "the run shows under Repair runs once the copy is made. Or start one from the engine's dashboard, or with this "
       + `command in a WSL or Linux terminal ${BLANKS}.`)))
       .toBeInTheDocument();
+    // each blank kept whole on a line with what's written against it, the sentence's full stop too
+    const [blankCase] = screen.getAllByText("<case>", { selector: "code" });
+    const [blankName] = screen.getAllByText("<name>", { selector: "code" });
+    expect(blankCase!.parentElement).toHaveClass("code-box");
+    expect(blankCase!.parentElement).toHaveTextContent(/^<case>,$/);
+    expect(blankName!.parentElement).toHaveTextContent(/^<name>\)\.$/);
     expect(screen.queryByRole("link", { name: "the engine's dashboard" })).toBeNull();
     // The Cases screen it points to is the demo's own.
     expect(screen.getByRole("link", { name: "Cases screen" })).toHaveAttribute("href", "/demo/cases");
@@ -304,6 +310,9 @@ describe("the Overview's Getting started", () => {
     expect(within(repair).getByRole("button", { name: "Copy “meshdoctor full motorBike motorBike-fix”" })).toBeInTheDocument();
     expect(repair).toHaveTextContent(
       "Start it here, or run this in a WSL or Linux terminal. It repairs a copy of motorBike, never the case itself. The run shows on this page once the copy is made, and its verdict when it finishes.");
+    // the case's name kept whole on a line, with the comma after it (InlineCode)
+    expect(within(repair).getByText("motorBike", { selector: "code" }).parentElement).toHaveClass("code-box");
+    expect(within(repair).getByText("motorBike", { selector: "code" }).parentElement).toHaveTextContent(/^motorBike,$/);
     expect(within(repair).queryByRole("link", { name: "Cases screen" })).toBeNull(); // one case: no others to point to
     // The command is on the page once: the empty list of runs doesn't give it again.
     expect(screen.getAllByRole("button", { name: /^Copy “meshdoctor full/ })).toHaveLength(1);

@@ -10,6 +10,7 @@ import { Link, useSearchParams } from "react-router";
 import { CopyBlock } from "@/components/shared/CopyBlock";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
+import { InlineCode } from "@/components/shared/InlineCode";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { VerdictBadge } from "@/components/shared/badges";
 import { EmptyState, PageHeader, TableSkeleton } from "@/components/shared/page";
@@ -74,7 +75,7 @@ function EstimateLink({ name, cells, className }: { name: string; cells: number 
 function CopyRepairCommand({ command }: { command: string }) {
   const { copied, copy } = useCopy();
   return (
-    <Tip label={<code className="font-mono text-[12px]">{command}</code>} side="right">
+    <Tip label={<InlineCode text={command} className="text-[12px]" />} side="right">
       <button
         type="button"
         onClick={() => void copy(command)}

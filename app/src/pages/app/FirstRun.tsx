@@ -7,6 +7,7 @@ import { CircleAlert, FlaskConical, FolderPlus, Play, Wrench } from "lucide-reac
 import { useId, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
+import { InlineCode } from "@/components/shared/InlineCode";
 import { PageHeader } from "@/components/shared/page";
 import { StepList, type Step } from "@/components/shared/Steps";
 import { Button } from "@/components/ui/button";
@@ -85,7 +86,7 @@ export function FirstRun() {
       title: "Make a coarse Ahmed case",
       state: g.states.case,
       text: g.states.case === "done"
-        ? <><code className="font-mono text-[12px]">{name}</code>, made from the Ahmed body template
+        ? <><InlineCode text={name} trail="," /> made from the Ahmed body template
             {cells != null ? `: about ${formatInt(cells)} cells` : ""}. It's on the{" "}
             <Link to={to("/cases")} className={LINK}>Cases screen</Link> too.</>
         : g.states.case === "running"
@@ -122,7 +123,7 @@ export function FirstRun() {
       title: "Repair a copy of it",
       state: g.states.repair,
       text: g.states.repair === "done" && g.repair
-        ? <><code className="font-mono text-[12px]">{g.repair.name}</code>: its{" "}
+        ? <><InlineCode text={g.repair.name} trail=":" /> its{" "}
             <Link to={to(`/repairs/${encodeURIComponent(g.repair.name)}/report`)} className={LINK}>report</Link> says
             what changed in the mesh.</>
         : g.states.repair === "running"

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { demoTransport } from "@/demo/transport";
@@ -125,6 +125,10 @@ describe("the Cases screen of your own engine", () => {
     const user = userEvent.setup(); // its clipboard stands in for the browser's
     ownEngine(["wing"]);
     const button = await screen.findByRole("button", { name: "Copy repair command: meshdoctor full wing wing-fix" });
+    // focused, its tip shows the command, kept whole on a line where the tip can hold it (InlineCode)
+    act(() => button.focus());
+    const [tip] = await screen.findAllByText("meshdoctor full wing wing-fix", { selector: "code" });
+    expect(tip).toHaveClass("code-box");
     await user.click(button);
     expect(await navigator.clipboard.readText()).toBe("meshdoctor full wing wing-fix");
     expect(await screen.findByRole("button", { name: "Copied" })).toBe(button);
