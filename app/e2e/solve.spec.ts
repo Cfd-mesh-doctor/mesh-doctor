@@ -80,8 +80,10 @@ test("a Verify install solved to 2,000 gives the accuracy check's answer, drawn 
   await card.locator('[data-row="1"]').hover();
   await expect(card.getByText(/Cd 0\.299 against 0\.285 in the wind tunnel, \+4\.8 %\. Lift Cl 0\.298; drift over the last 500 iterations −0\.11 %; solved in 15 min with its mesh\./))
     .toBeVisible();
-  // Its run's page, from the Runs card, says the same once it has ended.
-  await page.getByRole("list", { name: "Runs" }).getByRole("link", { name: "verify-install", exact: true }).click();
+  // Its run's page, linked beside the comparison, says the same once it has ended.
+  await expect(card).toContainText(
+    "verify-install solved to iteration 2,000. Its page shows its residuals and forces, and this comparison too.");
+  await card.getByRole("link", { name: "verify-install", exact: true }).click();
   await expect(page).toHaveURL(/\/app\/solve\/verify-install$/);
   const there = page.locator("section").filter({ has: page.getByRole("heading", { name: "Against the accuracy check", exact: true }) });
   await expect(there.getByText("Same answer", { exact: true })).toBeVisible();

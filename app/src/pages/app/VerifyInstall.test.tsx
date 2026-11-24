@@ -177,6 +177,10 @@ describe("Verify install", () => {
     expect(card().getByText(/^Cd 0\.2986 and Cl 0\.2978 over the last 500 of its 2,000 iterations, −0\.15 % from/))
       .toBeInTheDocument();
     expect(card().getByRole("link", { name: "The whole accuracy check" })).toHaveAttribute("href", "/accuracy");
+    // its run's page, which shows the same comparison, beside it
+    expect(card().getByRole("link", { name: "verify-install" })).toHaveAttribute("href", "/app/solve/verify-install");
+    expect(card().getByText(/^solved to iteration 2,000\. Its page shows its residuals and forces, and this comparison too\.$/))
+      .toBeInTheDocument();
     expect(card().getByRole("button", { name: "Verify install again…" })).toBeEnabled();
   });
 
@@ -206,6 +210,9 @@ describe("Verify install", () => {
     first.unmount();
     const second = show({ runs: [run("verify-install")] });                       // solves, but can't compare
     expect(await second.card().findByText(/^Your engine is older than this page and can't verify the install/))
+      .toBeInTheDocument();
+    expect(second.card().getByRole("link", { name: "verify-install" })).toHaveAttribute("href", "/app/solve/verify-install");
+    expect(second.card().getByText(/^solved to iteration 2,000\. Its page shows its residuals and forces\.$/))
       .toBeInTheDocument();
     second.unmount();
     const demo = show({ kind: "demo" });

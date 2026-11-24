@@ -2,10 +2,10 @@
 // The Solve screen's Verify install (API 1.6): the coarse Ahmed body made from its template and solved to iteration
 // 2,000 in one solve job, as the accuracy check's run of that mesh was, then its drag against that run's and the wind
 // tunnel's (GET /runs/{name}/validation), drawn as the accuracy check draws its cases (CdChart). Before it: what it
-// does, and Verify install…; while it runs: its step and how far it has come; after: the comparison, Continue… when
-// it ended short of 2,000, or Verify install again… when it failed or stopped before it solved. A run's page
-// (Run.tsx) shows the same comparison of a run of the Ahmed body template once it has ended (RunComparison), so
-// following the card's link to the run doesn't lose it.
+// does, and Verify install…; while it runs: its step and how far it has come; after: its run's page linked, and the
+// comparison, Continue… when it ended short of 2,000, or Verify install again… when it failed or stopped before it
+// solved. A run's page (Run.tsx) shows the same comparison of a run of the Ahmed body template once it has ended
+// (RunComparison), so following the card's link to the run doesn't lose it.
 import { CircleAlert, CircleCheck, FastForward, ShieldCheck, TriangleAlert } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
@@ -107,16 +107,28 @@ function Comparing({ name }: { name: string }) {
   );
 }
 
-/** Once it has solved to iteration 2,000: the engine's comparison. */
+/** Once it has solved to iteration 2,000: its run's page, which shows the same comparison (RunComparison), and the
+ * engine's comparison. */
 function Ended({ row }: { row: RunRow }) {
   const v = useRunValidation(row.name, true, row.run?.written ?? null);
-  if (v.data) return <Comparison v={v.data} time={verifyTime(row.run)} />;
-  if (v.isError) {
-    const e = asEngineError(v.error);
-    if (e.code === "not-found") return <p className="text-sm text-muted-foreground"><TextWithCode text={OLD_ENGINE_VERIFY} /></p>;
-    return <ErrorPanel compact error={v.error} onRetry={() => void v.refetch()} retrying={v.isFetching} />;
-  }
-  return <Comparing name={row.name} />;
+  const code = v.isError ? asEngineError(v.error).code : null;
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        <RunLink name={row.name} /> solved to iteration {formatInt(row.run?.written ?? VERIFY.to)}. Its page shows its
+        residuals and forces{v.data ? ", and this comparison too" : ""}.
+      </p>
+      {v.data ? (
+        <Comparison v={v.data} time={verifyTime(row.run)} />
+      ) : code === "not-found" ? (
+        <p className="text-sm text-muted-foreground"><TextWithCode text={OLD_ENGINE_VERIFY} /></p>
+      ) : v.isError ? (
+        <ErrorPanel compact error={v.error} onRetry={() => void v.refetch()} retrying={v.isFetching} />
+      ) : (
+        <Comparing name={row.name} />
+      )}
+    </div>
+  );
 }
 
 /**
