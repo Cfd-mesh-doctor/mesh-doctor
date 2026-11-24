@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Try it on the Ahmed body, against a pretend engine: Getting started leads to it, and each step is started there
-// with the screens' own dialogs, set for the guide.
+// Try it on the Ahmed body, against a pretend engine: Getting started leads to it, as the sidebar's foot always
+// does, and each step is started there with the screens' own dialogs, set for the guide.
 import { expect, test, type Page } from "@playwright/test";
 import { mockEngine, pairingLink, run } from "./engine";
 
@@ -16,9 +16,12 @@ const step = (page: Page, title: string) =>
 test("Getting started leads to the guided first run, which starts with a coarse Ahmed case", async ({ page }) => {
   const engine = await mockEngine(page, { noJobs: true, runs: [] });
   await pair(page);
-  await page.getByRole("link", { name: "try it on the Ahmed body" }).click();
+  await page.getByRole("main").getByRole("link", { name: "try it on the Ahmed body", exact: true }).click();
   await expect(page).toHaveURL(/\/app\/first-run$/);
   await expect(page.getByRole("heading", { name: "Try it on the Ahmed body", level: 1 })).toBeVisible();
+  // The sidebar's foot keeps a link to it for good, the page it is on.
+  await expect(page.getByRole("complementary").getByRole("link", { name: "Try it on the Ahmed body" }))
+    .toHaveAttribute("aria-current", "page");
   await expect(page.getByText("1 of 6 done")).toBeVisible();
   await expect(step(page, "Check the engine's computer")).toContainText("Done");
   await step(page, "Make a coarse Ahmed case").getByRole("button", { name: "New case…" }).click();

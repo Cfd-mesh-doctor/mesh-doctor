@@ -68,3 +68,19 @@ describe("the sidebar's Coming next list", () => {
     expect(fold()).toHaveAttribute("aria-expanded", "false");
   });
 });
+
+describe("the sidebar's foot", () => {
+  it("keeps Try it on the Ahmed body at hand, after a first run too, and the phone's menu closes as it opens it", async () => {
+    const user = userEvent.setup();
+    const { router } = show();
+    const link = sidebar().getByRole("link", { name: "Try it on the Ahmed body" });
+    expect(link).toHaveAttribute("href", "/demo/first-run");
+    expect(link).not.toHaveAttribute("aria-current");
+    await user.click(screen.getByRole("button", { name: "Open navigation" }));
+    const menu = within(await screen.findByRole("dialog", { name: "Navigation" }));
+    await user.click(menu.getByRole("link", { name: "Try it on the Ahmed body" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(router.state.location.pathname).toBe("/demo/first-run");
+    expect(sidebar().getByRole("link", { name: "Try it on the Ahmed body" })).toHaveAttribute("aria-current", "page");
+  });
+});

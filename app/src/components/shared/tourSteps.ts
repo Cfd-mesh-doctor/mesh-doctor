@@ -35,7 +35,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
   },
   {
     title: "Solve: run a case in OpenFOAM",
-    text: "Solve runs OpenFOAM on the engine's computer, and first checks that the computer has everything a solve needs. New case makes a ready-made case from a template, such as the Ahmed body, and meshes it; Solve under Runs then solves it, or a copy of a case you made. A run's page draws its residuals and forces as it solves and says whether it has converged.",
+    text: "Solve runs OpenFOAM on the engine's computer, and first checks that the computer has everything a solve needs. New case makes a ready-made case from a template, such as the Ahmed body, and meshes it; Solve under Runs then solves it, or a copy of a case you made. A run's page draws its residuals and forces as it solves and says whether it has converged. For a first run step by step, open Try it on the Ahmed body, at the foot of the menu.",
     page: "/solve",
     spot: "new-case",
   },

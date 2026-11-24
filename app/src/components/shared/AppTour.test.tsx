@@ -45,6 +45,8 @@ describe("the app tour", () => {
     expect(TOUR_STEPS[at - 1]!.page).toBe("/cases");
     expect(TOUR_STEPS[at]!.spot).toBe("new-case");
     expect(TOUR_STEPS[at]!.text).toMatch(/New case makes a ready-made case from a template, such as the Ahmed body, and meshes it/);
+    // ...and where the first run, step by step, is kept: the sidebar's foot (the phone's menu).
+    expect(TOUR_STEPS[at]!.text).toMatch(/ For a first run step by step, open Try it on the Ahmed body, at the foot of the menu\.$/);
   });
 
   it("steps through with Enter and back again, then hands the focus back when done", async () => {

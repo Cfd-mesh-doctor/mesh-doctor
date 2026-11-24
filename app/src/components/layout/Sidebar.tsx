@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Navigation. Screens that later milestones add are listed already, marked "Soon", so the shape of the
 // whole app is visible from day one: under Coming next, folded away until it's opened, so the screens that work
-// come first.
+// come first. At its foot: Settings, the docs, the tour and a first run, step by step.
 import {
-  BookOpen, Calculator, ChartLine, ChevronDown, Compass, FlaskConical, FolderOpen, Image, LayoutDashboard, ListChecks, Play,
-  Settings, Toolbox, Wrench,
+  BookOpen, Calculator, ChartLine, ChevronDown, Compass, FlaskConical, FolderOpen, Footprints, Image, LayoutDashboard,
+  ListChecks, Play, Settings, Toolbox, Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useId, useState } from "react";
@@ -176,6 +176,9 @@ export function Sidebar({ onNavigate, onTour }: { onNavigate?: () => void; onTou
             Take the tour
           </button>
         )}
+        {/* A first run from start to finish, each step started in the app: always at hand, as the Overview's Getting
+            started goes after the first repair, and the Solve screen's Runs card links it only while it lists none. */}
+        <NavItem item={{ label: "Try it on the Ahmed body", icon: Footprints, path: "/first-run" }} onNavigate={onNavigate} />
         <div className="mt-2 flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground">
           <Dot tone={conn.tone} />
           <span className="truncate" title={conn.detail}>{conn.label}</span>
