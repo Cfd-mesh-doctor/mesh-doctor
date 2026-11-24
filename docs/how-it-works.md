@@ -105,6 +105,8 @@ The case is only read: OpenFOAM runs in a temporary shadow case whose mesh, sett
 
 In the web app, a solved run's page has Plan a transient run: the engine makes the same plan as a job and the page shows it, with the hours on the run's own processes.
 
+**The transient run itself:** `meshdoctor solve <name> --steady <run>` makes the new case `<name>` a transient run of a solved steady run: its mesh, settings and latest result with its face flux, solved in time from there, so with no `potentialFoam`. By default it is DDES (`kOmegaSSTDES` with F2 shielding, so the boundary layers stay RANS and the wake's eddies are resolved), with second-order time steps (`backward`), `LUST` for the velocity, PIMPLE with 3 outer correctors and a time step OpenFOAM adjusts to a largest Courant number of 1 (`--co`; DDES takes 2 at most). Its first time step is the plan's, when one was made of the same result. `--model URANS` keeps the steady run's own RAS model and can run at a Courant number up to 20, with its outer correctors relaxed above 1. It runs 8 flow times over the body (8 L/U) unless `--to` gives the time in s, and writes four times a stretch; `meshdoctor solve <name> --to S` continues it from its latest written time. The steady run is only read.
+
 ## 6. Hotspots and the map
 
 `foamResidualHotspots` finds the cells where the solution still changes most:

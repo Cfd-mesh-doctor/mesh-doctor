@@ -117,6 +117,7 @@ meshdoctor help                       # every command; <command> --help for its 
 meshdoctor new <template> <name>      # a new case from a template, meshed (meshdoctor new lists them)
 meshdoctor solve <case> [--to N]      # solve a case made here to iteration N, or continue it there
 meshdoctor solve <case> <name>        # solve a copy of a case you made, as the new case <name>
+meshdoctor solve <name> --steady <run> # a transient run (DDES) of a solved steady run, to a time in s
 meshdoctor full <case> <name>         # repair a copy of <case> as <workspace>/<name>
 meshdoctor ab <case> <name>           # A/B solver test: original vs repaired mesh
 meshdoctor judge <case>               # is this run converged? (steady or transient)

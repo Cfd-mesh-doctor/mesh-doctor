@@ -6,6 +6,7 @@ later continued from its latest written time, or stopped early at a written time
     python3 -m meshdoctor solve <case> [--to N] [--np P]
     python3 -m meshdoctor solve <srcCase> <name> [--to N] [--np P]
     python3 -m meshdoctor solve <name> --template <template> [--size S] [--to N] [--np P]
+    python3 -m meshdoctor solve <name> --steady <run> [--co C] [--model DDES|URANS] [--to SECONDS] [--np P]
 
 <case> is a case in the cases folder that Mesh Doctor made (python3 -m meshdoctor new, or a copy made here).  A case
 you made is never changed, so it is solved through a copy: with <srcCase> and a new <name>, its mesh and settings,
@@ -15,12 +16,16 @@ as `new` makes one, then solved: Verify install solves the Ahmed body's coarse m
 GET /api/v1/runs/{name}/validation compares its drag with the wind tunnel's (validate.py).  While no iteration is
 written, a solve splits the case onto P processes (4 by default; 1 solves it whole), starts the flow with
 potentialFoam and runs foamRun to iteration N (2000 by default).  Once one is written, a solve continues from the
-latest to N, on the same processes.  The run's state is in the case's .meshdoctor-solve.json, which GET
-/api/v1/runs lists.  The app starts the same thing as a `solve` job (POST /api/v1/jobs, with a `source` to solve a
-copy, or a `template` to make the case first), which runs `solve.py run`; Stop (POST /api/v1/runs/{name}/stop) ends
-it at a written time.
+latest to N, on the same processes.  With --steady, the new case <name> is a transient run of that solved steady run
+(transient.py): its mesh, settings and latest result, solved in time with DDES (the default) or URANS at a largest
+Courant number of C (1 by default) to SECONDS of flow (8 L/U by default), with no potentialFoam, as it starts from the
+steady flow.  A transient run counts seconds, not iterations: its --to, its progress and its continuations are times.
+The run's state is in the case's .meshdoctor-solve.json, which GET /api/v1/runs lists.  The app starts the same thing
+as a `solve` job (POST /api/v1/jobs, with a `source` to solve a copy, a `template` to make the case first, or a
+`steady` run to start a transient one from), which runs `solve.py run`; Stop (POST /api/v1/runs/{name}/stop) ends it
+at a written time.
 """
-import json, os, re, shlex, shutil, signal, subprocess, sys, time
+import json, math, os, re, shlex, shutil, signal, subprocess, sys, time
 
 import config
 import jobs
@@ -28,6 +33,7 @@ import md_api
 import prog
 import ramguard
 import templates
+import transient
 
 PKG = os.path.dirname(os.path.abspath(__file__))
 STATUS = jobs.SOLVE_STATUS
@@ -36,6 +42,9 @@ POLL_S = 2.0
 MAX_ITERS = 100_000
 TIME = re.compile(rb"^Time = ([0-9.eE+-]+)s?[ \t]*$", re.M)
 NAME_RULE = "a case name is letters, digits and _ . - (not . or - first), at most 80 characters"
+WHOLE = "a steady run counts whole iterations: give a whole number"
+SKEW_S = 60     # OpenFOAM re-reads a changed controlDict only once its time is past the one it read by more than its
+                # fileModificationSkew (10 s in OpenFOAM 14, 30 s in some), so a Stop moves the file's time on past it
 
 
 def now():
@@ -60,18 +69,41 @@ def split(case):
         return 0
 
 
-def latest(case):
-    """The run's latest written iteration: the processors' when it is split, else the case's own; 0 if none."""
-    best = 0.0
+def num(x):
+    """A time as the API gives it: a whole number as an int (a steady run's iterations), else a float (seconds)."""
+    x = float(x)
+    return int(x) if x.is_integer() else x
+
+
+def latest_name(case):
+    """The folder name of the run's latest written time: the processors' when it is split, else the case's own; "0"
+    if none."""
+    best, name = 0.0, "0"
     try:
         for n in os.listdir(os.path.join(case, "processor0") if split(case) else case):
             try:
-                best = max(best, float(n))
+                if float(n) > best:
+                    best, name = float(n), n
             except ValueError:
                 pass
     except OSError:
         pass
-    return int(best)
+    return name
+
+
+def latest(case):
+    """The run's latest written iteration (seconds for a transient run): the processors' when it is split, else the
+    case's own; 0 if none."""
+    return num(latest_name(case))
+
+
+def transient_of(case):
+    """A transient run's origin, from its marker: {steady, at, maxCo, model}; None for a steady run."""
+    doc = md_api._read_json(os.path.join(case, jobs.CASE_MARKER))
+    if not isinstance(doc, dict) or not doc.get("transientOf"):
+        return None
+    return {"steady": str(doc["transientOf"]), "at": str(doc.get("at") or ""), "maxCo": doc.get("maxCo"),
+            "model": doc.get("model")}
 
 
 def own_size(template):
@@ -79,19 +111,48 @@ def own_size(template):
     return templates.TEMPLATES.get(template, {}).get("size", "")
 
 
-def refusal(name, to, nproc=None, source=None, template=None, size=None):
-    """Why case `name` can't be solved to iteration `to` now, as (code, message) with no paths, or None.  With a
-    `source`, `name` is the new case a copy of it goes in; with a `template`, the new case made from it."""
+def default_to(name, to, steady=None):
+    """What a solve runs to when it isn't said: 2,000 iterations for a steady run; for a new transient run of a steady
+    one, 8 flow times over the body (transient.flow_time); None for a transient run's continuation, which must say."""
+    if to is not None:
+        return num(to)
+    if steady is not None:
+        return transient.flow_time(case_dir(steady)) if md_api.SAFE.match(steady) else None
+    if md_api.SAFE.match(name) and transient_of(case_dir(name)):
+        return None
+    return 2000
+
+
+def refusal(name, to, nproc=None, source=None, template=None, size=None, steady=None, co=None, model=None):
+    """Why case `name` can't be solved to iteration `to` (a time in s for a transient run) now, as (code, message) with
+    no paths, or None.  With a `source`, `name` is the new case a copy of it goes in; with a `template`, the new case
+    made from it; with a `steady` run, the new transient run of it, at a largest Courant number `co` with `model`."""
     if not md_api.SAFE.match(name):
         return "bad-request", NAME_RULE
+    if to is not None and not math.isfinite(to):
+        return "bad-request", "the time or iteration to solve to is a number"
+    whole = to is None or float(to).is_integer()
     if source is not None and template is not None:
         return "bad-request", "a solve makes its new case from a source case or from a template, not both"
+    if steady is not None and (source is not None or template is not None):
+        return "bad-request", "a transient run starts from a steady run alone, not from a source case or a template"
     if size is not None and template is None:
         return "bad-request", "a mesh size goes with a template"
+    if (co is not None or model is not None) and steady is None:
+        return "bad-request", "a Courant number and a model go with a steady run, to start a transient run of it"
+    if (template is not None or source is not None) and not whole:
+        return "bad-request", WHOLE
     if template is not None:
         return templates.problem(template, size or own_size(template)) or templates.refusal(name) or _procs(nproc)
     if source is not None:
         return copy_refusal(source) or templates.refusal(name) or _procs(nproc)
+    if steady is not None:
+        why = (steady_refusal(steady, 1.0 if co is None else co, model or "DDES") or templates.refusal(name)
+               or _procs(nproc))
+        if why or (to is not None and to > 0):
+            return why
+        return "bad-request", (f"{steady}'s settings don't say its body's length and speed (lRef in its force "
+                               "coefficients, and 0/U): give the time in s to solve to")
     case = case_dir(name)
     if os.path.islink(case) or not os.path.isfile(os.path.join(case, "system", "controlDict")):
         return "not-found", f"no case {name} in the cases folder"
@@ -101,12 +162,46 @@ def refusal(name, to, nproc=None, source=None, template=None, size=None):
                                "under a new name")
     if made.get("state") != "done":
         return "not-ready", f"{name} has no mesh yet: make it again first"
+    unsteady = transient_of(case) is not None
+    if to is None:
+        return "bad-request", (f"{name} is a transient run: give the time in s to continue it to" if unsteady else
+                               "give the iteration to solve to")
+    if not unsteady and not whole:
+        return "bad-request", f"{name} is a steady run, which counts whole iterations: give a whole number"
     at = latest(case)
     if at == 0:                                 # a fresh start: its processes
         return _procs(nproc)
     if to <= at:                                # a continuation: past what is written
-        return "bad-request", f"{name} is solved to iteration {at} already; continue it to a later one"
+        return "bad-request", (f"{name} is solved to {at:g} s already; continue it to a later time" if unsteady else
+                               f"{name} is solved to iteration {at} already; continue it to a later one")
     return None
+
+
+def steady_refusal(steady, co, model):
+    """Why a transient run of run `steady` can't start now, at a largest Courant number `co` with `model`, as (code,
+    message) with no paths, or None."""
+    if not md_api.SAFE.match(steady):
+        return "bad-request", NAME_RULE
+    if model not in transient.MODELS:
+        return "bad-request", f"the model is {' or '.join(transient.MODELS)}"
+    if not 0 < co <= transient.MAX_CO:
+        return "bad-request", f"the largest Courant number is more than 0 and at most {transient.MAX_CO:g}"
+    if model == "DDES" and co > transient.MAX_DDES_CO:
+        return "bad-request", ("DDES resolves the wake's eddies, which needs a largest Courant number of about 1: ask "
+                               f"for {transient.MAX_DDES_CO:g} or less, or for URANS")
+    case = case_dir(steady)
+    if os.path.islink(case) or status_of(case) is None:
+        return "not-found", f"no run {steady}: a transient run starts from a solved steady run"
+    if transient_of(case):
+        return "unsupported", f"{steady} is a transient run already: continue it instead"
+    if solving(steady):
+        return "not-ready", f"{steady} is solving: wait for it to end, or stop it"
+    if latest(case) == 0:
+        return "not-ready", f"{steady} has no solved result yet: solve it first"
+    if transient.result(case) is None:
+        return "not-ready", f"{steady}'s latest result is still split onto its processors: continue it, which joins it"
+    why = transient.unsupported(case, model)
+    return ("unsupported", f"{steady}: {why}") if why else None
 
 
 def _procs(nproc):
@@ -153,24 +248,33 @@ def _plain(path):
     return re.sub(r"/\*.*?\*/|//[^\n]*", "", text, flags=re.S)
 
 
-def start(name, to, nproc, source=None, template=None, size=None):
+def start(name, to, nproc, source=None, template=None, size=None, steady=None, co=None, model=None):
     """Start a solve job (POST /jobs, kind "solve"): the job, or a refusal, as md_api's other starts answer.  With a
     `source`, the job first copies that case into the new case `name`, then solves the copy; with a `template`, it
-    first makes `name` from the template (at `size`, else the template's own), then solves it."""
-    why = refusal(name, to, nproc, source, template, size)
+    first makes `name` from the template (at `size`, else the template's own), then solves it; with a `steady` run, it
+    first makes `name` a transient run of it (transient.py), then solves that to `to` s.  With no `to`: 2,000
+    iterations, or 8 flow times for a new transient run (default_to)."""
+    if steady is not None:
+        co, model = num(1.0 if co is None else co), model or "DDES"
+    to = default_to(name, to, steady)
+    why = refusal(name, to, nproc, source, template, size, steady, co, model)
     if why:
         return md_api._refuse(*why)
     ws = config.settings()["workspace"]
     config.ensure_workspace(ws)
     os.makedirs(os.path.join(ws, LOGS), mode=0o700, exist_ok=True)
     made = {} if template is None else {"template": template, "size": size or own_size(template)}
+    unsteady = {} if steady is None else {"steady": steady, "maxCo": co, "model": model}
     cmd = [sys.executable, os.path.join(PKG, "solve.py"), "run", *([] if source is None else [source]), name,
-           *(["--template", made["template"], "--size", made["size"]] if made else []), "--to", str(to),
+           *(["--template", made["template"], "--size", made["size"]] if made else []),
+           *(["--steady", steady, "--co", str(co), "--model", model] if unsteady else []), "--to", str(to),
            "--np", str(nproc)]
-    params = {"name": name, "to": to, "np": nproc, **({} if source is None else {"source": source}), **made}
-    # a case made first needs its mesh's memory, more than its solve's; else the solve's own
+    params = {"name": name, "to": to, "np": nproc, **({} if source is None else {"source": source}), **made,
+              **unsteady}
+    # a case made first needs its mesh's memory, more than its solve's; else the solve's own (a transient run's is
+    # its steady run's: the same mesh)
     ram = ((templates.TEMPLATES[template]["sizes"][made["size"]]["cells"], "mesh") if made
-           else (case_dir(name if source is None else source), "solve"))
+           else (case_dir(steady if steady is not None else name if source is None else source), "solve"))
     return md_api._submit("solve", params, name, cmd, log=f"{LOGS}/{name}_to_{to}.log", ram=ram)   # a log per stretch
 
 
@@ -189,7 +293,15 @@ def stop(name):
         return None, ("not-ready", f"{name} is being copied: Stop works once it solves (cancel its job to end it now)")
     if str(st.get("step") or "").startswith("meshing"):
         return None, ("not-ready", f"{name} is being meshed: Stop works once it solves (cancel its job to end it now)")
+    path = os.path.join(case, "system", "controlDict")
+    try:
+        read = os.stat(path).st_mtime           # the time the solver read it at (each stretch writes it first)
+    except OSError:
+        read = None
     _stop_at(case, "writeNow")
+    if read is not None:                        # a Stop a few seconds into a stretch would go unnoticed
+        t = max(time.time(), read + SKEW_S)
+        os.utime(path, (t, t))
     return describe(name), None
 
 
@@ -226,7 +338,7 @@ def describe(name):
     return {"name": name, "state": state, "step": st.get("step") or "", "iteration": st.get("iteration"),
             "start": st.get("start", 0), "end": st.get("end"), "written": latest(case), "nProcs": st.get("nProcs"),
             "stretches": st.get("stretches", []), "started": st.get("started"), "updated": st.get("time"),
-            "finished": st.get("finished"), "error": st.get("error")}
+            "finished": st.get("finished"), "error": st.get("error"), "transient": transient_of(case)}
 
 
 # --------------------------------------------------------------------------
@@ -335,18 +447,20 @@ def _fail(status, program, rc):
     return 1
 
 
-def run(name, to, nproc, source=None, template=None, size=None):
-    """Solve case `name` to iteration `to`: from iteration 0 on `nproc` processes, else from the latest written one on
-    the run's own split.  With a `source`, `name` is made first, as a copy of it (_copy); with a `template`, it is made
-    first from the template, as a case job makes one (templates.build).  0 when it ran to `to` or was stopped at a
+def run(name, to, nproc, source=None, template=None, size=None, steady=None, co=None, model=None):
+    """Solve case `name` to iteration `to` (a time in s for a transient run): from 0 on `nproc` processes, else from
+    the latest written one on the run's own split.  With a `source`, `name` is made first, as a copy of it (_copy);
+    with a `template`, it is made first from the template, as a case job makes one (templates.build); with a `steady`
+    run, it is made first as a transient run of it (_make_transient).  0 when it ran to `to` or was stopped at a
     written time."""
-    why = refusal(name, to, source=source, template=template, size=size)
+    why = refusal(name, to, source=source, template=template, size=size, steady=steady, co=co, model=model)
     if why:
         _say(why[1])
         return 1
     case = case_dir(name)
     made = None
-    if source is not None or template is not None:
+    copied = source is not None or steady is not None       # a copy cut short is no case: its folder goes
+    if copied or template is not None:
         try:
             os.mkdir(case)
         except FileExistsError:
@@ -354,6 +468,10 @@ def run(name, to, nproc, source=None, template=None, size=None):
             return 1
         if source is not None:
             made = templates.Status(case, copyOf=source)      # its marker: a case made here, being copied
+            made.step("copying")
+        elif steady is not None:                              # and a transient run of a steady one, being made
+            made = templates.Status(case, transientOf=steady, at=transient.result(case_dir(steady))[0], maxCo=co,
+                                    model=model)
             made.step("copying")
         else:
             size = size or own_size(template)
@@ -363,10 +481,10 @@ def run(name, to, nproc, source=None, template=None, size=None):
     nproc = (nproc if first else split(case)) or 1
     status = Status(case, start_at, to, nproc, keep=not first)
     if made is not None:
-        status.step("copying" if source is not None else "meshing", 0.0)
+        status.step("copying" if copied else "meshing", 0.0)
 
     def ended():                                # cancelled
-        if source is not None and made.doc["state"] != "done":
+        if copied and made.doc["state"] != "done":
             _discard(case)                      # a copy cut short is no case, so its name is free again
         elif made is not None and made.doc["state"] != "done":
             made.end("cancelled")               # a case cut short while it was made says so, as a case job's does
@@ -382,6 +500,8 @@ def run(name, to, nproc, source=None, template=None, size=None):
     try:
         if source is not None and not _copy(source, case, made):
             return 1
+        if steady is not None and not _make_transient(steady, case, made, co, model, to):
+            return 1
         if template is not None:
             t = templates.TEMPLATES[template]
             why = templates.build(case, name, t, t["sizes"][size], _Meshing(made, status))
@@ -389,7 +509,7 @@ def run(name, to, nproc, source=None, template=None, size=None):
                 status.end("failed", why)
                 _say(why)
                 return 1
-        return _solve(case, name, first, start_at, to, nproc, status)
+        return _solve(case, name, first, start_at, to, nproc, status, transient_of(case) is not None)
     except KeyboardInterrupt:
         ended()
         _say("stopped")
@@ -416,6 +536,23 @@ def _copy(source, case, made):
     return True
 
 
+def _make_transient(steady, case, made, co, model, to):
+    """Make the new case a transient run of the steady run (transient.make): its mesh, settings and latest result,
+    with settings for a transient solve.  On any failure the folder goes, so its name is free again.  True once it is
+    made."""
+    _say(f"making a transient run of {steady} ({model}, largest Courant number {co:g}, to {to:g} s): its mesh, "
+         "settings and latest result")
+    try:
+        cells = transient.make(case_dir(steady), case, co, model, to)
+    except (OSError, ValueError) as e:          # shutil.Error too; ValueError: a settings file it couldn't read
+        _discard(case)
+        _say(f"the transient run of {steady} couldn't be made: {_reason(e) if isinstance(e, OSError) else e}")
+        return False
+    made.end("done", cells)
+    _say(f"made the transient run of {steady}" + (f": {cells:,} cells" if cells else ""))
+    return True
+
+
 def _reason(e):
     """Why a copy failed, in the system's words and naming no folders (No space left on device)."""
     if e.strerror:
@@ -432,12 +569,21 @@ def _discard(case):
     shutil.rmtree(case, ignore_errors=True)
 
 
-def _solve(case, name, first, start_at, to, nproc, status):
+def _solve(case, name, first, start_at, to, nproc, status, unsteady=False):
+    """Solve to `to`.  A transient run (`unsteady`) starts from its latest written time by name (in parallel, OpenFOAM
+    looks for the latest time in the case's own folder, which a stretch that was cut short hasn't joined), writes four
+    times a stretch at run times OpenFOAM's time steps land on, and has no potentialFoam: it starts from the steady
+    run's flow."""
     parallel = nproc > 1
-    _say(f"{name}: {'solving' if first else 'continuing'} from iteration {start_at} to {to}"
+    when = (lambda t: f"{t:g} s") if unsteady else (lambda t: f"iteration {t}")
+    _say(f"{name}: {'solving' if first else 'continuing'} from {when(start_at)} to {f'{to:g} s' if unsteady else to}"
          f"{f' on {nproc} processes' if parallel else ''}")
-    for entry, value in (("startFrom", "latestTime"), ("stopAt", "endTime"), ("endTime", to),
-                         ("writeInterval", write_interval(start_at, to))):
+    begin = latest_name(case)                   # OpenFOAM 14 writes at beginTime + k writeInterval: the 4th is `to`
+    entries = ((("startFrom", "startTime"), ("startTime", begin), ("beginTime", begin), ("stopAt", "endTime"),
+                ("endTime", to), ("writeInterval", f"{(to - start_at) / 4:.6g}")) if unsteady else
+               (("startFrom", "latestTime"), ("stopAt", "endTime"), ("endTime", to),
+                ("writeInterval", write_interval(start_at, to))))
+    for entry, value in entries:
         _set(case, os.path.join("system", "controlDict"), entry, value)
     mpi = f"mpirun --oversubscribe -np {nproc} " if parallel else ""
     par = " -parallel" if parallel else ""
@@ -453,23 +599,27 @@ def _solve(case, name, first, start_at, to, nproc, status):
                 return _fail(status, "decomposePar", rc)
         else:
             _unsplit(case)
-        status.step("potentialFoam", 0.03)
-        rc = _foam(case, f"{mpi}potentialFoam -initialiseUBCs{par}", "log.potentialFoam").wait()
-        if rc:
-            return _fail(status, "potentialFoam", rc)
+        if not unsteady:                        # a transient run starts from its steady run's flow
+            status.step("potentialFoam", 0.03)
+            rc = _foam(case, f"{mpi}potentialFoam -initialiseUBCs{par}", "log.potentialFoam").wait()
+            if rc:
+                return _fail(status, "potentialFoam", rc)
     log = "log.foamRun" if first else f"log.foamRun_to_{to}"
     status.step("solving", 0.05)
     p = _foam(case, f"nice -n 5 {mpi}foamRun{par}", log)
     seen, it = 0, start_at
+    span = (to - start_at) if unsteady else max(1, to - start_at)
     while True:
         try:
             rc = p.wait(timeout=POLL_S)
             break
         except subprocess.TimeoutExpired:
             seen, it = _iteration(os.path.join(case, log), seen, it)
-            status.step("solving", round(0.05 + 0.92 * (it - start_at) / max(1, to - start_at), 3), iteration=it)
+            status.step("solving", round(0.05 + 0.92 * (it - start_at) / span, 3) if span > 0 else 0.05, iteration=it)
     seen, it = _iteration(os.path.join(case, log), seen, it)
     status.doc["iteration"] = it
+    stopped = re.search(r"^[ \t]*stopAt[ \t]+writeNow[ \t]*;", _plain(os.path.join(case, "system", "controlDict")),
+                        re.M) is not None
     _stop_at(case, "endTime")                   # a Stop's writeNow ends this run only
     if rc:
         return _fail(status, "foamRun", rc)
@@ -478,9 +628,13 @@ def _solve(case, name, first, start_at, to, nproc, status):
         rc = _foam(case, "reconstructPar -latestTime", "log.reconstructPar").wait()
         if rc:
             return _fail(status, "reconstructPar", rc)
-    state = "done" if it >= to else "stopped"
+    # A transient run's last time step lands within half a step of its end, so it is done unless a Stop ended it
+    state = ("stopped" if stopped else "done") if unsteady else ("done" if it >= to else "stopped")
     status.end(state)
-    _say(f"{name}: solved to iteration {it}" + ("" if state == "done" else f", stopped before {to}"))
+    if unsteady:
+        _say(f"{name}: solved to {it:g} s" + ("" if state == "done" else f", stopped before {to:g} s"))
+    else:
+        _say(f"{name}: solved to iteration {it}" + ("" if state == "done" else f", stopped before {to}"))
     return 0
 
 
@@ -516,7 +670,7 @@ def _iteration(log, seen, it):
     times = TIME.findall(whole)
     if times:
         try:
-            it = int(float(times[-1]))
+            it = num(times[-1])                 # an iteration, or a transient run's time in s
         except ValueError:
             pass
     return seen + len(whole), it
@@ -543,6 +697,12 @@ def main(argv):
         except (IndexError, ValueError):
             sys.exit(f"{flag} takes a whole number")
 
+    def number(flag):                           # --to (iterations, or seconds for a transient run) and --co
+        try:
+            return float(rest[rest.index(flag) + 1]) if flag in rest else None
+        except (IndexError, ValueError):
+            sys.exit(f"{flag} takes a number")
+
     def word(flag):
         if flag not in rest:
             return None
@@ -550,22 +710,25 @@ def main(argv):
         if i >= len(rest) or rest[i].startswith("-"):
             sys.exit(f"{flag} takes a name")
         return rest[i]
-    to, nproc = opt("--to", 2000), opt("--np", 4)
-    if not 1 <= to <= MAX_ITERS or not 1 <= nproc <= 64:
-        sys.exit(f"--to is 1 to {MAX_ITERS:,} and --np 1 to 64")
-    template, size = word("--template"), word("--size")
-    why = refusal(name, to, nproc, source, template, size)
+    template, size, steady, model, co = word("--template"), word("--size"), word("--steady"), word("--model"), \
+        number("--co")
+    if steady is not None:
+        co, model = num(1.0 if co is None else co), model or "DDES"
+    to, nproc = default_to(name, number("--to"), steady), opt("--np", 4)
+    if (to is not None and not 0 < to <= MAX_ITERS) or not 1 <= nproc <= 64:
+        sys.exit(f"--to is 1 to {MAX_ITERS:,} (seconds for a transient run) and --np 1 to 64")
+    why = refusal(name, to, nproc, source, template, size, steady, co, model)
     if why:
         sys.exit(why[1])
     if not job:                                 # a job's memory was checked when it was admitted (jobs.submit)
         if template is not None:                # its mesh's, more than its solve's
             cells = templates.TEMPLATES[template]["sizes"][size or own_size(template)]["cells"]
             ok, msg = ramguard.check_cells(cells, "mesh")
-        else:
-            ok, msg = ramguard.check(case_dir(name if source is None else source), "solve")
+        else:                                   # a transient run's: its steady run's, the same mesh
+            ok, msg = ramguard.check(case_dir(steady or (name if source is None else source)), "solve")
         if not ok:
             sys.exit(msg)
-    return run(name, to, nproc, source, template, size)
+    return run(name, to, nproc, source, template, size, steady, co, model)
 
 
 if __name__ == "__main__":

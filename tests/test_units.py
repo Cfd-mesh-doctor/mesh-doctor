@@ -1624,10 +1624,15 @@ echo End
         self.assertEqual(self.solve("made", 30, 1)[0], 0)                      # 1 process: not split
         st, doc, _ = self.api.handle("POST", "/api/v1/runs/made/stop", {})
         self.assertEqual((st, doc["error"]["code"]), (409, "not-ready"))       # not solving now
+        path = os.path.join(self.cases, "made", "system", "controlDict")
+        read = os.stat(path).st_mtime
         with mock.patch.object(self.s, "solving", lambda name: True):
             st, doc, _ = self.api.handle("POST", "/api/v1/runs/made/stop", {})
         self.assertEqual((st, doc["name"]), (200, "made"))
         self.assertRegex(self.control(), r"(?m)^stopAt\s+writeNow;")
+        # OpenFOAM re-reads it only once its time is past the one it read by its fileModificationSkew (10 s), so a
+        # Stop moments after a stretch starts moves its time on, past that
+        self.assertGreaterEqual(os.stat(path).st_mtime, read + self.s.SKEW_S)
         with mock.patch.dict(os.environ, {"MD_TEST_STOP_AT": "45"}):          # a Stop while it solves
             rc, lines = self.solve("made", 100, 1)
         self.assertEqual((rc, lines[-1]), (0, "made: solved to iteration 45, stopped before 100"))
@@ -2053,6 +2058,341 @@ echo End
         self.assertEqual(rc, 0, out.getvalue())
         self.assertEqual(asked, [(480_000, "mesh")])                       # the memory of the mesh it makes
         self.assertEqual((self.s.describe("fresh")["written"], self.s.split(os.path.join(self.cases, "fresh"))), (10, 0))
+
+
+TRANSIENT_FOAMRUN = '''#!/usr/bin/env python3
+# foamRun in time, as OpenFOAM 14 runs one with adjustTimeStep: from startTime (by name) to endTime, five time steps
+# a write, writing at beginTime + k writeInterval, and at a Stop (stopAt writeNow) after the step it is at.
+import os, re
+
+
+def control():
+    with open("system/controlDict") as f:
+        return f.read()
+
+
+def entry(text, key):
+    m = re.search(r"(?m)^" + key + r"[ \\t]+([^;\\n]*);", text)
+    return m.group(1).strip() if m else None
+
+
+text = control()
+start, end, w = float(entry(text, "startTime")), float(entry(text, "endTime")), float(entry(text, "writeInterval"))
+begin = float(entry(text, "beginTime") or start)
+step, stop_at = w / 5, int(os.environ.get("MD_TEST_STOP_AT") or 0)
+where = sorted(n for n in os.listdir(".") if re.fullmatch(r"processor[0-9]+", n)) or ["."]
+n, k, t = 0, round((start - begin) / w), start
+while t < end - step / 2:
+    n += 1
+    t = start + n * step
+    print(f"deltaT = {step:.6g}\\nTime = {t:.6g}s\\n\\nExecutionTime = {n / 2:.2f} s  ClockTime = {n} s\\n", flush=True)
+    if n == stop_at:
+        with open("system/controlDict", "w") as f:
+            f.write(re.sub(r"(?m)^stopAt[ \\t].*$", "stopAt          writeNow;", text))
+    stopping = re.search(r"(?m)^stopAt[ \\t]+writeNow", control()) is not None
+    if stopping or abs(t - (begin + (k + 1) * w)) < step / 2:
+        k += 1
+        for d in where:
+            os.makedirs(os.path.join(d, f"{t:.6g}"), exist_ok=True)
+    if stopping:
+        break
+if os.environ.get("MD_TEST_FAIL"):
+    print("--> FOAM FATAL ERROR: stand-in")
+    raise SystemExit(1)
+print("End")
+'''
+
+
+class TransientSolveTest(unittest.TestCase):
+    """solve.py and transient.py: a transient run of a solved steady run, made from the Ahmed body template's own
+    settings and solved, continued and stopped by time with SolveTest's stand-in OpenFOAM programs (its foamRun in
+    time), so neither OpenFOAM nor a mesh is needed."""
+
+    PROGRAMS = dict(SolveTest.PROGRAMS, foamRun=TRANSIENT_FOAMRUN)
+    CONTROL = SolveTest.CONTROL
+    setUp, case, post, assertRefused, solve = (SolveTest.setUp, SolveTest.case, SolveTest.post,
+                                               SolveTest.assertRefused, SolveTest.solve)
+
+    def steady(self, name="steady", files=None, marker=None):
+        """A steady run solved to iteration 40 on 2 processes, as solve.py leaves one: the template's settings, its
+        initial fields, its result (joined, and on its processors) with the flux and a field a function object wrote,
+        its log and its forces.  A file's text of None removes that file or folder."""
+        import templates
+        ex = os.path.join(templates.EXAMPLES, "ahmed-body")
+        self.case(name, marker or {"state": "done", "template": "ahmed-body", "cells": 480})
+        c = os.path.join(self.cases, name)
+        for rel in ("system/controlDict", "system/fvSchemes", "system/fvSolution", "constant/momentumTransport"):
+            shutil.copyfile(os.path.join(ex, rel), os.path.join(c, rel))
+        own = {"0/U": "internalField uniform (40 0 0);\n", "0/p": "p at the start\n", "0/k": "k at the start\n",
+               "0/omega": "omega at the start\n", "0/nut": "nut at the start\n", "0/conditions": "speed 40;\n",
+               "40/U": "solved U\n", "40/p": "solved p\n", "40/k": "solved k\n", "40/omega": "solved omega\n",
+               "40/nut": "solved nut\n", "40/phi": "solved phi\n", "40/yPlus": "a function object's field\n",
+               "40/uniform/time": "value 40;\n", "processor0/40/U": "split U\n", "processor1/40/U": "split U\n",
+               "log.foamRun": "Time = 40\n", "postProcessing/forceCoeffs/0/forceCoeffs.dat": "40 0.3 0.1\n",
+               **(files or {})}
+        for rel, text in own.items():
+            path = os.path.join(c, rel)
+            if text is None:
+                shutil.rmtree(path) if os.path.isdir(path) else os.remove(path)
+                continue
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as f:
+                f.write(text)
+        with open(os.path.join(c, self.jobs.SOLVE_STATUS), "w") as f:
+            json.dump({"madeBy": "Mesh Doctor", "state": "done", "step": "done", "iteration": 40, "start": 0,
+                       "end": 40, "nProcs": 2, "stretches": [{"from": 0, "to": 40}], "started": "2026-11-23T20:00:00Z",
+                       "time": "2026-11-23T20:05:00Z", "finished": "2026-11-23T20:05:00Z", "error": None,
+                       "fraction": 1.0}, f)
+        return c
+
+    def text(self, name, rel):
+        with open(os.path.join(self.cases, name, rel)) as f:
+            return f.read()
+
+    def times(self, name, where="processor0"):
+        """The written times in the run's processor0 (or its own folder: "."), by their names, in time order."""
+        names = os.listdir(os.path.join(self.cases, name, where))
+        return sorted((n for n in names if re.fullmatch(r"[0-9.e+-]+", n)), key=float)
+
+    def status(self, name="ahmedT"):
+        with open(os.path.join(self.cases, name, self.jobs.SOLVE_STATUS)) as f:
+            return json.load(f)
+
+    def test_a_transient_run_has_the_steady_runs_mesh_settings_and_flow_made_transient(self):
+        import transient
+        src = self.steady()
+        before = SolveTest.tree(src)
+        new = os.path.join(self.cases, "ahmedT")
+        os.mkdir(new)
+        self.assertEqual(transient.make(src, new, 1, "DDES", 0.2088), 480)
+        self.assertEqual(SolveTest.tree(src), before)                       # the steady run is only read
+        got = SolveTest.tree(new)
+        self.assertEqual({k: got[k] for k in ("0/U", "0/phi", "0/nut", "0/conditions")},
+                         {"0/U": "solved U\n", "0/phi": "solved phi\n", "0/nut": "solved nut\n",
+                          "0/conditions": "speed 40;\n"})                  # its flow is the start; its files stay
+        self.assertEqual([k for k in got if k.startswith(("40/", "processor", "log.", "postProcessing", "0/yPlus"))],
+                         [])
+        control = got["system/controlDict"]
+        for line in (r"startFrom\s+startTime;", r"startTime\s+0;", r"beginTime\s+0;", r"endTime\s+0\.2088;",
+                     r"deltaT\s+1\.044e-05;", r"adjustTimeStep\s+yes;", r"maxCo\s+1;",
+                     r"writeControl\s+adjustableRunTime;", r"writeInterval\s+0\.0522;"):
+            self.assertRegex(control, "(?m)^" + line)
+        self.assertNotIn("maxDeltaT", control)                              # the Courant number alone sets it
+        self.assertIn("        writeInterval 1;", control)                 # a function object's own is left alone
+        schemes = got["system/fvSchemes"]
+        for line in ("ddtSchemes      { default backward; }", "div(phi,U)      Gauss LUST grad(U);",
+                     "div(phi,k)      Gauss limitedLinear 1;"):
+            self.assertIn(line, schemes)
+        self.assertNotIn("bounded", schemes)
+        solution = got["system/fvSolution"]
+        for line in ("PIMPLE\n{\n    nOuterCorrectors 3;\n    nCorrectors      2;\n    nNonOrthogonalCorrectors 0;\n}",
+                     "pFinal          { $p; relTol 0; }", '"(U|k|omega|epsilon|nuTilda)Final" { $U; relTol 0; }',
+                     'relaxationFactors\n{\n    equations { ".*" 1; }\n}', "potentialFlow { nNonOrthogonalCorrectors"):
+            self.assertIn(line, solution)
+        self.assertNotRegex(solution, r"\bSIMPLE\b|consistent|U 0\.9")
+        mt = got["constant/momentumTransport"]
+        self.assertRegex(mt, r"(?m)^simulationType\s+LES;")
+        for line in ("model           kOmegaSSTDES;", "kOmegaSSTDESCoeffs { FSST 2; }", "delta           maxDeltaxyz;"):
+            self.assertIn(line, mt)
+        self.assertNotRegex(mt, r"(?m)^RAS\b|kOmegaSST;")
+        # URANS keeps the steady run's RAS model, in time, and relaxes its outer correctors above a Courant number of 1
+        new = os.path.join(self.cases, "ahmedU")
+        os.mkdir(new)
+        transient.make(src, new, 5, "URANS", 0.1)
+        got = SolveTest.tree(new)
+        self.assertEqual(got["constant/momentumTransport"], before["constant/momentumTransport"])
+        self.assertIn("div(phi,U)      Gauss linearUpwindV grad(U);", got["system/fvSchemes"])
+        self.assertIn('fields { p 0.3; pFinal 1; }\n    equations { "(U|k|omega|epsilon|nuTilda)" 0.7; ".*Final" 1; }',
+                      got["system/fvSolution"])
+        for line in (r"maxCo\s+5;", r"deltaT\s+5e-06;", r"writeInterval\s+0\.025;"):
+            self.assertRegex(got["system/controlDict"], "(?m)^" + line)
+
+    def test_its_first_time_step_and_flow_time_come_from_the_plan_and_the_body(self):
+        import transient
+        src = self.steady()
+        self.assertEqual(transient.flow_time(src), 0.2088)                 # 8 L/U: lRef 1.044 m at 40 m/s
+        plan = ({"time": "40", "courantPerSecond": {"max": 2e5}}, None)
+        with mock.patch.object(transient.tplan, "of", lambda name: plan):
+            self.assertEqual(transient.start_dt("steady", "40", 1, 0.2), 5e-06)      # Co 1 at its fastest cell
+            self.assertEqual(transient.start_dt("steady", "30", 1, 0.2), 1e-05)      # a plan of another result
+        self.assertEqual(transient.start_dt("steady", "40", 1, 0.2), 1e-05)          # no plan: OpenFOAM cuts it
+        text = "solvers\n{\n}\nSIMPLE // the { steady } solver\n{\n    // one { brace\n    nNonOrthogonalCorrectors 1;\n}\n"
+        a, b = transient.block(text, "SIMPLE")
+        self.assertEqual(text[a:b], text[text.index("SIMPLE"):text.rindex("}") + 1])   # comments don't count
+        self.assertIsNone(transient.block(text, "PIMPLE"))
+        self.assertIsNone(transient.result(os.path.join(self.cases, "made")))          # no result
+
+    def test_a_transient_run_needs_a_solved_steady_run_whose_settings_it_can_make_transient(self):
+        self.steady()
+        for params, status, code, text in (
+                ({"name": "t", "steady": "nope"}, 404, "not-found", "no run nope"),
+                ({"name": "t", "steady": "made"}, 404, "not-found", "no run made"),     # a case, but no run
+                ({"name": "t", "steady": "../x"}, 400, "bad-request", "params.steady"),
+                ({"name": "t", "steady": "steady", "model": "LES"}, 400, "bad-request", "params.model"),
+                ({"name": "t", "steady": "steady", "maxCo": 3}, 400, "bad-request", "DDES resolves"),
+                ({"name": "t", "steady": "steady", "maxCo": 0}, 400, "bad-request", "more than 0"),
+                ({"name": "t", "steady": "steady", "maxCo": 25, "model": "URANS"}, 400, "bad-request", "params.maxCo"),
+                ({"name": "t", "maxCo": 1}, 400, "bad-request", "go with a steady run"),
+                ({"name": "t", "model": "URANS"}, 400, "bad-request", "go with a steady run"),
+                ({"name": "t", "steady": "steady", "template": "ahmed-body"}, 400, "bad-request", "alone"),
+                ({"name": "t", "steady": "steady", "source": "mine"}, 400, "bad-request", "alone"),
+                ({"name": "made", "steady": "steady"}, 409, "exists", "exists already"),
+                ({"name": "made", "to": 40.5}, 400, "bad-request", "made is a steady run"),
+                ({"name": "t", "template": "ahmed-body", "to": 40.5}, 400, "bad-request", "whole iterations"),
+                ({"name": "t", "source": "mine", "to": 0.5}, 400, "bad-request", "whole iterations")):
+            self.assertRefused(self.post(params), status, code, text)
+        for body in (b'{"kind": "solve", "params": {"name": "t", "steady": "steady", "to": NaN}}',
+                     b'{"kind": "solve", "params": {"name": "t", "steady": "steady", "to": 1e999}}',
+                     b'{"kind": "solve", "params": {"name": "t", "steady": "steady", "maxCo": -Infinity}}'):
+            self.assertRefused(self.api.handle("POST", "/api/v1/jobs", {}, body, "application/json"), 400,
+                               "bad-request", "not valid JSON")
+        with mock.patch.object(self.s, "solving", lambda name: True):
+            self.assertRefused(self.post({"name": "t", "steady": "steady"}), 409, "not-ready", "steady is solving")
+        self.steady("fresh", {"40": None, "processor0": None, "processor1": None})
+        self.assertRefused(self.post({"name": "t", "steady": "fresh"}), 409, "not-ready", "no solved result yet")
+        self.steady("cut", {"processor0/60/U": "split\n", "processor1/60/U": "split\n"})    # ended unjoined
+        self.assertRefused(self.post({"name": "t", "steady": "cut"}), 409, "not-ready", "still split")
+        self.steady("euler", {"system/fvSchemes": "ddtSchemes { default Euler; }\n"})
+        self.assertRefused(self.post({"name": "t", "steady": "euler"}), 422, "unsupported",
+                           "euler: its fvSchemes has no steadyState time scheme")
+        self.steady("piso", {"system/fvSolution": "PISO\n{\n    nCorrectors 2;\n}\n"})
+        self.assertRefused(self.post({"name": "t", "steady": "piso"}), 422, "unsupported", "no SIMPLE dictionary")
+        self.steady("ke", {"constant/momentumTransport": "simulationType RAS;\nRAS\n{\n    model realizableKE;\n}\n"})
+        self.assertRefused(self.post({"name": "t", "steady": "ke"}), 422, "unsupported", "as URANS")
+        self.steady("laminar", {"constant/momentumTransport": "simulationType laminar;\n"})
+        self.assertRefused(self.post({"name": "t", "steady": "laminar"}), 422, "unsupported", "starts from a RAS run")
+        self.steady("again", marker={"state": "done", "transientOf": "steady", "at": "40", "maxCo": 1, "model": "DDES"})
+        self.assertRefused(self.post({"name": "t", "steady": "again"}), 422, "unsupported", "a transient run already")
+        no_length = re.sub(r"\n *lRef[^\n]*", "", self.text("steady", "system/controlDict"))
+        self.steady("nolength", {"system/controlDict": no_length})
+        self.assertRefused(self.post({"name": "t", "steady": "nolength"}), 400, "bad-request", "give the time in s")
+        st, doc, _ = self.post({"name": "t", "steady": "ke", "model": "URANS", "to": 0.1})      # URANS: any RAS model
+        self.assertEqual(st, 202, doc)
+
+    def test_a_transient_job_starts_with_its_steady_runs_courant_number_model_and_flow_time(self):
+        self.steady()
+        asked = []
+        real = self.s.md_api._submit
+        with mock.patch.object(self.s.md_api, "_submit", lambda *a, **k: asked.append(k["ram"]) or real(*a, **k)):
+            st, doc, _ = self.post({"name": "ahmedT", "steady": "steady", "np": 2})
+        self.assertEqual(st, 202, doc)
+        self.assertEqual((doc["params"], doc["log"]), ({"name": "ahmedT", "to": 0.2088, "np": 2, "steady": "steady",
+                                                        "maxCo": 1, "model": "DDES"}, ".runs/ahmedT_to_0.2088.log"))
+        self.assertEqual(asked, [(os.path.join(self.cases, "steady"), "solve")])      # its steady run's mesh
+        argv = self.launched[0]
+        cmd = argv[argv.index("--") + 1:]
+        self.assertEqual(cmd[2:], ["run", "ahmedT", "--steady", "steady", "--co", "1", "--model", "DDES", "--to",
+                                   "0.2088", "--np", "2"])
+        with mock.patch.object(self.jobs, "busy", lambda ws=None: None):     # one big job at a time: the first's
+            st, doc, _ = self.post({"name": "ahmedU", "steady": "steady", "maxCo": 4.5, "model": "URANS", "to": 0.05})
+        self.assertEqual(st, 202, doc)
+        self.assertEqual(doc["params"], {"name": "ahmedU", "to": 0.05, "np": 4, "steady": "steady", "maxCo": 4.5,
+                                         "model": "URANS"})
+        self.assertEqual(self.launched[-1][-10:], ["--steady", "steady", "--co", "4.5", "--model", "URANS", "--to",
+                                                   "0.05", "--np", "4"])
+
+    def test_a_transient_run_solves_in_seconds_from_the_steady_flow_and_continues_and_stops_by_time(self):
+        src = self.steady()
+        before = SolveTest.tree(src)
+        rc, lines = self.solve("ahmedT", 0.0004, 2, None, None, None, "steady", 1, "DDES")
+        self.assertEqual(rc, 0, lines)
+        self.assertEqual(lines[0], "making a transient run of steady (DDES, largest Courant number 1, to 0.0004 s): "
+                                   "its mesh, settings and latest result")
+        self.assertIn("made the transient run of steady: 480 cells", lines)
+        self.assertIn("ahmedT: solving from 0 s to 0.0004 s on 2 processes", lines)
+        self.assertEqual(lines[-1], "ahmedT: solved to 0.0004 s")
+        case = os.path.join(self.cases, "ahmedT")
+        self.assertFalse(os.path.exists(os.path.join(case, "log.potentialFoam")))     # it starts from the steady flow
+        self.assertEqual(self.times("ahmedT"), ["0", "0.0001", "0.0002", "0.0003", "0.0004"])
+        st = self.status()
+        self.assertEqual((st["state"], st["iteration"], st["start"], st["end"], st["nProcs"], st["stretches"]),
+                         ("done", 0.0004, 0, 0.0004, 2, [{"from": 0, "to": 0.0004}]))
+        control = self.text("ahmedT", "system/controlDict")
+        for line in (r"startTime\s+0;", r"beginTime\s+0;", r"endTime\s+0\.0004;", r"writeInterval\s+0\.0001;",
+                     r"stopAt\s+endTime;"):
+            self.assertRegex(control, "(?m)^" + line)
+        self.assertEqual(SolveTest.tree(src), before)                       # the steady run is only read
+        import schema
+        st, run, _ = self.api.handle("GET", "/api/v1/runs/ahmedT", {})
+        self.assertEqual(schema.check(run, self.api.RUN_ONE), [])
+        self.assertEqual((run["written"], run["iteration"], run["transient"]),
+                         (0.0004, 0.0004, {"steady": "steady", "at": "40", "maxCo": 1, "model": "DDES"}))
+        self.assertIsNone(self.s.describe("steady")["transient"])
+        self.assertEqual(self.api.handle("GET", "/api/v1/cases", {})[1]["made"]["ahmedT"], {"transientOf": "steady"})
+        # Continued by time: from its latest written time, which the next stretch's writes line up from
+        self.assertRefused(self.post({"name": "ahmedT"}), 400, "bad-request", "give the time in s to continue it to")
+        self.assertRefused(self.post({"name": "ahmedT", "to": 0.0004}), 400, "bad-request",
+                           "solved to 0.0004 s already")
+        rc, lines = self.solve("ahmedT", 0.001, 4)
+        self.assertEqual((rc, lines[0], lines[-1]), (0, "ahmedT: continuing from 0.0004 s to 0.001 s on 2 processes",
+                                                     "ahmedT: solved to 0.001 s"))
+        control = self.text("ahmedT", "system/controlDict")
+        for line in (r"startFrom\s+startTime;", r"startTime\s+0\.0004;", r"beginTime\s+0\.0004;",
+                     r"writeInterval\s+0\.00015;"):
+            self.assertRegex(control, "(?m)^" + line)
+        self.assertEqual(self.times("ahmedT")[-4:], ["0.00055", "0.0007", "0.00085", "0.001"])
+        self.assertEqual(self.status()["stretches"], [{"from": 0, "to": 0.0004}, {"from": 0.0004, "to": 0.001}])
+        self.assertTrue(os.path.isfile(os.path.join(case, "log.foamRun_to_0.001")))
+        # A Stop ends it at the time it is at, written
+        with mock.patch.dict(os.environ, {"MD_TEST_STOP_AT": "7"}):
+            rc, lines = self.solve("ahmedT", 0.002, 2)
+        self.assertEqual((rc, lines[-1]), (0, "ahmedT: solved to 0.00135 s, stopped before 0.002 s"))
+        st = self.status()
+        self.assertEqual((st["state"], st["iteration"], st["stretches"][-1]),
+                         ("stopped", 0.00135, {"from": 0.001, "to": 0.00135}))
+        self.assertRegex(self.text("ahmedT", "system/controlDict"), r"(?m)^stopAt\s+endTime;")
+        self.assertEqual(self.s.latest(case), 0.00135)
+        self.assertRefused(self.post({"name": "steady", "to": 60.5}), 400, "bad-request", "whole number")
+
+    def test_a_transient_runs_time_left_counts_its_time_steps(self):
+        saved = dict(self.api._live)
+        import schema, server
+        self.api.provide(run_live=server.solve_live)
+        self.addCleanup(lambda: (self.api._live.clear(), self.api._live.update(saved)))
+        self.addCleanup(server._solve_cache.clear)
+        self.steady()
+        self.assertEqual(self.solve("ahmedT", 0.0004, 2, None, None, None, "steady", 1, "DDES")[0], 0)
+        case = os.path.join(self.cases, "ahmedT")
+        status = self.status()
+        status.update(state="running", start=0.0004, end=0.001, iteration=0.0005)
+        with open(os.path.join(case, self.jobs.SOLVE_STATUS), "w") as f:
+            json.dump(status, f)
+        with open(os.path.join(case, "log.foamRun_to_0.001"), "w") as f:
+            f.write("".join(f"deltaT = 2e-05\nTime = {0.0004 + i * 2e-05:.6g}s\n\n"
+                            f"ExecutionTime = {i:.2f} s  ClockTime = {3 * i} s\n\n" for i in range(1, 6)))
+        server._solve_cache.clear()
+        with mock.patch.object(self.s, "solving", lambda name: True):
+            st, doc, _ = self.api.handle("GET", "/api/v1/runs/ahmedT/live", {})
+        self.assertEqual(st, 200, doc)
+        self.assertEqual(schema.check(doc, self.api.RUN_LIVE), [])
+        s = doc["solver"]
+        self.assertEqual((s["state"], s["iteration"], s["deltaT"], s["wall_per_it"], s["end"], s["log"]),
+                         ("running", 0.0005, 2e-05, 3.0, 0.001, "log.foamRun_to_0.001"))
+        self.assertAlmostEqual(s["eta"], 75.0)                               # 25 time steps of 20 us, 3 s each
+        self.assertEqual(doc["current"], {"name": "Continued", "from": 0.0004, "to": 0.001})
+
+    def test_the_command_starts_a_transient_run_of_a_steady_one_and_continues_it_by_time(self):
+        self.steady()
+        for argv, text in ((["t", "--steady", "steady", "--co", "x"], "--co takes a number"),
+                           (["t", "--steady", "steady", "--model"], "--model takes a name"),
+                           (["t", "--steady", "steady", "--to", "-1"], "--to is 1 to"),
+                           (["t", "--steady", "steady", "--model", "LES"], "the model is DDES or URANS"),
+                           (["t", "--co", "1"], "go with a steady run")):
+            with self.assertRaises(SystemExit) as e:
+                self.s.main(argv)
+            self.assertIn(text, str(e.exception))
+        asked, out = [], io.StringIO()
+        with mock.patch.object(self.s.ramguard, "check", lambda case, step: asked.append((case, step)) or (True, "")), \
+                contextlib.redirect_stdout(out):
+            rc = self.s.main(["t", "--steady", "steady", "--to", "0.0004", "--np", "1"])
+        self.assertEqual(rc, 0, out.getvalue())
+        self.assertEqual(asked, [(os.path.join(self.cases, "steady"), "solve")])        # its steady run's mesh
+        run = self.s.describe("t")
+        self.assertEqual((run["written"], run["transient"]["maxCo"], run["transient"]["model"]), (0.0004, 1, "DDES"))
+        self.assertEqual((self.s.split(os.path.join(self.cases, "t")), self.times("t", ".")[-1]), (0, "0.0004"))
+        with self.assertRaises(SystemExit) as e:
+            self.s.main(["t"])                                                 # a transient run says its time
+        self.assertIn("give the time in s to continue it to", str(e.exception))
 
 
 class MachineTest(unittest.TestCase):

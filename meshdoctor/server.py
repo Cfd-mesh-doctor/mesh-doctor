@@ -543,6 +543,9 @@ def _solver_of(lp):
     solver = {"state": "running", "log": os.path.basename(lp)}
     if times:
         solver["iteration"] = float(times[-1])
+    steps = re.findall(r"^deltaT = (" + NUM + r")\s*$", txt, re.M)      # a transient run's time step, in s
+    if steps:
+        solver["deltaT"] = float(steps[-1])
     if len(execs) >= 3:
         clocks = [float(c) for _, c in execs[-40:]]
         d = sorted(b - a for a, b in zip(clocks, clocks[1:]))
@@ -593,7 +596,10 @@ def solve_live(name):
     solver["end"] = run["end"] if run["end"] is not None else stages[-1]["to"]
     it = solver.get("iteration") or run["iteration"] or 0
     if solver.get("wall_per_it") and run["state"] == "running":
-        solver["eta"] = max(0, solver["end"] - it) * solver["wall_per_it"]
+        left = solver["end"] - it                   # iterations, or a transient run's seconds: its time steps
+        if run.get("transient") and solver.get("deltaT"):
+            left /= solver["deltaT"]
+        solver["eta"] = max(0, left) * solver["wall_per_it"]
     res = md_api._residuals(case, maxpts=1500) or {}
     frc = force_payload(case)
     data = {"name": name, "run": run, "stages": stages, "current": stages[-1], "solver": solver, "residuals": res,

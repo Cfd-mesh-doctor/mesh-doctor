@@ -146,7 +146,9 @@ def result_schema(p, q, b):
                         "type": "object", "additionalProperties": False, "properties": {
                             "template": {"type": "string", "description": "the template a case job made it from"},
                             "copyOf": {"type": "string",
-                                       "description": "the case you made that a solve job copied it from, to solve"}}},
+                                       "description": "the case you made that a solve job copied it from, to solve"},
+                            "transientOf": {"type": "string",
+                                            "description": "the steady run a solve job made it a transient run of"}}},
                     "description": "the cases Mesh Doctor made, each with what from: a template, or a case you made "
                                    "(a copy of it, to solve); the cases a solve job takes (API 1.6)"}}})
 def cases(p, q, b):
@@ -330,7 +332,11 @@ LIVE = {"type": "object", "required": ["label", "status", "stages", "current", "
                                    "description": "seconds per iteration: the median of the last 40, or their mean "
                                                   "when the log's whole-second clock makes that 0; left out until it "
                                                   "can tell"},
-                   "eta": {"type": "number", "description": "seconds left at that pace (while running)"},
+                   "eta": {"type": "number", "description": "seconds left at that pace (while running; a "
+                                                           "transient run's: its time steps left at its latest "
+                                                           "time step)"},
+                   "deltaT": {"type": "number", "description": "a transient run's latest time step in s, from its "
+                                                              "log (API 1.6)"},
                    "clock": {"type": "number"}, "log": {"type": "string"},
                    "error": {"type": "string", "description": "the log's FOAM FATAL message (state error)"},
                    "idle_s": {"type": "number", "description": "seconds since the log changed (state stopped)"}}},
@@ -515,6 +521,7 @@ def list_templates(p, q, b):
 
 
 _INT_OR_NULL = {"type": ["integer", "null"]}
+_NUM_OR_NULL = {"type": ["number", "null"]}
 RUN = {"type": "object", "required": ["name", "state", "step", "iteration", "start", "end", "written", "nProcs",
                                        "stretches", "started", "updated", "finished", "error"], "properties": {
     "name": {"type": "string", "description": "the case it solves: a case in the cases folder that Mesh Doctor made"},
@@ -524,18 +531,25 @@ RUN = {"type": "object", "required": ["name", "state", "step", "iteration", "sta
     "step": {"type": "string", "description": "copying (a copy of a case you made), meshing or meshing: <its mesh's "
                                              "step> (a case made from a template first), decomposing, potentialFoam, "
                                              "solving, reconstructing or done"},
-    "iteration": dict(_INT_OR_NULL, description="the last iteration in its solver log"),
-    "start": {"type": "integer", "description": "the iteration the latest stretch started from"},
-    "end": dict(_INT_OR_NULL, description="the iteration the latest stretch runs to (endTime)"),
-    "written": {"type": "integer", "description": "the latest iteration written, which a continuation starts from"},
+    "iteration": dict(_NUM_OR_NULL, description="the last iteration in its solver log (a transient run's: the time "
+                                                "in s, as are its other times)"),
+    "start": {"type": "number", "description": "the iteration the latest stretch started from"},
+    "end": dict(_NUM_OR_NULL, description="the iteration the latest stretch runs to (endTime)"),
+    "written": {"type": "number", "description": "the latest iteration written, which a continuation starts from"},
     "nProcs": dict(_INT_OR_NULL, description="the processes it runs on; 1: the case isn't split"),
     "stretches": {"type": "array", "description": "the stretches solved so far, oldest first", "items": {
         "type": "object", "required": ["from", "to"],
-        "properties": {"from": {"type": "integer"}, "to": {"type": "integer"}}}},
+        "properties": {"from": {"type": "number"}, "to": {"type": "number"}}}},
     "started": dict(_TEXT, description="when the latest stretch started (UTC)"),
     "updated": dict(_TEXT, description="when its status last changed (UTC)"),
     "finished": dict(_TEXT, description="when the latest stretch ended (UTC); null while it runs"),
-    "error": dict(_TEXT, description="why it failed (state failed), naming no folders")}}
+    "error": dict(_TEXT, description="why it failed (state failed), naming no folders"),
+    "transient": {"type": ["object", "null"], "required": ["steady", "at", "maxCo", "model"],
+                  "description": "a transient run: the steady run it started from, and the time of that run's result "
+                                 "it took (at), its largest Courant number and its model; null for a steady run "
+                                 "(API 1.6)", "properties": {
+                      "steady": {"type": "string"}, "at": {"type": "string"},
+                      "maxCo": {"type": ["number", "null"]}, "model": {"type": ["string", "null"]}}}}}
 RUN_ONE = dict(RUN, properties=dict(RUN["properties"], links={
     "type": "object", "description": "itself, Stop, and its convergence judge (GET /judge?case=)"}))
 
@@ -712,7 +726,8 @@ JOBS = {
         "summary": "solve a case Mesh Doctor made to an iteration: while none is written it splits the case, starts "
                    "the flow with potentialFoam and runs foamRun; once one is written it continues from the latest. "
                    "With a source, it first makes the case as a copy of a case you made; with a template, it first "
-                   "makes it from the template, as a case job does",
+                   "makes it from the template, as a case job does; with a steady run, it first makes it a transient "
+                   "run of that one, solved in time to a time in s",
         "params": _params({"name": dict(NAME, description="a case in the cases folder that Mesh Doctor made (a case "
                                                           "job's, or a copy); with a source or a template, the new "
                                                           "case it makes, a name not taken there"),
@@ -726,12 +741,26 @@ JOBS = {
                                                               "body's coarse mesh, solved to 2000)"),
                            "size": {"enum": templates.SIZES, "description": "with a template: one of its mesh sizes "
                                                                             "(default: the template's own)"},
-                           "to": {"type": "integer", "minimum": 1, "maximum": solve.MAX_ITERS, "default": 2000,
-                                  "description": "the iteration to solve to; past the latest written one"},
+                           "steady": dict(NAME, description="a solved steady run (GET /runs) to start a "
+                                                            "transient run of: the new case name takes its mesh, "
+                                                            "settings and latest result, and is solved in time "
+                                                            "from there, with no potentialFoam (API 1.6)"),
+                           "maxCo": {"type": "number", "minimum": 0, "maximum": 20,
+                                     "description": "with steady: the largest Courant number the time step keeps "
+                                                    "to (default 1; DDES 2 or less)"},
+                           "model": {"enum": ["DDES", "URANS"],
+                                     "description": "with steady: DDES (kOmegaSSTDES with F2 shielding: the wake's "
+                                                    "eddies resolved, the boundary layers RANS; the default), or "
+                                                    "URANS (the steady run's RAS model, in time)"},
+                           "to": {"type": "number", "minimum": 0, "maximum": solve.MAX_ITERS,
+                                  "description": "the iteration to solve to (a whole number; 2000 by default), or "
+                                                 "for a transient run the time in s (a new one's default: 8 flow "
+                                                 "times over the body, 8 L/U); past the latest written one"},
                            "np": {"type": "integer", "minimum": 1, "maximum": 64, "default": 4,
                                   "description": "processes for a solve from iteration 0 (1: not split); a "
                                                  "continuation keeps the run's own"}}, ["name"]),
-        "start": lambda a: solve.start(a["name"], a["to"], a["np"], a.get("source"), a.get("template"), a.get("size")),
+        "start": lambda a: solve.start(a["name"], a.get("to"), a["np"], a.get("source"), a.get("template"),
+                                       a.get("size"), a.get("steady"), a.get("maxCo"), a.get("model")),
         "links": lambda n: {"run": f"{PREFIX}/runs/{n}"},
     },
     "tplan": {
@@ -896,6 +925,17 @@ def _query_args(spec, query):
     return out
 
 
+def _no_number(word):
+    raise ValueError(f"{word} is not a JSON number")
+
+
+def _finite(text):
+    v = float(text)
+    if not math.isfinite(v):
+        raise ValueError(f"{text} is too large a number")
+    return v
+
+
 def handle(method, path, query=None, body=b"", content_type=""):
     """(HTTP status, JSON document, extra headers) for one request below PREFIX.
     `query` is {name: first value}.  Unexpected exceptions are the caller's to log."""
@@ -922,8 +962,8 @@ def _handle(method, path, query, body, content_type):
             raise ApiError("unsupported-media-type", "send the body as application/json")
         if len(body) > MAX_BODY:
             raise ApiError("too-large", f"body over {MAX_BODY} bytes")
-        try:
-            doc = json.loads(body.decode("utf-8") or "null")
+        try:                                # NaN, Infinity and 1e999 are no JSON numbers: refused, not inf
+            doc = json.loads(body.decode("utf-8") or "null", parse_constant=_no_number, parse_float=_finite)
         except (UnicodeDecodeError, ValueError):
             raise ApiError("bad-request", "body is not valid JSON")
     return r.status, r.func(m.groupdict(), _query_args(r.query, query), doc), {}

@@ -1273,11 +1273,13 @@ export interface operations {
                         /** @description the repaired-mesh run's newest solver log */
                         solver: {
                             clock?: number;
+                            /** @description a transient run's latest time step in s, from its log (API 1.6) */
+                            deltaT?: number;
                             /** @description the iteration it runs to (endTime) */
                             end: number;
                             /** @description the log's FOAM FATAL message (state error) */
                             error?: string;
-                            /** @description seconds left at that pace (while running) */
+                            /** @description seconds left at that pace (while running; a transient run's: its time steps left at its latest time step) */
                             eta?: number;
                             /** @description seconds since the log changed (state stopped) */
                             idle_s?: number;
@@ -1347,6 +1349,8 @@ export interface operations {
                                 copyOf?: string;
                                 /** @description the template a case job made it from */
                                 template?: string;
+                                /** @description the steady run a solve job made it a transient run of */
+                                transientOf?: string;
                             };
                         };
                     };
@@ -1547,6 +1551,13 @@ export interface operations {
                     /** @enum {unknown} */
                     kind: "solve";
                     params: {
+                        /** @description with steady: the largest Courant number the time step keeps to (default 1; DDES 2 or less) */
+                        maxCo?: number;
+                        /**
+                         * @description with steady: DDES (kOmegaSSTDES with F2 shielding: the wake's eddies resolved, the boundary layers RANS; the default), or URANS (the steady run's RAS model, in time)
+                         * @enum {unknown}
+                         */
+                        model?: "DDES" | "URANS";
                         /** @description a case in the cases folder that Mesh Doctor made (a case job's, or a copy); with a source or a template, the new case it makes, a name not taken there */
                         name: string;
                         /**
@@ -1561,12 +1572,11 @@ export interface operations {
                         size?: "coarse" | "medium" | "fine";
                         /** @description a case you made, to solve a copy of: its mesh and settings, not its results, are copied into the cases folder as name (a case you made is never changed). It needs its mesh joined, its 0 (or 0.orig) fields and a steady foamRun setup */
                         source?: string;
+                        /** @description a solved steady run (GET /runs) to start a transient run of: the new case name takes its mesh, settings and latest result, and is solved in time from there, with no potentialFoam (API 1.6) */
+                        steady?: string;
                         /** @description a template (GET /templates) to make the case from first, as a case job does (Verify install: the Ahmed body's coarse mesh, solved to 2000) */
                         template?: string;
-                        /**
-                         * @description the iteration to solve to; past the latest written one
-                         * @default 2000
-                         */
+                        /** @description the iteration to solve to (a whole number; 2000 by default), or for a transient run the time in s (a new one's default: 8 flow times over the body, 8 L/U); past the latest written one */
                         to?: number;
                     };
                 } | {
@@ -1795,11 +1805,13 @@ export interface operations {
                         /** @description the repaired-mesh run's newest solver log */
                         solver: {
                             clock?: number;
+                            /** @description a transient run's latest time step in s, from its log (API 1.6) */
+                            deltaT?: number;
                             /** @description the iteration it runs to (endTime) */
                             end: number;
                             /** @description the log's FOAM FATAL message (state error) */
                             error?: string;
-                            /** @description seconds left at that pace (while running) */
+                            /** @description seconds left at that pace (while running; a transient run's: its time steps left at its latest time step) */
                             eta?: number;
                             /** @description seconds since the log changed (state stopped) */
                             idle_s?: number;
@@ -2228,7 +2240,7 @@ export interface operations {
                             error: string | null;
                             /** @description when the latest stretch ended (UTC); null while it runs */
                             finished: string | null;
-                            /** @description the last iteration in its solver log */
+                            /** @description the last iteration in its solver log (a transient run's: the time in s, as are its other times) */
                             iteration: number | null;
                             /** @description the case it solves: a case in the cases folder that Mesh Doctor made */
                             name: string;
@@ -2250,6 +2262,13 @@ export interface operations {
                                 from: number;
                                 to: number;
                             }[];
+                            /** @description a transient run: the steady run it started from, and the time of that run's result it took (at), its largest Courant number and its model; null for a steady run (API 1.6) */
+                            transient?: {
+                                at: string;
+                                maxCo: number | null;
+                                model: string | null;
+                                steady: string;
+                            } | null;
                             /** @description when its status last changed (UTC) */
                             updated: string | null;
                             /** @description the latest iteration written, which a continuation starts from */
@@ -2293,7 +2312,7 @@ export interface operations {
                         error: string | null;
                         /** @description when the latest stretch ended (UTC); null while it runs */
                         finished: string | null;
-                        /** @description the last iteration in its solver log */
+                        /** @description the last iteration in its solver log (a transient run's: the time in s, as are its other times) */
                         iteration: number | null;
                         /** @description itself, Stop, and its convergence judge (GET /judge?case=) */
                         links?: Record<string, unknown>;
@@ -2317,6 +2336,13 @@ export interface operations {
                             from: number;
                             to: number;
                         }[];
+                        /** @description a transient run: the steady run it started from, and the time of that run's result it took (at), its largest Courant number and its model; null for a steady run (API 1.6) */
+                        transient?: {
+                            at: string;
+                            maxCo: number | null;
+                            model: string | null;
+                            steady: string;
+                        } | null;
                         /** @description when its status last changed (UTC) */
                         updated: string | null;
                         /** @description the latest iteration written, which a continuation starts from */
@@ -2395,7 +2421,7 @@ export interface operations {
                             error: string | null;
                             /** @description when the latest stretch ended (UTC); null while it runs */
                             finished: string | null;
-                            /** @description the last iteration in its solver log */
+                            /** @description the last iteration in its solver log (a transient run's: the time in s, as are its other times) */
                             iteration: number | null;
                             /** @description the case it solves: a case in the cases folder that Mesh Doctor made */
                             name: string;
@@ -2417,6 +2443,13 @@ export interface operations {
                                 from: number;
                                 to: number;
                             }[];
+                            /** @description a transient run: the steady run it started from, and the time of that run's result it took (at), its largest Courant number and its model; null for a steady run (API 1.6) */
+                            transient?: {
+                                at: string;
+                                maxCo: number | null;
+                                model: string | null;
+                                steady: string;
+                            } | null;
                             /** @description when its status last changed (UTC) */
                             updated: string | null;
                             /** @description the latest iteration written, which a continuation starts from */
@@ -2425,11 +2458,13 @@ export interface operations {
                         /** @description the solver log of the stretch it is in (log.foamRun, or log.foamRun_to_<end> for a continuation); stopped: its log ended without End (a Stop's ends with it) or hasn't changed for 5 minutes */
                         solver: {
                             clock?: number;
+                            /** @description a transient run's latest time step in s, from its log (API 1.6) */
+                            deltaT?: number;
                             /** @description the iteration it runs to (endTime) */
                             end: number;
                             /** @description the log's FOAM FATAL message (state error) */
                             error?: string;
-                            /** @description seconds left at that pace (while running) */
+                            /** @description seconds left at that pace (while running; a transient run's: its time steps left at its latest time step) */
                             eta?: number;
                             /** @description seconds since the log changed (state stopped) */
                             idle_s?: number;
@@ -2489,7 +2524,7 @@ export interface operations {
                         error: string | null;
                         /** @description when the latest stretch ended (UTC); null while it runs */
                         finished: string | null;
-                        /** @description the last iteration in its solver log */
+                        /** @description the last iteration in its solver log (a transient run's: the time in s, as are its other times) */
                         iteration: number | null;
                         /** @description itself, Stop, and its convergence judge (GET /judge?case=) */
                         links?: Record<string, unknown>;
@@ -2513,6 +2548,13 @@ export interface operations {
                             from: number;
                             to: number;
                         }[];
+                        /** @description a transient run: the steady run it started from, and the time of that run's result it took (at), its largest Courant number and its model; null for a steady run (API 1.6) */
+                        transient?: {
+                            at: string;
+                            maxCo: number | null;
+                            model: string | null;
+                            steady: string;
+                        } | null;
                         /** @description when its status last changed (UTC) */
                         updated: string | null;
                         /** @description the latest iteration written, which a continuation starts from */

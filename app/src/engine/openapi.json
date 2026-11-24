@@ -2311,6 +2311,10 @@
                         "clock": {
                           "type": "number"
                         },
+                        "deltaT": {
+                          "description": "a transient run's latest time step in s, from its log (API 1.6)",
+                          "type": "number"
+                        },
                         "end": {
                           "description": "the iteration it runs to (endTime)",
                           "type": "number"
@@ -2320,7 +2324,7 @@
                           "type": "string"
                         },
                         "eta": {
-                          "description": "seconds left at that pace (while running)",
+                          "description": "seconds left at that pace (while running; a transient run's: its time steps left at its latest time step)",
                           "type": "number"
                         },
                         "idle_s": {
@@ -2464,6 +2468,10 @@
                           },
                           "template": {
                             "description": "the template a case job made it from",
+                            "type": "string"
+                          },
+                          "transientOf": {
+                            "description": "the steady run a solve job made it a transient run of",
                             "type": "string"
                           }
                         },
@@ -2915,7 +2923,7 @@
                   },
                   {
                     "additionalProperties": false,
-                    "description": "solve a case Mesh Doctor made to an iteration: while none is written it splits the case, starts the flow with potentialFoam and runs foamRun; once one is written it continues from the latest. With a source, it first makes the case as a copy of a case you made; with a template, it first makes it from the template, as a case job does",
+                    "description": "solve a case Mesh Doctor made to an iteration: while none is written it splits the case, starts the flow with potentialFoam and runs foamRun; once one is written it continues from the latest. With a source, it first makes the case as a copy of a case you made; with a template, it first makes it from the template, as a case job does; with a steady run, it first makes it a transient run of that one, solved in time to a time in s",
                     "properties": {
                       "kind": {
                         "enum": [
@@ -2925,6 +2933,19 @@
                       "params": {
                         "additionalProperties": false,
                         "properties": {
+                          "maxCo": {
+                            "description": "with steady: the largest Courant number the time step keeps to (default 1; DDES 2 or less)",
+                            "maximum": 20,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "model": {
+                            "description": "with steady: DDES (kOmegaSSTDES with F2 shielding: the wake's eddies resolved, the boundary layers RANS; the default), or URANS (the steady run's RAS model, in time)",
+                            "enum": [
+                              "DDES",
+                              "URANS"
+                            ]
+                          },
                           "name": {
                             "description": "a case in the cases folder that Mesh Doctor made (a case job's, or a copy); with a source or a template, the new case it makes, a name not taken there",
                             "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
@@ -2950,17 +2971,21 @@
                             "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
                             "type": "string"
                           },
+                          "steady": {
+                            "description": "a solved steady run (GET /runs) to start a transient run of: the new case name takes its mesh, settings and latest result, and is solved in time from there, with no potentialFoam (API 1.6)",
+                            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+                            "type": "string"
+                          },
                           "template": {
                             "description": "a template (GET /templates) to make the case from first, as a case job does (Verify install: the Ahmed body's coarse mesh, solved to 2000)",
                             "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
                             "type": "string"
                           },
                           "to": {
-                            "default": 2000,
-                            "description": "the iteration to solve to; past the latest written one",
+                            "description": "the iteration to solve to (a whole number; 2000 by default), or for a transient run the time in s (a new one's default: 8 flow times over the body, 8 L/U); past the latest written one",
                             "maximum": 100000,
-                            "minimum": 1,
-                            "type": "integer"
+                            "minimum": 0,
+                            "type": "number"
                           }
                         },
                         "required": [
@@ -3378,6 +3403,10 @@
                         "clock": {
                           "type": "number"
                         },
+                        "deltaT": {
+                          "description": "a transient run's latest time step in s, from its log (API 1.6)",
+                          "type": "number"
+                        },
                         "end": {
                           "description": "the iteration it runs to (endTime)",
                           "type": "number"
@@ -3387,7 +3416,7 @@
                           "type": "string"
                         },
                         "eta": {
-                          "description": "seconds left at that pace (while running)",
+                          "description": "seconds left at that pace (while running; a transient run's: its time steps left at its latest time step)",
                           "type": "number"
                         },
                         "idle_s": {
@@ -4114,7 +4143,7 @@
                           "end": {
                             "description": "the iteration the latest stretch runs to (endTime)",
                             "type": [
-                              "integer",
+                              "number",
                               "null"
                             ]
                           },
@@ -4133,9 +4162,9 @@
                             ]
                           },
                           "iteration": {
-                            "description": "the last iteration in its solver log",
+                            "description": "the last iteration in its solver log (a transient run's: the time in s, as are its other times)",
                             "type": [
-                              "integer",
+                              "number",
                               "null"
                             ]
                           },
@@ -4152,7 +4181,7 @@
                           },
                           "start": {
                             "description": "the iteration the latest stretch started from",
-                            "type": "integer"
+                            "type": "number"
                           },
                           "started": {
                             "description": "when the latest stretch started (UTC)",
@@ -4181,10 +4210,10 @@
                             "items": {
                               "properties": {
                                 "from": {
-                                  "type": "integer"
+                                  "type": "number"
                                 },
                                 "to": {
-                                  "type": "integer"
+                                  "type": "number"
                                 }
                               },
                               "required": [
@@ -4195,6 +4224,39 @@
                             },
                             "type": "array"
                           },
+                          "transient": {
+                            "description": "a transient run: the steady run it started from, and the time of that run's result it took (at), its largest Courant number and its model; null for a steady run (API 1.6)",
+                            "properties": {
+                              "at": {
+                                "type": "string"
+                              },
+                              "maxCo": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "model": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "steady": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "steady",
+                              "at",
+                              "maxCo",
+                              "model"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
                           "updated": {
                             "description": "when its status last changed (UTC)",
                             "type": [
@@ -4204,7 +4266,7 @@
                           },
                           "written": {
                             "description": "the latest iteration written, which a continuation starts from",
-                            "type": "integer"
+                            "type": "number"
                           }
                         },
                         "required": [
@@ -4274,7 +4336,7 @@
                     "end": {
                       "description": "the iteration the latest stretch runs to (endTime)",
                       "type": [
-                        "integer",
+                        "number",
                         "null"
                       ]
                     },
@@ -4293,9 +4355,9 @@
                       ]
                     },
                     "iteration": {
-                      "description": "the last iteration in its solver log",
+                      "description": "the last iteration in its solver log (a transient run's: the time in s, as are its other times)",
                       "type": [
-                        "integer",
+                        "number",
                         "null"
                       ]
                     },
@@ -4316,7 +4378,7 @@
                     },
                     "start": {
                       "description": "the iteration the latest stretch started from",
-                      "type": "integer"
+                      "type": "number"
                     },
                     "started": {
                       "description": "when the latest stretch started (UTC)",
@@ -4345,10 +4407,10 @@
                       "items": {
                         "properties": {
                           "from": {
-                            "type": "integer"
+                            "type": "number"
                           },
                           "to": {
-                            "type": "integer"
+                            "type": "number"
                           }
                         },
                         "required": [
@@ -4359,6 +4421,39 @@
                       },
                       "type": "array"
                     },
+                    "transient": {
+                      "description": "a transient run: the steady run it started from, and the time of that run's result it took (at), its largest Courant number and its model; null for a steady run (API 1.6)",
+                      "properties": {
+                        "at": {
+                          "type": "string"
+                        },
+                        "maxCo": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "model": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "steady": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "steady",
+                        "at",
+                        "maxCo",
+                        "model"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
                     "updated": {
                       "description": "when its status last changed (UTC)",
                       "type": [
@@ -4368,7 +4463,7 @@
                     },
                     "written": {
                       "description": "the latest iteration written, which a continuation starts from",
-                      "type": "integer"
+                      "type": "number"
                     }
                   },
                   "required": [
@@ -4527,7 +4622,7 @@
                         "end": {
                           "description": "the iteration the latest stretch runs to (endTime)",
                           "type": [
-                            "integer",
+                            "number",
                             "null"
                           ]
                         },
@@ -4546,9 +4641,9 @@
                           ]
                         },
                         "iteration": {
-                          "description": "the last iteration in its solver log",
+                          "description": "the last iteration in its solver log (a transient run's: the time in s, as are its other times)",
                           "type": [
-                            "integer",
+                            "number",
                             "null"
                           ]
                         },
@@ -4565,7 +4660,7 @@
                         },
                         "start": {
                           "description": "the iteration the latest stretch started from",
-                          "type": "integer"
+                          "type": "number"
                         },
                         "started": {
                           "description": "when the latest stretch started (UTC)",
@@ -4594,10 +4689,10 @@
                           "items": {
                             "properties": {
                               "from": {
-                                "type": "integer"
+                                "type": "number"
                               },
                               "to": {
-                                "type": "integer"
+                                "type": "number"
                               }
                             },
                             "required": [
@@ -4608,6 +4703,39 @@
                           },
                           "type": "array"
                         },
+                        "transient": {
+                          "description": "a transient run: the steady run it started from, and the time of that run's result it took (at), its largest Courant number and its model; null for a steady run (API 1.6)",
+                          "properties": {
+                            "at": {
+                              "type": "string"
+                            },
+                            "maxCo": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "model": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "steady": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "steady",
+                            "at",
+                            "maxCo",
+                            "model"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "updated": {
                           "description": "when its status last changed (UTC)",
                           "type": [
@@ -4617,7 +4745,7 @@
                         },
                         "written": {
                           "description": "the latest iteration written, which a continuation starts from",
-                          "type": "integer"
+                          "type": "number"
                         }
                       },
                       "required": [
@@ -4643,6 +4771,10 @@
                         "clock": {
                           "type": "number"
                         },
+                        "deltaT": {
+                          "description": "a transient run's latest time step in s, from its log (API 1.6)",
+                          "type": "number"
+                        },
                         "end": {
                           "description": "the iteration it runs to (endTime)",
                           "type": "number"
@@ -4652,7 +4784,7 @@
                           "type": "string"
                         },
                         "eta": {
-                          "description": "seconds left at that pace (while running)",
+                          "description": "seconds left at that pace (while running; a transient run's: its time steps left at its latest time step)",
                           "type": "number"
                         },
                         "idle_s": {
@@ -4768,7 +4900,7 @@
                     "end": {
                       "description": "the iteration the latest stretch runs to (endTime)",
                       "type": [
-                        "integer",
+                        "number",
                         "null"
                       ]
                     },
@@ -4787,9 +4919,9 @@
                       ]
                     },
                     "iteration": {
-                      "description": "the last iteration in its solver log",
+                      "description": "the last iteration in its solver log (a transient run's: the time in s, as are its other times)",
                       "type": [
-                        "integer",
+                        "number",
                         "null"
                       ]
                     },
@@ -4810,7 +4942,7 @@
                     },
                     "start": {
                       "description": "the iteration the latest stretch started from",
-                      "type": "integer"
+                      "type": "number"
                     },
                     "started": {
                       "description": "when the latest stretch started (UTC)",
@@ -4839,10 +4971,10 @@
                       "items": {
                         "properties": {
                           "from": {
-                            "type": "integer"
+                            "type": "number"
                           },
                           "to": {
-                            "type": "integer"
+                            "type": "number"
                           }
                         },
                         "required": [
@@ -4853,6 +4985,39 @@
                       },
                       "type": "array"
                     },
+                    "transient": {
+                      "description": "a transient run: the steady run it started from, and the time of that run's result it took (at), its largest Courant number and its model; null for a steady run (API 1.6)",
+                      "properties": {
+                        "at": {
+                          "type": "string"
+                        },
+                        "maxCo": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "model": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "steady": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "steady",
+                        "at",
+                        "maxCo",
+                        "model"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
                     "updated": {
                       "description": "when its status last changed (UTC)",
                       "type": [
@@ -4862,7 +5027,7 @@
                     },
                     "written": {
                       "description": "the latest iteration written, which a continuation starts from",
-                      "type": "integer"
+                      "type": "number"
                     }
                   },
                   "required": [

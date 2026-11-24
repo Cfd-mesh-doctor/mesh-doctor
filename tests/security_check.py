@@ -77,6 +77,8 @@ SOLVEJOB = b'{"kind": "solve", "params": {"name": ".."}}'
 COPYJOB = b'{"kind": "solve", "params": {"name": "copy", "source": ".."}}'
 TEMPLATEJOB = b'{"kind": "solve", "params": {"name": "verify-install", "template": ".."}}'
 TPLANJOB = b'{"kind": "tplan", "params": {"name": ".."}}'
+TRANSIENTJOB = b'{"kind": "solve", "params": {"name": "transient", "steady": ".."}}'
+NANJOB = b'{"kind": "solve", "params": {"name": "transient", "steady": "steady", "to": NaN}}'
 JSON = "application/json"
 PAGES = ("/", "/run", "/meshdoctor", "/meshmap", "/report")
 APP_KEY = ""
@@ -178,6 +180,13 @@ CHECKS = [
      {"Content-Type": JSON, "X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 400, '"code": "bad-request"', TPLANJOB),
     ("v1 a transient plan job without token refused", "POST", "/api/v1/jobs", {"Content-Type": JSON}, 403, "token",
      TPLANJOB),
+    ("v1 a transient solve takes no bad steady run name", "POST", "/api/v1/jobs",
+     {"Content-Type": JSON, "X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 400, '"code": "bad-request"',
+     TRANSIENTJOB),
+    ("v1 a transient solve without token refused", "POST", "/api/v1/jobs", {"Content-Type": JSON}, 403, "token",
+     TRANSIENTJOB),
+    ("v1 a body's NaN is no JSON number", "POST", "/api/v1/jobs",
+     {"Content-Type": JSON, "X-MD-Token": TOKEN, "Origin": f"http://{HOST}"}, 400, "not valid JSON", NANJOB),
     # page scripts: only plain names from web/js/
     ("shared page script is served", "GET", "/js/md.js", {}, 200, "MD.render"),
     ("unknown script is not served", "GET", "/js/nope.js", {}, 404, ""),
