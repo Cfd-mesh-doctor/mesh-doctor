@@ -43,11 +43,13 @@ const STATE = {
   fail: { icon: CircleX, colour: "text-danger", said: "Problem" },
 } as const;
 
-/** The checks' groups, in the engine's order; programs go under OpenFOAM, whose environment finds them. */
+/** The checks' groups, in the engine's order; programs go under OpenFOAM, whose environment finds them. Pictures:
+ * ParaView, which only pictures of the flow need (API 1.14; an older engine doesn't check it, and has no section). */
 const SECTIONS: { title: string; groups: ReadinessCheck["group"][] }[] = [
   { title: "Python", groups: ["python"] },
   { title: "Folders", groups: ["folders"] },
   { title: "OpenFOAM", groups: ["openfoam", "programs"] },
+  { title: "Pictures", groups: ["pictures"] },
   { title: "Memory", groups: ["memory"] },
 ];
 
@@ -179,8 +181,9 @@ function ReadinessCard() {
           {doc ? <Verdict doc={doc} /> : old ? <Badge>Not checked</Badge> : readiness.isPending ? <Skeleton className="h-5 w-16" /> : null}
         </CardTitleRow>
         <CardDescription>
-          What {whose} has: Python, its folders, OpenFOAM 14 and the programs a repair, an A/B test and a solve run, and
-          the memory that&apos;s free. A warning doesn&apos;t stop a job; a problem does, until it&apos;s fixed.
+          What {whose} has: Python, its folders, OpenFOAM 14 and the programs a repair, an A/B test and a solve run,
+          ParaView for pictures of the flow, and the memory that&apos;s free. A warning doesn&apos;t stop a job; a
+          problem does, until it&apos;s fixed.
           {doc && <> Checked {formatDateTime(doc.checked)}.</>}
         </CardDescription>
       </CardHeader>

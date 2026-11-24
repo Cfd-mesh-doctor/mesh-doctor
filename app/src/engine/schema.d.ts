@@ -110,7 +110,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Is this computer ready?  `meshdoctor check` as JSON: Python, numpy, the folders, OpenFOAM 14, the programs a repair, an A/B test and a solve run, and the memory, each with what was found and the fix, never this machine's folders (API 1.4) */
+        /** Is this computer ready?  `meshdoctor check` as JSON: Python, numpy, the folders, OpenFOAM 14, the programs a repair, an A/B test and a solve run, ParaView for pictures of the flow (API 1.14), and the memory, each with what was found and the fix, never this machine's folders (API 1.4) */
         get: operations["readiness"];
         put?: never;
         post?: never;
@@ -1507,11 +1507,11 @@ export interface operations {
                             /** @description what the check found */
                             found: string;
                             /**
-                             * @description programs are checked only once an OpenFOAM environment is found
+                             * @description programs are checked only once an OpenFOAM environment is found; pictures: ParaView's pvbatch, which only pictures of the flow need, so a warning without it (API 1.14)
                              * @enum {unknown}
                              */
-                            group: "python" | "folders" | "openfoam" | "programs" | "memory";
-                            /** @description python, numpy, cases, workspace, openfoam, memory, or a program's name */
+                            group: "python" | "folders" | "openfoam" | "programs" | "pictures" | "memory";
+                            /** @description python, numpy, cases, workspace, openfoam, pvbatch (API 1.14), memory, or a program's name */
                             id: string;
                             label: string;
                             /** @enum {unknown} */

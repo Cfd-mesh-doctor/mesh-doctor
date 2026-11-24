@@ -50,6 +50,8 @@ describe("the Solve screen's Ready to solve?", () => {
     // The programs found share a line: eight of them, by name.
     expect(section("OpenFOAM").getByText("All 8 found")).toBeInTheDocument();
     expect(section("OpenFOAM").getByText(/^foamRun · checkMesh · .* · foamCourantCells$/)).toBeInTheDocument();
+    expect(section("Pictures").getByText("ParaView")).toBeInTheDocument();
+    expect(section("Pictures").getByText("5.10.0-RC1")).toBeInTheDocument();
     expect(section("Memory").getByText("20.8 GB available")).toBeInTheDocument();
     expect(section("Memory").getByText(/repair a mesh of up to about 14\.1 M cells, or to solve one of up to about 15\.7 M/))
       .toBeInTheDocument();
@@ -110,6 +112,31 @@ describe("the Solve screen's Ready to solve?", () => {
     });
     expect(await screen.findByText("Ready, 1 warning")).toBeInTheDocument();
     expect(section("Python").getByText("Only the repair map needs it")).toBeInTheDocument();
+  });
+
+  it("calls ParaView missing a warning, with its install command, as only pictures of the flow need it", async () => {
+    renderScreen(<Solve />, {
+      path,
+      transport: engine(withChecks({
+        pvbatch: {
+          state: "warn", found: "pvbatch not found", fix: "only pictures of the flow need it (about 600 MB)",
+          command: "sudo apt install paraview python3-paraview",
+        },
+      })),
+    });
+    expect(await screen.findByText("Ready, 1 warning")).toBeInTheDocument();
+    const pictures = section("Pictures");
+    expect(pictures.getByText("pvbatch not found")).toBeInTheDocument();
+    expect(pictures.getByText("Only pictures of the flow need it (about 600 MB)")).toBeInTheDocument();
+    expect(pictures.getByRole("button", { name: "Copy “sudo apt install paraview python3-paraview”" })).toBeInTheDocument();
+    expect(pictures.getAllByText("Warning:")).toHaveLength(1);
+  });
+
+  it("has no Pictures section for an engine that doesn't check ParaView (before API 1.14)", async () => {
+    renderScreen(<Solve />, { path, transport: engine(withChecks({}, ["pvbatch"])) });
+    expect(await screen.findByText("Ready")).toBeInTheDocument();
+    expect(section("Memory").getByText("20.8 GB available")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Pictures" })).toBeNull();
   });
 
   it("says when the free memory is the engine's RAM limit, and leaves out the meshes when it is unknown", async () => {

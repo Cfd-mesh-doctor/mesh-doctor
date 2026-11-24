@@ -4,14 +4,15 @@
 
 Checks Python, numpy, the settings, the cases folder and the workspace,
 OpenFOAM 14 (openfoam.org), the programs a repair, an A/B test and a solve run,
-and memory.  Prints one line per check, then what to do next; exits 1 if
-anything required is missing.  Reads only; changes nothing.
+ParaView (pvbatch), which only pictures of the flow need, and memory.  Prints
+one line per check, then what to do next; exits 1 if anything required is
+missing.  Reads only; changes nothing.
 
 report() is the same checks as one document, for GET /api/v1/check: each
 check's id, label, state (ok, warn or fail), what it found, the fix and a
 command for it, worded without this machine's folders, as every API answer is.
 """
-import math, os, shlex, stat, subprocess, sys, time
+import math, os, re, shlex, shutil, stat, subprocess, sys, time
 
 import config
 import prog
@@ -26,6 +27,10 @@ OPENFOAM = ("foamRun", "checkMesh", "decomposePar", "foamDictionary")
 MPI = "mpirun"
 OWN = ("foamMeshDoctor", "foamResidualHotspots", "foamCourantCells")
 PROGRAMS = OPENFOAM + (MPI,) + OWN
+# ParaView's batch program, which makes the pictures of the flow offscreen (skills/paraview-post); Ubuntu's finds its
+# own Python modules only with them on PYTHONPATH.  A warning without it: no repair, A/B test or solve needs it.
+PVBATCH = "pvbatch"
+PV_PYTHONPATH = "/usr/lib/python3/dist-packages"
 
 
 def foam_env(bashrc):
@@ -47,6 +52,21 @@ def foam_env(bashrc):
 def millions(cells):
     """Cells in millions, rounded down to 0.1 so a size is never generous: 14.49 M is "14.4"."""
     return f"{math.floor(cells / 1e5) / 10:.1f}"
+
+
+def paraview():
+    """(where pvbatch is, the ParaView version `pvbatch --version` gives): (None, None) when it isn't on the PATH,
+    (where, None) when it doesn't start or doesn't say its version."""
+    where = shutil.which(PVBATCH)
+    if not where:
+        return None, None
+    try:
+        r = subprocess.run([where, "--version"], capture_output=True, text=True, timeout=30,
+                           stdin=subprocess.DEVNULL, env=dict(os.environ, PYTHONPATH=PV_PYTHONPATH))
+    except (OSError, subprocess.SubprocessError):
+        return where, None
+    m = re.search(r"\bversion\s+(\d\S*)", r.stdout + r.stderr) if r.returncode == 0 else None
+    return where, m.group(1) if m else None
 
 
 def _run(paths):
@@ -126,6 +146,17 @@ def _run(paths):
             else:
                 add("programs", p, p, FAIL, "not found in the OpenFOAM environment",
                     "it comes with OpenFOAM 14: check that `bashrc` is OpenFOAM 14's")
+
+    where, version = paraview()
+    if version:
+        add("pictures", "pvbatch", "ParaView", OK, f"{version}, {where}" if paths else version)
+    elif where:
+        add("pictures", "pvbatch", "ParaView", WARN, f"{where} found, but it doesn't start" if paths else
+            "pvbatch found, but it doesn't start", "pictures of the flow need it: install ParaView again",
+            "sudo apt install --reinstall paraview python3-paraview")
+    else:
+        add("pictures", "pvbatch", "ParaView", WARN, "pvbatch not found",
+            "only pictures of the flow need it (about 600 MB)", "sudo apt install paraview python3-paraview")
 
     free = ramguard.available_mb()
     if free:

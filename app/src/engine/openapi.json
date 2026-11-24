@@ -1759,7 +1759,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.13"
+    "version": "1.14"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -2637,17 +2637,18 @@
                             "type": "string"
                           },
                           "group": {
-                            "description": "programs are checked only once an OpenFOAM environment is found",
+                            "description": "programs are checked only once an OpenFOAM environment is found; pictures: ParaView's pvbatch, which only pictures of the flow need, so a warning without it (API 1.14)",
                             "enum": [
                               "python",
                               "folders",
                               "openfoam",
                               "programs",
+                              "pictures",
                               "memory"
                             ]
                           },
                           "id": {
-                            "description": "python, numpy, cases, workspace, openfoam, memory, or a program's name",
+                            "description": "python, numpy, cases, workspace, openfoam, pvbatch (API 1.14), memory, or a program's name",
                             "type": "string"
                           },
                           "label": {
@@ -2750,7 +2751,7 @@
             "description": "Error (the code says which; see STATUS in api_v1.py)"
           }
         },
-        "summary": "Is this computer ready?  `meshdoctor check` as JSON: Python, numpy, the folders, OpenFOAM 14, the programs a repair, an A/B test and a solve run, and the memory, each with what was found and the fix, never this machine's folders (API 1.4)"
+        "summary": "Is this computer ready?  `meshdoctor check` as JSON: Python, numpy, the folders, OpenFOAM 14, the programs a repair, an A/B test and a solve run, ParaView for pictures of the flow (API 1.14), and the memory, each with what was found and the fix, never this machine's folders (API 1.4)"
       }
     },
     "/disk": {

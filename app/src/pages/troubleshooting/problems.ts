@@ -194,6 +194,11 @@ export const GROUPS: ProblemGroup[] = [
       head: ["You see", "Why", "Fix"],
       rows: [
         [
+          "Ready to solve? (or `meshdoctor check`) warns: ParaView, pvbatch not found",
+          "ParaView isn't installed (`tools/setup_linux.sh --no-paraview` leaves it out); only pictures of the flow need it",
+          "`sudo apt install paraview python3-paraview` (about 600 MB), then check again",
+        ],
+        [
           "`No module named paraview`",
           "pvbatch can't find its own Python modules",
           "`PYTHONPATH=/usr/lib/python3/dist-packages pvbatch ...`",

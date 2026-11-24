@@ -3952,9 +3952,9 @@ class SelfCheckTest(unittest.TestCase):
                 "progs": {p: "" if p in missing else "/opt/x/bin/" + p for p in selfcheck.PROGRAMS}}
 
     @contextlib.contextmanager
-    def checking(self, foam, cases=True, free=8192):
-        """selfcheck with a temporary cases folder (or none), workspace and bashrc, the given OpenFOAM environment
-        and free memory; yields (selfcheck, the temporary folder)."""
+    def checking(self, foam, cases=True, free=8192, pv=("/opt/x/bin/pvbatch", "5.10.0-RC1")):
+        """selfcheck with a temporary cases folder (or none), workspace and bashrc, the given OpenFOAM environment,
+        free memory and ParaView (selfcheck.paraview's answer); yields (selfcheck, the temporary folder)."""
         import selfcheck
         tmp = tempfile.mkdtemp(prefix="md_check_")
         self.addCleanup(shutil.rmtree, tmp, True)
@@ -3968,12 +3968,13 @@ class SelfCheckTest(unittest.TestCase):
                 mock.patch.object(selfcheck, "foam_env", return_value=foam), \
                 mock.patch.object(selfcheck.ramguard, "available_mb", return_value=free), \
                 mock.patch.object(selfcheck.ramguard, "limit_mb", return_value=None), \
+                mock.patch.object(selfcheck, "paraview", return_value=pv), \
                 mock.patch.dict(os.environ, {"MESHDOCTOR_PROG": "meshdoctor"}):
             yield selfcheck, tmp
 
-    def run_check(self, foam):
+    def run_check(self, foam, **kw):
         out = io.StringIO()
-        with self.checking(foam) as (selfcheck, _), contextlib.redirect_stdout(out):
+        with self.checking(foam, **kw) as (selfcheck, _), contextlib.redirect_stdout(out):
             code = selfcheck.main([])
         return code, out.getvalue()
 
@@ -4032,6 +4033,55 @@ class SelfCheckTest(unittest.TestCase):
     def schema_problems(doc, sch):
         import schema
         return schema.check(doc, sch)
+
+    def test_paraview_is_only_a_warning_as_only_pictures_of_the_flow_need_it(self):
+        import api_v1
+        said = {("/opt/x/bin/pvbatch", "5.10.0-RC1"): ("ok", "5.10.0-RC1", None, None),
+                ("/opt/x/bin/pvbatch", None): ("warn", "pvbatch found, but it doesn't start",
+                                               "pictures of the flow need it: install ParaView again",
+                                               "sudo apt install --reinstall paraview python3-paraview"),
+                (None, None): ("warn", "pvbatch not found", "only pictures of the flow need it (about 600 MB)",
+                               "sudo apt install paraview python3-paraview")}
+        for pv, (state, found, fix, command) in said.items():
+            with self.subTest(pv=pv), self.checking(self.foam(), pv=pv) as (selfcheck, _):
+                doc = selfcheck.report()
+                self.assertEqual(self.schema_problems(doc, api_v1.READINESS), [])
+                self.assertEqual({c["id"]: c for c in doc["checks"]}["pvbatch"],
+                                 {"id": "pvbatch", "label": "ParaView", "group": "pictures", "state": state,
+                                  "found": found, "fix": fix, "command": command})
+                self.assertTrue(doc["ready"])                   # a warning: a repair, an A/B test and a solve still run
+                self.assertEqual([c["group"] for c in doc["checks"]][-2:], ["pictures", "memory"])
+                self.assertNotIn("/opt/x", json.dumps(doc))
+        # The command says where it is, and a missing one is a warning there too: still ready
+        code, out = self.run_check(self.foam())
+        self.assertRegex(out, r"ok    ParaView +5\.10\.0-RC1, /opt/x/bin/pvbatch\n")
+        code, out = self.run_check(self.foam(), pv=(None, None))
+        self.assertEqual(code, 0, out)
+        self.assertRegex(out, r"warn  ParaView +pvbatch not found; only pictures of the flow need it \(about 600 MB\): "
+                              r"sudo apt install paraview python3-paraview\n")
+        self.assertIn("\nready\n", out)
+
+    def test_paraview_asks_pvbatch_its_version_with_its_python_modules(self):
+        import selfcheck
+        tmp = tempfile.mkdtemp(prefix="md_pv_")
+        self.addCleanup(shutil.rmtree, tmp, True)
+        pv, said = os.path.join(tmp, "pvbatch"), os.path.join(tmp, "pythonpath")
+
+        def stand_in(code, text):
+            with open(pv, "w") as f:
+                f.write(f"#!/bin/sh\necho \"$PYTHONPATH\" > '{said}'\necho '{text}'\nexit {code}\n")
+            os.chmod(pv, 0o755)
+        with mock.patch.dict(os.environ, {"PATH": tmp + os.pathsep + "/usr/bin:/bin"}):
+            stand_in(0, "paraview version 5.10.0-RC1")
+            self.assertEqual(selfcheck.paraview(), (pv, "5.10.0-RC1"))
+            with open(said) as f:
+                self.assertEqual(f.read().strip(), "/usr/lib/python3/dist-packages")
+            stand_in(1, "pvbatch: error while loading shared libraries")         # found, but it doesn't start
+            self.assertEqual(selfcheck.paraview(), (pv, None))
+            stand_in(0, "no version here")
+            self.assertEqual(selfcheck.paraview(), (pv, None))
+        with mock.patch.dict(os.environ, {"PATH": os.path.join(tmp, "none")}):
+            self.assertEqual(selfcheck.paraview(), (None, None))
 
     def test_the_cells_that_fit_are_what_the_ram_guard_lets_through(self):
         import ramguard

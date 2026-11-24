@@ -27,8 +27,9 @@ const found = (group: Readiness["checks"][number]["group"], id: string, label: s
   ({ id, label, group, state: "ok" as const, found: what, fix: null, command: null });
 
 /** The demo engine's self check (GET /check), written by hand as its computer is (the recording's engine predates
- *  it): ready, on Ubuntu 22.04's Python and numpy, with 20.8 GB of the laptop's 25 GB free. The cells that fit are
- *  the engine's RAM guard's for that memory. The demo answers it as checked at the time it's asked. */
+ *  it): ready, on Ubuntu 22.04's Python, numpy and ParaView (its version as `pvbatch --version` says it), with
+ *  20.8 GB of the laptop's 25 GB free. The cells that fit are the engine's RAM guard's for that memory. The demo
+ *  answers it as checked at the time it's asked. */
 export const DEMO_READINESS: Omit<Readiness, "checked"> = {
   ready: true,
   checks: [
@@ -39,6 +40,7 @@ export const DEMO_READINESS: Omit<Readiness, "checked"> = {
     found("openfoam", "openfoam", "OpenFOAM", "OpenFOAM 14"),
     ...["foamRun", "checkMesh", "decomposePar", "foamDictionary", "mpirun", "foamMeshDoctor", "foamResidualHotspots",
       "foamCourantCells"].map((p) => found("programs", p, p, "found")),
+    found("pictures", "pvbatch", "ParaView", "5.10.0-RC1"),
     found("memory", "memory", "Memory", "20.8 GB available"),
   ],
   memory: { availableMb: 21_300, limitMb: null, cells: { repair: 14_191_274, solve: 15_768_082 } },

@@ -345,7 +345,7 @@ export const DESIGN: DocSection[] = [
             [
               "`GET /check`",
               "(CLI only)",
-              "is this computer ready: `meshdoctor check` as JSON. Python, numpy, the cases folder and the workspace, OpenFOAM 14, the programs a repair, an A/B test and a solve run (`mpirun` among them) and the memory, each `ok`, `warn` or `fail` with what was found, the fix and a command for it, never this machine's folders; and the largest mesh a repair or a solve could take in the memory free now, by the RAM guard. The app's Solve screen opens with it. Each answer runs the checks (a second or two), one at a time (API 1.4)"
+              "is this computer ready: `meshdoctor check` as JSON. Python, numpy, the cases folder and the workspace, OpenFOAM 14, the programs a repair, an A/B test and a solve run (`mpirun` among them), ParaView's `pvbatch`, which only pictures of the flow need (a warning without it, API 1.14), and the memory, each `ok`, `warn` or `fail` with what was found, the fix and a command for it, never this machine's folders; and the largest mesh a repair or a solve could take in the memory free now, by the RAM guard. The app's Solve screen opens with it. Each answer runs the checks (a second or two), one at a time (API 1.4)"
             ],
             [
               "`GET /templates`",

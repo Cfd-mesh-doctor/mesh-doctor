@@ -54,6 +54,7 @@ Problems people actually hit, with the fix. Search this page for the message you
 
 | You see | Why | Fix |
 |---|---|---|
+| Ready to solve? (or `meshdoctor check`) warns: ParaView, pvbatch not found | ParaView isn't installed (`tools/setup_linux.sh --no-paraview` leaves it out); only pictures of the flow need it | `sudo apt install paraview python3-paraview` (about 600 MB), then check again |
 | `No module named paraview` | pvbatch can't find its own Python modules | `PYTHONPATH=/usr/lib/python3/dist-packages pvbatch ...` |
 | Empty fields at time 0 | the case's `0/` files use `#includeEtc`, which ParaView 5.10 can't parse | read solver-written times (`SkipZeroTime`, the default in the scripts) |
 | White holes in cut planes | polyhedral cells not decomposed | set `Decomposepolyhedra = 1` on the reader (more memory) |

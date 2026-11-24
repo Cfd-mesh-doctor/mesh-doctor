@@ -38,6 +38,7 @@ export function readiness(change: Record<string, Record<string, unknown>> = {}) 
     check("folders", "cases", "Cases folder", "found"), check("folders", "workspace", "Workspace", "private (700)"),
     check("openfoam", "openfoam", "OpenFOAM", "OpenFOAM 14"),
     ...programs.map((p) => check("programs", p, p, "found")),
+    check("pictures", "pvbatch", "ParaView", "5.10.0-RC1"),
     check("memory", "memory", "Memory", "12.5 GB available"),
   ].map((c) => ({ ...c, ...change[c.id] }));
   return {

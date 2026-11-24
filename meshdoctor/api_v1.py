@@ -27,7 +27,7 @@ import tplan
 import validate
 import version
 
-API_VERSION = "1.13"
+API_VERSION = "1.14"
 PREFIX = "/api/v1"
 WRITES_MAX = solve.transient.MAX_WRITES   # the most times a stretch of a transient run writes
 MAX_BODY = 64 * 1024
@@ -1036,10 +1036,13 @@ READINESS = {"type": "object", "required": ["ready", "checks", "memory", "checke
     "checks": {"type": "array", "items": {
         "type": "object", "required": ["id", "label", "group", "state", "found", "fix", "command"], "properties": {
             "id": {"type": "string",
-                   "description": "python, numpy, cases, workspace, openfoam, memory, or a program's name"},
+                   "description": "python, numpy, cases, workspace, openfoam, pvbatch (API 1.14), memory, or a "
+                                  "program's name"},
             "label": {"type": "string"},
-            "group": {"enum": ["python", "folders", "openfoam", "programs", "memory"],
-                      "description": "programs are checked only once an OpenFOAM environment is found"},
+            "group": {"enum": ["python", "folders", "openfoam", "programs", "pictures", "memory"],
+                      "description": "programs are checked only once an OpenFOAM environment is found; pictures: "
+                                     "ParaView's pvbatch, which only pictures of the flow need, so a warning without "
+                                     "it (API 1.14)"},
             "state": {"enum": ["ok", "warn", "fail"]},
             "found": {"type": "string", "description": "what the check found"},
             "fix": dict(NULL_TEXT, description="what to do about a warning or a failure; a command, setting or "
@@ -1062,8 +1065,9 @@ CHECK_REUSE_S = 2.0
 
 
 @route("GET", "/check", "Is this computer ready?  `meshdoctor check` as JSON: Python, numpy, the folders, "
-       "OpenFOAM 14, the programs a repair, an A/B test and a solve run, and the memory, each with what was found "
-       "and the fix, never this machine's folders (API 1.4)", ok=READINESS)
+       "OpenFOAM 14, the programs a repair, an A/B test and a solve run, ParaView for pictures of the flow (API "
+       "1.14), and the memory, each with what was found and the fix, never this machine's folders (API 1.4)",
+       ok=READINESS)
 def readiness(p, q, b):
     asked = time.monotonic()
     with _check["lock"]:
