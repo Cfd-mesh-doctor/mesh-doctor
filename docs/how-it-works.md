@@ -97,15 +97,16 @@ Forces are reported as drag (along the flow) and the vertical force, named **dow
 ### When a steady run cannot converge: the transient plan
 
 A steady run that plateaus on a physically unsteady flow (a wing-tip vortex, a tyre wake) will not converge however long it runs. The way on is a transient run with time-averaged forces, which costs far more. `meshdoctor transient-plan <case>` says how much before you start one:
-- it runs OpenFOAM's `CourantNo` function on the steady result, which gives each cell's Courant number per second of time step, `0.5 Σ|φ| / V`;
+- it runs Mesh Doctor's `foamCourantCells` on the steady result (OpenFOAM's `CourantNo` function where that isn't built), which gives each cell's Courant number per second of time step, `0.5 Σ|φ| / V`;
 - with `adjustTimeStep`, the largest of these sets the time step: `dt = maxCo / max`;
 - for each max Courant number (`--co`, default 1, 5 and 20) it gives the time step, the number of steps for the flow time, and the hours, from the steady run's seconds per iteration and `--outer` PIMPLE iterations per step (default 3);
 - the flow time is `--flow-time`, or 8 body lengths of flow from `--length` or a `forceCoeffs` `lRef`; without one, the plan gives hours per 0.1 s of flow;
-- it finds the 100 fastest cells (`--top`) and groups them by place, and says how much larger the time step would be without them. A few tiny cells often set the time step for the whole mesh.
+- it finds the 100 fastest cells (`--top`) and groups them by place, and says how much larger the time step would be without them. A few tiny cells often set the time step for the whole mesh. With `foamCourantCells`, each place also says what may make it fast: its nearest wall and how far from it the cells are, the flow's speed there, and the cells' shape (aspect ratio and non-orthogonality);
+- `--sets <folder>` also writes those cells as the cell set `fastestCells`, laid out as the case is (`[processorN/]constant/polyMesh/sets/fastestCells`): copy its folders into the case to see the cells in paraFoam (Include Sets, and Decomposed Case for a case on processors) or to pick them with `topoSet`.
 
-The case is only read: OpenFOAM runs in a temporary shadow case whose mesh, settings and flux are links to it. The answer is a versioned JSON document (`tplan` schema). DES and LES need max Co ≤ 1. URANS with enough outer correctors usually runs higher, so the plan shows both.
+The case is only read: OpenFOAM runs in a temporary shadow case whose mesh, settings, flux and velocity are links to it. The answer is a versioned JSON document (`tplan` schema). DES and LES need max Co ≤ 1. URANS with enough outer correctors usually runs higher, so the plan shows both.
 
-In the web app, a solved run's page has Plan a transient run: the engine makes the same plan as a job and the page shows it, with the hours on the run's own processes.
+In the web app, a solved run's page has Plan a transient run: the engine makes the same plan as a job and the page shows it, with the hours on the run's own processes and where the fastest cells are. The job saves their cell set in the workspace, in `.tplans/<case>.sets`.
 
 **The transient run itself:** `meshdoctor solve <name> --steady <run>` makes the new case `<name>` a transient run of a solved steady run: its mesh, settings and latest result with its face flux, solved in time from there, so with no `potentialFoam`. By default it is DDES (`kOmegaSSTDES` with F2 shielding, so the boundary layers stay RANS and the wake's eddies are resolved), with second-order time steps (`backward`), `LUST` for the velocity, PIMPLE with 3 outer correctors and a time step OpenFOAM adjusts to a largest Courant number of 1 (`--co`; DDES takes 2 at most). Its first time step is the plan's, when one was made of the same result. `--model URANS` keeps the steady run's own RAS model and can run at a Courant number up to 20, with its outer correctors relaxed above 1. It runs 8 flow times over the body (8 L/U) unless `--to` gives the time in s, and writes four times a stretch; `meshdoctor solve <name> --to S` continues it from its latest written time. The steady run is only read.
 

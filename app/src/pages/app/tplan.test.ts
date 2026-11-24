@@ -2,8 +2,8 @@
 import { describe, expect, it } from "vitest";
 import type { Job, TransientPlan } from "@/engine/types";
 import {
-  flowText, formatHours, formatPoint, formatSize, formatStep, planHeadline, planIteration, planJobOf, planMade,
-  planProcs, planRows, planStale, regionLines, setBy,
+  cellSetLine, flowText, formatHours, formatPoint, formatSize, formatStep, planHeadline, planIteration, planJobOf,
+  planMade, planProcs, planRows, planStale, regionLines, setBy,
 } from "./tplan";
 
 /** The plan the engine's own test makes (TransientPlanTest.test_plan): 500 cells on 2 processes, 5 fast ones in a
@@ -84,6 +84,24 @@ describe("a transient plan in words", () => {
       .toBe("1 cell of 500 is within 2× of the largest Courant number: it sets the time step. Leaving out the 5 fastest "
         + "would hardly change it.");
     expect(regionLines(PLAN)).toEqual(["5 cells near (5.02, 2, 1) m, about 1 cm across"]);
+    expect(cellSetLine(PLAN)).toBeNull();
+  });
+
+  it("says what may make the fastest places fast, from foamCourantCells, and where it saved them as a cell set", () => {
+    // TransientPlanTest.test_plan_from_foamCourantCells's: the place's nearest wall and its cells' median distance
+    // from it, the fastest flow there, and its shape, said where it's poor
+    const g = { ...PLAN.regions[0]!, wall: "body", wallDist: 0.005, speed: 34, aspectRatio: 40, maxNonOrtho: 70 };
+    const plan = { ...PLAN, regions: [g], cellSet: { name: "fastestCells", cells: 5 } };
+    expect(regionLines(plan)).toEqual(["5 cells near (5.02, 2, 1) m, about 1 cm across and 5 mm from the wall body, "
+      + "where the flow is up to 34 m/s; non-orthogonal up to 70°"]);
+    expect(regionLines({ ...plan, regions: [{ ...g, wallDist: null, speed: null, aspectRatio: 340, maxNonOrtho: 64 }] }))
+      .toEqual(["5 cells near (5.02, 2, 1) m, about 1 cm across, by the wall body; stretched to an aspect ratio of 340"]);
+    expect(regionLines({ ...plan, regions: [{ ...g, wall: null, speed: 120, maxNonOrtho: 80, aspectRatio: 1200.4 }] }))
+      .toEqual(["5 cells near (5.02, 2, 1) m, about 1 cm across, where the flow is up to 120 m/s; non-orthogonal up "
+        + "to 80°, stretched to an aspect ratio of 1,200"]);
+    expect(cellSetLine(plan)).toBe("The 5 fastest are saved as the cell set `fastestCells` in the workspace "
+      + "(`.tplans/ahmed.sets`, laid out as the case is): copy its folders into the case to see them in paraFoam "
+      + "(Include Sets) or pick them with topoSet.");
   });
 
   it("says what it was planned from, and whether the run has been solved further since", () => {

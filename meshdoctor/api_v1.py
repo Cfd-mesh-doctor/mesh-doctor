@@ -665,8 +665,9 @@ def run_live(p, q, b):
 
 
 @route("GET", "/tplans/{name}", "The transient plan a tplan job made of a case: from its latest result, the time "
-       "step a transient run of it would need at each Courant number, which cells set it, and the steps and hours "
-       "such a run would take (API 1.6)", ok=_ref("tplan"))
+       "step a transient run of it would need at each Courant number, which cells set it (where they are, their "
+       "nearest wall, the flow's speed and their shape there, and the cell set of them it wrote), and the steps and "
+       "hours such a run would take (API 1.6)", ok=_ref("tplan"))
 def transient_plan(p, q, b):
     doc, why = tplan.of(_name(p["name"]))
     if why:
@@ -782,7 +783,8 @@ JOBS = {
     "tplan": {
         "summary": "plan a transient run of a solved case: from its latest result, the time step its mesh allows at "
                    "each Courant number, which cells set it, and the steps and hours such a run would take. The case "
-                   "is only read: OpenFOAM works in a throwaway shadow case of links to it",
+                   "is only read: OpenFOAM works in a throwaway shadow case of links to it, and the cell set of the "
+                   "fastest cells goes in the workspace, beside the plan",
         "params": _params({"name": dict(NAME, description="a case in the cases folder with a solved result: a run "
                                                           "(GET /runs), or a case you made (GET /cases)")}, ["name"]),
         "start": lambda a: tplan.start(a["name"]),

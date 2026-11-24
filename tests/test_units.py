@@ -455,6 +455,27 @@ def write_field(path, values, ncomp=1, binary=True, gz=False):
         f.write(data)
 
 
+def write_cells(root, cells, gmax, ntop, lo=-4.0, width=0.02):
+    """What foamCourantCells writes for one processor, in root/meshDoctor/courant/cells.txt: cells are (rate, (x, y,
+    z), volume, aspect ratio, non-orthogonality, speed, wall distance, wall), -1 and "-" where it can't tell; gmax is
+    the largest rate of the whole mesh."""
+    d = os.path.join(root, "meshDoctor", "courant")
+    os.makedirs(d, exist_ok=True)
+    hist = {}
+    for c in cells:
+        if c[0] > 0:
+            b = min(max(int(math.floor((math.log10(c[0]) - lo) / width)), 0), 699)
+            hist[b] = hist.get(b, 0) + 1
+    with open(os.path.join(d, "cells.txt"), "w") as f:
+        f.write(f"L {lo} {width}\nN {len(cells)}\nZ {sum(c[0] <= 0 for c in cells)}\n"
+                f"W {sum(c[0] > 0 and c[0] >= 0.5 * gmax for c in cells)}\n")
+        for b in sorted(hist):
+            f.write(f"B {b} {hist[b]}\n")
+        for i in sorted(range(len(cells)), key=lambda i: -cells[i][0])[:ntop]:
+            r, (x, y, z), v, aspect, ortho, u, dist, wall = cells[i]
+            f.write(f"T {i} {r} {x} {y} {z} {v} {aspect} {ortho} {u} {dist} {wall}\n")
+
+
 class TransientPlanTest(unittest.TestCase):
     """tplan: field reading, the shadow case, and the plan, with OpenFOAM stubbed out."""
 
@@ -514,7 +535,7 @@ class TransientPlanTest(unittest.TestCase):
         self.assertEqual([os.path.basename(r) for r in roots], [f"processor{p}" for p in range(12)])
         self.assertTrue(os.path.islink(os.path.join(into, "processor10", "300", "phi")))
         self.assertTrue(os.path.islink(os.path.join(into, "processor10", "constant")))
-        self.assertFalse(os.path.exists(os.path.join(into, "processor10", "300", "U")))
+        self.assertTrue(os.path.islink(os.path.join(into, "processor10", "300", "U")))       # the speed it reports
         open(os.path.join(into, "processor10", "300", "Co"), "w").close()     # what OpenFOAM writes
         self.assertEqual(self.listing(), before)
 
@@ -534,7 +555,7 @@ class TransientPlanTest(unittest.TestCase):
             return 0, log
         return run
 
-    def test_plan(self):
+    def test_plan_where_foamCourantCells_isnt_built(self):
         self.make_case(nproc=2)
 
         def rates_of(p):                  # 250 cells each; 5 fast cells in a cluster on processor 1
@@ -547,13 +568,14 @@ class TransientPlanTest(unittest.TestCase):
                     c[3 * (100 + k):3 * (100 + k) + 3] = [5.0 + 0.01 * k, 2.0, 1.0]
                     v[100 + k] = 1e-6
             return co, c, v
-        seen, real = [], self.tp.post_process
+        seen, real = [], (self.tp.courant_cells, self.tp.post_process)
+        self.tp.courant_cells = lambda into, t, nproc, ntop: (127, os.path.join(into, "log.foamCourantCells"))
         self.tp.post_process = self.fake_post_process(rates_of, seen)
         try:
             before = self.listing()
             p = self.tp.plan(self.case, targets=(1.0, 5.0), outer=3, top=5)
         finally:
-            self.tp.post_process = real
+            self.tp.courant_cells, self.tp.post_process = real
         self.assertEqual(self.listing(), before)                         # the case is only read
         self.assertFalse(os.path.exists(seen[0][0]))                       # the shadow is removed
         self.assertEqual((p["cells"], p["processors"], p["time"], seen[0][1]), (500, 2, "300", 2))
@@ -579,6 +601,102 @@ class TransientPlanTest(unittest.TestCase):
         self.assertIn("steady at 300: 500 cells", text)
         self.assertIn("set by 5 cells within 2x of the max", text)
         self.assertIn("800 steps, about 1.3 h at 3 outer iterations per step", text)
+        # OpenFOAM's CourantNo, and it says so: no walls, speeds or shapes, and no cells for a cell set
+        self.assertEqual((p["tool"], p["decomposed"], "fastestCells" in p, "wall" in g),
+                         ("foamPostProcess", True, False, False))
+        self.assertIn("foamCourantCells isn't built (./Allwmake in its folder)", p["notes"][-1])
+
+    def fake_courant_cells(self, cells_of, seen):
+        """Stand-in for foamCourantCells: writes each shadow processor's cells.txt from cells_of(processor)."""
+        def run(into, t, nproc, ntop):
+            seen.append((into, nproc, ntop))
+            every = [cells_of(p) for p in range(nproc)]
+            gmax = max(c[0] for cells in every for c in cells)
+            for p, cells in enumerate(every):
+                write_cells(os.path.join(into, f"processor{p}"), cells, gmax, ntop)
+            log = os.path.join(into, "log.foamCourantCells")
+            open(log, "w").close()
+            return 0, log
+        return run
+
+    def test_plan_from_foamCourantCells(self):
+        self.make_case(nproc=2)
+        walls = ["body", "floor", "body", "floor", "body"]
+
+        def cells_of(p):       # as the fallback's: 250 cells each, 5 fast ones in a cluster on processor 1, by walls
+            cells = [(10.0 + (i % 7), (i * 0.1, p * 50.0, 0.0), 1e-3, 1.5, 20.0, 25.0, 0.5, "floor") for i in range(250)]
+            if p == 1:
+                for k in range(5):
+                    cells[100 + k] = (1000.0 - k, (5.0 + 0.01 * k, 2.0, 1.0), 1e-6, (2, 3, 40, 4, 5)[k],
+                                      (30, 70, 40, 50, 60)[k], 30.0 + k, 0.001 * (2 * k + 1), walls[k])
+            return cells
+        seen, real = [], self.tp.courant_cells
+        self.tp.courant_cells = self.fake_courant_cells(cells_of, seen)
+        try:
+            before = self.listing()
+            p = self.tp.plan(self.case, targets=(1.0, 5.0), outer=3, top=5)
+        finally:
+            self.tp.courant_cells = real
+        self.assertEqual(self.listing(), before)                         # the case is only read
+        self.assertFalse(os.path.exists(seen[0][0]))                       # the shadow is removed
+        self.assertEqual(seen[0][1:], (2, 6))                              # each processor's fastest top + 1
+        self.assertEqual((p["tool"], p["decomposed"], p["cells"], p["processors"]), ("foamCourantCells", True, 500, 2))
+        d = p["courantPerSecond"]
+        # exact at the top; below, from its histogram (bins 4.7 % wide): the median is 13, as the fallback's
+        self.assertEqual((d["max"], d["withoutTop"], d["p99"], d["p9999"]), (1000.0, 16.0, 996.0, 1000.0))
+        self.assertLess(abs(d["median"] / 13 - 1), 0.047, d["median"])
+        self.assertEqual(p["cellsWithin2x"], 5)
+        g = p["regions"][0]
+        # the wall most of its cells are nearest, their median distance from it (1, 5 and 9 mm), the fastest flow,
+        # the largest aspect ratio and the worst non-orthogonality there
+        self.assertEqual((g["nCells"], g["wall"], g["speed"], g["aspectRatio"], g["maxNonOrtho"]),
+                         (5, "body", 34.0, 40.0, 70.0))
+        self.assertAlmostEqual(g["wallDist"], 0.005)
+        self.assertAlmostEqual(g["h"], 0.01)
+        self.assertEqual(p["fastestCells"], [[1, 100], [1, 101], [1, 102], [1, 103], [1, 104]])
+        self.assertAlmostEqual(p["options"][0]["deltaT"], 1e-3)
+        self.assertEqual(self.schema.validate(p, "tplan"), [])
+        self.assertNotIn("isn't built", " ".join(p["notes"]))
+        self.assertIn("0.005 m from body, flow up to 34 m/s", self.tp.summary(p))
+        # where the flow has no U written and no wall is on a processor, it says nothing of them
+        bare = lambda p: [(r, c, v, a, o, -1, -1, "-") for r, c, v, a, o, *_ in cells_of(p)]     # noqa: E731
+        self.tp.courant_cells = self.fake_courant_cells(bare, [])
+        try:
+            g = self.tp.plan(self.case, top=5)["regions"][0]
+        finally:
+            self.tp.courant_cells = real
+        self.assertEqual((g["wall"], g["wallDist"], g["speed"]), (None, None, None))
+
+    def test_the_cell_set_is_written_whole_in_the_case_layout_and_replaces_only_its_own(self):
+        dest = os.path.join(self.d, "plan.sets")
+        p = {"case": "steady", "time": "300", "processors": 3, "decomposed": True,
+             "fastestCells": [[2, 7], [0, 5], [2, 3]]}
+        self.tp.write_sets(dest, p)
+        sets = lambda sub: os.path.join(dest, sub, "constant", "polyMesh", "sets", "fastestCells")      # noqa: E731
+        with open(sets("processor2")) as f:
+            text = f.read()
+        self.assertIn("    class       cellSet;\n", text)
+        self.assertTrue(text.endswith("}\n\n2\n(\n3\n7\n)\n"), text)
+        with open(sets("processor1")) as f:                    # on every processor, empty where it has none
+            self.assertTrue(f.read().endswith("}\n\n0\n(\n)\n"))
+        self.assertTrue(os.path.isfile(os.path.join(dest, ".meshdoctor-sets")))
+        # again: a whole new folder in its place, nothing of the old one left and nothing beside it
+        open(os.path.join(dest, "stale"), "w").close()
+        self.tp.write_sets(dest, dict(p, processors=1, decomposed=False, fastestCells=[[0, 9], [0, 4]]))
+        with open(sets("")) as f:
+            self.assertTrue(f.read().endswith("}\n\n2\n(\n4\n9\n)\n"))
+        self.assertEqual(sorted(os.listdir(dest)), [".meshdoctor-sets", "constant"])
+        self.assertEqual(os.listdir(self.d), ["plan.sets"])
+        # a folder it didn't write, or a link, is never replaced
+        mine, link = os.path.join(self.d, "mine"), os.path.join(self.d, "link")
+        os.makedirs(mine)
+        open(os.path.join(mine, "keep"), "w").close()
+        os.symlink(dest, link)
+        for there in (mine, link):
+            with self.assertRaisesRegex(ValueError, "isn't a folder of cell sets this wrote: not replacing it"):
+                self.tp.write_sets(there, p)
+        self.assertEqual(os.listdir(mine), ["keep"])
+        self.assertEqual(sorted(os.listdir(self.d)), ["link", "mine", "plan.sets"])
 
     def test_plan_errors(self):
         os.makedirs(os.path.join(self.case, "system"))
@@ -590,20 +708,20 @@ class TransientPlanTest(unittest.TestCase):
         for bad in ("7; rm -rf x", "../300", "-1", ""):
             with self.assertRaisesRegex(ValueError, "not a time"):
                 self.tp.plan(self.case, t=bad)
-        seen, real = [], self.tp.post_process
+        seen, real = [], self.tp.courant_cells
 
-        def failing(into, t, nproc):
+        def failing(into, t, nproc, ntop):
             seen.append(into)
-            log = os.path.join(into, "log.foamPostProcess")
+            log = os.path.join(into, "log.foamCourantCells")
             with open(log, "w") as f:
                 f.write("--> FOAM FATAL ERROR:\ncannot find phi\n")
             return 1, log
-        self.tp.post_process = failing
+        self.tp.courant_cells = failing
         try:
-            with self.assertRaisesRegex(RuntimeError, "exit 1.*cannot find phi"):
+            with self.assertRaisesRegex(RuntimeError, r"foamCourantCells failed \(exit 1\).*cannot find phi"):
                 self.tp.plan(self.case)
         finally:
-            self.tp.post_process = real
+            self.tp.courant_cells = real
         self.assertFalse(os.path.exists(seen[0]))
 
     @property
@@ -668,7 +786,8 @@ class TransientPlanJobTest(unittest.TestCase):
         self.assertEqual(self.ram, [(case, "post")])                  # foamPostProcess's memory, on its mesh
         argv = self.launched[0]
         self.assertEqual(argv[argv.index("--") + 1:], [sys.executable, os.path.join(self.tp.PKG, "tplan.py"), case,
-                                                       "-o", os.path.join(self.ws, ".tplans", "ahmed.json")])
+                                                       "-o", os.path.join(self.ws, ".tplans", "ahmed.json"),
+                                                       "--sets", os.path.join(self.ws, ".tplans", "ahmed.sets")])
         self.solved("wing")
         st, doc, _ = self.post({"name": "wing"})                          # one big job at a time
         self.assertEqual((st, doc["error"]["code"]), (409, "busy"))
@@ -698,19 +817,20 @@ class TransientPlanJobTest(unittest.TestCase):
         os.makedirs(os.path.join(self.ws, ".tplans"))
         out = self.tp.plan_file("ahmed")
 
-        def post_process(into, t, nproc):            # foamPostProcess's fields: 10 cells a processor, one fast
+        def courant_cells(into, t, nproc, ntop):     # foamCourantCells' answer: 10 cells a processor, one fast
             for p in range(nproc):
-                d = os.path.join(into, f"processor{p}", t)
-                write_field(os.path.join(d, "Co"), [1.0] * 9 + [50.0 * (p + 1)])
-                write_field(os.path.join(d, "C"), [0.5 * i for i in range(30)], 3)
-                write_field(os.path.join(d, "Vc"), [1e-6] * 10)
-            log = os.path.join(into, "log.foamPostProcess")
+                write_cells(os.path.join(into, f"processor{p}"),
+                            [(1.0, (0.5 * i, 0.0, 0.0), 1e-6, 1.0, 0.0, -1, -1, "-") for i in range(9)]
+                            + [(50.0 * (p + 1), (4.5, 0.0, 0.0), 1e-6, 1.0, 0.0, -1, -1, "-")], 100.0, ntop)
+            log = os.path.join(into, "log.foamCourantCells")
             open(log, "w").close()
             return 0, log
 
-        with mock.patch.object(self.tp, "post_process", post_process), contextlib.redirect_stderr(io.StringIO()):
-            self.tp.main([case, "-o", out])
-        self.assertEqual(os.listdir(os.path.dirname(out)), ["ahmed.json"])      # nothing half-written left beside it
+        sets = self.tp.sets_dir("ahmed")
+        with mock.patch.object(self.tp, "courant_cells", courant_cells), contextlib.redirect_stderr(io.StringIO()):
+            self.tp.main([case, "-o", out, "--sets", sets])
+        # nothing half-written left beside them
+        self.assertEqual(sorted(os.listdir(os.path.dirname(out))), ["ahmed.json", "ahmed.sets"])
         st, doc = self.get("ahmed")
         self.assertEqual(st, 200, doc)
         import schema
@@ -719,18 +839,27 @@ class TransientPlanJobTest(unittest.TestCase):
         self.assertEqual(doc["courantPerSecond"]["max"], 100.0)
         self.assertEqual([o["maxCo"] for o in doc["options"]], [1.0, 5.0, 20.0])
         self.assertAlmostEqual(doc["options"][0]["deltaT"], 0.01)
+        # its 19 fastest cells (all but one of them) as the cell set fastestCells, on each processor
+        self.assertEqual(doc["cellSet"], {"name": "fastestCells", "cells": 19})
+        self.assertEqual(sorted(os.listdir(sets)), [".meshdoctor-sets", "processor0", "processor1"])
+        n = 0
+        for p in (0, 1):
+            with open(os.path.join(sets, f"processor{p}", "constant", "polyMesh", "sets", "fastestCells")) as f:
+                n += int(f.read().split("}\n\n")[1].split("\n")[0])
+        self.assertEqual(n, 19)
 
-        def failing(into, t, nproc):
-            log = os.path.join(into, "log.foamPostProcess")
+        def failing(into, t, nproc, ntop):
+            log = os.path.join(into, "log.foamCourantCells")
             with open(log, "w") as f:
                 f.write("--> FOAM FATAL ERROR:\ncannot find phi\n")
             return 1, log
 
         before = self.text(out)
-        with mock.patch.object(self.tp, "post_process", failing), contextlib.redirect_stderr(io.StringIO()), \
-                self.assertRaisesRegex(SystemExit, "foamPostProcess failed"):
-            self.tp.main([case, "-o", out])
-        self.assertEqual((self.text(out), os.listdir(os.path.dirname(out))), (before, ["ahmed.json"]))
+        with mock.patch.object(self.tp, "courant_cells", failing), contextlib.redirect_stderr(io.StringIO()), \
+                self.assertRaisesRegex(SystemExit, "foamCourantCells failed"):
+            self.tp.main([case, "-o", out, "--sets", sets])
+        self.assertEqual((self.text(out), sorted(os.listdir(os.path.dirname(out)))),
+                         (before, ["ahmed.json", "ahmed.sets"]))
 
     def test_the_route_says_plainly_when_there_is_no_plan_a_torn_one_a_newer_one_or_a_bad_name(self):
         os.makedirs(os.path.join(self.ws, ".tplans"))

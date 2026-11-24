@@ -39,7 +39,7 @@
 using namespace Foam;
 
 static const scalar LO = -4;        // log10 of the smallest binned rate
-static const scalar BIN = 0.02;     // bin width in decades (2.3 % per bin)
+static const scalar BIN = 0.02;     // bin width in decades (each bin 4.7 % wide, 10^0.02)
 static const label NBIN = 700;      // up to 1e10 1/s
 
 int main(int argc, char *argv[])

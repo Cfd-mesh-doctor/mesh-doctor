@@ -2,7 +2,8 @@
 // A solved run's transient plan, on its page (Run.tsx). A steady run that won't settle may be a flow that is unsteady
 // in fact, which only a transient run with averaged forces solves. Plan a transient run starts a tplan job (API 1.6),
 // which works out from the run's result the time step such a run would need at each Courant number, which cells set
-// it and what it would cost (GET /tplans/{name}). While it plans, the card says so; once made, it shows the plan, and
+// it (where they are, and what may make them fast: the nearest wall, the flow's speed, a poor shape) and what it
+// would cost (GET /tplans/{name}). While it plans, the card says so; once made, it shows the plan, and
 // says when the run has been solved further since. The case is only read. With a plan, Start a transient run… starts
 // one (TransientDialog in SolveDialog.tsx): a new case of the run's mesh, settings and latest result, solved in time;
 // the transient runs made of the run are listed under the plan.
@@ -21,7 +22,7 @@ import { useCases, useEngineInfo, useJobs, useStartJob, useTransientPlan } from 
 import { isActive, type RunDetail, type TransientPlan } from "@/engine/types";
 import { formatInt } from "@/lib/format";
 import { TransientDialog } from "./SolveDialog";
-import { planHeadline, planJobOf, planMade, planProcs, planRows, planStale, regionLines, setBy } from "./tplan";
+import { cellSetLine, planHeadline, planJobOf, planMade, planProcs, planRows, planStale, regionLines, setBy } from "./tplan";
 
 const LINK = "font-medium text-primary underline-offset-4 hover:underline";
 const NUM = "text-right tabular-nums";
@@ -33,6 +34,7 @@ export const OLD_ENGINE_TPLAN = "Your engine is older than this page and can't p
 function PlanView({ plan, run }: { plan: TransientPlan; run: RunDetail }) {
   const rows = planRows(plan);
   const regions = regionLines(plan);
+  const saved = cellSetLine(plan);
   return (
     <div className="space-y-4 text-sm">
       <p className="font-medium">{planHeadline(plan)}</p>
@@ -68,6 +70,7 @@ function PlanView({ plan, run }: { plan: TransientPlan; run: RunDetail }) {
             </ul>
           </>
         )}
+        {saved && <p className="mt-2 text-muted-foreground"><TextWithCode text={saved} /></p>}
       </div>
       {plan.notes && plan.notes.length > 0 && (
         <ul className="list-disc space-y-0.5 pl-5 text-[13px] text-muted-foreground" aria-label="What the plan assumes">

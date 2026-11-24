@@ -150,7 +150,9 @@ test("a run's transient plan: the time step at each Courant number, its cost, an
   await expect(table.getByRole("row").nth(1).getByRole("cell")).toHaveText(["1", "18 µs", "11,369", "3.8 h", "40 µs, 1.7 h"]);
   await expect(table.getByRole("row").nth(3).getByRole("cell")).toHaveText(["20", "370 µs", "569", "11 min", "810 µs, 5 min"]);
   await expect(page.getByText(/^62 cells of 478,901 are within 2× of the largest Courant number/)).toBeVisible();
-  await expect(page.getByText("38 cells near (−0.0635, 0.18, 0.322) m, about 2.6 mm across")).toBeVisible();
+  await expect(page.getByText("38 cells near (−0.0635, 0.18, 0.322) m, about 2.6 mm across and 2.4 mm from the wall "
+    + "ahmed, where the flow is up to 55 m/s")).toBeVisible();
+  await expect(page.getByText(/^The 100 fastest are saved as the cell set fastestCells in the workspace/)).toBeVisible();
   await expect(page.getByText("Planned from iteration 300 of this run, in 2 s.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Plan again" })).toBeEnabled();
 });

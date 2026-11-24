@@ -1470,6 +1470,14 @@
             "type": "integer",
             "minimum": 1
           },
+          "decomposed": {
+            "type": "boolean",
+            "description": "whether it planned from the processors' result (processorN/): the cell set's layout follows it"
+          },
+          "tool": {
+            "type": "string",
+            "description": "what worked out the Courant numbers: foamCourantCells (Mesh Doctor's own, with the fastest cells' walls, speeds and shapes) or foamPostProcess (OpenFOAM's CourantNo, where foamCourantCells isn't built)"
+          },
           "cells": {
             "type": "integer",
             "minimum": 1
@@ -1555,7 +1563,74 @@
                 "maxRate": {
                   "type": "number",
                   "minimum": 0
+                },
+                "wall": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "the wall patch most of its cells are nearest (null: no wall on their processor); from foamCourantCells, as are the four below"
+                },
+                "wallDist": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "description": "its cells' median distance from that wall, m"
+                },
+                "speed": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "description": "the largest flow speed in its cells, m/s (null: the result has no U)"
+                },
+                "aspectRatio": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "description": "its cells' largest aspect ratio, as checkMesh's"
+                },
+                "maxNonOrtho": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "description": "its cells' worst face non-orthogonality, degrees"
                 }
+              }
+            }
+          },
+          "fastestCells": {
+            "type": "array",
+            "description": "the top fastest cells, fastest first, each [processor, its cell label there] (processor 0 for a case that isn't decomposed): the cell set fastestCells (from foamCourantCells only)",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "cellSet": {
+            "type": "object",
+            "description": "the cell set of the fastest cells the plan wrote (meshdoctor transient-plan --sets; a tplan job: in <workspace>/.tplans/<case>.sets), in the case's layout: [processorN/]constant/polyMesh/sets/<name>",
+            "required": [
+              "name",
+              "cells"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "cells": {
+                "type": "integer",
+                "minimum": 0
               }
             }
           },
@@ -3009,7 +3084,7 @@
                   },
                   {
                     "additionalProperties": false,
-                    "description": "plan a transient run of a solved case: from its latest result, the time step its mesh allows at each Courant number, which cells set it, and the steps and hours such a run would take. The case is only read: OpenFOAM works in a throwaway shadow case of links to it",
+                    "description": "plan a transient run of a solved case: from its latest result, the time step its mesh allows at each Courant number, which cells set it, and the steps and hours such a run would take. The case is only read: OpenFOAM works in a throwaway shadow case of links to it, and the cell set of the fastest cells goes in the workspace, beside the plan",
                     "properties": {
                       "kind": {
                         "enum": [
@@ -5453,7 +5528,7 @@
             "description": "Error (the code says which; see STATUS in api_v1.py)"
           }
         },
-        "summary": "The transient plan a tplan job made of a case: from its latest result, the time step a transient run of it would need at each Courant number, which cells set it, and the steps and hours such a run would take (API 1.6)"
+        "summary": "The transient plan a tplan job made of a case: from its latest result, the time step a transient run of it would need at each Courant number, which cells set it (where they are, their nearest wall, the flow's speed and their shape there, and the cell set of them it wrote), and the steps and hours such a run would take (API 1.6)"
       }
     },
     "/variants": {

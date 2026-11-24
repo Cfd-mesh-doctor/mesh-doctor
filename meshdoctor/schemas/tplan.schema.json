@@ -10,6 +10,8 @@
   "case": {"type": "string", "description": "the case folder's name (not its path)"},
   "time": {"type": "string", "description": "the steady result time planned from"},
   "processors": {"type": "integer", "minimum": 1},
+  "decomposed": {"type": "boolean", "description": "whether it planned from the processors' result (processorN/): the cell set's layout follows it"},
+  "tool": {"type": "string", "description": "what worked out the Courant numbers: foamCourantCells (Mesh Doctor's own, with the fastest cells' walls, speeds and shapes) or foamPostProcess (OpenFOAM's CourantNo, where foamCourantCells isn't built)"},
   "cells": {"type": "integer", "minimum": 1},
   "courantPerSecond": {
    "type": "object",
@@ -34,9 +36,25 @@
      "centre": {"type": "array", "items": {"type": "number"}},
      "bbox": {"type": "array"},
      "h": {"type": "number", "minimum": 0, "description": "median cell size (cube root of volume), m"},
-     "maxRate": {"type": "number", "minimum": 0}
+     "maxRate": {"type": "number", "minimum": 0},
+     "wall": {"type": ["string", "null"], "description": "the wall patch most of its cells are nearest (null: no wall on their processor); from foamCourantCells, as are the four below"},
+     "wallDist": {"type": ["number", "null"], "minimum": 0, "description": "its cells' median distance from that wall, m"},
+     "speed": {"type": ["number", "null"], "minimum": 0, "description": "the largest flow speed in its cells, m/s (null: the result has no U)"},
+     "aspectRatio": {"type": ["number", "null"], "minimum": 0, "description": "its cells' largest aspect ratio, as checkMesh's"},
+     "maxNonOrtho": {"type": ["number", "null"], "minimum": 0, "description": "its cells' worst face non-orthogonality, degrees"}
     }
    }
+  },
+  "fastestCells": {
+   "type": "array",
+   "description": "the top fastest cells, fastest first, each [processor, its cell label there] (processor 0 for a case that isn't decomposed): the cell set fastestCells (from foamCourantCells only)",
+   "items": {"type": "array", "items": {"type": "integer", "minimum": 0}}
+  },
+  "cellSet": {
+   "type": "object",
+   "description": "the cell set of the fastest cells the plan wrote (meshdoctor transient-plan --sets; a tplan job: in <workspace>/.tplans/<case>.sets), in the case's layout: [processorN/]constant/polyMesh/sets/<name>",
+   "required": ["name", "cells"],
+   "properties": {"name": {"type": "string"}, "cells": {"type": "integer", "minimum": 0}}
   },
   "speed": {"type": ["number", "null"], "description": "freestream speed, m/s"},
   "length": {"type": ["number", "null"], "description": "reference length, m"},

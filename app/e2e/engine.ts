@@ -140,17 +140,25 @@ export const MATCHING = {
 };
 
 /** GET /tplans/ahmed-coarse (a tplan job's plan, API 1.6) as the engine answered it of a real coarse Ahmed body solved
- *  to 300 on 6 processes, to 6 digits: the time step at Courant numbers 1, 5 and 20, which cells set it, the cost. */
+ *  to 300 on 6 processes, to 6 digits: the time step at Courant numbers 1, 5 and 20, which cells set it, the cost. Its
+ *  places' walls, speeds and shapes (foamCourantCells') are those of a plan of the same mesh solved on to 2000 (the
+ *  fourth's made up to match), and it saved the cell set of its 100 fastest cells. */
 export const PLAN = {
-  schemaVersion: "1.0", case: "ahmed-coarse", time: "300", processors: 6, cells: 478_901,
+  schemaVersion: "1.1", case: "ahmed-coarse", time: "300", processors: 6, decomposed: true, tool: "foamCourantCells",
+  cells: 478_901,
   courantPerSecond: { median: 4329.14, p99: 15320.4, p999: 20357.4, p9999: 29466.6, max: 54448.3, withoutTop: 24803.3 },
   top: 100, cellsWithin2x: 62,
   regions: [
-    { nCells: 38, centre: [-0.0635271, 0.179941, 0.322101], h: 0.00264837, maxRate: 54448.3 },
-    { nCells: 26, centre: [-0.931042, 0.190741, 0.298457], h: 0.0025086, maxRate: 43727.2 },
-    { nCells: 33, centre: [-0.0525219, 0.177295, 0.0701108], h: 0.00219626, maxRate: 41831 },
-    { nCells: 3, centre: [-1.04556, 0.193505, 0.0518287], h: 0.00274267, maxRate: 27844.4 },
+    { nCells: 38, centre: [-0.0635271, 0.179941, 0.322101], h: 0.00264837, maxRate: 54448.3, wall: "ahmed",
+      wallDist: 0.002376, speed: 54.9072, aspectRatio: 5.31782, maxNonOrtho: 51.878 },
+    { nCells: 26, centre: [-0.931042, 0.190741, 0.298457], h: 0.0025086, maxRate: 43727.2, wall: "ahmed",
+      wallDist: 0.000855, speed: 49.0417, aspectRatio: 4.45747, maxNonOrtho: 64.5689 },
+    { nCells: 33, centre: [-0.0525219, 0.177295, 0.0701108], h: 0.00219626, maxRate: 41831, wall: "ahmed",
+      wallDist: 0.001272, speed: 55.6989, aspectRatio: 4.80645, maxNonOrtho: 47.4006 },
+    { nCells: 3, centre: [-1.04556, 0.193505, 0.0518287], h: 0.00274267, maxRate: 27844.4, wall: "ahmed",
+      wallDist: 0.000912, speed: 47.2108, aspectRatio: 4.21, maxNonOrtho: 39.8 },
   ],
+  cellSet: { name: "fastestCells", cells: 100 },
   speed: 40, length: 1.044, flowTime: 0.2088, flowTimeSource: "8 L/U", secondsPerIteration: 0.4, outerCorrectors: 3,
   options: [
     { maxCo: 1, deltaT: 1.83661e-5, deltaTWithoutTop: 4.03171e-5, stepsPerSecond: 54448.3, hoursPerFlowSecond: 18.1494,

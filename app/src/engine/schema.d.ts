@@ -519,7 +519,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The transient plan a tplan job made of a case: from its latest result, the time step a transient run of it would need at each Courant number, which cells set it, and the steps and hours such a run would take (API 1.6) */
+        /** The transient plan a tplan job made of a case: from its latest result, the time step a transient run of it would need at each Courant number, which cells set it (where they are, their nearest wall, the flow's speed and their shape there, and the cell set of them it wrote), and the steps and hours such a run would take (API 1.6) */
         get: operations["transient_plan"];
         put?: never;
         post?: never;
@@ -938,6 +938,11 @@ export interface components {
             /** @description the case folder's name (not its path) */
             case: string;
             cells: number;
+            /** @description the cell set of the fastest cells the plan wrote (meshdoctor transient-plan --sets; a tplan job: in <workspace>/.tplans/<case>.sets), in the case's layout: [processorN/]constant/polyMesh/sets/<name> */
+            cellSet?: {
+                cells: number;
+                name: string;
+            };
             /** @description cells whose Courant number is within 2x of the largest: the ones that set the time step */
             cellsWithin2x: number;
             /** @description each cell's Courant number per second of time step, 0.5 sum|phi| / V, in 1/s; withoutTop is the largest once the top fastest cells are left out */
@@ -949,6 +954,10 @@ export interface components {
                 p9999: number;
                 withoutTop: number;
             };
+            /** @description whether it planned from the processors' result (processorN/): the cell set's layout follows it */
+            decomposed?: boolean;
+            /** @description the top fastest cells, fastest first, each [processor, its cell label there] (processor 0 for a case that isn't decomposed): the cell set fastestCells (from foamCourantCells only) */
+            fastestCells?: number[][];
             /** @description seconds of flow the costs are for */
             flowTime?: number | null;
             flowTimeSource?: string | null;
@@ -970,12 +979,22 @@ export interface components {
             processors?: number;
             /** @description the fastest cells grouped by place, fastest group first */
             regions: {
+                /** @description its cells' largest aspect ratio, as checkMesh's */
+                aspectRatio?: number | null;
                 bbox?: unknown[];
                 centre: number[];
                 /** @description median cell size (cube root of volume), m */
                 h: number;
+                /** @description its cells' worst face non-orthogonality, degrees */
+                maxNonOrtho?: number | null;
                 maxRate: number;
                 nCells: number;
+                /** @description the largest flow speed in its cells, m/s (null: the result has no U) */
+                speed?: number | null;
+                /** @description the wall patch most of its cells are nearest (null: no wall on their processor); from foamCourantCells, as are the four below */
+                wall?: string | null;
+                /** @description its cells' median distance from that wall, m */
+                wallDist?: number | null;
             }[];
             /** @description major.minor; readers accept any 1.x */
             schemaVersion: string;
@@ -987,6 +1006,8 @@ export interface components {
             speed?: number | null;
             /** @description the steady result time planned from */
             time: string;
+            /** @description what worked out the Courant numbers: foamCourantCells (Mesh Doctor's own, with the fastest cells' walls, speeds and shapes) or foamPostProcess (OpenFOAM's CourantNo, where foamCourantCells isn't built) */
+            tool?: string;
             /** @description how many of the fastest cells were located */
             top: number;
         };

@@ -105,10 +105,31 @@ export function setBy(p: TransientPlan): string {
     : `${few} Leaving out the ${formatInt(p.top)} fastest would hardly change it.`;
 }
 
-/** Where the fastest cells are, fastest place first: "12 cells near (0.21, 0.05, 0.19) m, about 2.1 mm across". */
+/** Where the fastest cells are, fastest place first, and what may make them fast: "12 cells near (0.21, 0.05, 0.19) m,
+ * about 2.1 mm across and 0.4 mm from the wall frontWing, where the flow is up to 38 m/s". A plan from Mesh Doctor's
+ * foamCourantCells knows the nearest wall and the speed, and the cells' shape, said where it's poor: non-orthogonal
+ * past 65° (a repair's target) or stretched past an aspect ratio of 100. */
 export function regionLines(p: TransientPlan, n = 3): string[] {
-  return p.regions.slice(0, n).map((g) =>
-    `${formatCount(g.nCells, "cell")} near ${formatPoint(g.centre)}, about ${formatSize(g.h)} across`);
+  return p.regions.slice(0, n).map((g) => {
+    let s = `${formatCount(g.nCells, "cell")} near ${formatPoint(g.centre)}, about ${formatSize(g.h)} across`;
+    if (g.wall) s += g.wallDist != null ? ` and ${formatSize(g.wallDist)} from the wall ${g.wall}` : `, by the wall ${g.wall}`;
+    if (g.speed != null) s += `, where the flow is up to ${two.format(round2(g.speed))} m/s`;
+    const shape = [
+      g.maxNonOrtho != null && g.maxNonOrtho > 65 ? `non-orthogonal up to ${Math.round(g.maxNonOrtho)}°` : null,
+      g.aspectRatio != null && g.aspectRatio > 100
+        ? `stretched to an aspect ratio of ${formatInt(Math.round(g.aspectRatio))}` : null,
+    ].filter((x) => x != null);
+    return shape.length ? `${s}; ${shape.join(", ")}` : s;
+  });
+}
+
+/** Where the plan saved its fastest cells as a cell set, to see in paraFoam or pick with topoSet; null when it saved
+ * none (a plan made with OpenFOAM's CourantNo, where foamCourantCells isn't built, or by an engine before it). */
+export function cellSetLine(p: TransientPlan): string | null {
+  if (!p.cellSet) return null;
+  return `The ${formatInt(p.cellSet.cells)} fastest are saved as the cell set \`${p.cellSet.name}\` in the workspace `
+    + `(\`.tplans/${p.case}.sets\`, laid out as the case is): copy its folders into the case to see them in paraFoam `
+    + "(Include Sets) or pick them with topoSet.";
 }
 
 /** The iteration (a steady run's time) the plan was made from; null for a time that isn't a number. */

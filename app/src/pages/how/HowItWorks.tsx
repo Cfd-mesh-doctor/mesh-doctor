@@ -325,8 +325,9 @@ export function HowItWorks() {
               </p>
               <ul className={list}>
                 <li>
-                  it runs OpenFOAM's <code>CourantNo</code> function on the steady result, which gives each cell's
-                  Courant number per second of time step, <code>0.5 Σ|φ| / V</code>;
+                  it runs Mesh Doctor's <code>foamCourantCells</code> on the steady result (OpenFOAM's{" "}
+                  <code>CourantNo</code> function where that isn't built), which gives each cell's Courant number per
+                  second of time step, <code>0.5 Σ|φ| / V</code>;
                 </li>
                 <li>with <code>adjustTimeStep</code>, the largest of these sets the time step: <code>dt = maxCo / max</code>;</li>
                 <li>
@@ -341,16 +342,27 @@ export function HowItWorks() {
                 <li>
                   it finds the 100 fastest cells (<code>--top</code>), groups them by place, and says how much larger
                   the time step would be without them. A few tiny cells often set the time step for the whole mesh.
+                  With <code>foamCourantCells</code>, each place also says what may make it fast: its nearest wall and
+                  how far from it the cells are, the flow's speed there, and the cells' shape (aspect ratio and
+                  non-orthogonality);
+                </li>
+                <li>
+                  <code>--sets &lt;folder&gt;</code> also writes those cells as the cell set{" "}
+                  <code>fastestCells</code>, laid out as the case is (
+                  <code>[processorN/]constant/polyMesh/sets/fastestCells</code>): copy its folders into the case to see
+                  the cells in paraFoam (Include Sets, and Decomposed Case for a case on processors) or to pick them
+                  with <code>topoSet</code>.
                 </li>
               </ul>
               <p>
-                The case is only read: OpenFOAM runs in a temporary shadow case whose mesh, settings and flux are links
-                to it. DES and LES need max Co ≤ 1. URANS with enough outer correctors usually runs higher, so the plan
-                shows both.
+                The case is only read: OpenFOAM runs in a temporary shadow case whose mesh, settings, flux and velocity
+                are links to it. DES and LES need max Co ≤ 1. URANS with enough outer correctors usually runs higher,
+                so the plan shows both.
               </p>
               <p>
                 In the web app, a solved run's page has Plan a transient run: the engine makes the same plan as a job
-                and the page shows it, with the hours on the run's own processes.
+                and the page shows it, with the hours on the run's own processes and where the fastest cells are. The
+                job saves their cell set in the workspace, in <code>.tplans/&lt;case&gt;.sets</code>.
               </p>
               <p>
                 <strong>The transient run itself:</strong> <code>meshdoctor solve &lt;name&gt; --steady &lt;run&gt;</code>{" "}
