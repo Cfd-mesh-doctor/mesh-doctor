@@ -4134,12 +4134,20 @@ view = os.path.dirname(foam)
 with open(os.path.join(os.path.dirname(view), "seen"), "a") as f:
     f.write(script + " " + os.environ.get("PYTHONPATH", "") + " " + " ".join(sorted(os.listdir(view))) + "\\n")
 out = a[3] if script == "vortex_views.py" else a[4]
+if os.environ.get("MD_TEST_PV_FAILS") == script:
+    sys.exit(2)
 if script == "pressure_spots.py" and os.environ.get("MD_TEST_NO_SPOTS"):
     print("ahmed: 17510 faces, 0.763 m2, pressure force (-12.80, 66.43, 21.85) N, Cp -2.0 .. 1.00")
     sys.exit(0)
-for n in {"cut_views.py": ["c1_side_centre_U", "c1_side_centre_Cpt"], "vortex_views.py": ["Q210000_rear34",
-          "Q21000_rear34", "Q21000_top"], "pressure_spots.py": ["spots_Cp_spot_closeup", "spots_Cp_spot_normal",
-          "spots_Cp_spot_side"]}[script]:
+names = {"cut_views.py": ["c1_side_centre_U", "c1_side_centre_Cpt"], "vortex_views.py": ["Q210000_rear34",
+         "Q21000_rear34", "Q21000_top"], "pressure_spots.py": ["spots_Cp_spot_closeup", "spots_Cp_spot_normal",
+         "spots_Cp_spot_side"]}[script]
+if script == "cut_views.py" and a[5] == "auto":
+    import json
+    with open(os.path.join(out, "cuts.json"), "w") as f:
+        json.dump({"cuts": [{"name": "a1_side_centre", "title": "Side cut on the model's centre plane"}]}, f)
+    names = ["a1_side_centre_U"]
+for n in names:
     open(os.path.join(out, n + ".png"), "wb").close()
 """
     FRAME = {"total": "forcesTotal", "flowAxis": 0, "flowSign": -1, "upAxis": 2, "Uinf": 40.0, "rho": 1.205}
@@ -4197,6 +4205,7 @@ for n in {"cut_views.py": ["c1_side_centre_U", "c1_side_centre_Cpt"], "vortex_vi
         self.frame.update(total="forcesTotal")
         cmds, notes = self.p.plan(case, "/view", "/set", self.p.KINDS, "pvbatch")
         self.assertEqual(notes, [])
+        self.assertEqual(cmds["cuts"][6:8], [os.path.join(case, "cuts.json"), "ahmedP, written time {it}"])
         v = cmds["vortices"]
         self.assertEqual((v[0], v[1], v[2].endswith("vortex_views.py"), v[3:6]),
                          ("pvbatch", "--force-offscreen-rendering", True,
@@ -4233,13 +4242,18 @@ for n in {"cut_views.py": ["c1_side_centre_U", "c1_side_centre_Cpt"], "vortex_vi
         doc = self.p.make(case, out, "200", ("vortices",))
         self.assertEqual(sorted(os.listdir(out)), [self.p.MARK, "pictures.json", "seen", "vortices"])
 
-    def test_without_a_cut_list_the_cuts_are_left_out_and_said(self):
+    def test_without_a_cut_list_the_cuts_are_made_from_the_models_size(self):
         case = self.case(cuts=False)
         out = os.path.join(self.tmp, "set")
         doc = self.p.make(case, out, "200", ("cuts", "vortices"))
-        self.assertEqual(doc["notes"], ["no cuts: ahmedP has no cut list (cuts.json at its root)"])
-        self.assertEqual({p["kind"] for p in doc["pictures"]}, {"vortices"})
-        with self.assertRaisesRegex(RuntimeError, r"^no picture was made: no cuts: ahmedP has no cut list"):
+        self.assertEqual(doc["notes"], ["cuts made from the model's size: ahmedP has no cut list (cuts.json at its "
+                                        "root)"])
+        self.assertEqual(doc["pictures"][0], {"file": "cuts/a1_side_centre_U.png", "kind": "cuts",
+                                              "title": "Side cut on the model's centre plane: speed"})   # its list's
+        self.assertEqual({p["kind"] for p in doc["pictures"]}, {"cuts", "vortices"})
+        with mock.patch.dict(os.environ, {"MD_TEST_PV_FAILS": "cut_views.py"}), \
+                self.assertRaisesRegex(RuntimeError, r"^no picture was made: cuts made from the model's size: .*; "
+                                                     r"cuts: ParaView stopped \(exit 2\); the job's log says why$"):
             self.p.make(case, os.path.join(self.tmp, "none"), "200", ("cuts",))
         self.assertFalse(os.path.exists(os.path.join(self.tmp, "none")))
 

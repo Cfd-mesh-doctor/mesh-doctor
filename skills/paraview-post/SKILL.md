@@ -37,7 +37,7 @@ rotated: chart those from the original case with `plot_convergence.py --drag/--d
 
 | Script | Does |
 |---|---|
-| `cut_views.py CASE.foam decomposed\|reconstructed OUTDIR CUTS.json "note {it}" --walls a,b [--uinf 15]` | plane cuts from a JSON list (`cuts_example.json`), coloured by U, Cp, Cp,t; the model cut away on the camera side |
+| `cut_views.py CASE.foam decomposed\|reconstructed OUTDIR CUTS.json "note {it}" --walls a,b [--uinf 15]` | plane cuts from a JSON list (`cuts_example.json`), or `auto` for three made from the walls' bounds (written to OUTDIR/cuts.json), coloured by U, Cp, Cp,t; the model cut away on the camera side |
 | `vortex_views.py CASE.foam OUTDIR "3000,10000,30000" --walls a,b [--zoom PATCH] [--note ...]` | Q-criterion iso-surfaces coloured by x-vorticity; `--selftest OUTDIR` checks the pipeline (the test vortex must be red) |
 | `pressure_spots.py CASE.foam kind OUTDIR PREFIX --walls a,b [--uinf] [--rho]` | finds wall faces with Cp < -5, clusters them, prints each spot's extra force, renders the worst |
 | `plot_convergence.py CASE OUTDIR PREFIX "subtitle" [--total FO] [--parts FO:Label,...] [--drag -x --down -z] [--uinf] [--rho]` | residual, total-force and per-part force charts + summary CSV and Markdown tables (python3 + matplotlib, no ParaView) |

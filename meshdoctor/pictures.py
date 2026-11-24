@@ -6,10 +6,10 @@
 
 The case (a run Mesh Doctor made, or a case you made, in the cases folder) is only read: ParaView reads it through
 a folder of links in the workspace (its constant, system and the time pictured, and an empty case.foam), and the
-pictures go in the workspace too, in .pictures/<case>/<time>/, with pictures.json listing them.  Cuts need the
-case's cut list (cuts.json at its root, as a case made from the Ahmed body template has); vortices and spots of
-unphysical pressure on the walls (Cp below -5: a numerical error) need only the case.  The scripts' cameras need the
-flow toward -x and z up.
+pictures go in the workspace too, in .pictures/<case>/<time>/, with pictures.json listing them.  Cuts follow the
+case's cut list (cuts.json at its root, as a case made from the Ahmed body template has), or without one are made
+from its model's size; vortices and spots of unphysical pressure on the walls (Cp below -5: a numerical error) need
+only the case.  The scripts' cameras need the flow toward -x and z up.
 """
 import argparse, json, math, os, re, shutil, subprocess, sys, time
 
@@ -155,11 +155,11 @@ def plan(case, view, out, kinds, pvbatch):
     for kind in kinds:
         script, into = os.path.join(SCRIPTS, SCRIPT[kind]), os.path.join(out, kind)
         if kind == "cuts":
-            if not os.path.isfile(os.path.join(case, CUTS)):
-                notes.append(f"no cuts: {name} has no cut list ({CUTS} at its root)")
-                continue
-            cmds[kind] = run + [script, foam, "reconstructed", into, os.path.join(case, CUTS), note,
-                                "--walls", w, "--uinf", f"{uinf:g}"]
+            spec = os.path.join(case, CUTS)
+            if not os.path.isfile(spec):                # cut_views makes three from the walls' bounds
+                spec = "auto"
+                notes.append(f"cuts made from the model's size: {name} has no cut list ({CUTS} at its root)")
+            cmds[kind] = run + [script, foam, "reconstructed", into, spec, note, "--walls", w, "--uinf", f"{uinf:g}"]
         elif kind == "vortices":
             cmds[kind] = run + [script, foam, into, ",".join(map(str, q_levels(uinf))), "--walls", w,
                                 "--views", ",".join(VIEWS), "--note", note]
@@ -173,11 +173,13 @@ def listing(case, folder):
     """The pictures in a set's folder, each {file, kind, title}: each kind's PNGs, titled from the cut list, the Q
     level and the view, or the spot."""
     cuts = {}
-    try:
-        with open(os.path.join(case, CUTS), encoding="utf-8") as f:
-            cuts = {c["name"]: c.get("title", c["name"]) for c in json.load(f)["cuts"]}
-    except (OSError, ValueError, KeyError, TypeError):
-        pass
+    for path in (os.path.join(case, CUTS), os.path.join(folder, "cuts", CUTS)):     # the case's, else cut_views' own
+        try:
+            with open(path, encoding="utf-8") as f:
+                cuts = {c["name"]: c.get("title", c["name"]) for c in json.load(f)["cuts"]}
+            break
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
     out = []
     for kind in KINDS:
         d = os.path.join(folder, kind)

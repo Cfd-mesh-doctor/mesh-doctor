@@ -5,11 +5,15 @@
 #              "colours": ["U", "Cp", "Cpt"], "step": 0.001 (optional probe spacing in m, default 0.002)}]}
 # Axes: x forward (flow toward -x), z up. Cameras: a y cut is seen from +y, a z cut from above, an x cut from behind. The box is framed
 # with a clear band at the top for the title and one at the right for the colour bar.
+# With `auto` for CUTS.json (a case with no cut list), three cuts are made from the walls' bounds: a side cut on the
+# model's centre plane (on its symmetry plane, for a half model), a flat cut halfway up it seen from above, and a cross
+# cut one model height behind it; they are written to OUTDIR/cuts.json, so their titles go with the pictures.
 # Usage (WSL): PYTHONPATH=/usr/lib/python3/dist-packages pvbatch --force-offscreen-rendering cut_views.py \
 #              CASE.foam decomposed|reconstructed OUTDIR CUTS.json "note under every title; {it} = iteration" \n#              --walls p1,p2,... [--uinf 15]   (p must be kinematic, p/rho, as in incompressible solvers)
 import json
 import math
 import os
+import re
 import sys
 import time
 import traceback
@@ -171,8 +175,61 @@ def frame(b, d, up, pad=1.03):
     V.CameraPosition = [fc[k] + 20.0 * d[k] for k in range(3)]
 
 
+def symmetry_at(b):
+    """A half model's symmetry plane: the y of a symmetry patch of the case lying flat on one side of the model's
+    bounds b; None for a whole model."""
+    try:
+        with open(os.path.join(os.path.dirname(CASE), 'constant', 'polyMesh', 'boundary')) as f:
+            text = f.read()
+    except OSError:
+        return None
+    span = b[3] - b[2]
+    for name in re.findall(r'([^\s{}();]+)\s*\{[^{}]*\btype\s+(?:symmetryPlane|symmetry)\s*;', text):
+        s = reader(['patch/' + name], [])
+        s.UpdatePipeline(TIME)
+        sb = s.GetDataInformation().GetBounds()
+        Delete(s)
+        for y in (b[2], b[3]):
+            if abs(sb[2] - y) < 0.01 * span and abs(sb[3] - y) < 0.01 * span:
+                return y
+    return None
+
+
+def auto_cuts():
+    """Three cuts made from the walls' bounds (flow toward -x, z up), written to OUT/cuts.json."""
+    car.UpdatePipeline(TIME)
+    b = list(car.GetDataInformation().GetBounds())
+    x0, x1, y0, y1, z0, z1 = b
+    L, B, Hm = x1 - x0, y1 - y0, z1 - z0
+    ys = symmetry_at(b)
+    if ys is None:
+        yc, at, ya, yb = (y0 + y1) / 2, (y0 + y1) / 2, y0 - 0.7 * B, y1 + 0.7 * B
+    elif ys == y0:
+        yc, at, ya, yb = y0, y0 + 0.001 * B, y0, y1 + 1.3 * B      # just off the symmetry plane, in the flow
+    else:
+        yc, at, ya, yb = y1, y1 - 0.001 * B, y0 - 1.3 * B, y1
+    xa, xb, za, zb = x0 - 1.0 * L, x1 + 0.3 * L, z0 - 0.25 * Hm, z1 + 1.0 * Hm
+    step, zc, xw = max(STEP, L / 600), (z0 + z1) / 2, x0 - Hm
+    where = 'symmetry' if ys is not None else 'centre'
+    cuts = [
+        {'name': 'a1_side_centre', 'plane': 'y', 'at': at, 'box': [xa, xb, 0, 0, za, zb], 'step': step,
+         'title': "Side cut on the model's %s plane (y = %.3f m), seen from the side (+y), nose to the left" % (where, yc),
+         'colours': ['U', 'Cp', 'Cpt']},
+        {'name': 'a2_top_middle', 'plane': 'z', 'at': zc, 'box': [xa, xb, ya, yb, 0, 0], 'step': step,
+         'title': 'Flat cut halfway up the model (z = %.3f m), seen from above' % zc, 'colours': ['U', 'Cpt']},
+        {'name': 'a3_cross_wake', 'plane': 'x', 'at': xw, 'box': [0, 0, ya, yb, za, z1 + 0.6 * Hm], 'step': step,
+         'title': 'Cross cut one model height (%.3f m) behind the model (x = %.3f m), seen from behind' % (Hm, xw),
+         'colours': ['U', 'Cpt']},
+    ]
+    with open(os.path.join(OUT, 'cuts.json'), 'w') as f:
+        json.dump({'about': 'cuts made from the walls\' bounds by cut_views.py (auto)', 'cuts': cuts}, f, indent=1)
+    log('cuts made from the walls: x %.3f to %.3f, y %.3f to %.3f, z %.3f to %.3f m%s'
+        % (x0, x1, y0, y1, z0, z1, ', a half model' if ys is not None else ''))
+    return cuts
+
+
 done, failed = [], []
-for cut in json.load(open(SPEC))['cuts']:
+for cut in auto_cuts() if SPEC == 'auto' else json.load(open(SPEC))['cuts']:
     ax, v, b = cut['plane'], float(cut['at']), list(cut['box'])
     step = float(cut.get('step', STEP))
     i = AXIS[ax]
