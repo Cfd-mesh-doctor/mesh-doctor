@@ -321,6 +321,18 @@ def disk(name, writes=None):
             "transientSolveMb": None if made is None else solves(True, True, writes or transient.WRITES)}
 
 
+def template_disk(template, size=None):
+    """GET /disk's template: what a solve job that makes a case of `template` at `size` (else the template's own)
+    takes on the disk, in MB, as disk_need counts it: the new case (madeMb: its mesh and its sets, from the cells it
+    makes, diskguard.made_mb), then what its solve writes as it goes from the start, on several processes or one
+    (solveMb, diskguard.solve_mb, keeping the written times the template's controlDict keeps)."""
+    size = size or own_size(template)
+    cells = templates.TEMPLATES[template]["sizes"][size]["cells"]
+    mesh, purge = diskguard.mesh_mb(cells), _purge(os.path.join(templates.EXAMPLES, template))
+    return {"name": template, "size": size, "madeMb": diskguard.made_mb(cells),
+            "solveMb": {k: diskguard.solve_mb(mesh, purge, n) for k, n in (("several", 2), ("one", 1))}}
+
+
 def disk_need(name, nproc, source=None, template=None, size=None, steady=None, writes=None):
     """What the solve job of case `name` writes on the disk, for the disk guard: (MB, what needs it, with its verb).
     The new case it makes (a copy of `source`, a transient run of `steady`, or a case of `template` at `size`: its
@@ -328,9 +340,8 @@ def disk_need(name, nproc, source=None, template=None, size=None, steady=None, w
     `nproc` processes, or continued on the run's own split; a transient run's `writes` times a stretch (else its
     own), each kept.  None when the mesh it solves can't be measured."""
     if template is not None:
-        cells = templates.TEMPLATES[template]["sizes"][size or own_size(template)]["cells"]
-        solved = diskguard.solve_mb(diskguard.mesh_mb(cells), _purge(os.path.join(templates.EXAMPLES, template)), nproc)
-        return diskguard.made_mb(cells) + solved, f"{name}'s mesh and its solve need"
+        t = template_disk(template, size)              # as GET /disk says it (template_disk)
+        return t["madeMb"] + t["solveMb"]["several" if nproc > 1 else "one"], f"{name}'s mesh and its solve need"
     if source is not None or steady is not None:
         src = case_dir(source if source is not None else steady)
         made = (templates.copy_size(src, case_dir(name)) if source is not None

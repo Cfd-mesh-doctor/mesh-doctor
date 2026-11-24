@@ -145,6 +145,19 @@ export function useDisk(name: string | null, writes?: number) {
   });
 }
 
+/** What a solve that makes its case from `template` (at `size`, else the template's own) takes on the disk, and the
+ * free space for it (GET /disk?template=, API 1.13), for Verify install's dialog; null: not asked. An older engine
+ * leaves it out of its answer, and the dialog then says nothing of the disk. */
+export function useTemplateDisk(template: string | null, size?: string) {
+  const { transport } = useEngine();
+  return useQuery({
+    queryKey: [transport?.scope, "disk-template", template, size ?? null],
+    queryFn: transport && template != null
+      ? ({ signal }) => api.templateDisk(transport, template, size, signal) : skipToken,
+    staleTime: 30_000,
+  });
+}
+
 /** The param of a job a GET /disk/{kind} answer is for: while it stays the same, the last answer shows while the next
  * comes (other iterations, another mesh size), but never another case's, run's or template's. */
 const DISK_SUBJECT: Record<DiskJobKind, string> = { repair: "source", abtest: "name", abextend: "name", case: "template" };

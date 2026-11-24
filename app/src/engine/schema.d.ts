@@ -127,7 +127,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The free space for a new case in the cases folder, which the disk guard checks a solve against, and with `case`, what solving that case takes on the disk, in MB (API 1.7) */
+        /** The free space for a new case in the cases folder, which the disk guard checks a solve against, and with `case`, what solving that case takes on the disk, in MB (API 1.7); with `template`, what a solve that makes a case of it takes, as Verify install's does (API 1.13) */
         get: operations["disk"];
         put?: never;
         post?: never;
@@ -1549,6 +1549,10 @@ export interface operations {
             query?: {
                 /** @description a case in the cases folder (GET /cases) */
                 case?: string;
+                /** @description with `template`: one of its mesh sizes (default: the template's own), as a solve job takes it (API 1.13) */
+                size?: "coarse" | "medium" | "fine";
+                /** @description a template (GET /templates), for what a solve job that makes a case of it takes (API 1.13) */
+                template?: string;
                 /** @description with `case`: the times each stretch of a transient run writes, for transientSolveMb (a new transient run of it) and, when it is a transient run, continueMb (API 1.10) */
                 writes?: number;
             };
@@ -1599,6 +1603,25 @@ export interface operations {
                         freeMb: number | null;
                         /** @description kept free for everything else: the disk guard refuses a solve when the new case it makes, what it writes and this are more than freeMb */
                         keepMb: number;
+                        /** @description with `template`: what a solve job that makes a case of it takes on the disk, as its disk guard counts it (API 1.13) */
+                        template?: {
+                            /** @description the new case: its mesh and the sets snappyHexMesh writes of its layers, from the cells it makes, as GET /disk/case counts them */
+                            madeMb: number;
+                            /** @description plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters */
+                            name: string;
+                            /**
+                             * @description the mesh size it counts: `size`, else the template's own
+                             * @enum {unknown}
+                             */
+                            size: "coarse" | "medium" | "fine";
+                            /** @description what its solve writes as it goes from the start: its split and its written times (meshdoctor/diskguard.py); the disk guard counts the new case and this */
+                            solveMb: {
+                                /** @description on one process */
+                                one: number;
+                                /** @description on several processes */
+                                several: number;
+                            };
+                        } | null;
                     };
                 };
             };

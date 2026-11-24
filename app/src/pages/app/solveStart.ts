@@ -336,6 +336,17 @@ export function diskCheck(
   return { need, free: disk.freeMb, keep: disk.keepMb, fits: need + disk.keepMb <= disk.freeMb };
 }
 
+/** What a solve that makes its case from a template takes on the disk, from GET /disk's answer for that template (API
+ * 1.13): the new case first (its mesh and the sets beside it), then what its solve writes as it goes from the start,
+ * on `procs` processes. Null when the engine doesn't say (an engine before API 1.13, or a free space it can't
+ * measure), as for diskCheck. */
+export function templateDiskCheck(disk: DiskInfo | undefined, procs: number): DiskCheck | null {
+  const t = disk?.template;
+  if (!disk || !t || disk.freeMb == null) return null;
+  const need = t.madeMb + (procs > 1 ? t.solveMb.several : t.solveMb.one);
+  return { need, free: disk.freeMb, keep: disk.keepMb, fits: need + disk.keepMb <= disk.freeMb };
+}
+
 /** An amount of disk space as the engine words it (meshdoctor/diskguard.py's text): "70 MB" under a GB (1 MB at
  * least), "2.4 GB" under 100 GB, then "412 GB". */
 export function diskSpace(mb: number): string {

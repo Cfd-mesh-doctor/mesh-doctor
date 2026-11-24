@@ -6,8 +6,8 @@ import {
   isTransient, keptText,
   madeFrom, madeOfJob, ofText,
   procChoices, runRows, runShown, solveCommand, solveJobOf, solveStep, stretchFraction, stretchesText, suggestedProcs,
-  suggestedTime, suggestedTo, takesWrites, timeInput, timeNumber, timeProblem, toProblem, totalForces, transientCommand,
-  transientText, writesHint, writesProblem, yourCases,
+  suggestedTime, suggestedTo, takesWrites, templateDiskCheck, timeInput, timeNumber, timeProblem, toProblem,
+  totalForces, transientCommand, transientText, writesHint, writesProblem, yourCases,
 } from "./solveStart";
 
 const run = (name: string, more: Partial<Run> = {}): Run => ({
@@ -328,5 +328,29 @@ describe("what a solve takes on the disk", () => {
   it("is worded as the engine words it", () => {
     expect([0, 70, 1023, 2458, 421_888, 1_200_000].map(diskSpace))
       .toEqual(["1 MB", "70 MB", "1,023 MB", "2.4 GB", "412 GB", "1,172 GB"]);
+  });
+});
+
+describe("what a solve that makes its case from a template takes on the disk", () => {
+  // GET /disk?template=ahmed-body&size=coarse (API 1.13): its mesh with its sets, 68 MB, then 215 MB written split
+  const coarse = { name: "ahmed-body", size: "coarse" as const, madeMb: 68, solveMb: { several: 215, one: 80 } };
+  const disk = (freeMb: number | null, template: DiskInfo["template"] = coarse): DiskInfo =>
+    ({ freeMb, keepMb: 1024, case: null, template });
+
+  it("is its new case, then what its solve writes from the start, on the processes it runs on", () => {
+    expect(templateDiskCheck(disk(402_339), 4)).toEqual({ need: 283, free: 402_339, keep: 1024, fits: true });
+    expect(templateDiskCheck(disk(402_339), 1)?.need).toBe(68 + 80);                      // unsplit
+  });
+
+  it("fits with the space the engine keeps free to spare, as its disk guard checks, and no less", () => {
+    expect(templateDiskCheck(disk(283 + 1024), 2)?.fits).toBe(true);
+    expect(templateDiskCheck(disk(283 + 1023), 2)?.fits).toBe(false);
+  });
+
+  it("is not said when the engine doesn't say it: before API 1.13, or a free space it can't measure", () => {
+    expect(templateDiskCheck(undefined, 4)).toBeNull();
+    expect(templateDiskCheck({ freeMb: 402_339, keepMb: 1024, case: null }, 4)).toBeNull();   // before API 1.13
+    expect(templateDiskCheck(disk(402_339, null), 4)).toBeNull();
+    expect(templateDiskCheck(disk(null), 4)).toBeNull();
   });
 });

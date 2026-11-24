@@ -2673,7 +2673,7 @@ echo End
         self.yours()
         with mock.patch.object(diskguard, "free_mb", lambda folder: 5000):
             self.assertEqual(self.api.handle("GET", "/api/v1/disk")[:2],
-                             (200, {"freeMb": 5000, "keepMb": 1024, "case": None}))
+                             (200, {"freeMb": 5000, "keepMb": 1024, "case": None, "template": None}))
             st, doc, _ = self.api.handle("GET", "/api/v1/disk", {"case": "yours"})
         self.assertEqual((st, doc["case"]), (200, {"name": "yours", "copyMb": 1, "transientMb": 1,
                                                    "solveMb": {"several": 4, "one": 2},
@@ -2692,6 +2692,42 @@ echo End
         self.assertEqual((st, doc["error"]["code"]), (404, "not-found"))
         st, doc, _ = self.api.handle("GET", "/api/v1/disk", {"case": "../x"})
         self.assertEqual((st, doc["error"]["code"]), (400, "bad-request"))
+
+    def test_the_disk_route_says_what_a_solve_that_makes_a_case_of_a_template_takes(self):
+        import diskguard
+        with mock.patch.object(diskguard, "free_mb", lambda folder: 5000):
+            st, doc, _ = self.api.handle("GET", "/api/v1/disk", {"template": "ahmed-body", "size": "coarse"})
+        # the coarse Ahmed body's 480,000 cells: its mesh of 66 MB with its sets, 68 MB, then its solve keeping two
+        # written times (purgeWrite 2): 66 x (1.05 + 2 x 0.8 + 0.6) = 214.5 MB on several processes, 66 x 2 x 0.6 on one
+        self.assertEqual((st, doc["freeMb"], doc["case"], doc["template"]),
+                         (200, 5000, None, {"name": "ahmed-body", "size": "coarse", "madeMb": 68,
+                                            "solveMb": {"several": 215, "one": 80}}))
+        for nproc, solved in ((4, 215), (2, 215), (1, 80)):            # as the solve job's disk guard counts it
+            self.assertEqual(self.s.disk_need("fresh", nproc, template="ahmed-body", size="coarse"),
+                             (68 + solved, "fresh's mesh and its solve need"), nproc)
+        own = self.s.own_size("ahmed-body")                             # no size: the template's own, as a solve's
+        st, doc, _ = self.api.handle("GET", "/api/v1/disk", {"template": "ahmed-body"})
+        self.assertEqual((st, doc["template"]), (200, self.s.template_disk("ahmed-body", own)))
+        self.assertEqual((doc["template"]["size"], self.s.disk_need("fresh", 2, template="ahmed-body")[0]),
+                         (own, doc["template"]["madeMb"] + doc["template"]["solveMb"]["several"]))
+        for q, status, text in (({"template": "nope"}, 404, "no template nope"),
+                                ({"template": "../x"}, 400, "template"),
+                                ({"template": "ahmed-body", "size": "huge"}, 400, "size"),
+                                ({"size": "coarse"}, 400, "a mesh size goes with a template")):
+            st, doc, _ = self.api.handle("GET", "/api/v1/disk", q)
+            self.assertEqual((st, doc["error"]["code"]), (status, "not-found" if status == 404 else "bad-request"), q)
+            self.assertIn(text, doc["error"]["message"], q)
+        body = self.s.templates.TEMPLATES["ahmed-body"]
+        with mock.patch.dict(body, {"sizes": {k: v for k, v in body["sizes"].items() if k != "fine"}}):
+            st, doc, _ = self.api.handle("GET", "/api/v1/disk", {"template": "ahmed-body", "size": "fine"})
+        self.assertEqual((st, doc["error"]["code"]), (400, "bad-request"))   # a size the template hasn't
+        self.assertIn("has no fine mesh", doc["error"]["message"])
+        st, doc, _ = self.api.handle("GET", "/api/v1/disk", {"case": "nope", "template": "ahmed-body"})
+        self.assertEqual((st, doc["error"]["code"]), (404, "not-found"))   # each asked for is checked
+        spec = self.api.handle("GET", "/api/v1/openapi.json")[1]["paths"]["/disk"]["get"]["parameters"]
+        query = {p["name"]: p for p in spec}
+        self.assertEqual(query["size"]["schema"], self.api.JOBS["solve"]["params"]["properties"]["size"])
+        self.assertEqual([n for n, p in query.items() if p["required"]], [])
 
 
 TRANSIENT_FOAMRUN = '''#!/usr/bin/env python3

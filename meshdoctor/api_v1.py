@@ -27,7 +27,7 @@ import tplan
 import validate
 import version
 
-API_VERSION = "1.12"
+API_VERSION = "1.13"
 PREFIX = "/api/v1"
 WRITES_MAX = solve.transient.MAX_WRITES   # the most times a stretch of a transient run writes
 MAX_BODY = 64 * 1024
@@ -899,15 +899,32 @@ DISK_CASE = {"type": ["object", "null"], "required": ["name", "copyMb", "transie
                                                   "averaged flow, and on several processes its latest time joined; "
                                                   "null when it has no joined result to start from, or no mesh to "
                                                   "measure (API 1.9)")}}
+DISK_TEMPLATE = {"type": ["object", "null"], "required": ["name", "size", "madeMb", "solveMb"],
+                 "description": "with `template`: what a solve job that makes a case of it takes on the disk, as its "
+                                "disk guard counts it (API 1.13)", "properties": {
+    "name": NAME,
+    "size": {"enum": templates.SIZES, "description": "the mesh size it counts: `size`, else the template's own"},
+    "madeMb": {"type": "integer", "minimum": 0,
+               "description": "the new case: its mesh and the sets snappyHexMesh writes of its layers, from the cells "
+                              "it makes, as GET /disk/case counts them"},
+    "solveMb": dict(_SOLVES, type="object",
+                    description="what its solve writes as it goes from the start: its split and its written times "
+                                "(meshdoctor/diskguard.py); the disk guard counts the new case and this")}}
 
 
 @route("GET", "/disk", "The free space for a new case in the cases folder, which the disk guard checks a solve "
-       "against, and with `case`, what solving that case takes on the disk, in MB (API 1.7)",
+       "against, and with `case`, what solving that case takes on the disk, in MB (API 1.7); with `template`, what a "
+       "solve that makes a case of it takes, as Verify install's does (API 1.13)",
        query={"case": {"schema": NAME, "description": "a case in the cases folder (GET /cases)"},
               "writes": {"schema": {"type": "integer", "minimum": 1, "maximum": WRITES_MAX},
                          "description": "with `case`: the times each stretch of a transient run writes, for "
                                         "transientSolveMb (a new transient run of it) and, when it is a transient "
-                                        "run, continueMb (API 1.10)"}},
+                                        "run, continueMb (API 1.10)"},
+              "template": {"schema": NAME, "description": "a template (GET /templates), for what a solve job that "
+                                                          "makes a case of it takes (API 1.13)"},
+              "size": {"schema": JOBS["solve"]["params"]["properties"]["size"],
+                       "description": "with `template`: one of its mesh sizes (default: the template's own), as a "
+                                      "solve job takes it (API 1.13)"}},
        ok={"type": "object", "required": ["freeMb", "keepMb", "case"], "properties": {
            "freeMb": {"type": ["integer", "null"], "minimum": 0,
                       "description": "the free space for a new case in the cases folder: its disk's, and inside WSL 2 "
@@ -916,15 +933,22 @@ DISK_CASE = {"type": ["object", "null"], "required": ["name", "copyMb", "transie
            "keepMb": {"type": "integer", "minimum": 0,
                       "description": "kept free for everything else: the disk guard refuses a solve when the new case "
                                      "it makes, what it writes and this are more than freeMb"},
-           "case": DISK_CASE}})
+           "case": DISK_CASE, "template": DISK_TEMPLATE}})
 def disk(p, q, b):
     import diskguard
     root = md_api.run_dir()
-    doc = {"freeMb": diskguard.free_mb(root), "keepMb": diskguard.KEEP_MB, "case": None}
+    doc = {"freeMb": diskguard.free_mb(root), "keepMb": diskguard.KEEP_MB, "case": None, "template": None}
+    if q.get("size") and not q.get("template"):
+        raise ApiError("bad-request", "a mesh size goes with a template")
     if q.get("case"):
         if not os.path.isfile(os.path.join(root, q["case"], "system", "controlDict")):
             raise ApiError("not-found", "no case " + q["case"] + " in the cases folder")
         doc["case"] = solve.disk(q["case"], q.get("writes"))
+    if q.get("template"):
+        why = templates.problem(q["template"], q.get("size") or solve.own_size(q["template"]))
+        if why:
+            raise ApiError(*why)
+        doc["template"] = solve.template_disk(q["template"], q.get("size"))
     return doc
 
 

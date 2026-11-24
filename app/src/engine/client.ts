@@ -129,6 +129,12 @@ export const api = {
     t.request<DiskInfo>("GET", name != null
       ? `/disk?case=${encodeURIComponent(name)}${writes != null ? `&writes=${writes}` : ""}`
       : "/disk", undefined, signal),
+  /** What a solve that makes its case from `template` at `size` (else the template's own) takes on the disk, as the
+   * engine's disk guard counts it, and the free space for it (API 1.13): Verify install's. An older engine leaves
+   * `template` out of its answer. */
+  templateDisk: (t: Transport, template: string, size?: string, signal?: AbortSignal) =>
+    t.request<DiskInfo>("GET", `/disk?${new URLSearchParams(size ? { template, size } : { template })}`, undefined,
+      signal),
   /** What a repair, an A/B test, its continuation or a new case writes on the disk, as the engine's disk guard counts
    * it before the job starts, and the free space where it writes (API 1.12), from the params the job would start
    * with: a repair's source, an A/B test's repair run and settings, the test and the iteration it continues to, a

@@ -1759,7 +1759,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.12"
+    "version": "1.13"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -2778,6 +2778,31 @@
               "minimum": 1,
               "type": "integer"
             }
+          },
+          {
+            "description": "a template (GET /templates), for what a solve job that makes a case of it takes (API 1.13)",
+            "in": "query",
+            "name": "template",
+            "required": false,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "with `template`: one of its mesh sizes (default: the template's own), as a solve job takes it (API 1.13)",
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "description": "with a template: one of its mesh sizes (default: the template's own)",
+              "enum": [
+                "coarse",
+                "medium",
+                "fine"
+              ]
+            }
           }
         ],
         "responses": {
@@ -2901,6 +2926,59 @@
                       "description": "kept free for everything else: the disk guard refuses a solve when the new case it makes, what it writes and this are more than freeMb",
                       "minimum": 0,
                       "type": "integer"
+                    },
+                    "template": {
+                      "description": "with `template`: what a solve job that makes a case of it takes on the disk, as its disk guard counts it (API 1.13)",
+                      "properties": {
+                        "madeMb": {
+                          "description": "the new case: its mesh and the sets snappyHexMesh writes of its layers, from the cells it makes, as GET /disk/case counts them",
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "name": {
+                          "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+                          "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+                          "type": "string"
+                        },
+                        "size": {
+                          "description": "the mesh size it counts: `size`, else the template's own",
+                          "enum": [
+                            "coarse",
+                            "medium",
+                            "fine"
+                          ]
+                        },
+                        "solveMb": {
+                          "description": "what its solve writes as it goes from the start: its split and its written times (meshdoctor/diskguard.py); the disk guard counts the new case and this",
+                          "properties": {
+                            "one": {
+                              "description": "on one process",
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "several": {
+                              "description": "on several processes",
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "several",
+                            "one"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "size",
+                        "madeMb",
+                        "solveMb"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
                     }
                   },
                   "required": [
@@ -2925,7 +3003,7 @@
             "description": "Error (the code says which; see STATUS in api_v1.py)"
           }
         },
-        "summary": "The free space for a new case in the cases folder, which the disk guard checks a solve against, and with `case`, what solving that case takes on the disk, in MB (API 1.7)"
+        "summary": "The free space for a new case in the cases folder, which the disk guard checks a solve against, and with `case`, what solving that case takes on the disk, in MB (API 1.7); with `template`, what a solve that makes a case of it takes, as Verify install's does (API 1.13)"
       }
     },
     "/disk/abextend": {

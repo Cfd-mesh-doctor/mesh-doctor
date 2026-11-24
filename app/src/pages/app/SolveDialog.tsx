@@ -19,7 +19,9 @@ import { Button } from "@/components/ui/button";
 import { DialogActions, DialogClose, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input, Segmented } from "@/components/ui/misc";
 import { useAppPath, useEngine } from "@/engine/context";
-import { useCases, useDisk, useEngineInfo, useJobs, useMachine, useRuns, useStartJob } from "@/engine/hooks";
+import {
+  useCases, useDisk, useEngineInfo, useJobs, useMachine, useRuns, useStartJob, useTemplateDisk,
+} from "@/engine/hooks";
 import { JOB_KIND_LABEL, isActive, type Run, type RunDetail, type TransientPlan } from "@/engine/types";
 import { machineFields } from "@/estimate/machine";
 import { formatInt } from "@/lib/format";
@@ -28,8 +30,8 @@ import { FIELD, GB, JobDialog, Note, Space } from "./dialogParts";
 import { stepMemory } from "./repairStart";
 import {
   FIRST_TO, WRITES, copyName, copyNameProblem, copyTaken, diskCheck, formatTime, isTransient, procChoices,
-  solveCommand, suggestedProcs, suggestedTime, suggestedTo, takesWrites, timeInput, timeProblem, toProblem,
-  transientCommand, writesHint, writesProblem, yourCases, type DiskCheck,
+  solveCommand, suggestedProcs, suggestedTime, suggestedTo, takesWrites, templateDiskCheck, timeInput, timeProblem,
+  toProblem, transientCommand, writesHint, writesProblem, yourCases, type DiskCheck,
 } from "./solveStart";
 import {
   MODELS, coProblem, flowHint, planAtText, suggestedCo, transientName, transientProcs, type Model,
@@ -379,6 +381,8 @@ function VerifyForm({ onDone }: { onDone: (name: string) => void }) {
   const nameProblem = verifyNameProblem(name, taken);
   const [picked, setPicked] = useState<number | null>(null);
   const np = picked ?? verifyProcs(s.cores);
+  // its new case and what its solve writes, as the engine's disk guard counts them (API 1.13)
+  const disk = useTemplateDisk(s.demo ? null : VERIFY.template, VERIFY.size);
   const ready = !s.demo && !nameProblem && !s.busy && !s.start.isPending;
 
   const submit = () => {
@@ -416,7 +420,8 @@ function VerifyForm({ onDone }: { onDone: (name: string) => void }) {
           </p>
         </div>
         <ProcsField id={id} np={np} onPick={setPicked} s={s} />
-        <Notes s={s} cells={VERIFY_CELLS} what="verify the install" step="snappy" />
+        <Notes s={s} cells={VERIFY_CELLS} what="verify the install" step="snappy"
+          disk={templateDiskCheck(disk.data, np)} spends="Its mesh and its solve need" />
         {s.demo && !nameProblem && <DemoCommand verb="Verify install" command={verifyCommand(name, np)} />}
       </div>
 

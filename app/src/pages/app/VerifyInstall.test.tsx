@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The Solve screen's Verify install: starting it, following it, continuing it to 2,000, and its comparison with the
 // accuracy check, drawn as that check's chart draws its cases.
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import type { Transport } from "@/engine/client";
@@ -34,6 +34,9 @@ const MATCHING: RunValidation = {
  * throws, or none from an engine before it); `noRuns`: an engine before the solve job. */
 function engine(o: {
   runs?: Run[]; jobs?: Job[]; validation?: RunValidation | EngineError; noRuns?: boolean; kind?: "engine" | "demo";
+  /** the MB free GET /disk says for the coarse Ahmed body (API 1.13): nothing, as an older engine, unless given;
+   * `old`: an engine before API 1.13, which says the free space but not what the template's case takes */
+  freeMb?: number; old?: boolean;
 } = {}) {
   const posted: unknown[] = [];
   const transport: Transport = {
@@ -52,6 +55,11 @@ function engine(o: {
       if (path === "/runs" && !o.noRuns) return { items: o.runs ?? [] } as T;
       if (path === "/jobs") return { items: o.jobs ?? [] } as T;
       if (path === "/machine") return MACHINE as T;
+      if (path === "/disk?template=ahmed-body&size=coarse" && o.freeMb != null) {
+        // its new case, the mesh with its sets, 68 MB, then what its solve writes: 215 MB split, 80 on one process
+        return { freeMb: o.freeMb, keepMb: 1024, case: null, ...(o.old ? {} : {
+          template: { name: "ahmed-body", size: "coarse", madeMb: 68, solveMb: { several: 215, one: 80 } } }) } as T;
+      }
       if (/^\/runs\/[^/]+\/validation$/.test(path) && o.validation) {
         if (o.validation instanceof EngineError) throw o.validation;
         return structuredClone(o.validation) as T;
@@ -73,7 +81,7 @@ const dialog = () => within(screen.getByRole("dialog"));
 describe("Verify install", () => {
   it("before one: says what it does, and starts it as the accuracy check's coarse run under a free name", async () => {
     const user = userEvent.setup();
-    const { posted, card } = show({ runs: [run("verify-install", { state: "cancelled", written: 0 })] });
+    const { posted, card } = show({ runs: [run("verify-install", { state: "cancelled", written: 0 })], freeMb: 402_339 });
     expect(card().getByText(/^Whether your install gives the answer the accuracy check got/)).toBeInTheDocument();
     await user.click(await card().findByRole("button", { name: "Verify install again…" }));
     expect(dialog().getByRole("heading", { name: "Verify install" })).toBeInTheDocument();
@@ -87,10 +95,30 @@ describe("Verify install", () => {
     await user.type(name, "verify-install-2");
     expect(dialog().getByRole("combobox", { name: "Processes" })).toHaveValue("6");
     expect(dialog().getByText(/^Its mesh, more than its solve, needs about/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent(
+      "Its mesh and its solve need about 283 MB of disk space; the disk the cases are on has 393 GB free."));
     await user.click(dialog().getByRole("button", { name: "Verify install" }));
     expect(posted).toEqual([{ kind: "solve", params: { name: "verify-install-2", template: "ahmed-body", size: "coarse",
       to: 2000, np: 6 } }]);
     expect(screen.queryByRole("dialog")).toBeNull();                 // it stays on this screen, which follows it
+  });
+
+  it("warns when its new case and what its solve writes won't fit on the disk; an older engine says nothing", async () => {
+    const user = userEvent.setup();
+    const view = show({ freeMb: 1200 });
+    await user.click(await view.card().findByRole("button", { name: "Verify install…" }));
+    await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent("Its mesh and its solve need about 283 MB "
+      + "of disk space, more than the disk the cases are on can give: it has 1.2 GB free, and the engine keeps 1.0 GB of "
+      + "that for everything else. Delete runs or results you no longer need: the engine refuses a solve that won't fit."));
+    expect(dialog().getByRole("button", { name: "Verify install" })).toBeEnabled();            // the engine decides
+    await user.selectOptions(dialog().getByRole("combobox", { name: "Processes" }), "1");      // unsplit, it writes less
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "Its mesh and its solve need about 148 MB of disk space; the disk the cases are on has 1.2 GB free.");
+    view.unmount();
+    const older = show({ freeMb: 402_339, old: true });
+    await user.click(await older.card().findByRole("button", { name: "Verify install…" }));
+    await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent(/Its mesh, more than its solve, needs about/));
+    expect(screen.getByRole("dialog")).not.toHaveTextContent(/disk space/);
   });
 
   it("with none yet: Verify install…, and the command that does the same in a terminal", async () => {

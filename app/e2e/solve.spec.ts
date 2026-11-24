@@ -51,6 +51,9 @@ test("Verify install solves the coarse Ahmed body as the accuracy check did, and
   const dialog = page.getByRole("dialog", { name: "Verify install" });
   await expect(dialog.getByLabel("Name")).toHaveValue("verify-install");
   await expect(dialog.getByLabel("Processes")).toHaveValue("4");            // the 4 cores the engine's computer has
+  // its new case, the coarse mesh with its sets, and its solve on 4 processes (API 1.13): 68 + 215 MB
+  await expect(dialog).toContainText(
+    "Its mesh and its solve need about 283 MB of disk space; the disk the cases are on has 393 GB free.");
   await dialog.getByRole("button", { name: "Verify install", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(page).toHaveURL(/\/app\/solve$/);

@@ -310,7 +310,10 @@ export async function mockEngine(
     if (path === "/machine") return json(200, { cpus: 8, cores: 4, memoryMb: 16_000, ramLimitMb: null });
     // Its disk (API 1.7), where solving any of its cases takes what the coarse Ahmed body's does: a copy of 65 MB, and
     // 212 MB written on several processes; 445 MB for a transient run, with its averaged flow (API 1.9), and more for
-    // each written time past the 4 a stretch of one writes unasked (API 1.10's `writes`).
+    // each written time past the 4 a stretch of one writes unasked (API 1.10's `writes`). With a template (API 1.13),
+    // what a solve that makes a case of it takes, as the disk guard counts it from the cells it makes: its mesh with
+    // the sets beside it, then two written times kept (purgeWrite 2), split on several processes: for the coarse
+    // Ahmed body's 66 MB mesh, 68 MB and 215 MB (80 on one process).
     if (path === "/disk") {
       const query = new URL(req.url()).searchParams;
       const name = query.get("case");
@@ -318,10 +321,20 @@ export async function mockEngine(
       if (name != null && !state.cases.includes(name)) {
         return json(404, { error: { code: "not-found", message: `no case ${name} in the cases folder` } });
       }
+      const asked = query.get("template");
+      const template = TEMPLATES.items.find((t) => t.name === asked);
+      const size = query.get("size") ?? template?.size;
+      const cells = template?.sizes.find((s) => s.name === size)?.cells;
+      if (asked != null && cells == null) {
+        return json(404, { error: { code: "not-found", message: `no template ${asked} here` } });
+      }
+      const mesh = Math.ceil((cells ?? 0) * 0.14 / 1024);
       return json(200, { freeMb: opts.diskFreeMb ?? 402_339, keepMb: 1024, case: name == null ? null : {
         name, copyMb: 65, transientMb: 103, solveMb: { several: 212, one: 78 },
         continueMb: { several: 39 + 20 * more, one: 0 },
-        transientSolveMb: { several: 445 + 84 * more, one: 164 + 75 * more } } });
+        transientSolveMb: { several: 445 + 84 * more, one: 164 + 75 * more } },
+        template: cells == null ? null : { name: asked, size, madeMb: Math.ceil((cells * 0.14 / 1024) * 1.03),
+          solveMb: { several: Math.ceil(mesh * 3.25), one: Math.ceil(mesh * 1.2) } } });
     }
     // What the other jobs write (API 1.12), as the disk guard counts them for the coarse Ahmed body's mesh of 66 MB: a
     // repair 212 MB (its copy and its points' backup, its sets and room to collapse faces), an A/B test 484 MB (two
