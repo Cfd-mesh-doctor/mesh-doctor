@@ -291,12 +291,26 @@ describe("a run's page", () => {
     expect(screen.getByText("The live judge, so far")).toBeInTheDocument();
     expect(screen.getByText("not converged yet")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Job details" })).toHaveAttribute("href", `/app/jobs?job=${job("a", "running").id}`);
+    expect(screen.queryByText(/solving in a terminal/)).toBeNull();
     expect(screen.queryByRole("button", { name: /Continue/ })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Stop" }));
     expect(await screen.findByText("Stopping: the solver writes the iteration it has reached, then ends.")).toBeInTheDocument();
     expect(posted).toEqual([{ path: "/runs/a/stop", body: undefined }]);
     expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+  });
+
+  it("follows a solve run in a terminal, which has no job: it says so, and Stop works on it as on a job's", async () => {
+    const user = userEvent.setup();
+    const { posted } = runPage("t", { made: { t: { template: "ahmed-body" } }, runs: [run("t")] });
+    expect(await screen.findByRole("heading", { name: "Solving (foamRun)" })).toBeInTheDocument();
+    expect(await screen.findByText(/^It is solving in a terminal/)).toHaveTextContent("It is solving in a terminal "
+      + "(meshdoctor solve), not as a job: Stop ends it at the iteration it has reached, which it writes first; "
+      + "Ctrl+C in its terminal ends it at the one it wrote last.");
+    expect(screen.queryByRole("link", { name: "Job details" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Stop" }));
+    expect(await screen.findByText("Stopping: the solver writes the iteration it has reached, then ends.")).toBeInTheDocument();
+    expect(posted).toEqual([{ path: "/runs/t/stop", body: undefined }]);
   });
 
   it("judges a run that has ended, and continues it from the latest iteration written", async () => {
@@ -339,7 +353,7 @@ describe("a run's page", () => {
 
     runPage("i", { runs: [run("i", { state: "interrupted" })] });
     expect(await screen.findByRole("heading", { name: "Interrupted" })).toBeInTheDocument();
-    expect(screen.getByText(/or it is being solved in a terminal\. What it wrote is kept, to iteration 100/)).toBeInTheDocument();
+    expect(screen.getByText(/or the terminal it was solving in was closed\. What it wrote is kept, to iteration 100/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Continue…" })).toBeInTheDocument();
   });
 

@@ -360,7 +360,7 @@ export const DESIGN: DocSection[] = [
             [
               "`GET /runs`, `GET /runs/{name}`",
               "(new)",
-              "solves of cases Mesh Doctor made (`solve` jobs), newest first: each run's state (`running`, `done`, `stopped` at a written iteration, `failed`, `cancelled`, or `interrupted` when its job is gone), the iteration it is at, the latest one written and the stretches solved so far (a transient run's in seconds, with `transient`: the steady run it started from, the time of the result it took, its largest Courant number and its model); one run adds its links, its judge (`GET /judge?case=`) among them (API 1.6)"
+              "solves of cases Mesh Doctor made (`solve` jobs, and `meshdoctor solve` in a terminal), newest first: each run's state (`running`, `done`, `stopped` at a written iteration, `failed`, `cancelled`, or `interrupted` when nothing solves it any more: no job, and no solve in a terminal), the iteration it is at, the latest one written and the stretches solved so far (a transient run's in seconds, with `transient`: the steady run it started from, the time of the result it took, its largest Courant number and its model); one run adds its links, its judge (`GET /judge?case=`) among them (API 1.6)"
             ],
             [
               "`GET /runs/{name}/live`",
@@ -496,7 +496,7 @@ export const DESIGN: DocSection[] = [
       {
         "list": [
           "**States:** `queued` → `running` → `done` | `failed` | `cancelled`. Paths are relative to the workspace, so a job means the same thing on another worker.",
-          "**Admission** happens in `jobs.submit`, so every client gets the same rules. Only one big job runs at a time, judged both from the job files and from OpenFOAM processes started outside Mesh Doctor (from `/proc`). The RAM guard runs before the job is written.",
+          "**Admission** happens in `jobs.submit`, so every client gets the same rules. Only one big job runs at a time, judged from the job files, from solves run in a terminal (`meshdoctor solve`, whose status files name their processes) and from OpenFOAM processes started outside Mesh Doctor (from `/proc`). The RAM guard runs before the job is written.",
           {
             "text": "**The LocalRunner** starts `jobrun.py`, a small wrapper, detached from the server. Init adopts it, so a finished job leaves no zombie process, and a job keeps running if the server stops. The wrapper:",
             "list": [

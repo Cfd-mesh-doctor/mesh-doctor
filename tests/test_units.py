@@ -1869,6 +1869,84 @@ echo End
         self.assertEqual((self.s.split(case), self.s.latest(case), self.status()["nProcs"]), (0, 10, 1))
         self.assertTrue(os.path.isfile(os.path.join(case, "log.potentialFoam")))
 
+    def test_a_solve_run_in_a_terminal_says_running_and_keeps_jobs_out_all_through_it(self):
+        # It has no job: its status file names its process, which must still be a solve of the case.  Here a stand-in
+        # whose command line names one, as meshdoctor solve made's does.
+        p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)", "solve", "made"],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            case = os.path.join(self.cases, "made")
+
+            def status(**changes):
+                doc = {"madeBy": "Mesh Doctor", "state": "running", "step": "solving", "iteration": 0, "start": 0,
+                       "end": 100, "nProcs": 2, "started": "2026-11-24T08:00:00Z", "time": "2026-11-24T08:00:00Z",
+                       "finished": None, "error": None, "fraction": 0.0, "stretches": [], "pid": p.pid,
+                       "pidStart": self.jobs.started(p.pid), **changes}
+                with open(os.path.join(case, self.jobs.SOLVE_STATUS), "w") as f:
+                    json.dump(doc, f)
+            self.assertIsInstance(self.jobs.started(p.pid), int)
+            for step in ("decomposing", "potentialFoam", "solving"):    # while it splits the case and starts the flow
+                status(step=step)
+                self.assertEqual(self.s.describe("made")["state"], "running")
+                self.assertEqual(self.jobs.busy(), "made is solving in a terminal; one big job at a time (RAM)")
+                st, doc, _ = self.post({"name": "made", "to": 200})
+                self.assertEqual((st, doc["error"]["code"]), (409, "busy"))
+            st, doc, _ = self.api.handle("POST", "/api/v1/runs/made/stop", {})    # Stop works on it, as on a job's
+            self.assertEqual((st, doc["name"], doc["state"]), (200, "made", "running"))
+            self.assertRegex(self.control(), r"(?m)^stopAt\s+writeNow;")
+            status(step="copying")
+            st, doc, _ = self.api.handle("POST", "/api/v1/runs/made/stop", {})
+            self.assertEqual((st, doc["error"]["code"]), (409, "not-ready"))
+            self.assertTrue(doc["error"]["message"].endswith("(Ctrl+C in its terminal ends it now)"))
+            status()
+            with self.assertRaises(SystemExit) as e:                    # nor does a second solve of it start
+                self.s.main(["made", "--to", "300"])
+            self.assertEqual(str(e.exception), "made is solving now: wait for it to end, or stop it")
+            # A pid used again, by a process that started later or isn't a solve of the case, isn't taken for it.
+            for changes in ({"pidStart": self.jobs.started(p.pid) + 1},
+                            {"pid": os.getpid(), "pidStart": self.jobs.started(os.getpid())}, {"pid": None}):
+                status(**changes)
+                self.assertEqual(self.s.describe("made")["state"], "interrupted")
+                self.assertIsNone(self.jobs.busy())
+            status()
+        finally:
+            p.kill()
+            p.wait()
+        self.assertEqual(self.s.describe("made")["state"], "interrupted")      # its terminal was closed, say
+        self.assertIsNone(self.jobs.busy())
+
+    def test_stop_ends_a_solve_run_in_a_terminal_at_the_iteration_it_has_reached(self):
+        import signal
+        env = dict(os.environ, MD_TEST_SLOW="1")
+        p = subprocess.Popen([sys.executable, "-m", "meshdoctor", "solve", "made", "--to", "1000", "--np", "2"],
+                             cwd=os.path.dirname(self.s.PKG), env=env, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+        try:
+            log = os.path.join(self.cases, "made", "log.foamRun")
+            for _ in range(400):
+                if os.path.isfile(log) and os.path.getsize(log) > 20:
+                    break
+                time.sleep(0.05)
+            run = self.s.describe("made")
+            self.assertEqual((run["state"], run["step"]), ("running", "solving"))   # no job, yet not interrupted
+            self.assertEqual(self.status()["pid"], p.pid)
+            self.assertEqual(self.jobs.busy(), "made is solving in a terminal; one big job at a time (RAM)")
+            st, doc, _ = self.api.handle("POST", "/api/v1/runs/made/stop", {})
+            self.assertEqual(st, 200)
+            self.assertEqual(p.wait(timeout=20), 0)
+        finally:
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+            p.wait()
+        st = self.status()
+        self.assertEqual((st["state"], st["stretches"][-1]["from"]), ("stopped", 0))
+        self.assertLess(st["iteration"], 1000)
+        self.assertEqual(self.s.latest(os.path.join(self.cases, "made")), st["iteration"])     # and written
+        self.assertEqual(self.s.describe("made")["state"], "stopped")
+        self.assertIsNone(self.jobs.busy())
+
     def test_the_cases_say_which_ones_mesh_doctor_made(self):
         self.case("copied", {"state": "done", "copyOf": "mine", "cells": 480})
         doc = self.api.handle("GET", "/api/v1/cases", {})[1]
@@ -3289,6 +3367,10 @@ class LocalRunnerTest(unittest.TestCase):
         self.ws = tempfile.mkdtemp(prefix="jobs_test_")
         self.saved = jobs.solver_running
         jobs.solver_running = lambda: False
+        # an empty cases folder: no solve run in a terminal there keeps its jobs out (jobs.solving_outside)
+        cases = mock.patch.dict(os.environ, {"MESHDOCTOR_CASES": os.path.join(self.ws, "cases")})
+        cases.start()
+        self.addCleanup(cases.stop)
 
     def tearDown(self):
         for j in self.jobs.list_jobs(self.ws):

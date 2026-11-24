@@ -2274,7 +2274,7 @@ export interface operations {
                             /** @description when the latest stretch started (UTC) */
                             started: string | null;
                             /**
-                             * @description stopped: ended at a written iteration before its end (Stop); interrupted: its status says running but its job is gone (the computer restarted, or the job was killed)
+                             * @description stopped: ended at a written iteration before its end (Stop); interrupted: its status says running but nothing solves it: no job, and no solve in a terminal (the computer restarted, or the job or the solve was killed)
                              * @enum {unknown}
                              */
                             state: "running" | "done" | "stopped" | "failed" | "cancelled" | "interrupted";
@@ -2348,7 +2348,7 @@ export interface operations {
                         /** @description when the latest stretch started (UTC) */
                         started: string | null;
                         /**
-                         * @description stopped: ended at a written iteration before its end (Stop); interrupted: its status says running but its job is gone (the computer restarted, or the job was killed)
+                         * @description stopped: ended at a written iteration before its end (Stop); interrupted: its status says running but nothing solves it: no job, and no solve in a terminal (the computer restarted, or the job or the solve was killed)
                          * @enum {unknown}
                          */
                         state: "running" | "done" | "stopped" | "failed" | "cancelled" | "interrupted";
@@ -2455,7 +2455,7 @@ export interface operations {
                             /** @description when the latest stretch started (UTC) */
                             started: string | null;
                             /**
-                             * @description stopped: ended at a written iteration before its end (Stop); interrupted: its status says running but its job is gone (the computer restarted, or the job was killed)
+                             * @description stopped: ended at a written iteration before its end (Stop); interrupted: its status says running but nothing solves it: no job, and no solve in a terminal (the computer restarted, or the job or the solve was killed)
                              * @enum {unknown}
                              */
                             state: "running" | "done" | "stopped" | "failed" | "cancelled" | "interrupted";
@@ -2567,7 +2567,7 @@ export interface operations {
                         /** @description when the latest stretch started (UTC) */
                         started: string | null;
                         /**
-                         * @description stopped: ended at a written iteration before its end (Stop); interrupted: its status says running but its job is gone (the computer restarted, or the job was killed)
+                         * @description stopped: ended at a written iteration before its end (Stop); interrupted: its status says running but nothing solves it: no job, and no solve in a terminal (the computer restarted, or the job or the solve was killed)
                          * @enum {unknown}
                          */
                         state: "running" | "done" | "stopped" | "failed" | "cancelled" | "interrupted";
@@ -2654,7 +2654,7 @@ export interface operations {
                         /** @description the body's rear slant, in degrees */
                         slant: number;
                         /**
-                         * @description stopped: ended at a written iteration before its end (Stop); interrupted: its status says running but its job is gone (the computer restarted, or the job was killed)
+                         * @description stopped: ended at a written iteration before its end (Stop); interrupted: its status says running but nothing solves it: no job, and no solve in a terminal (the computer restarted, or the job or the solve was killed)
                          * @enum {unknown}
                          */
                         state: "running" | "done" | "stopped" | "failed" | "cancelled" | "interrupted";

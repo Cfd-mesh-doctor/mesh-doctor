@@ -527,7 +527,8 @@ RUN = {"type": "object", "required": ["name", "state", "step", "iteration", "sta
     "name": {"type": "string", "description": "the case it solves: a case in the cases folder that Mesh Doctor made"},
     "state": {"enum": ["running", "done", "stopped", "failed", "cancelled", "interrupted"],
               "description": "stopped: ended at a written iteration before its end (Stop); interrupted: its status "
-                             "says running but its job is gone (the computer restarted, or the job was killed)"},
+                             "says running but nothing solves it: no job, and no solve in a terminal (the computer "
+                             "restarted, or the job or the solve was killed)"},
     "step": {"type": "string", "description": "copying (a copy of a case you made), meshing or meshing: <its mesh's "
                                              "step> (a case made from a template first), decomposing, potentialFoam, "
                                              "solving, reconstructing or done"},

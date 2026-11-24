@@ -23,7 +23,9 @@ steady flow.  A transient run counts seconds, not iterations: its --to, its prog
 The run's state is in the case's .meshdoctor-solve.json, which GET /api/v1/runs lists.  The app starts the same thing
 as a `solve` job (POST /api/v1/jobs, with a `source` to solve a copy, a `template` to make the case first, or a
 `steady` run to start a transient one from), which runs `solve.py run`; Stop (POST /api/v1/runs/{name}/stop) ends it
-at a written time.
+at a written time.  A solve run here, in a terminal, has no job: its status file names its process, so the engine
+knows that it solves (GET /api/v1/runs says running, not interrupted), Stop works on it as on a job's, and no job
+starts until it has ended (jobs.busy).  Ctrl+C ends it too, cancelled at the iteration it wrote last.
 """
 import json, math, os, re, shlex, shutil, signal, subprocess, sys, time
 
@@ -289,10 +291,11 @@ def stop(name):
         return None, ("not-found", f"no run {name}")
     if not solving(name):
         return None, ("not-ready", f"{name} isn't solving now")
+    end_now = "cancel its job to end it now" if _job_of(name) else "Ctrl+C in its terminal ends it now"
     if st.get("step") == "copying":
-        return None, ("not-ready", f"{name} is being copied: Stop works once it solves (cancel its job to end it now)")
+        return None, ("not-ready", f"{name} is being copied: Stop works once it solves ({end_now})")
     if str(st.get("step") or "").startswith("meshing"):
-        return None, ("not-ready", f"{name} is being meshed: Stop works once it solves (cancel its job to end it now)")
+        return None, ("not-ready", f"{name} is being meshed: Stop works once it solves ({end_now})")
     path = os.path.join(case, "system", "controlDict")
     try:
         read = os.stat(path).st_mtime           # the time the solver read it at (each stretch writes it first)
@@ -308,10 +311,19 @@ def stop(name):
 # --------------------------------------------------------------------------
 # what GET /runs and /runs/{name} answer
 
+def _job_of(name):
+    """The solve job of case `name` that is queued or running, or None."""
+    return next((j for j in jobs.list_jobs(limit=1000)
+                 if j["kind"] == "solve" and j["name"] == name and j["state"] in jobs.ACTIVE), None)
+
+
 def solving(name):
-    """Is a solve job of case `name` queued or running?"""
-    return any(j["kind"] == "solve" and j["name"] == name and j["state"] in jobs.ACTIVE
-               for j in jobs.list_jobs(limit=1000))
+    """Is case `name` solving now: a solve job of it queued or running, or a solve run in a terminal, whose status
+    file says running and names its live process (jobs.solve_alive)?"""
+    if _job_of(name) is not None:
+        return True
+    st = status_of(case_dir(name))
+    return st is not None and st.get("state") == "running" and jobs.solve_alive(name, st)
 
 
 def runs():
@@ -326,8 +338,8 @@ def runs():
 
 
 def describe(name):
-    """A run as the API shows it: its status file, with its state checked against the jobs (a run whose job is gone
-    says interrupted), the iteration written last, and its split."""
+    """A run as the API shows it: its status file, with its state checked against what solves it (a run that no
+    job and no solve in a terminal is solving says interrupted), the iteration written last, and its split."""
     case = case_dir(name)
     st = status_of(case)
     if st is None:
@@ -350,9 +362,11 @@ class Status:
     def __init__(self, case, start_at, end, nproc, keep=True):
         self.case, self.path = case, os.path.join(case, STATUS)
         old = (status_of(case) or {}) if keep else {}
+        # pid and pidStart: the process solving it, so the engine can tell it runs, with or without a job (solving)
         self.doc = {"madeBy": "Mesh Doctor", "state": "running", "step": "", "iteration": start_at,
                     "start": start_at, "end": end, "nProcs": nproc, "started": now(), "time": now(),
-                    "finished": None, "error": None, "fraction": 0.0, "stretches": old.get("stretches", [])}
+                    "finished": None, "error": None, "fraction": 0.0, "stretches": old.get("stretches", []),
+                    "pid": os.getpid(), "pidStart": jobs.started(os.getpid())}
         self._write()
 
     def step(self, step, fraction, **more):
@@ -720,6 +734,8 @@ def main(argv):
     why = refusal(name, to, nproc, source, template, size, steady, co, model)
     if why:
         sys.exit(why[1])
+    if not job and solving(name):               # a job's own solve is its job, which solving counts
+        sys.exit(f"{name} is solving now: wait for it to end, or stop it")
     if not job:                                 # a job's memory was checked when it was admitted (jobs.submit)
         if template is not None:                # its mesh's, more than its solve's
             cells = templates.TEMPLATES[template]["sizes"][size or own_size(template)]["cells"]

@@ -75,9 +75,11 @@ their spread, not just "it improved".
 - **Solving: `solve`.** It runs only in a case Mesh Doctor made (by `new`, or a copy made by `solve`). The first solve
   splits it onto `--np` processes (4 by default; 1 solves it whole), starts the flow with potentialFoam and runs
   foamRun to iteration `--to` (2000 by default). The same command with a higher `--to` continues from the latest
-  written time, on the same processes; Ctrl+C stops it. A case the user made is never solved in place:
-  `meshdoctor solve <srcCase> <name>` copies its mesh and settings, not its results, as the new case `<name>`, and
-  solves that. The free memory is checked first; run one solve at a time.
+  written time, on the same processes. Stop on the run's page in the web app ends it at the iteration it has
+  reached, writing it first; Ctrl+C ends it at the one it wrote last. While it runs, the engine starts no other job.
+  A case the user made is never solved in place: `meshdoctor solve <srcCase> <name>` copies its mesh and settings,
+  not its results, as the new case `<name>`, and solves that. The free memory is checked first; run one solve at a
+  time.
 - **Does the install give the right answer? Verify install.**
   `meshdoctor solve verify-install --template ahmed-body --size coarse --to 2000 --np 6` makes the coarse Ahmed body
   and solves it as the accuracy check did, in about 15 minutes on 6 cores. Its drag over the last 500 iterations

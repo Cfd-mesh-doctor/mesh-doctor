@@ -15,8 +15,9 @@ relative to the workspace, so a job means the same thing on another worker.
 The LocalRunner starts `jobrun.py`, a small wrapper that runs the command in its
 own process group, writes the log, and records the end state and exit code.
 Admission rules live here so every client gets them: one big job at a time
-(running jobs, plus OpenFOAM processes started outside Mesh Doctor), and the
-RAM guard.  Progress is read from each tool's own status file when a job is read.
+(running jobs, solves run in a terminal, whose status files name their processes,
+plus OpenFOAM processes started outside Mesh Doctor), and the RAM guard.
+Progress is read from each tool's own status file when a job is read.
 
     python3 -m meshdoctor jobs [list | show <id> | cancel <id>]
 """
@@ -36,6 +37,7 @@ CASE_MARKER = ".meshdoctor-case.json"
 # In a case a solve job solves (solve.py): the run's state, iteration and the stretches solved so far.
 SOLVE_STATUS = ".meshdoctor-solve.json"
 ID = re.compile(r"^[0-9]{8}-[0-9]{6}-[a-z]+-[A-Za-z0-9_.-]{1,80}-[0-9a-f]{4}$")
+SAFE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$")      # md_api.SAFE: a case's folder name
 START_GRACE = 60          # seconds a queued job may wait for its wrapper before it counts as lost
 SPAWN_TIMEOUT = 30        # seconds the wrapper has to say its pid (jobrun.detach)
 
@@ -121,6 +123,53 @@ def _wrapper_alive(pid, job_id):
     except (OSError, TypeError):
         return False
     return "jobrun.py" in cmd and job_id in cmd
+
+
+def started(pid):
+    """When process `pid` started, in clock ticks after the machine booted (/proc/<pid>/stat), or None."""
+    try:
+        with open(f"/proc/{pid}/stat", "rb") as f:
+            stat = f.read().decode("ascii", "replace")
+        return int(stat[stat.rindex(")") + 2:].split()[19])      # the fields after "(comm)" from the 3rd: the 22nd
+    except (OSError, TypeError, ValueError, IndexError):
+        return None
+
+
+def solve_alive(name, doc):
+    """Is the process that a run's status file `doc` names still solving case `name`?  solve.py writes its own pid
+    and start time into the file.  The process must still run, with a command line that names a solve (meshdoctor
+    solve, or a job's solve.py) and the case, and have started when the file says, so that a pid used again by another
+    process isn't taken for it.  A solve run in a terminal has no job: this is how the engine knows it runs."""
+    pid = doc.get("pid") if isinstance(doc, dict) else None
+    if type(pid) is not int or pid <= 0:
+        return False
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            args = f.read().decode("utf-8", "replace").split("\0")
+    except OSError:
+        return False
+    if name not in args or not any(a == "solve" or os.path.basename(a) == "solve.py" for a in args):
+        return False
+    return doc.get("pidStart") is None or started(pid) == doc.get("pidStart")
+
+
+def solving_outside():
+    """A case solving outside a job (meshdoctor solve, in a terminal): the first in the cases folder whose status
+    file says running and names its live solve (solve_alive), or None."""
+    root = config.settings()["cases"]
+    try:
+        names = sorted(n for n in os.listdir(root) if SAFE.match(n))
+    except OSError:
+        return None
+    for name in names:
+        try:
+            with open(os.path.join(root, name, SOLVE_STATUS), encoding="utf-8") as f:
+                doc = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if isinstance(doc, dict) and doc.get("state") == "running" and solve_alive(name, doc):
+            return name
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -227,6 +276,9 @@ def busy(ws=None):
     for job in list_jobs(ws, limit=1000):
         if job["state"] in ACTIVE:
             return f"job {job['id']} ({job['kind']} {job['name']}) is {job['state']}; one big job at a time (RAM)"
+    outside = solving_outside()                 # all through it: while it splits the case and starts the flow too
+    if outside:
+        return f"{outside} is solving in a terminal; one big job at a time (RAM)"
     if solver_running():
         return "another OpenFOAM job is running; one big job at a time (RAM)"
     return None

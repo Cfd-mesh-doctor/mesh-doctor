@@ -267,7 +267,7 @@ function runLine(row: RunRow, cells: number | null | undefined): string {
     case "cancelled": return `Cancelled${run?.written ? `, written to ${at(run.written)}`
       : ` before it wrote ${transient ? "a time" : "an iteration"}`}${when}`;
     case "failed": return `Stopped with an error${run?.written ? `, written to ${at(run.written)}` : ""}${when}`;
-    case "interrupted": return `Its job is gone, written to ${at(run?.written ?? 0)}`;
+    case "interrupted": return `Its solve is gone, written to ${at(run?.written ?? 0)}`;
   }
 }
 

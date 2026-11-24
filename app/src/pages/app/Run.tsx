@@ -3,7 +3,8 @@
 // residuals and forces as they are now (GET /runs/{name}/live, the engine's live monitor), and the convergence judge
 // on it: the live monitor's while it solves, the engine's (GET /judge?case=) once it has ended. Stop ends it at the
 // iteration it has reached (POST /runs/{name}/stop), and Continue… solves on from the latest one written
-// (SolveDialog.tsx). A solve just started shows as starting until its job writes the run's status, and a copy of a
+// (SolveDialog.tsx). A solve run in a terminal (meshdoctor solve) has no job: the page says so, and Stop works on it
+// as on a job's. A solve just started shows as starting until its job writes the run's status, and a copy of a
 // case you made as copying while its job makes it. While it solves the screen asks again every 3 s, so the charts
 // grow. Once it has ended, Plan a transient run (TransientPlan.tsx) says what a transient run of it would take, and
 // starts one. A transient run (`transient`) counts time in s: its progress, stretches, charts and Continue are in
@@ -15,6 +16,7 @@ import { Link, useParams } from "react-router";
 import { LineChart, type LineSeries } from "@/components/charts/LineChart";
 import { RunStateBadge } from "@/components/shared/badges";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
+import { InlineCode } from "@/components/shared/InlineCode";
 import { PageHeader } from "@/components/shared/page";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -71,13 +73,15 @@ function paceLine(solver: RunLive["solver"] | undefined, run: RunDetail): string
   return parts.length ? parts.join(" · ") : null;
 }
 
-function StatusCard({ shown, run, job, live, stopping }: {
+function StatusCard({ shown, run, job, live, stopping, outside }: {
   shown: RunShown;
   run: RunDetail;
   job: Job | undefined;
   live: RunLive | undefined;
   /** Stop was asked for this stretch, which hasn't ended yet. */
   stopping: boolean;
+  /** It solves in a terminal (meshdoctor solve), with no job. */
+  outside: boolean;
 }) {
   const to = useAppPath();
   const transient = isTransient(run);
@@ -127,6 +131,13 @@ function StatusCard({ shown, run, job, live, stopping }: {
             {transientText(run.transient)}.
           </p>
         )}
+        {outside && (
+          <p>
+            It is solving in a terminal <InlineCode text="meshdoctor solve" lead="(" trail=")," /> not as a job: Stop
+            ends it at the {transient ? "time" : "iteration"} it has reached, which it writes first; Ctrl+C in its
+            terminal ends it at the one it wrote last.
+          </p>
+        )}
         {stopping && <p>Stopping: the solver writes the {transient ? "time" : "iteration"} it has reached, then ends.</p>}
         <p className="text-muted-foreground">
           {[sofar, split].filter(Boolean).join(", ")}.
@@ -150,8 +161,8 @@ function StatusCard({ shown, run, job, live, stopping }: {
         )}
         {shown === "interrupted" && (
           <p className="text-muted-foreground">
-            Its status says it was solving, but no job of the engine is: the engine was restarted or its job was killed,
-            or it is being solved in a terminal. {run.written > 0 ? kept : ""}
+            Its status says it was solving, but nothing is solving it now: the computer was restarted, its job was
+            killed, or the terminal it was solving in was closed. {run.written > 0 ? kept : ""}
           </p>
         )}
       </CardContent>
@@ -312,7 +323,9 @@ export function RunPage() {
 
   const from = madeFrom(cases.data?.made?.[name] ?? madeOfJob(job));
   const stopping = shown === "running" && run != null && stoppedAt === (run.started ?? "");
-  const canStop = shown === "running" && run?.state === "running" && run.step === "solving" && working && !stopping;
+  // A solve run in a terminal has no job; the engine says it runs, and Stop works on it as on a job's.
+  const outside = shown === "running" && run?.state === "running" && !working && jobs.data != null;
+  const canStop = shown === "running" && run?.state === "running" && run.step === "solving" && !stopping;
   const canGoOn = run != null && !solving && !working;
   const sub = [
     "Solve",
@@ -416,7 +429,7 @@ export function RunPage() {
         <ErrorPanel className="mb-4" compact error={first.error} onRetry={() => void first.refetch()} retrying={first.isFetching} />
       )}
       {stop.isError && <ErrorPanel className="mb-4" compact error={stop.error} />}
-      <StatusCard shown={shown} run={run} job={job} live={doc} stopping={stopping} />
+      <StatusCard shown={shown} run={run} job={job} live={doc} stopping={stopping} outside={outside} />
 
       {liveCode === "unavailable" ? (
         <Card className="mt-4 p-5">
