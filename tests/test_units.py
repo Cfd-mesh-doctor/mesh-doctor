@@ -4441,6 +4441,34 @@ for n in names:
                     {"name": "ahmed", "mean": "yes"}):
             self.assertNotEqual(schema.check(bad, params), [], bad)
 
+    def test_a_picture_job_counts_its_set_on_the_disk(self):
+        import api_v1, diskguard
+        case = self.case(times=("100", "200"))
+        ws, launched, _, post = self.jobs_here(case)
+        self.assertEqual(self.p.how_many(case, self.p.KINDS), 7 + 9 + 3)     # the Ahmed cut list's 7 colours
+        self.assertEqual(diskguard.pictures_mb(19), 7)                        # 19 x 0.3 MB and 1 MB, rounded up
+        get = lambda **q: api_v1.handle("GET", "/api/v1/disk/pictures", {k: str(v) for k, v in q.items()})
+        st, doc, _ = get(name="ahmedP")
+        self.assertEqual((st, doc["needMb"], doc["keepMb"], doc["folder"]), (200, 7, diskguard.KEEP_MB, "workspace"))
+        self.assertIsInstance(doc["freeMb"], int)
+        self.assertEqual(get(name="ahmedP", kinds="vortices", time="100", mean="false")[1]["needMb"], 4)   # 9 x 0.3 + 1
+        for q, status, code in (({"name": "ahmedP", "mean": "true"}, 409, "not-ready"),     # it has no mean flow
+                                ({"name": "ahmedP", "mean": "yes"}, 400, "bad-request"),
+                                ({"name": "ahmedP", "time": "300"}, 400, "bad-request"),
+                                ({"name": "ahmedP", "kinds": "photos"}, 400, "bad-request"),
+                                ({"name": "nope"}, 404, "not-found"), ({}, 400, "bad-request")):
+            st, err, _ = get(**q)
+            self.assertEqual((st, err["error"]["code"]), (status, code), q)
+        self.assertEqual(get(name="ahmedP", mean="yes")[1]["error"]["message"], "mean must be true or false")
+        os.remove(os.path.join(case, "cuts.json"))                            # cuts made from the model's size
+        self.assertEqual(self.p.how_many(case, ("cuts",)), self.p.AUTO_CUTS)
+        with mock.patch.object(diskguard, "free_mb", lambda path: 500):       # the job's start counts it too
+            st, err, _ = post({"name": "ahmedP"})
+        self.assertEqual((st, err["error"]["code"], launched), (409, "not-enough-disk", []))
+        self.assertIn("the set of about 19 pictures of ahmedP needs about 7 MB, and the disk has 500 MB free",
+                      err["error"]["message"])
+        self.assertEqual(post({"name": "ahmedP"})[0], 202)
+
     def made(self, case, ws, at, mean=False, kinds=("vortices",), when=None):
         """A set of `case` at time `at` made in the workspace `ws`, as a job makes one; `when`: when it says it was
         made (UTC)."""

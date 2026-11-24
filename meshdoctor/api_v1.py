@@ -29,7 +29,7 @@ import tplan
 import validate
 import version
 
-API_VERSION = "1.17"
+API_VERSION = "1.18"
 PREFIX = "/api/v1"
 WRITES_MAX = solve.transient.MAX_WRITES   # the most times a stretch of a transient run writes
 MAX_BODY = 64 * 1024
@@ -1090,8 +1090,8 @@ DISK_JOB = {"type": "object", "required": ["needMb", "freeMb", "keepMb", "folder
                "description": "kept free for everything else: the disk guard refuses the job when what it writes and "
                               "this are more than freeMb"},
     "folder": {"enum": ["workspace", "cases"],
-               "description": "where it writes: the engine's workspace (a repair, an A/B test) or its cases folder (a "
-                              "new case)"}}}
+               "description": "where it writes: the engine's workspace (a repair, an A/B test, a set of pictures) or "
+                              "its cases folder (a new case)"}}}
 
 
 def _disk_job(planned, folder):
@@ -1150,6 +1150,17 @@ def disk_abextend(p, q, b):
        ok=DISK_JOB)
 def disk_case(p, q, b):
     return _disk_job(templates.disk_of(q["template"], q["size"]), "cases")
+
+
+@route("GET", "/disk/pictures", "What a picture job writes in the engine's workspace, as the disk guard counts it "
+       "before the job starts (about 0.3 MB a picture: one per colour of each cut, per vortex level and view, "
+       "and the worst spot's three views), and the free space there, in MB (API 1.18)",
+       query={"name": dict(_job_query("pictures", "name"), required=True), "time": _job_query("pictures", "time"),
+              "kinds": _job_query("pictures", "kinds"), "mean": _job_query("pictures", "mean")},
+       ok=DISK_JOB)
+def disk_pictures(p, q, b):
+    return _disk_job(pictures.disk_of(q["name"], q["time"] or None, tuple(dict.fromkeys(q["kinds"].split(","))),
+                                      q["mean"]), "workspace")
 
 
 NULL_TEXT = {"type": ["string", "null"]}
@@ -1266,9 +1277,13 @@ def _query_args(spec, query):
 
 
 def _query_value(k, v, sch):
-    """Query parameter k's text v as its schema takes it, or ApiError: an integer or a number when its type says so,
-    checked against the schema. With anyOf, the first alternative it fits, such as a number in a range or a word of
-    an enum (GET /judge's window: iterations, or auto)."""
+    """Query parameter k's text v as its schema takes it, or ApiError: an integer, a number or a boolean (true or
+    false) when its type says so, checked against the schema. With anyOf, the first alternative it fits, such as a
+    number in a range or a word of an enum (GET /judge's window: iterations, or auto)."""
+    if sch.get("type") == "boolean":                       # GET /disk/pictures' mean
+        if v not in ("true", "false"):
+            raise ApiError("bad-request", f"{k} must be true or false")
+        v = v == "true"
     if "anyOf" in sch:
         for alt in sch["anyOf"]:
             try:

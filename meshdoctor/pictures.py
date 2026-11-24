@@ -19,6 +19,7 @@ import argparse, json, math, os, re, shutil, stat, subprocess, sys, time
 
 import caseinfo
 import config
+import diskguard
 import jobs
 import md_api
 import prog
@@ -46,6 +47,7 @@ SET = re.compile(r"^[0-9][0-9.eE+-]{0,39}(_mean)?$")              # a set's fold
 FILE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}\.png$")     # a picture's file, in its kind's folder of its set
 PNG = b"\x89PNG\r\n\x1a\n"      # the first bytes of every PNG file
 MAX_PNG = 32 << 20              # the largest picture served: ParaView's 1920 x 1080 PNGs are well under 1 MB
+AUTO_CUTS = 7                   # the pictures of the cuts cut_views.py makes from the model's size: 3, 2 and 2 colours
 
 
 def _num(text):
@@ -171,6 +173,36 @@ def refusal(name, at=None, mean=False):
     """Why case `name` in the cases folder can't be pictured now, as (code, message), or None."""
     case = tplan._case(name)
     return ("not-found", f"no case {name} in the cases folder") if case is None else why_not(case, at, mean)
+
+
+def how_many(case, kinds):
+    """About how many pictures a set of these kinds makes of `case`: one per colour of each cut in its cut list (else
+    AUTO_CUTS), one per vortex level and view, and the worst spot's three views."""
+    n = 0
+    for kind in kinds:
+        if kind == "cuts":
+            try:
+                with open(os.path.join(case, CUTS), encoding="utf-8") as f:
+                    n += sum(len(c["colours"]) for c in json.load(f)["cuts"]) or AUTO_CUTS
+            except (OSError, ValueError, KeyError, TypeError):
+                n += AUTO_CUTS
+        else:
+            n += len(Q_AT_15) * len(VIEWS) if kind == "vortices" else len(SPOT_VIEWS)
+    return n
+
+
+def _disk(case, name, kinds):
+    """What a pictures job of `case` writes, for the disk guard: (MB, the workspace's folder of sets, what needs it,
+    with its verb), from how_many() pictures."""
+    n = how_many(case, kinds)
+    return diskguard.pictures_mb(n), root(), f"the set of about {n} pictures of {name} needs"
+
+
+def disk_of(name, at=None, kinds=KINDS, mean=False):
+    """GET /disk/pictures: what a pictures job writes, as start's disk guard counts it: ((MB, folder, what), None), or
+    (None, the refusal start would give)."""
+    why = refusal(name, at, mean)
+    return (None, md_api._refuse(*why)) if why else (_disk(tplan._case(name), name, kinds), None)
 
 
 def plan(case, view, out, kinds, pvbatch, mean=False, since=None):
@@ -374,7 +406,8 @@ def start(name, at=None, kinds=KINDS, mean=False):
     cmd = [sys.executable, os.path.join(PKG, "pictures.py"), case, "--time", at, "--kinds", ",".join(kinds),
            "--out", os.path.join(ws, rel)] + (["--mean"] if mean else [])
     return md_api._submit("pictures", {"name": name, "time": at, "kinds": list(kinds), "mean": mean}, name, cmd,
-                          log=f"{rel}.log", result=f"{rel}/pictures.json", ram=(case, "pictures"))
+                          log=f"{rel}.log", result=f"{rel}/pictures.json", ram=(case, "pictures"),
+                          disk=_disk(case, name, kinds))
 
 
 # --------------------------------------------------------------------------

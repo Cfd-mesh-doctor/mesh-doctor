@@ -53,6 +53,9 @@ SETS = 0.03                                     # the sets beside a mesh (snappy
                                                 # and a repair's of its faults), times the mesh
 COLLAPSE = 2                                    # a repair collapsing faces: its mesh's backup, and the new mesh
 AB_TIMES = 2                                    # the times an A/B test's run writes: its end, and the one after it
+PICTURE_MB = 0.3                                # a picture: ParaView's 1920 x 1080 PNGs of the coarse Ahmed body
+                                                # were 0.08 to 0.14 MB, and a car's are busier
+PICTURES_MB = 1                                 # a set's list and log, and the self test's picture
 KEEP_MB = 1024                                  # kept free for everything else
 WINDOWS_DRIVE = "/mnt/c"                        # inside WSL 2: the Windows drive that holds Linux's own disk
 DEPTH = 40                                      # folders deep through links, as the system's own limit on links
@@ -134,6 +137,11 @@ def extend_mb(mesh, times):
     """The MB an A/B test's second run writes when it is run longer: `times` more written times, split, of its mesh of
     `mesh` MB (it keeps every one)."""
     return _up(mesh * times * WRITTEN["split"])
+
+
+def pictures_mb(pictures):
+    """The MB a set of this many pictures takes (pictures.py), with its list and log."""
+    return _up(pictures * PICTURE_MB + PICTURES_MB)
 
 
 def _up(x):

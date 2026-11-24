@@ -1760,7 +1760,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.17"
+    "version": "1.18"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -3043,7 +3043,7 @@
                 "schema": {
                   "properties": {
                     "folder": {
-                      "description": "where it writes: the engine's workspace (a repair, an A/B test) or its cases folder (a new case)",
+                      "description": "where it writes: the engine's workspace (a repair, an A/B test, a set of pictures) or its cases folder (a new case)",
                       "enum": [
                         "workspace",
                         "cases"
@@ -3159,7 +3159,7 @@
                 "schema": {
                   "properties": {
                     "folder": {
-                      "description": "where it writes: the engine's workspace (a repair, an A/B test) or its cases folder (a new case)",
+                      "description": "where it writes: the engine's workspace (a repair, an A/B test, a set of pictures) or its cases folder (a new case)",
                       "enum": [
                         "workspace",
                         "cases"
@@ -3251,7 +3251,7 @@
                 "schema": {
                   "properties": {
                     "folder": {
-                      "description": "where it writes: the engine's workspace (a repair, an A/B test) or its cases folder (a new case)",
+                      "description": "where it writes: the engine's workspace (a repair, an A/B test, a set of pictures) or its cases folder (a new case)",
                       "enum": [
                         "workspace",
                         "cases"
@@ -3305,6 +3305,118 @@
         "summary": "What making a new case from a template writes in the cases folder, as the disk guard counts it before the case job starts (its mesh, and the sets snappyHexMesh writes of its layers), and the free space there, in MB (API 1.12)"
       }
     },
+    "/disk/pictures": {
+      "get": {
+        "operationId": "disk_pictures",
+        "parameters": [
+          {
+            "description": "a case in the cases folder with a written result: a run (GET /runs), or a case you made (GET /cases)",
+            "in": "query",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "a case in the cases folder with a written result: a run (GET /runs), or a case you made (GET /cases)",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "the written time to picture, as its folder says it (default: the latest on the case's whole mesh; with mean, the latest with a mean flow)",
+            "in": "query",
+            "name": "time",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "the written time to picture, as its folder says it (default: the latest on the case's whole mesh; with mean, the latest with a mean flow)",
+              "pattern": "^([0-9][0-9.eE+-]*)?$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "what to make, comma-separated: cuts, vortices, spots",
+            "in": "query",
+            "name": "kinds",
+            "required": false,
+            "schema": {
+              "default": "cuts,vortices,spots",
+              "description": "what to make, comma-separated: cuts, vortices, spots",
+              "pattern": "^(cuts|vortices|spots)(,(cuts|vortices|spots))*$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "a transient run's mean flow (UMean and pMean) in place of the flow at that time: a time written once its averaging is on (GET /runs' averaging); its set is <time>_mean (API 1.16)",
+            "in": "query",
+            "name": "mean",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "a transient run's mean flow (UMean and pMean) in place of the flow at that time: a time written once its averaging is on (GET /runs' averaging); its set is <time>_mean (API 1.16)",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "folder": {
+                      "description": "where it writes: the engine's workspace (a repair, an A/B test, a set of pictures) or its cases folder (a new case)",
+                      "enum": [
+                        "workspace",
+                        "cases"
+                      ]
+                    },
+                    "freeMb": {
+                      "description": "the free space of the disk it writes on (inside WSL 2, at most that of the Windows drive that holds Linux's own disk); null when it can't be read",
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "keepMb": {
+                      "description": "kept free for everything else: the disk guard refuses the job when what it writes and this are more than freeMb",
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "needMb": {
+                      "description": "what the job writes on the disk as it goes, as the engine's disk guard counts it before the job starts (meshdoctor/diskguard.py); null when it can't be measured, and the guard lets the job through",
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "needMb",
+                    "freeMb",
+                    "keepMb",
+                    "folder"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "What a picture job writes in the engine's workspace, as the disk guard counts it before the job starts (about 0.3 MB a picture: one per colour of each cut, per vortex level and view, and the worst spot's three views), and the free space there, in MB (API 1.18)"
+      }
+    },
     "/disk/repair": {
       "get": {
         "operationId": "disk_repair",
@@ -3328,7 +3440,7 @@
                 "schema": {
                   "properties": {
                     "folder": {
-                      "description": "where it writes: the engine's workspace (a repair, an A/B test) or its cases folder (a new case)",
+                      "description": "where it writes: the engine's workspace (a repair, an A/B test, a set of pictures) or its cases folder (a new case)",
                       "enum": [
                         "workspace",
                         "cases"

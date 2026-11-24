@@ -188,6 +188,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/disk/pictures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What a picture job writes in the engine's workspace, as the disk guard counts it before the job starts (about 0.3 MB a picture: one per colour of each cut, per vortex level and view, and the worst spot's three views), and the free space there, in MB (API 1.18) */
+        get: operations["disk_pictures"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/disk/repair": {
         parameters: {
             query?: never;
@@ -1726,7 +1743,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         /**
-                         * @description where it writes: the engine's workspace (a repair, an A/B test) or its cases folder (a new case)
+                         * @description where it writes: the engine's workspace (a repair, an A/B test, a set of pictures) or its cases folder (a new case)
                          * @enum {unknown}
                          */
                         folder: "workspace" | "cases";
@@ -1776,7 +1793,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         /**
-                         * @description where it writes: the engine's workspace (a repair, an A/B test) or its cases folder (a new case)
+                         * @description where it writes: the engine's workspace (a repair, an A/B test, a set of pictures) or its cases folder (a new case)
                          * @enum {unknown}
                          */
                         folder: "workspace" | "cases";
@@ -1822,7 +1839,57 @@ export interface operations {
                 content: {
                     "application/json": {
                         /**
-                         * @description where it writes: the engine's workspace (a repair, an A/B test) or its cases folder (a new case)
+                         * @description where it writes: the engine's workspace (a repair, an A/B test, a set of pictures) or its cases folder (a new case)
+                         * @enum {unknown}
+                         */
+                        folder: "workspace" | "cases";
+                        /** @description the free space of the disk it writes on (inside WSL 2, at most that of the Windows drive that holds Linux's own disk); null when it can't be read */
+                        freeMb: number | null;
+                        /** @description kept free for everything else: the disk guard refuses the job when what it writes and this are more than freeMb */
+                        keepMb: number;
+                        /** @description what the job writes on the disk as it goes, as the engine's disk guard counts it before the job starts (meshdoctor/diskguard.py); null when it can't be measured, and the guard lets the job through */
+                        needMb: number | null;
+                    };
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    disk_pictures: {
+        parameters: {
+            query: {
+                /** @description what to make, comma-separated: cuts, vortices, spots */
+                kinds?: string;
+                /** @description a transient run's mean flow (UMean and pMean) in place of the flow at that time: a time written once its averaging is on (GET /runs' averaging); its set is <time>_mean (API 1.16) */
+                mean?: boolean;
+                /** @description a case in the cases folder with a written result: a run (GET /runs), or a case you made (GET /cases) */
+                name: string;
+                /** @description the written time to picture, as its folder says it (default: the latest on the case's whole mesh; with mean, the latest with a mean flow) */
+                time?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /**
+                         * @description where it writes: the engine's workspace (a repair, an A/B test, a set of pictures) or its cases folder (a new case)
                          * @enum {unknown}
                          */
                         folder: "workspace" | "cases";
@@ -1866,7 +1933,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         /**
-                         * @description where it writes: the engine's workspace (a repair, an A/B test) or its cases folder (a new case)
+                         * @description where it writes: the engine's workspace (a repair, an A/B test, a set of pictures) or its cases folder (a new case)
                          * @enum {unknown}
                          */
                         folder: "workspace" | "cases";
