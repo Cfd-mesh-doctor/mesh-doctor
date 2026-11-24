@@ -102,6 +102,31 @@ class SourceCaseTest(unittest.TestCase):
             self.assertIn("no case 'case9'", self.no_case(lambda: abtest.main(["case9", "x"])))
         self.assertEqual(sorted(os.listdir(work)), ["case7-copy"])
 
+    def test_full_and_ab_check_the_disk_before_anything_is_copied(self):
+        import diskguard
+        work = os.path.join(self.tmp, "work")
+        with open(os.path.join(self.cases, "case7", "constant", "polyMesh", "points"), "w") as f:
+            f.write("p" * 100)
+        os.makedirs(os.path.join(self.cases, "case7", "0"))
+        out = io.StringIO()
+        with mock.patch.object(repair, "ROOT", work), mock.patch.object(abtest, "ROOT", work), \
+                mock.patch.object(diskguard, "free_mb", lambda folder: diskguard.KEEP_MB - 1), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            for argv, run in ((["full", "case7", "x", "--no-ram-check"], repair.main),
+                              (["case7", "-", "--variant", "simplec", "--no-ram-check"], abtest.main)):
+                with self.assertRaises(SystemExit) as e:
+                    run(argv)
+                self.assertEqual(e.exception.code, 4, argv)
+        free = diskguard.text(diskguard.KEEP_MB - 1)
+        # the copy and its points' backup (1 MB), and the sets and room to collapse faces of its 1 MB mesh (3 MB);
+        # the A/B test's two runs: each a copy (1 MB), its split and two written times (3 MB)
+        said = out.getvalue()
+        self.assertIn("not enough disk space: the copy of case7 and its repair need about 4 MB, and the disk has "
+                      f"{free} free (the engine keeps 1.0 GB free)", said)
+        self.assertIn(f"not enough disk space: the A/B test case7_simplec needs about 8 MB, and the disk has {free} "
+                      "free", said)
+        self.assertFalse(os.path.exists(work))                              # nothing copied, nothing solved
+
 
 
 class StartFieldsTest(unittest.TestCase):
@@ -254,6 +279,19 @@ class AbFollowUpTest(unittest.TestCase):
             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
                 abtest.main(["extend", "wing-fix", "400", "--no-ram-check"])
         self.assertEqual(calls, [(self.top, 400, None)])
+
+    def test_extend_checks_the_disk_before_the_run_goes_on(self):
+        import diskguard
+        sparse(os.path.join(self.top, "fixed", "constant", "polyMesh", "points"), diskguard.MB)
+        out = io.StringIO()
+        with mock.patch.object(diskguard, "free_mb", lambda folder: diskguard.KEEP_MB), \
+                mock.patch.object(abtest, "extend", lambda *a, **kw: self.fail("it went on")), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()), \
+                self.assertRaises(SystemExit) as e:
+            abtest.main(["extend", "wing-fix", "400", "--no-ram-check"])
+        self.assertEqual(e.exception.code, 4)
+        self.assertIn("not enough disk space: running wing-fix's second run longer needs about 1 MB, and the disk has "
+                      f"{diskguard.text(diskguard.KEEP_MB)} free", out.getvalue())     # a time it writes, split
 
 
 def write_steady_run(d, n, p_of, drag_of):
@@ -1533,6 +1571,83 @@ class ApiV1Test(unittest.TestCase):
         cmd = self.launched[0]
         self.assertEqual((cmd[-3], os.path.basename(cmd[-2]), cmd[-1]), ("extend", "r1_ab", "600"))
 
+    def disk_case(self):
+        """c1 with a mesh of 6 MB (points 2, faces 3, owner 1: sparse files), and r1's A/B test with a second run at
+        iteration 400 on a mesh of 1 MB (for running it longer), whose first run a variant can reuse."""
+        import diskguard
+        for name, mb in (("points", 2), ("faces", 3), ("owner", 1)):
+            sparse(os.path.join(self.src, "constant", "polyMesh", name), mb * diskguard.MB)
+
+    def disk_ab(self):
+        import diskguard
+        ab = os.path.join(self.d, "work", "r1_ab")
+        for t in ("0", "200", "400"):
+            os.makedirs(os.path.join(ab, "fixed", "processor0", t))
+        sparse(os.path.join(ab, "fixed", "constant", "polyMesh", "points"), diskguard.MB)
+        self.schema.write(os.path.join(ab, "ab_result.json"), {"source": self.src, "iters": 200, "init": "0",
+                          "base": {"forces": {}}, "fixed": {"forces": {}}, "extensions": [{"from": "200", "to": 400}]},
+                          "abtest")
+
+    def test_a_repair_an_ab_test_and_running_it_longer_are_refused_when_they_wont_fit_on_the_disk(self):
+        import diskguard
+        keep = diskguard.KEEP_MB
+        self.disk_case()
+        # the copy (6 MB) and its points' backup (2 MB), and the sets and room to collapse faces of its 6 MB mesh
+        # (6 x 2.03 = 12.18: 13 MB); the A/B test's two runs: each a copy (6 MB), its split and two written times
+        # (6 x 2.65 = 15.9: 16 MB); and running its second run longer from 400 to 600: one time, split, of 1 MB
+        repair = {"kind": "repair", "params": {"source": "c1", "name": "r2"}}
+        for job, what, mb in ((repair, "the copy of c1 and its repair need", 8 + 13),
+                              ({"kind": "abtest", "params": {"name": "r1"}}, "the A/B test r1 needs", 2 * (6 + 16)),
+                              ({"kind": "abextend", "params": {"name": "r1", "to": 600}},
+                               "running r1's second run longer needs", 1)):
+            if job["kind"] == "abextend":
+                self.disk_ab()
+            with mock.patch.object(diskguard, "free_mb", lambda folder: mb + keep - 1):
+                self.assertError(self.post("/jobs", job), 409, "not-enough-disk",
+                                 f"{what} about {mb} MB, and the disk has {diskguard.text(mb + keep - 1)} free (the "
+                                 "engine keeps 1.0 GB free)")
+        self.assertEqual(self.launched, [])
+        self.assertFalse(os.path.exists(os.path.join(self.d, "work", "r2")))
+        with mock.patch.object(diskguard, "free_mb", lambda folder: 21 + keep):
+            st, doc, _ = self.post("/jobs", repair)
+        self.assertEqual(st, 202, doc)
+
+    def test_the_disk_routes_say_what_a_repair_an_ab_test_and_running_it_longer_write(self):
+        import diskguard
+        self.disk_case()
+        with mock.patch.object(diskguard, "free_mb", lambda folder: 5000):
+            self.assertEqual(self.get("/disk/repair", source="c1")[:2],
+                             (200, {"needMb": 21, "freeMb": 5000, "keepMb": 1024, "folder": "workspace"}))
+            st, doc, _ = self.get("/disk/abtest", name="r1")
+            self.assertEqual((st, doc), (200, {"needMb": 44, "freeMb": 5000, "keepMb": 1024, "folder": "workspace"}))
+            self.assertEqual(self.get("/disk/abtest", name="r1", variant="simplec")[1]["needMb"], 44)
+            self.disk_ab()                                    # an earlier test whose first run the variant reuses
+            self.assertEqual(self.get("/disk/abtest", name="r1", variant="simplec")[1]["needMb"], 22)
+            self.assertEqual(self.get("/disk/abtest", name="r1", iters=400, variant="simplec")[1]["needMb"], 44)
+            self.assertEqual(self.get("/disk/abextend", name="r1", to=600)[:2],
+                             (200, {"needMb": 1, "freeMb": 5000, "keepMb": 1024, "folder": "workspace"}))
+            self.assertEqual(self.get("/disk/abextend", name="r1", to=5000)[1]["needMb"], 2)   # at 2500 and 5000
+        for path, q, status, code, text in (
+                ("/disk/repair", {"source": "c9"}, 404, "not-found", "unknown source case"),
+                ("/disk/repair", {"source": "../x"}, 400, "bad-request", "source"),
+                ("/disk/repair", {}, 400, "bad-request", "missing query parameter source"),
+                ("/disk/abtest", {"name": "nope"}, 409, "not-ready", "repair run not finished"),
+                ("/disk/abtest", {"name": "r1", "init": "0.cold"}, 400, "bad-request", "no 0.cold directory"),
+                ("/disk/abtest", {"name": "r1", "iters": "many"}, 400, "bad-request", "iters"),
+                ("/disk/abtest", {"name": "r1", "variant": "nope"}, 400, "bad-request", "unknown variant"),
+                ("/disk/abextend", {"name": "r1"}, 400, "bad-request", "missing query parameter to"),
+                ("/disk/abextend", {"name": "r1", "to": 400}, 400, "bad-request", "between 401 and 5000"),
+                ("/disk/abextend", {"name": "c1", "to": 600}, 409, "not-ready", "A/B not finished")):
+            self.assertError(self.get(path, **q), status, code, text)
+        self.assertEqual(self.launched, [])
+        doc = self.get("/openapi.json")[1]                    # each query parameter as its job takes it
+        query = lambda path: {p["name"]: p for p in doc["paths"][path]["get"]["parameters"]}
+        self.assertEqual(query("/disk/abtest")["iters"]["schema"],
+                         self.api.JOBS["abtest"]["params"]["properties"]["iters"])
+        for path, required in (("/disk/repair", ["source"]), ("/disk/abtest", ["name"]),
+                               ("/disk/abextend", ["name", "to"]), ("/disk/case", ["template"])):
+            self.assertEqual([n for n, p in query(path).items() if p["required"]], required, path)
+
     def test_openapi_matches_the_table(self):
         doc = self.get("/openapi.json")[1]
         self.assertEqual(doc["openapi"], "3.1.0")
@@ -1683,6 +1798,33 @@ printf 'FoamFile\\n{\\n    note "nPoints:900 nCells:480 nFaces:2000 nInternalFac
                                "not-enough-memory", "mesh of 480,000 cells")
         with mock.patch.object(self.t.ramguard, "available_mb", lambda: need):
             self.assertEqual(self.post({"template": "ahmed-body", "size": "coarse", "name": "a"})[0], 202)
+
+    def test_the_disk_guard_checks_the_mesh_the_job_will_make_and_its_sets(self):
+        import diskguard
+        keep, coarse = diskguard.KEEP_MB, {"template": "ahmed-body", "size": "coarse"}
+        with mock.patch.object(diskguard, "free_mb", lambda folder: 68 + keep - 1):        # 65.6 MB of mesh, and 3 %
+            self.assertRefused(self.post(dict(coarse, name="a")), 409, "not-enough-disk", "a's mesh needs about 68 MB")
+            st, doc, _ = self.api.handle("GET", "/api/v1/disk/case", coarse)
+        self.assertEqual((st, doc), (200, {"needMb": 68, "freeMb": 68 + keep - 1, "keepMb": keep, "folder": "cases"}))
+        st, doc, _ = self.api.handle("GET", "/api/v1/disk/case", {"template": "ahmed-body"})      # medium, the default
+        self.assertEqual((st, doc["needMb"]),
+                         (200, diskguard.made_mb(self.t.TEMPLATES["ahmed-body"]["sizes"]["medium"]["cells"])))
+        for q, status, code, text in (({"template": "nope"}, 404, "not-found", "no template nope"),
+                                      ({"template": "wheel-wing", "size": "coarse"}, 400, "bad-request",
+                                       "has no coarse mesh"),
+                                      ({"template": "../x"}, 400, "bad-request", "template"),
+                                      ({}, 400, "bad-request", "missing query parameter template")):
+            self.assertRefused(self.api.handle("GET", "/api/v1/disk/case", q), status, code, text)
+        self.assertEqual(self.launched, [])
+        with mock.patch.object(diskguard, "free_mb", lambda folder: 68 + keep):
+            self.assertEqual(self.post(dict(coarse, name="a"))[0], 202)
+        # the command checks it too, once the memory is checked
+        with mock.patch.object(self.t.ramguard, "check_cells", lambda cells, step: (True, "")), \
+                mock.patch.object(diskguard, "free_mb", lambda folder: 68 + keep - 1), \
+                self.assertRaises(SystemExit) as e:
+            self.t.main(["ahmed-body", "a2", "--size", "coarse"])
+        self.assertTrue(str(e.exception).startswith("not enough disk space: a2's mesh needs about 68 MB"), e.exception)
+        self.assertFalse(os.path.exists(os.path.join(self.cases, "a2")))
 
     def test_make_copies_the_template_resizes_it_and_meshes_it(self):
         self.stand_in()
@@ -2509,7 +2651,7 @@ echo End
                 ({"name": "copy1", "source": "yours", "np": 2}, "the copy of yours and its solve need", 1 + 4),
                 ({"name": "made", "to": 100, "np": 2}, "the solve of made needs", 4),     # its split and 2 times
                 ({"name": "fresh", "template": "ahmed-body", "size": "coarse", "np": 2},
-                 "fresh's mesh and its solve need", 66 + 215)):
+                 "fresh's mesh and its solve need", 68 + 215)):   # its mesh with its sets, then its solve
             need = self.s.disk_need(params["name"], 2, params.get("source"), params.get("template"), params.get("size"))
             self.assertEqual(need, (mb, what))
             with mock.patch.object(diskguard, "free_mb", lambda folder: mb + keep - 1):
@@ -3210,6 +3352,13 @@ class TransientSolveTest(unittest.TestCase):
         self.assertIn("give the time in s to continue it to", str(e.exception))
 
 
+def sparse(path, nbytes):
+    """A file of `nbytes` that takes next to no room (a sparse file)."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as f:
+        f.truncate(nbytes)
+
+
 class DiskGuardTest(unittest.TestCase):
     """diskguard.py: what a copy writes, measured as the copy walks it; what a solve writes, from its mesh; the free
     space, at most the Windows drive's inside WSL; and the refusal, with its numbers."""
@@ -3271,6 +3420,83 @@ class DiskGuardTest(unittest.TestCase):
                          ((100, 2, 2, True, False, 1), 245)):
             self.assertEqual(self.g.solve_mb(*args), mb, args)
         self.assertEqual(self.g.mesh_mb(480_000), 66)                        # the coarse Ahmed body's: 65.6 MB
+
+    def test_a_new_case_a_repair_an_ab_test_and_running_it_longer_from_the_sizes_they_start_from(self):
+        mib = self.g.MB
+        self.assertEqual(self.g.made_mb(480_000), 68)                       # its mesh, and 3 % of sets beside it
+        # a repair: its copy and its points' backup, then of its mesh: 3 % of sets, and 2 times to collapse faces
+        self.assertEqual(self.g.repair_mb(10 * mib, 2 * mib, 100), 12 + 203)
+        self.assertEqual(self.g.repair_mb(0, 0, 0), 0)
+        # an A/B test: two runs (one when it reuses an earlier test's first run), each a copy of the case, its split
+        # onto its processes (1.05) and two written times, split (2 x 0.8)
+        self.assertEqual(self.g.ab_mb(101 * mib, 100), 2 * (101 + 265))
+        self.assertEqual(self.g.ab_mb(101 * mib, 100, runs=1), 101 + 265)
+        self.assertEqual((self.g.extend_mb(100, 2), self.g.extend_mb(100, 1), self.g.extend_mb(1, 1)), (160, 80, 1))
+
+    def test_a_link_a_copy_keeps_as_a_link_takes_no_room(self):
+        case, outside = os.path.join(self.d, "case"), os.path.join(self.d, "surfaces")
+        self.write(outside, {"body.stl": "solid body\n" * 50})
+        self.write(case, {"constant/polyMesh/owner": "o" * 4000})
+        os.symlink(outside, os.path.join(case, "constant", "triSurface"))
+        os.symlink(os.path.join(outside, "body.stl"), os.path.join(case, "constant", "body.stl"))
+        self.assertEqual(self.g.size(os.path.join(case, "constant"), links=False), 4000)
+        self.assertEqual(self.g.size(os.path.join(case, "constant")), 4000 + 2 * 550)      # followed: both
+
+    def test_a_repair_measures_the_copy_it_makes_and_the_mesh_it_repairs(self):
+        import repair
+        mib, owner = self.g.MB, 'FoamFile\n{\n    note "nPoints:900 nCells:%d nFaces:2000 nInternalFaces:1500";\n}\n'
+        src, outside, work = (os.path.join(self.d, n) for n in ("case", "surfaces", "work"))
+        self.write(outside, {"body.stl": "solid body\n" * 50})
+        self.write(src, {"system/controlDict": "application foamRun;\n", "constant/polyMesh/owner": owner % 480,
+                         "0/U": "u" * 99, "100/U": "a result\n" * 99, "log.foamRun": "Time = 100\n"})
+        sparse(os.path.join(src, "constant", "polyMesh", "points"), 2 * mib)
+        os.symlink(outside, os.path.join(src, "constant", "triSurface"))     # copied as a link: no room
+
+        def copied():
+            with mock.patch.object(repair, "ROOT", work):
+                need, dst = repair.copy_size(src), repair.copy_case(src, "case-fix")
+            files = [os.path.join(d, n) for d, _, names in os.walk(dst) for n in names if n != ".meshDoctorCopy"]
+            self.assertEqual(need, sum(os.path.getsize(p) for p in files if not os.path.islink(p)))
+            self.assertTrue(os.path.islink(os.path.join(dst, "constant", "triSurface")))
+            return need
+        need = copied()
+        # in serial, the case's own mesh is repaired (2 MB and its owner: 3 MB): its sets and room to collapse faces
+        self.assertEqual(repair.disk_need(src), self.g.repair_mb(need, 2 * mib, 3))
+        # its processors' meshes when the case's own isn't the whole of them: each copied, each one's points backed up
+        self.write(src, {"processor0/constant/polyMesh/owner": owner % 400, "processor0/100/U": "x" * 99})
+        sparse(os.path.join(src, "processor0", "constant", "polyMesh", "points"), mib)
+        need = copied()
+        self.assertEqual(repair.disk_need(src), self.g.repair_mb(need, 3 * mib, 2))
+
+    def test_an_ab_test_measures_the_copy_each_of_its_runs_makes(self):
+        import abtest
+        src, outside = os.path.join(self.d, "case"), os.path.join(self.d, "surfaces")
+        self.write(outside, {"body.stl": "solid body\n" * 50})
+        self.write(src, {"system/controlDict": "application foamRun;\n",
+                         "system/decomposeParDict": "numberOfSubdomains 2;", "0.warm/U": "w" * 300, "0/U": "u" * 99,
+                         "100/U": "a result\n" * 99, "log.foamRun": "Time = 100\n"})
+        sparse(os.path.join(src, "constant", "polyMesh", "points"), self.g.MB)
+        os.symlink(outside, os.path.join(src, "constant", "triSurface"))     # followed, as the copy follows it
+        need, dst = abtest.copy_size(src, "0.warm"), os.path.join(self.d, "work", "case_ab", "base")
+        abtest.make_case(src, dst, "0.warm")
+        self.assertEqual(need, self.bytes_in(dst) - os.path.getsize(os.path.join(dst, ".meshDoctorCopy")))
+        self.assertEqual(abtest.disk_need(src, "0.warm"), self.g.ab_mb(need, 1))           # its mesh: 1 MB
+        self.assertEqual(abtest.disk_need(src, "0.warm", runs=1), self.g.ab_mb(need, 1, 1))
+
+    def test_running_an_ab_tests_second_run_longer_counts_each_time_it_writes(self):
+        import abtest
+        for (start, end), n in (((200, 1000), 2), ((200, 300), 1), ((400, 401), 1), ((1000, 5000), 2),
+                                ((400, 600), 1)):
+            self.assertEqual(abtest.extend_writes(start, end), n, (start, end))
+        for start in range(20, 420, 20):           # as the solver writes: each iteration that is a multiple of it
+            for end in range(start + 1, start + 300, 7):
+                every = abtest.end_write_interval(start, end)
+                written = [i for i in range(start + 1, end + 1) if i % every == 0]
+                self.assertEqual(abtest.extend_writes(start, end), len(written), (start, end))
+                self.assertEqual(written[-1], end)                          # its last is where it ends
+        fixed = os.path.join(self.d, "fixed")
+        sparse(os.path.join(fixed, "constant", "polyMesh", "points"), self.g.MB)
+        self.assertEqual(abtest.extend_need(fixed, 200, 1000), self.g.extend_mb(1, 2))      # at 500 and 1000
 
     def test_inside_wsl_the_free_space_is_at_most_the_windows_drives_that_holds_linuxs_disk(self):
         from collections import namedtuple

@@ -229,7 +229,7 @@ export async function mockEngine(
     kinds?: string[];
     /** The transient plans tplan jobs made (GET /tplans/{name}, API 1.6), by their case's name. */
     tplans?: Record<string, unknown>;
-    /** The free space GET /disk says (API 1.7), in MB: 393 GB by default. */
+    /** The free space GET /disk and GET /disk/{kind} say (API 1.7, 1.12), in MB: 393 GB by default. */
     diskFreeMb?: number;
   } = {},
 ): Promise<MockEngine> {
@@ -322,6 +322,23 @@ export async function mockEngine(
         name, copyMb: 65, transientMb: 103, solveMb: { several: 212, one: 78 },
         continueMb: { several: 39 + 20 * more, one: 0 },
         transientSolveMb: { several: 445 + 84 * more, one: 164 + 75 * more } } });
+    }
+    // What the other jobs write (API 1.12), as the disk guard counts them for the coarse Ahmed body's mesh of 66 MB: a
+    // repair 212 MB (its copy and its points' backup, its sets and room to collapse faces), an A/B test 484 MB (two
+    // runs), its continuation 106 MB (two written times), and a new case its mesh with its sets.
+    const diskJob = /^\/disk\/(repair|abtest|abextend|case)$/.exec(path);
+    if (diskJob) {
+      const query = new URL(req.url()).searchParams;
+      const kind = diskJob[1]!;
+      const template = TEMPLATES.items.find((t) => t.name === query.get("template"));
+      const cells = template?.sizes.find((s) => s.name === (query.get("size") ?? "medium"))?.cells;
+      if (kind === "case" && cells == null) {
+        return json(404, { error: { code: "not-found", message: `no template ${query.get("template")}` } });
+      }
+      const needMb = kind === "repair" ? 212 : kind === "abtest" ? 484 : kind === "abextend" ? 106
+        : Math.ceil((cells ?? 0) * 0.14 / 1024 * 1.03);
+      return json(200, { needMb, freeMb: opts.diskFreeMb ?? 402_339, keepMb: 1024,
+        folder: kind === "case" ? "cases" : "workspace" });
     }
     if (path === "/check" && opts.check !== null) return json(200, opts.check ?? readiness());
     if (path === "/templates" && opts.templates !== null) return json(200, opts.templates ?? TEMPLATES);

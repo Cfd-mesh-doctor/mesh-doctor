@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Making a new case from the app (API 1.5): a template, its mesh size and the case's name, whether the mesh fits in
-// the memory of the engine's computer, then POST /jobs (a `case` job), and the new job's details on the Jobs screen.
+// the memory of the engine's computer and on the disk the cases are on, then POST /jobs (a `case` job), and the new
+// job's details on the Jobs screen.
 // The demo can't start jobs: it says so and gives the command that does the same in a terminal.
 import { FolderPlus } from "lucide-react";
 import { useId, useMemo, useState } from "react";
@@ -13,11 +14,11 @@ import { DialogActions, DialogClose, DialogDescription, DialogTitle } from "@/co
 import { Input, Segmented } from "@/components/ui/misc";
 import { useAppPath, useEngine } from "@/engine/context";
 import { asEngineError } from "@/engine/errors";
-import { useCases, useJobs, useMachine, useStartJob, useTemplates } from "@/engine/hooks";
+import { useCases, useDiskJob, useJobs, useMachine, useStartJob, useTemplates } from "@/engine/hooks";
 import { JOB_KIND_LABEL, isActive, type TemplateSize } from "@/engine/types";
 import { formatInt } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { FIELD, GB, JobDialog, Note } from "./dialogParts";
+import { DiskNote, FIELD, GB, JobDialog, Note } from "./dialogParts";
 import { OLD_ENGINE_CASES, checkCaseName, newCaseCommand, suggestName, takenCaseNames } from "./caseStart";
 import { stepMemory } from "./repairStart";
 
@@ -63,6 +64,8 @@ function NewCaseForm({ onDone, preset }: { onDone: () => void; preset?: { templa
   const memory = stepMemory("snappy", size?.cells ?? null, machine.data);
   const busy = jobs.data?.items.find((j) => isActive(j.state));
   const demo = mode === "demo";
+  // its mesh and the sets beside it, as the engine's disk guard counts them (API 1.12)
+  const disk = useDiskJob("case", !demo && template && size ? { template: template.name, size: size.name } : null);
   const computer = demo ? "the demo engine's computer" : "your engine's computer";
   const Computer = demo ? "The demo engine's computer" : "Your engine's computer";
   const old = templates.isError && !templates.data && asEngineError(templates.error).code === "not-found";
@@ -163,6 +166,7 @@ function NewCaseForm({ onDone, preset }: { onDone: () => void; preset?: { templa
                 checks it when the case starts.
               </Note>
             )}
+            <DiskNote disk={disk.data} needs="Its mesh needs" refuses="a case" />
             {busy && !demo && (
               <Note tone="warn">
                 {JOB_KIND_LABEL[busy.kind] ?? busy.kind} {busy.name} is {busy.state === "queued" ? "waiting to start" : "running"}.

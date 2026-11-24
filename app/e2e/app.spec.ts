@@ -429,6 +429,7 @@ test("Solve's New case makes a case from a template: a free name, the memory it 
   await expect(name).toHaveValue("ahmed-coarse");
   await expect(dialog.getByText("About 480,000 cells: for a quick look.")).toBeVisible();
   await expect(dialog.getByText(/^Its mesh needs about 1\.0 GB of memory; your engine's computer has 15\.6 GB\.$/)).toBeVisible();
+  await expect(dialog).toContainText("Its mesh needs about 68 MB of disk space; the disk the cases are on has 393 GB free.");
   await name.fill("wing");                                                       // a case's name
   await expect(dialog.getByText("A case with this name exists already. Pick another name.")).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Make case" })).toBeDisabled();

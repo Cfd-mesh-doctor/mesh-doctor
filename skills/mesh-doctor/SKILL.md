@@ -54,6 +54,10 @@ folder there, marked as made by Mesh Doctor.
 - **Memory:** about 1.5 KB per cell plus 0.5 GB (about 15 GB for 10 million cells, serial). Run one big job at a time,
   and check free RAM first (`free -g`). For very large meshes use zone mode if the repository has it
   (`python3 -m meshdoctor zone`): it cuts out only the bad regions.
+- **Disk:** before a repair, an A/B test (and `ab extend`), a new case or a solve starts, the engine checks that what
+  it writes fits on its disk with 1 GB to spare: a repair writes its copy and up to about 2 more times its mesh, an
+  A/B test about 3.3 times the mesh a run. A refusal (`not enough disk space: ...`) gives both numbers: delete runs
+  or results you no longer need, then try again.
 - **The source must be serial** (a real `constant/polyMesh`). If only `processor*/` holds the mesh, reconstruct first
   (`reconstructPar -constant` / `reconstructParMesh -constant`) in a copy.
 

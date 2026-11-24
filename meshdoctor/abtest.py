@@ -33,12 +33,15 @@ Writes <workspace>/<fixedName>_ab/ab_result.json with residual levels, force
 means/oscillation and seconds per iteration for both runs, plus a checksum
 proving the source case was only read.  python3 -m meshdoctor config shows <workspace>.
 Serial-mesh sources only (the root polyMesh must be the real mesh). A case without a
-system/decomposeParDict (run in serial) gets a scotch one in both copies.
+system/decomposeParDict (run in serial) gets a scotch one in both copies.  Before it
+copies anything, the RAM guard and the disk guard check that the test fits in the free
+memory and in the workspace's free disk space; so does `extend`.
 """
 import bisect, gzip, json, os, re, shutil, statistics, subprocess, sys, time
 
 import caseinfo
 import config
+import diskguard
 import prog
 import ramguard
 import schema
@@ -103,6 +106,19 @@ def make_case(src, dst, init, points=None):
             f.write(DECOMPOSE_PAR_DICT)
     with open(os.path.join(dst, ".meshDoctorCopy"), "w") as f:
         f.write(src + "\n")
+
+
+def copy_size(src, init):
+    """The bytes make_case copies of case `src`: its settings, its mesh and its start fields `init`, links followed."""
+    return sum(diskguard.size(os.path.join(src, d)) for d in ("system", "constant", init))
+
+
+def disk_need(src, init, runs=2):
+    """What an A/B test of case `src` writes into the workspace, in MB, for the disk guard (diskguard.ab_mb): `runs`
+    runs (2; 1 when it reuses an earlier test's first run), each a copy of the case (copy_size) and what it solves,
+    from the size of its mesh."""
+    mesh = diskguard.mb(diskguard.size(os.path.join(src, "constant", "polyMesh")))
+    return diskguard.ab_mb(copy_size(src, init), mesh, runs)
 
 
 def start_fields(src, init=None):
@@ -689,6 +705,20 @@ def end_write_interval(start, end):
     return 1
 
 
+def extend_writes(start, end):
+    """The times extend() writes continuing a run from iteration `start` to `end`: each multiple of its write interval
+    (end_write_interval) past start, up to end."""
+    d = end_write_interval(start, end)
+    return end // d - start // d
+
+
+def extend_need(case, start, end):
+    """What continuing run `case` (an A/B test's second run, split) from iteration `start` to `end` writes, in MB, for
+    the disk guard (diskguard.extend_mb): its written times, split, from the size of its mesh."""
+    mesh = diskguard.mb(diskguard.size(os.path.join(case, "constant", "polyMesh")))
+    return diskguard.extend_mb(mesh, extend_writes(start, end))
+
+
 def extend(top, end_iter, nproc=None, variant=None):
     """Continue the second run of an A/B to end_iter (optionally switching to
     another solver preset first), then judge convergence."""
@@ -768,6 +798,12 @@ def main(a):
             print(msg, flush=True)
             if not ok:
                 sys.exit(4)
+        fixed = os.path.join(top, "fixed")
+        ok, msg = diskguard.check(extend_need(fixed, int(float(latest_time(fixed))), end), top,
+                                  f"running {os.path.basename(top)[:-3]}'s second run longer needs")
+        print(msg, flush=True)
+        if not ok:
+            sys.exit(4)
         r = extend(top, end, variant=v)
         print(json.dumps({k: v for k, v in r["fixedJudge"].items() if k != "pBlocks"}, indent=1))
         return
@@ -824,6 +860,11 @@ def main(a):
                      "points; compare the two cases with separate runs instead.")
     label = opt("--label", fixed_name if not variant else f"{os.path.basename(src)}_{variant}")
     repair.plain_name(label, "label")      # <label>_ab/base and /fixed get deleted and re-made
+    ok, msg = diskguard.check(disk_need(src, init, 1 if "--base-from" in a else 2), os.path.join(ROOT, label + "_ab"),
+                              f"the A/B test {label} needs")
+    print(msg, flush=True)
+    if not ok:
+        sys.exit(4)
     fp0 = repair.source_fingerprint(src)   # proves at the end that the source was only read
     top = os.path.join(ROOT, label + "_ab")
     os.makedirs(top, exist_ok=True)

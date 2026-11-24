@@ -143,6 +143,8 @@ test("on your own engine, Start A/B test starts the job, whose test's page and J
   await expect(dialog).toContainText("Solves wing twice, 200 iterations each: on the original mesh, then on the repaired mesh of "
     + "wing-fix. About 32 min in all on 4 solver ranks.");
   await expect(dialog).toContainText("Needs about 3.5 GB of memory; your engine's computer has 15.6 GB.");
+  await expect(dialog).toContainText(
+    "The test needs about 484 MB of disk space; the disk the engine's workspace is on has 393 GB free.");
   await dialog.getByRole("button", { name: "Start A/B test" }).click();
   await expect(page).toHaveURL(/\/app\/abtests\/wing-fix$/);
   expect(engine.started).toEqual([{ kind: "abtest", params: { name: "wing-fix", iters: 200, init: "auto", variant: "", replace: false } }]);

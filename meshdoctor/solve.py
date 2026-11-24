@@ -323,14 +323,14 @@ def disk(name, writes=None):
 
 def disk_need(name, nproc, source=None, template=None, size=None, steady=None, writes=None):
     """What the solve job of case `name` writes on the disk, for the disk guard: (MB, what needs it, with its verb).
-    The new case it makes (a copy of `source`, a transient run of `steady`, or `template`'s mesh at `size`), then what
-    it writes as it goes (diskguard.solve_mb): from the start on `nproc` processes, or continued on the run's own
-    split; a transient run's `writes` times a stretch (else its own), each kept.  None when the mesh it solves can't
-    be measured."""
+    The new case it makes (a copy of `source`, a transient run of `steady`, or a case of `template` at `size`: its
+    mesh and its sets, diskguard.made_mb), then what it writes as it goes (diskguard.solve_mb): from the start on
+    `nproc` processes, or continued on the run's own split; a transient run's `writes` times a stretch (else its
+    own), each kept.  None when the mesh it solves can't be measured."""
     if template is not None:
-        mesh = diskguard.mesh_mb(templates.TEMPLATES[template]["sizes"][size or own_size(template)]["cells"])
-        solved = diskguard.solve_mb(mesh, _purge(os.path.join(templates.EXAMPLES, template)), nproc)
-        return mesh + solved, f"{name}'s mesh and its solve need"
+        cells = templates.TEMPLATES[template]["sizes"][size or own_size(template)]["cells"]
+        solved = diskguard.solve_mb(diskguard.mesh_mb(cells), _purge(os.path.join(templates.EXAMPLES, template)), nproc)
+        return diskguard.made_mb(cells) + solved, f"{name}'s mesh and its solve need"
     if source is not None or steady is not None:
         src = case_dir(source if source is not None else steady)
         made = (templates.copy_size(src, case_dir(name)) if source is not None

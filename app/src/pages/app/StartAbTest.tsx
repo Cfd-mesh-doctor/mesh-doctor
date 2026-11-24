@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/misc";
 import { abCommand, abExtendCommand } from "@/engine/commands";
 import { useAppPath, useEngine } from "@/engine/context";
 import {
-  IDLE_POLL_MS, useAbtests, useCases, useJobs, useMachine, useRepairs, useStartJob, useVariants,
+  IDLE_POLL_MS, useAbtests, useCases, useDiskJob, useJobs, useMachine, useRepairs, useStartJob, useVariants,
 } from "@/engine/hooks";
 import { JOB_KIND_LABEL, isActive, type Job } from "@/engine/types";
 import { caseName } from "@/engine/verdict";
@@ -27,7 +27,7 @@ import {
   AB_EXTEND_MAX, AB_INITS, AB_ITERS, abRanks, abTestName, extendTarget, itersProblem, runSeconds, targetProblem,
   testableRuns, wholeNumber, type AbInit,
 } from "./abStart";
-import { FIELD, GB, JobDialog, Note } from "./dialogParts";
+import { DiskNote, FIELD, GB, JobDialog, Note } from "./dialogParts";
 import { caseCells, stepMemory } from "./repairStart";
 
 /** The line that says a big job is under way, so this one waits: the engine runs one at a time. */
@@ -105,6 +105,9 @@ function StartAbTestForm({ run, onDone }: { run: string | null; onDone: () => vo
   const memory = stepMemory("solver", cells, machine.data);
   const busy = jobs.data?.items.find((j) => isActive(j.state));
   const demo = mode === "demo";
+  // a copy of the case for each run it solves, and what each writes, as the engine's disk guard counts them (API 1.12)
+  const disk = useDiskJob("abtest", !demo && chosen && !problem && iters != null
+    ? { name: chosen.name, iters, init, ...(variant ? { variant } : {}) } : null);
   const computer = demo ? "the demo engine's computer" : "your engine's computer";
   const Computer = demo ? "The demo engine's computer" : "Your engine's computer";
   const ready = !demo && !!chosen && !problem && (!taken || replace) && !busy && !start.isPending;
@@ -249,6 +252,7 @@ function StartAbTestForm({ run, onDone }: { run: string | null; onDone: () => vo
                 so the memory isn&apos;t checked here; the engine checks it when the test starts.
               </Note>
             )}
+            <DiskNote disk={disk.data} needs="The test needs" refuses="a test" />
             {busy && !demo && <BusyNote job={busy} />}
           </div>
 
@@ -330,6 +334,8 @@ function ExtendAbTestForm({ test, onDone }: { test: ExtendTarget; onDone: () => 
   const seconds = more != null ? runSeconds(cells, more, machine.data, test.pace) : null;
   const busy = jobs.data?.items.find((j) => isActive(j.state));
   const demo = mode === "demo";
+  // the times it writes, as the engine's disk guard counts them (API 1.12)
+  const disk = useDiskJob("abextend", !demo && !atEnd && !problem && target != null ? { name: test.name, to: target } : null);
   const ready = !demo && !atEnd && !problem && !busy && !start.isPending;
   const which = withVariant(test.variant ? `the original mesh with ${test.variant} settings` : "the repaired mesh", test.variant);
 
@@ -381,6 +387,7 @@ function ExtendAbTestForm({ test, onDone }: { test: ExtendTarget; onDone: () => 
                   : ". How long isn't known here: the case's size isn't."}
               </Note>
             )}
+            <DiskNote disk={disk.data} needs="The continuation needs" refuses="a continuation" />
             {busy && !demo && <BusyNote job={busy} />}
           </div>
         )}

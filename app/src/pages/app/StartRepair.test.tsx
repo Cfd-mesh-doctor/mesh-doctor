@@ -7,7 +7,7 @@ import { demoTransport } from "@/demo/transport";
 import type { Transport } from "@/engine/client";
 import { fullCommand, repairCommand, repairName } from "@/engine/commands";
 import { EngineError } from "@/engine/errors";
-import type { Job, MachineInfo, RepairSummary } from "@/engine/types";
+import type { DiskJob, Job, MachineInfo, RepairSummary } from "@/engine/types";
 import { savePairing } from "@/engine/pairing";
 import { renderScreen } from "@/test/render";
 import { Cases } from "./Cases";
@@ -62,14 +62,17 @@ describe("the repair dialog's memory check", () => {
 });
 
 /** Your own engine, paired: these cases and runs, a 16 GB computer, these jobs, and what POST /jobs answers. */
-function ownEngine({ runs = [], jobs = [], refuse, screen: ui = <Cases /> }: {
+function ownEngine({ runs = [], jobs = [], refuse, screen: ui = <Cases />, disk }: {
   runs?: RepairSummary[];
   jobs?: Job[];
   refuse?: EngineError;
   screen?: ReactElement;
+  /** what GET /disk/repair says (API 1.12): nothing, as an older engine, unless given */
+  disk?: Pick<DiskJob, "needMb" | "freeMb">;
 } = {}) {
   savePairing({ engine: "http://localhost:8765", key: "TestKey_0123456789abcdefghijklmnopqrstuvwxy", paired: "2026-11-22T12:00:00Z" });
   const posted: unknown[] = [];
+  const asked: string[] = [];
   const transport: Transport = {
     kind: "engine",
     scope: "test",
@@ -85,11 +88,15 @@ function ownEngine({ runs = [], jobs = [], refuse, screen: ui = <Cases /> }: {
       if (route === "/repairs") return { items: runs } as T;
       if (route === "/jobs") return { items: jobs } as T;
       if (route === "/machine") return MACHINE as T;
+      if (route === "/disk/repair" && disk) {
+        asked.push(path);
+        return { ...disk, keepMb: 1024, folder: "workspace" } as T;
+      }
       throw new EngineError("not-found", "no such route", 404);
     },
   };
   const at = ui.type === Repairs ? "/app/repairs" : "/app/cases";
-  return { ...renderScreen(ui, { path: at, transport }), posted };
+  return { ...renderScreen(ui, { path: at, transport }), posted, asked };
 }
 
 const dialog = () => screen.getByRole("dialog");
@@ -192,5 +199,38 @@ describe("the demo's repair dialog", () => {
     // The dialog's own Close, not the corner's X (also called Close).
     await user.click(within(dialog()).getAllByRole("button", { name: "Close" })[0]!);
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
+describe("the repair dialog's disk check", () => {
+  it("says what the copy and its repair take on the disk of the engine's workspace, for the case picked", async () => {
+    const user = userEvent.setup();
+    const { asked } = ownEngine({ disk: { needMb: 212, freeMb: 402_339 } });
+    await user.click(await screen.findByRole("button", { name: "Repair wing" }));
+    await waitFor(() => expect(dialog()).toHaveTextContent(
+      "The copy and its repair need about 212 MB of disk space; the disk the engine's workspace is on has 393 GB free."));
+    expect(asked).toContain("/disk/repair?source=wing");
+    // A case whose folder name the engine can't take isn't asked about.
+    await user.selectOptions(within(dialog()).getByRole("combobox", { name: "Case" }), "my case");
+    expect(dialog()).not.toHaveTextContent("of disk space");
+    expect(asked.every((p) => p === "/disk/repair?source=wing")).toBe(true);
+  });
+
+  it("warns when that and what the engine keeps free are more than the disk has, and leaves the refusal to the engine", async () => {
+    const user = userEvent.setup();
+    ownEngine({ disk: { needMb: 212, freeMb: 1200 } });
+    await user.click(await screen.findByRole("button", { name: "Repair wing" }));
+    await waitFor(() => expect(dialog()).toHaveTextContent("The copy and its repair need about 212 MB of disk space, more than "
+      + "the disk the engine's workspace is on can give: it has 1.2 GB free, and the engine keeps 1.0 GB of that for "
+      + "everything else. Delete runs or results you no longer need: the engine refuses a repair that won't fit."));
+    expect(startButton()).toBeEnabled();
+  });
+
+  it("says nothing of it for an engine before API 1.12, which doesn't check a repair's disk", async () => {
+    const user = userEvent.setup();
+    ownEngine();
+    await user.click(await screen.findByRole("button", { name: "Repair wing" }));
+    await waitFor(() => expect(dialog()).toHaveTextContent("Needs about"));
+    expect(dialog()).not.toHaveTextContent("of disk space");
   });
 });

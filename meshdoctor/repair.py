@@ -13,13 +13,16 @@ A <srcCase> is a folder, or the name of a case in the cases folder (config.py),
 so `full motorBike mb` works from any folder.
 
 Copies live in <workspace>/<name> (see config.py); the source case is only
-ever read, and a checksum taken before and after proves it.  Every step writes
+ever read, and a checksum taken before and after proves it.  Before `full`
+copies anything, the RAM guard and the disk guard check that the repair fits
+in the free memory and in the workspace's free disk space.  Every step writes
 a log and the final result.json records commands, versions, before/after
 numbers and verdicts.
 """
 import hashlib, json, math, os, re, shutil, subprocess, sys, time
 
 import config
+import diskguard
 import prog
 import ramguard
 import schema
@@ -175,6 +178,29 @@ def copy_case(src, name):
         f.write(src + "\n")
     os.makedirs(os.path.join(dst, "meshDoctor"), exist_ok=True)
     return dst
+
+
+def copy_size(src):
+    """The bytes copy_case writes copying case `src`: its system and constant folders (a link in them copied as a
+    link, which takes no room) and each processor's mesh (links followed)."""
+    total = sum(diskguard.size(os.path.join(src, d), links=False) for d in ("system", "constant"))
+    for d in os.listdir(src):
+        if re.fullmatch(r"processor\d+", d):
+            total += diskguard.size(os.path.join(src, d, "constant", "polyMesh"))
+    return total
+
+
+def disk_need(src):
+    """What a repair of case `src` writes into the workspace, in MB, for the disk guard (diskguard.repair_mb): its copy
+    (copy_size), a backup of each mesh's points (fix), the sets it writes, and room to collapse faces in the mesh it
+    repairs: the case's own, or its processors' when the case's own isn't the whole mesh (layout)."""
+    points = 0
+    for base in [src] + [os.path.join(src, d) for d in os.listdir(src) if re.fullmatch(r"processor\d+", d)]:
+        pts = os.path.join(base, "constant", "polyMesh", "points")
+        if os.path.isfile(pts):
+            points += os.path.getsize(pts)
+    mesh = sum(diskguard.size(os.path.join(b, "constant", "polyMesh")) for b in mesh_bases(src, layout(src)))
+    return diskguard.repair_mb(copy_size(src), points, diskguard.mb(mesh))
 
 
 # --------------------------------------------------------------------------
@@ -657,6 +683,11 @@ def main(a):
             print(msg, flush=True)
             if not ok:
                 sys.exit(4)
+        ok, msg = diskguard.check(disk_need(src), os.path.join(ROOT, a[2]),
+                                  f"the copy of {os.path.basename(src)} and its repair need")
+        print(msg, flush=True)
+        if not ok:
+            sys.exit(4)
         fp0 = source_fingerprint(src)          # before the copy: covers every step
         dst = copy_case(src, a[2])
         r = fix(dst, prof, fp_before=fp0); print(json.dumps(r["verdict"], indent=1))

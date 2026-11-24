@@ -174,7 +174,25 @@ def start(src, name, profile, replace=True):
     case = posixpath.join(run_dir(), src)
     return _submit("repair", {"source": src, "name": name, "profile": profile}, name,
                    [sys.executable, DRIVER, "full", case, name, "--profile", profile],
-                   log=name + ".log", result=f"{name}/meshDoctor/result.json", ram=(case, "repair"))
+                   log=name + ".log", result=f"{name}/meshDoctor/result.json", ram=(case, "repair"),
+                   disk=_repair_disk(src, os.path.join(md_dir(), name)))
+
+
+def _repair_disk(src, folder):
+    """What a repair of source case `src` writes into `folder` in the workspace, for the disk guard: (MB, folder, what
+    needs it, with its verb): its copy and what the repair writes in it (repair.disk_need)."""
+    import repair
+    return repair.disk_need(posixpath.join(run_dir(), src)), folder, f"the copy of {src} and its repair need"
+
+
+def repair_disk(src):
+    """GET /disk/repair: what a repair of source case `src` writes, as start's disk guard counts it: ((MB, folder,
+    what), None), or (None, the refusal start would give)."""
+    if not SAFE.match(src):
+        return None, _refuse("bad-request", "bad arguments")
+    if src not in sources():
+        return None, _refuse("not-found", "unknown source case")
+    return _repair_disk(src, md_dir()), None
 
 
 # --------------------------------------------------------------------------
@@ -271,30 +289,55 @@ def ab(name):
     return out
 
 
-def ab_extend(label, to):
-    """Continue the second run of an A/B (abtest.py extend) and judge it.  The target must be past the iteration
-    that run is at now (the A/B test's own iterations, or where an earlier extension ended), as `ab extend` checks."""
+def _extend_plan(label, to):
+    """Running A/B test `label`'s second run longer, to iteration `to`, as ab_extend starts it: ({top, now, to}, None):
+    the test's folder, the iteration that run is at and the one it goes to; else (None, the refusal)."""
     if not SAFE.match(label):
-        return _refuse("bad-request", "bad arguments")
+        return None, _refuse("bad-request", "bad arguments")
     top = os.path.join(md_dir(), label + "_ab")
     r = _read_json(os.path.join(top, "ab_result.json"), "abtest")
     if not r or not r.get("fixed"):
-        return _refuse("not-ready", "A/B not finished")
+        return None, _refuse("not-ready", "A/B not finished")
     try:
         to = int(to)
     except ValueError:
-        return _refuse("bad-request", "bad iteration count")
+        return None, _refuse("bad-request", "bad iteration count")
     import abtest
     try:
         now = float(abtest.latest_time(os.path.join(top, "fixed")))
     except (OSError, ValueError):                 # no processor0/, or no time in it
-        return _refuse("not-ready", "second run has no decomposed fields to continue from")
+        return None, _refuse("not-ready", "second run has no decomposed fields to continue from")
     if not (now < to <= 5000):
-        return _refuse("bad-request", f"target must be between {int(now) + 1} and 5000: the second run is at "
-                       f"iteration {now:g}")
+        return None, _refuse("bad-request", f"target must be between {int(now) + 1} and 5000: the second run is at "
+                             f"iteration {now:g}")
+    return {"top": top, "now": now, "to": to}, None
+
+
+def _extend_disk(label, plan):
+    """What running A/B test `label`'s second run longer (_extend_plan) writes, for the disk guard: (MB, the test's
+    folder, what needs it, with its verb): its written times, split (abtest.extend_need)."""
+    import abtest
+    return (abtest.extend_need(os.path.join(plan["top"], "fixed"), int(plan["now"]), plan["to"]), plan["top"],
+            f"running {label}'s second run longer needs")
+
+
+def extend_disk(label, to):
+    """GET /disk/abextend: what running A/B test `label`'s second run to iteration `to` writes, as ab_extend's disk
+    guard counts it: ((MB, folder, what), None), or (None, the refusal ab_extend would give)."""
+    plan, why = _extend_plan(label, to)
+    return (None, why) if why else (_extend_disk(label, plan), None)
+
+
+def ab_extend(label, to):
+    """Continue the second run of an A/B (abtest.py extend) and judge it.  The target must be past the iteration
+    that run is at now (the A/B test's own iterations, or where an earlier extension ended), as `ab extend` checks."""
+    plan, why = _extend_plan(label, to)
+    if why:
+        return why
+    top, to = plan["top"], plan["to"]
     return _submit("abextend", {"name": label, "to": to}, label, [sys.executable, ABTEST, "extend", top, str(to)],
                    log=f"{label}_ab/extend.log", result=f"{label}_ab/ab_result.json",
-                   ram=(os.path.join(top, "fixed"), "solve"))
+                   ram=(os.path.join(top, "fixed"), "solve"), disk=_extend_disk(label, plan))
 
 
 def _base_for(src, iters, init):
@@ -312,43 +355,72 @@ def variants():
     return [{"name": k, "label": abtest.PRESET_LABELS.get(k, k)} for k in abtest.PRESETS]
 
 
-def ab_start(name, iters, init, variant="", replace=True):
-    """Start an A/B solver test of repair run `name`.  replace=False refuses
-    when the A/B folder it would write already exists."""
+def _ab_plan(name, iters, init, variant):
+    """An A/B test of repair run `name` as ab_start starts it: ({src, case, iters, init, label, base}, None): its source
+    case's path as the repair's result has it, its folder in the cases folder, the iterations (20 to 2000), the start
+    fields (auto taken), the test's label, and the earlier test whose first run it reuses (None: none); else (None,
+    the refusal)."""
     import abtest
     if variant and variant not in abtest.PRESETS:
-        return _refuse("bad-request", "unknown variant")
+        return None, _refuse("bad-request", "unknown variant")
     if not SAFE.match(name) or init not in ("auto", "0.warm", "0.cold", "0"):
-        return _refuse("bad-request", "bad arguments")
+        return None, _refuse("bad-request", "bad arguments")
     try:
         iters = max(20, min(int(iters), 2000))
     except (TypeError, ValueError):
-        return _refuse("bad-request", "bad iteration count")
+        return None, _refuse("bad-request", "bad iteration count")
     res = result(name)
     if not res or not res.get("finished"):
-        return _refuse("not-ready", "repair run not finished")
+        return None, _refuse("not-ready", "repair run not finished")
     if res.get("layout", {}).get("parallel"):
-        return _refuse("unsupported", "A/B test supports serial (root) meshes only for now")
+        return None, _refuse("unsupported", "A/B test supports serial (root) meshes only for now")
     src = res.get("source", "")
     cases, ws, _ = _paths()
     if posixpath.dirname(src) != cases.rstrip("/") or not SAFE.match(posixpath.basename(src)):
-        return _refuse("unsupported", "unexpected source path")
+        return None, _refuse("unsupported", "unexpected source path")
     case = os.path.join(run_dir(), posixpath.basename(src))
     if init == "auto":                     # as the command does: a solution the case has, else its own 0
         init = "0.warm" if os.path.isdir(os.path.join(case, "0.warm")) else "0"
     if not os.path.isdir(os.path.join(case, init)):
-        return _refuse("bad-request", f"source case has no {init} directory")
+        return None, _refuse("bad-request", f"source case has no {init} directory")
     label = f"{os.path.basename(src)}_{variant}" if variant else name
+    return {"src": src, "case": case, "iters": iters, "init": init, "label": label,
+            "base": _base_for(src, iters, init) if variant else None}, None
+
+
+def _ab_disk(plan):
+    """What A/B test `plan` (_ab_plan) writes, for the disk guard: (MB, its folder in the workspace, what needs it, with
+    its verb): a copy of its case for each run it solves and what each writes (abtest.disk_need), one when it reuses
+    an earlier test's first run."""
+    import abtest
+    return (abtest.disk_need(plan["case"], plan["init"], 1 if plan["base"] else 2),
+            os.path.join(md_dir(), plan["label"] + "_ab"), f"the A/B test {plan['label']} needs")
+
+
+def ab_disk(name, iters, init, variant=""):
+    """GET /disk/abtest: what an A/B test of repair run `name` writes, as ab_start's disk guard counts it: ((MB,
+    folder, what), None), or (None, the refusal ab_start would give)."""
+    plan, why = _ab_plan(name, iters, init, variant)
+    return (None, why) if why else (_ab_disk(plan), None)
+
+
+def ab_start(name, iters, init, variant="", replace=True):
+    """Start an A/B solver test of repair run `name`.  replace=False refuses
+    when the A/B folder it would write already exists."""
+    plan, why = _ab_plan(name, iters, init, variant)
+    if why:
+        return why
+    src, iters, init, label = plan["src"], plan["iters"], plan["init"], plan["label"]
     if not replace and os.path.exists(os.path.join(md_dir(), label + "_ab")):
         return _refuse("exists", f"A/B test {label} already exists; extend it or replace it")
     cmd = [sys.executable, ABTEST, src, "-" if variant else name, "--iters", str(iters), "--init", init]
     if variant:
         cmd += ["--variant", variant, "--label", label]
-        b = _base_for(src, iters, init)
-        if b:
-            cmd += ["--base-from", b]       # reuse an earlier original-mesh run with the same settings
+        if plan["base"]:
+            cmd += ["--base-from", plan["base"]]       # reuse an earlier original-mesh run with the same settings
     return _submit("abtest", {"name": name, "iters": iters, "init": init, "variant": variant}, label, cmd,
-                   log=label + "_ab.log", result=f"{label}_ab/ab_result.json", ram=(src, "solve"))
+                   log=label + "_ab.log", result=f"{label}_ab/ab_result.json", ram=(src, "solve"),
+                   disk=_ab_disk(plan))
 
 
 def ab_list():

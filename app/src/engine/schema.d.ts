@@ -137,6 +137,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/disk/abextend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What running an A/B test's second run longer writes in the engine's workspace, as the disk guard counts it before it starts (the times it writes, split), and the free space there, in MB (API 1.12) */
+        get: operations["disk_abextend"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/disk/abtest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What an A/B test of a finished repair writes in the engine's workspace, as the disk guard counts it before the test starts (a copy of the case for each run it solves, with its split and two written times; one run when it reuses an earlier test's first run), and the free space there, in MB (API 1.12) */
+        get: operations["disk_abtest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/disk/case": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What making a new case from a template writes in the cases folder, as the disk guard counts it before the case job starts (its mesh, and the sets snappyHexMesh writes of its layers), and the free space there, in MB (API 1.12) */
+        get: operations["disk_case"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/disk/repair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What a repair of a case writes in the engine's workspace, as the disk guard counts it before the repair starts (its copy, a backup of each mesh's points, the sets it writes, and room to collapse faces in the mesh it repairs), and the free space there, in MB (API 1.12) */
+        get: operations["disk_repair"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/jobs": {
         parameters: {
             query?: never;
@@ -1531,6 +1599,192 @@ export interface operations {
                         freeMb: number | null;
                         /** @description kept free for everything else: the disk guard refuses a solve when the new case it makes, what it writes and this are more than freeMb */
                         keepMb: number;
+                    };
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    disk_abextend: {
+        parameters: {
+            query: {
+                /** @description an A/B test (GET /abtests) */
+                name: string;
+                /** @description continue to this iteration, past the one the second run is at now (the A/B test's iterations, or where an earlier extension ended) */
+                to: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /**
+                         * @description where it writes: the engine's workspace (a repair, an A/B test) or its cases folder (a new case)
+                         * @enum {unknown}
+                         */
+                        folder: "workspace" | "cases";
+                        /** @description the free space of the disk it writes on (inside WSL 2, at most that of the Windows drive that holds Linux's own disk); null when it can't be read */
+                        freeMb: number | null;
+                        /** @description kept free for everything else: the disk guard refuses the job when what it writes and this are more than freeMb */
+                        keepMb: number;
+                        /** @description what the job writes on the disk as it goes, as the engine's disk guard counts it before the job starts (meshdoctor/diskguard.py); null when it can't be measured, and the guard lets the job through */
+                        needMb: number | null;
+                    };
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    disk_abtest: {
+        parameters: {
+            query: {
+                /** @description the case's folder both runs start from; auto: 0.warm when the case has one, else 0 */
+                init?: "auto" | "0.warm" | "0.cold" | "0";
+                /** @description each run's iterations, as the test would take them (an earlier test's first run is reused only with the same ones) */
+                iters?: number;
+                /** @description a finished repair run (GET /repairs) */
+                name: string;
+                /** @description solver-setting variant for the second run (GET /variants) */
+                variant?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /**
+                         * @description where it writes: the engine's workspace (a repair, an A/B test) or its cases folder (a new case)
+                         * @enum {unknown}
+                         */
+                        folder: "workspace" | "cases";
+                        /** @description the free space of the disk it writes on (inside WSL 2, at most that of the Windows drive that holds Linux's own disk); null when it can't be read */
+                        freeMb: number | null;
+                        /** @description kept free for everything else: the disk guard refuses the job when what it writes and this are more than freeMb */
+                        keepMb: number;
+                        /** @description what the job writes on the disk as it goes, as the engine's disk guard counts it before the job starts (meshdoctor/diskguard.py); null when it can't be measured, and the guard lets the job through */
+                        needMb: number | null;
+                    };
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    disk_case: {
+        parameters: {
+            query: {
+                /** @description one of the template's mesh sizes */
+                size?: "coarse" | "medium" | "fine";
+                /** @description a template (GET /templates) */
+                template: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /**
+                         * @description where it writes: the engine's workspace (a repair, an A/B test) or its cases folder (a new case)
+                         * @enum {unknown}
+                         */
+                        folder: "workspace" | "cases";
+                        /** @description the free space of the disk it writes on (inside WSL 2, at most that of the Windows drive that holds Linux's own disk); null when it can't be read */
+                        freeMb: number | null;
+                        /** @description kept free for everything else: the disk guard refuses the job when what it writes and this are more than freeMb */
+                        keepMb: number;
+                        /** @description what the job writes on the disk as it goes, as the engine's disk guard counts it before the job starts (meshdoctor/diskguard.py); null when it can't be measured, and the guard lets the job through */
+                        needMb: number | null;
+                    };
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    disk_repair: {
+        parameters: {
+            query: {
+                /** @description the case to repair (GET /cases) */
+                source: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /**
+                         * @description where it writes: the engine's workspace (a repair, an A/B test) or its cases folder (a new case)
+                         * @enum {unknown}
+                         */
+                        folder: "workspace" | "cases";
+                        /** @description the free space of the disk it writes on (inside WSL 2, at most that of the Windows drive that holds Linux's own disk); null when it can't be read */
+                        freeMb: number | null;
+                        /** @description kept free for everything else: the disk guard refuses the job when what it writes and this are more than freeMb */
+                        keepMb: number;
+                        /** @description what the job writes on the disk as it goes, as the engine's disk guard counts it before the job starts (meshdoctor/diskguard.py); null when it can't be measured, and the guard lets the job through */
+                        needMb: number | null;
                     };
                 };
             };

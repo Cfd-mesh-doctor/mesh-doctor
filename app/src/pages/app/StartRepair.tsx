@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Starting a repair from the app: which case, the new run's name, the limits, whether it fits in the memory of the
-// engine's computer, then POST /jobs, and the new job's details on the Jobs screen. The demo can't start jobs: it
+// engine's computer and on the disk of its workspace, then POST /jobs, and the new job's details on the Jobs screen. The demo can't start jobs: it
 // says so and gives the command that does the same in a terminal.
 import { Wrench } from "lucide-react";
 import { useId, useMemo, useState } from "react";
@@ -12,11 +12,11 @@ import { DialogActions, DialogClose, DialogDescription, DialogTitle } from "@/co
 import { Input, Segmented } from "@/components/ui/misc";
 import { fullCommand, isPlainName, repairName, type RepairProfile } from "@/engine/commands";
 import { useAppPath, useEngine } from "@/engine/context";
-import { useCases, useJobs, useMachine, useRepairs, useStartJob } from "@/engine/hooks";
+import { useCases, useDiskJob, useJobs, useMachine, useRepairs, useStartJob } from "@/engine/hooks";
 import { JOB_KIND_LABEL, isActive } from "@/engine/types";
 import { formatInt } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { FIELD, GB, JobDialog, Note } from "./dialogParts";
+import { DiskNote, FIELD, GB, JobDialog, Note } from "./dialogParts";
 import { PROFILES, caseCells, nameProblem, repairMemory, takenNames } from "./repairStart";
 
 /**
@@ -64,6 +64,8 @@ function StartRepairForm({ source, onDone }: { source: string | null; onDone: ()
   const memory = repairMemory(cells, machine.data);
   const busy = jobs.data?.items.find((j) => isActive(j.state));
   const demo = mode === "demo";
+  // its copy and what the repair writes, as the engine's disk guard counts them (API 1.12)
+  const disk = useDiskJob("repair", !demo && plain && chosen ? { source: chosen } : null);
   const computer = demo ? "the demo engine's computer" : "your engine's computer";
   const Computer = demo ? "The demo engine's computer" : "Your engine's computer";
   const ready = !demo && plain && !!repairs.data && !problem && !busy && !start.isPending;
@@ -173,6 +175,7 @@ function StartRepairForm({ source, onDone }: { source: string | null; onDone: ()
                   so the memory isn&apos;t checked here; the engine checks it when the repair starts.
                 </Note>
               )}
+              <DiskNote disk={disk.data} needs="The copy and its repair need" refuses="a repair" />
               {busy && !demo && (
                 <Note tone="warn">
                   {JOB_KIND_LABEL[busy.kind] ?? busy.kind} {busy.name} is {busy.state === "queued" ? "waiting to start" : "running"}.

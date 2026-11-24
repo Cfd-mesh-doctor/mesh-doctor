@@ -71,10 +71,20 @@ test("on your own engine, Start repair starts the job and opens its details on t
   const engine = await mockEngine(page, { noJobs: true });
   const dialog = await repairDialog(page, "wing");
   await expect(dialog.getByRole("textbox", { name: "Name of the new run" })).toHaveValue("wing-fix");
+  await expect(dialog).toContainText(
+    "The copy and its repair need about 212 MB of disk space; the disk the engine's workspace is on has 393 GB free.");
   await dialog.getByRole("button", { name: "Start repair" }).click();
   await expect(page).toHaveURL(/\/app\/jobs\?job=20261123-120000-repair-wing-fix-e2e1$/);
   await expect(page.getByRole("dialog", { name: "wing-fix" })).toBeVisible();
   expect(engine.started).toEqual([{ kind: "repair", params: { source: "wing", name: "wing-fix", profile: "openfoam" } }]);
+});
+
+test("a repair that won't fit on the disk of the engine's workspace is said so before it starts", async ({ page }) => {
+  await mockEngine(page, { noJobs: true, diskFreeMb: 1200 });
+  const dialog = await repairDialog(page, "wing");
+  await expect(dialog).toContainText("The copy and its repair need about 212 MB of disk space, more than the disk the "
+    + "engine's workspace is on can give: it has 1.2 GB free, and the engine keeps 1.0 GB of that for everything else.");
+  await expect(dialog.getByRole("button", { name: "Start repair" })).toBeEnabled();       // the engine decides
 });
 
 test("when the engine refuses a repair, the dialog says why, with the engine's own numbers", async ({ page }) => {

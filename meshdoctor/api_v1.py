@@ -27,7 +27,7 @@ import tplan
 import validate
 import version
 
-API_VERSION = "1.11"
+API_VERSION = "1.12"
 PREFIX = "/api/v1"
 WRITES_MAX = solve.transient.MAX_WRITES   # the most times a stretch of a transient run writes
 MAX_BODY = 64 * 1024
@@ -926,6 +926,80 @@ def disk(p, q, b):
             raise ApiError("not-found", "no case " + q["case"] + " in the cases folder")
         doc["case"] = solve.disk(q["case"], q.get("writes"))
     return doc
+
+
+DISK_JOB = {"type": "object", "required": ["needMb", "freeMb", "keepMb", "folder"], "properties": {
+    "needMb": {"type": ["integer", "null"], "minimum": 0,
+               "description": "what the job writes on the disk as it goes, as the engine's disk guard counts it before "
+                              "the job starts (meshdoctor/diskguard.py); null when it can't be measured, and the "
+                              "guard lets the job through"},
+    "freeMb": {"type": ["integer", "null"], "minimum": 0,
+               "description": "the free space of the disk it writes on (inside WSL 2, at most that of the Windows "
+                              "drive that holds Linux's own disk); null when it can't be read"},
+    "keepMb": {"type": "integer", "minimum": 0,
+               "description": "kept free for everything else: the disk guard refuses the job when what it writes and "
+                              "this are more than freeMb"},
+    "folder": {"enum": ["workspace", "cases"],
+               "description": "where it writes: the engine's workspace (a repair, an A/B test) or its cases folder (a "
+                              "new case)"}}}
+
+
+def _disk_job(planned, folder):
+    """A GET /disk/{kind} answer, from what a job's start works out for its disk guard: ((MB, folder, what), None),
+    or (None, the refusal the job's start would give), which this gives too."""
+    import diskguard
+    disk, why = planned
+    if why:
+        raise ApiError(why.get("code", "bad-request"), why.get("error", "refused"))
+    return {"needMb": disk[0], "freeMb": diskguard.free_mb(disk[1]), "keepMb": diskguard.KEEP_MB, "folder": folder}
+
+
+def _job_query(kind, name, description=None):
+    """A GET /disk/{kind} query parameter that is job `kind`'s own parameter `name` (its schema from JOBS)."""
+    sch = JOBS[kind]["params"]["properties"][name]
+    return {"schema": sch, "description": description or sch.get("description", "")}
+
+
+@route("GET", "/disk/repair", "What a repair of a case writes in the engine's workspace, as the disk guard counts it "
+       "before the repair starts (its copy, a backup of each mesh's points, the sets it writes, and room to collapse "
+       "faces in the mesh it repairs), and the free space there, in MB (API 1.12)",
+       query={"source": {"schema": NAME, "required": True, "description": "the case to repair (GET /cases)"}},
+       ok=DISK_JOB)
+def disk_repair(p, q, b):
+    return _disk_job(md_api.repair_disk(q["source"]), "workspace")
+
+
+@route("GET", "/disk/abtest", "What an A/B test of a finished repair writes in the engine's workspace, as the disk "
+       "guard counts it before the test starts (a copy of the case for each run it solves, with its split and two "
+       "written times; one run when it reuses an earlier test's first run), and the free space there, in MB "
+       "(API 1.12)",
+       query={"name": {"schema": NAME, "required": True, "description": "a finished repair run (GET /repairs)"},
+              "iters": _job_query("abtest", "iters", "each run's iterations, as the test would take them (an earlier "
+                                                     "test's first run is reused only with the same ones)"),
+              "init": _job_query("abtest", "init"), "variant": _job_query("abtest", "variant")},
+       ok=DISK_JOB)
+def disk_abtest(p, q, b):
+    return _disk_job(md_api.ab_disk(q["name"], q["iters"], q["init"], q["variant"]), "workspace")
+
+
+@route("GET", "/disk/abextend", "What running an A/B test's second run longer writes in the engine's workspace, as the "
+       "disk guard counts it before it starts (the times it writes, split), and the free space there, in MB "
+       "(API 1.12)",
+       query={"name": {"schema": NAME, "required": True, "description": "an A/B test (GET /abtests)"},
+              "to": dict(_job_query("abextend", "to"), required=True)},
+       ok=DISK_JOB)
+def disk_abextend(p, q, b):
+    return _disk_job(md_api.extend_disk(q["name"], q["to"]), "workspace")
+
+
+@route("GET", "/disk/case", "What making a new case from a template writes in the cases folder, as the disk guard "
+       "counts it before the case job starts (its mesh, and the sets snappyHexMesh writes of its layers), and the "
+       "free space there, in MB (API 1.12)",
+       query={"template": {"schema": NAME, "required": True, "description": "a template (GET /templates)"},
+              "size": _job_query("case", "size")},
+       ok=DISK_JOB)
+def disk_case(p, q, b):
+    return _disk_job(templates.disk_of(q["template"], q["size"]), "cases")
 
 
 NULL_TEXT = {"type": ["string", "null"]}

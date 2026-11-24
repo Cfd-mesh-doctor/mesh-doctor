@@ -54,9 +54,17 @@ describe("a new case's name and command", () => {
 });
 
 /** Your own engine, paired: its templates (none: older than API 1.5), cases, jobs and a 16 GB computer. */
-function ownEngine({ jobs = [], templates = true, refuse }: { jobs?: Job[]; templates?: boolean; refuse?: EngineError } = {}) {
+/** The cells of the Ahmed body's meshes, for what GET /disk/case says each takes (API 1.12). */
+const CELLS: Record<string, number> = { coarse: 480_000, medium: 836_000, fine: 1_570_000 };
+
+function ownEngine({ jobs = [], templates = true, refuse, disk }: {
+  jobs?: Job[]; templates?: boolean; refuse?: EngineError;
+  /** the MB free GET /disk/case says (API 1.12): nothing, as an older engine, unless given */
+  disk?: number;
+} = {}) {
   savePairing({ engine: "http://localhost:8765", key: "TestKey_0123456789abcdefghijklmnopqrstuvwxy", paired: "2026-11-22T12:00:00Z" });
   const posted: unknown[] = [];
+  const asked: string[] = [];
   const transport: Transport = {
     kind: "engine",
     scope: "test",
@@ -72,10 +80,15 @@ function ownEngine({ jobs = [], templates = true, refuse }: { jobs?: Job[]; temp
       if (route === "/cases") return { items: ["wing", "ahmed-medium"], cells: { wing: 12_225, "ahmed-medium": 836_000 } } as T;
       if (route === "/jobs") return { items: jobs } as T;
       if (route === "/machine") return MACHINE as T;
+      if (route === "/disk/case" && disk != null) {     // its mesh and the sets beside it, as the engine counts them
+        asked.push(path);
+        const cells = CELLS[new URLSearchParams(path.split("?")[1]).get("size") ?? "medium"] ?? 0;
+        return { needMb: Math.ceil(cells * 0.14 / 1024 * 1.03), freeMb: disk, keepMb: 1024, folder: "cases" } as T;
+      }
       throw new EngineError("not-found", "no such API route", 404);
     },
   };
-  return { ...renderScreen(<Solve />, { path: "/app/solve", transport }), posted };
+  return { ...renderScreen(<Solve />, { path: "/app/solve", transport }), posted, asked };
 }
 
 const dialog = () => within(screen.getByRole("dialog"));
@@ -168,5 +181,22 @@ describe("New case on the Solve screen", () => {
     expect(name).toBe("ahmed-fine");
     expect(dialog().getByRole("button", { name: `Copy “meshdoctor new ahmed-body ${name} --size fine”` })).toBeInTheDocument();
     expect(dialog().queryByRole("button", { name: "Make case" })).toBeNull();
+  });
+});
+
+describe("what a new case takes on the disk", () => {
+  it("says what its mesh and the sets beside it take on the disk the cases are on, for the size picked", async () => {
+    const user = userEvent.setup();
+    const { asked } = ownEngine({ disk: 1100 });
+    await openDialog(user);
+    // The medium mesh: 118 MB, more than 1.1 GB free can give with the 1 GB the engine keeps.
+    await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent("Its mesh needs about 118 MB of disk space, more "
+      + "than the disk the cases are on can give: it has 1.1 GB free, and the engine keeps 1.0 GB of that for everything "
+      + "else. Delete runs or results you no longer need: the engine refuses a case that won't fit."));
+    expect(asked).toContain("/disk/case?template=ahmed-body&size=medium");
+    await user.click(dialog().getByRole("radio", { name: "Coarse" }));
+    await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent(
+      "Its mesh needs about 68 MB of disk space; the disk the cases are on has 1.1 GB free."));
+    expect(dialog().getByRole("button", { name: "Make case" })).toBeEnabled();
   });
 });

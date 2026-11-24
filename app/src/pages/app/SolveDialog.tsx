@@ -24,10 +24,10 @@ import { JOB_KIND_LABEL, isActive, type Run, type RunDetail, type TransientPlan 
 import { machineFields } from "@/estimate/machine";
 import { formatInt } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { FIELD, GB, JobDialog, Note } from "./dialogParts";
+import { FIELD, GB, JobDialog, Note, Space } from "./dialogParts";
 import { stepMemory } from "./repairStart";
 import {
-  FIRST_TO, WRITES, copyName, copyNameProblem, copyTaken, diskCheck, diskSpace, formatTime, isTransient, procChoices,
+  FIRST_TO, WRITES, copyName, copyNameProblem, copyTaken, diskCheck, formatTime, isTransient, procChoices,
   solveCommand, suggestedProcs, suggestedTime, suggestedTo, takesWrites, timeInput, timeProblem, toProblem,
   transientCommand, writesHint, writesProblem, yourCases, type DiskCheck,
 } from "./solveStart";
@@ -197,11 +197,6 @@ function ProcsField({ id, np, onPick, s }: { id: string; np: number; onPick: (np
       </p>
     </div>
   );
-}
-
-/** An amount of disk space, kept on one line ("2.4 GB", never "2.4" and "GB" on two). */
-function Space({ mb }: { mb: number }) {
-  return <span className="whitespace-nowrap">{diskSpace(mb)}</span>;
 }
 
 /** Whether the solve (or, for a case it makes from a template, its mesh: `step` snappy) fits in the memory of the

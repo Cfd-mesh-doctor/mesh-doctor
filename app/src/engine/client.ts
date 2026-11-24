@@ -4,9 +4,9 @@
 import { NOT_THE_ENGINE, EngineError, isEngineCode } from "./errors";
 import { localAccessState } from "./permission";
 import type {
-  AbtestDetail, AbtestList, AbtestLive, CaseJudge, CaseList, ClusterShape, DiskInfo, EngineInfo, Job, JobList, JobRequest,
-  JudgeAnswer, MachineInfo, Readiness, RepairList, RunDetail, RunList, RunLive, RunValidation, TemplateList, TransientPlan,
-  VariantList,
+  AbtestDetail, AbtestList, AbtestLive, CaseJudge, CaseList, ClusterShape, DiskInfo, DiskJob, DiskJobKind, EngineInfo, Job,
+  JobList, JobRequest, JudgeAnswer, MachineInfo, Readiness, RepairList, RunDetail, RunList, RunLive, RunValidation,
+  TemplateList, TransientPlan, VariantList,
 } from "./types";
 import { API_MAJOR } from "./types";
 import type { Report } from "@/report/read";
@@ -129,6 +129,13 @@ export const api = {
     t.request<DiskInfo>("GET", name != null
       ? `/disk?case=${encodeURIComponent(name)}${writes != null ? `&writes=${writes}` : ""}`
       : "/disk", undefined, signal),
+  /** What a repair, an A/B test, its continuation or a new case writes on the disk, as the engine's disk guard counts
+   * it before the job starts, and the free space where it writes (API 1.12), from the params the job would start
+   * with: a repair's source, an A/B test's repair run and settings, the test and the iteration it continues to, a
+   * new case's template and size. An older engine answers not-found. */
+  diskJob: (t: Transport, kind: DiskJobKind, query: Record<string, string | number>, signal?: AbortSignal) =>
+    t.request<DiskJob>("GET", `/disk/${kind}?${new URLSearchParams(
+      Object.entries(query).map(([k, v]) => [k, String(v)]))}`, undefined, signal),
   /** The engine's self check (API 1.4), run for this answer; an older engine answers not-found. */
   readiness: (t: Transport, signal?: AbortSignal) => t.request<Readiness>("GET", "/check", undefined, signal),
   templates: (t: Transport, signal?: AbortSignal) => t.request<TemplateList>("GET", "/templates", undefined, signal),

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 The Mesh Doctor authors
-"""Disk guard: refuse to start a solve that would fill the disk.
+"""Disk guard: refuse to start a job that would fill the disk.
 
 A solve that makes a new case first writes it into the cases folder: a copy of a case you made (its mesh and
 settings), a transient run of a solved steady run (its mesh, settings and latest result), or a case made from a
@@ -22,6 +22,18 @@ the start of a template's case writes 3.25 times its mesh on several processes, 
 A transient run's written times hold its averages too, once its forces have settled (transient.py): UMean, pMean,
 UPrime2Mean and pPrime2Mean, 11 values a cell, 1.1 times a written time's own fields (U, p, k, omega and nut, and the
 flux on about 3 faces a cell: about 10), worked out from those fields' sizes; the guard counts them in each one.
+
+The other jobs that write a case of their own are checked the same way, each against the free space of the folder it
+writes in.  A new case made from a template (templates.py) takes its mesh, and the sets snappyHexMesh writes of its
+layers: 0.022 to 0.026 times the mesh, measured on both templates' meshes (SETS: 0.03).  A repair (repair.py) writes
+its copy into the workspace, measured as the copy walks it, then a backup of each mesh's points, the sets checkMesh and
+the repair write of the mesh's faults (SETS), and while it collapses faces, a backup of the mesh it repairs and the new
+mesh, before the old one goes (COLLAPSE: 2 times that mesh).  An A/B test (abtest.py) solves two copies of a case in
+the workspace: each its settings, mesh and start fields, split onto its processes, and two written times, split, never
+joined: the one it ends at, and the one after it that maps where the solution moves (AB_TIMES).  Measured: 3.3 times
+the mesh a run, on the Ahmed body's 0.48 and 0.84 million cell meshes from 0, on 6 processes; the guard counts its copy
+and 2.65 times the mesh.  A test that reuses an earlier one's first run makes one copy.  Running its second run longer
+writes that run's own times, split.
 1 GB is kept free for everything else.
 
 The free space is that of the cases folder's disk.  Inside WSL 2, Linux's own disk is a file on a Windows drive (C:,
@@ -37,15 +49,20 @@ SPLIT = 1.05                                    # the mesh's split onto the proc
 WRITTEN = {"split": 0.8, "joined": 0.6}         # a written time, times the mesh
 AVERAGED = 1.1                                  # a transient run's averages, times a written time's own fields
 STRETCH = 4                                     # the times a stretch writes (solve.write_interval)
+SETS = 0.03                                     # the sets beside a mesh (snappyHexMesh's of its layers, checkMesh's
+                                                # and a repair's of its faults), times the mesh
+COLLAPSE = 2                                    # a repair collapsing faces: its mesh's backup, and the new mesh
+AB_TIMES = 2                                    # the times an A/B test's run writes: its end, and the one after it
 KEEP_MB = 1024                                  # kept free for everything else
 WINDOWS_DRIVE = "/mnt/c"                        # inside WSL 2: the Windows drive that holds Linux's own disk
 DEPTH = 40                                      # folders deep through links, as the system's own limit on links
 
 
-def size(folder, ignore=None):
+def size(folder, ignore=None, links=True):
     """The bytes shutil.copytree(folder, ...) writes: each file's own size, links followed as copytree follows them,
-    without what `ignore` (copytree's) leaves out and without dangling links (ignore_dangling_symlinks).  0 when the
-    folder can't be read."""
+    without what `ignore` (copytree's) leaves out and without dangling links (ignore_dangling_symlinks).  links=False
+    counts as copytree(..., symlinks=True) copies: a link in the folder is copied as a link, which takes no room.  0
+    when the folder can't be read."""
     def walk(d, depth):
         try:
             names = os.listdir(d)
@@ -58,7 +75,7 @@ def size(folder, ignore=None):
                 continue
             p = os.path.join(d, n)
             try:
-                st = os.stat(p)
+                st = os.stat(p) if links else os.lstat(p)
             except OSError:                     # a dangling link
                 continue
             if stat.S_ISDIR(st.st_mode):
@@ -91,6 +108,32 @@ def solve_mb(mesh, purge, nproc, first=True, averaged=False, writes=STRETCH):
     added = kept if first else (0 if purge > 0 else writes)
     times = (SPLIT if several and first else 0) + added * WRITTEN["split" if several else "joined"] * grow
     return _up(mesh * (times + (WRITTEN["joined"] * grow if several else 0)))
+
+
+def made_mb(cells):
+    """The MB a case made from a template takes once meshed, from the `cells` it makes: its mesh (mesh_mb's) and the
+    sets snappyHexMesh writes of its layers (SETS)."""
+    return _up(cells * MESH_KB_PER_CELL / 1024 * (1 + SETS))
+
+
+def repair_mb(copy, points, mesh):
+    """The MB a repair writes into the workspace: its copy (`copy` bytes) and a backup of its meshes' points (`points`
+    bytes), and from the MB of the mesh it repairs (`mesh`), the sets it writes (SETS) and room to collapse faces in it
+    (COLLAPSE)."""
+    return mb(copy + points) + _up(mesh * (SETS + COLLAPSE))
+
+
+def ab_mb(copy, mesh, runs=2):
+    """The MB an A/B test writes into the workspace: `runs` runs (2; 1 when it reuses an earlier test's first run),
+    each a copy of the case (`copy` bytes: its settings, mesh and start fields) and, from the MB of its mesh (`mesh`),
+    its split onto its processes and AB_TIMES written times, split."""
+    return runs * (mb(copy) + _up(mesh * (SPLIT + AB_TIMES * WRITTEN["split"])))
+
+
+def extend_mb(mesh, times):
+    """The MB an A/B test's second run writes when it is run longer: `times` more written times, split, of its mesh of
+    `mesh` MB (it keeps every one)."""
+    return _up(mesh * times * WRITTEN["split"])
 
 
 def _up(x):

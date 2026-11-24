@@ -16,8 +16,9 @@ The LocalRunner starts `jobrun.py`, a small wrapper that runs the command in its
 own process group, writes the log, and records the end state and exit code.
 Admission rules live here so every client gets them: one big job at a time
 (running jobs, solves run in a terminal, whose status files name their processes,
-plus OpenFOAM processes started outside Mesh Doctor), the RAM guard, and for a
-solve the disk guard.
+plus OpenFOAM processes started outside Mesh Doctor), the RAM guard, and the disk
+guard for each job that writes a case of its own: a repair's copy, an A/B test's
+runs and their extension, a new case, and a solve.
 Progress is read from each tool's own status file when a job is read.
 
     python3 -m meshdoctor jobs [list | show <id> | cancel <id>]

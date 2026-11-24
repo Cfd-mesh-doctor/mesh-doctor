@@ -8,9 +8,10 @@ A solve of a case you made makes a new case the same way: a copy of its mesh and
 
 A new case always goes in a new folder: Mesh Doctor never changes a case you made.  A name that is taken is
 refused, except a case made here before (it holds a .meshdoctor-case.json), which --replace deletes and makes
-again, as after a mesh that failed.  The free memory is checked first (the RAM guard's mesh figure).  The app
-starts the same thing as a `case` job (POST /api/v1/jobs), which runs `templates.py make`; a solve job with a
-template makes its case the same way (build()), then solves it (solve.py).
+again, as after a mesh that failed.  The free memory and disk space are checked first (the RAM guard's mesh figure,
+and the disk guard's: the mesh and its sets, from the cells it makes).  The app starts the same thing as a `case`
+job (POST /api/v1/jobs), which runs `templates.py make`; a solve job with a template makes its case the same way
+(build()), then solves it (solve.py).
 """
 import json, os, re, shlex, shutil, signal, subprocess, sys, time
 
@@ -132,7 +133,24 @@ def start(template, size, name, replace=False):
     cmd = [sys.executable, os.path.join(PKG, "templates.py"), "make", template, name, "--size", size]
     return md_api._submit("case", {"template": template, "size": size, "name": name, "replace": replace}, name,
                           cmd + (["--replace"] if replace else []), log=f"{LOGS}/{name}.log",
-                          ram=(TEMPLATES[template]["sizes"][size]["cells"], "mesh"))
+                          ram=(TEMPLATES[template]["sizes"][size]["cells"], "mesh"),
+                          disk=case_disk(template, size, name))
+
+
+def case_disk(template, size, name=None):
+    """What making case `name` of `template` at `size` writes into the cases folder, for the disk guard: (MB, its
+    folder, what needs it, with its verb): its mesh and the sets snappyHexMesh writes of its layers (diskguard.made_mb),
+    from the cells it makes."""
+    cases = config.settings()["cases"]
+    return (diskguard.made_mb(TEMPLATES[template]["sizes"][size]["cells"]),
+            os.path.join(cases, name) if name else cases, f"{name or 'the new case'}'s mesh needs")
+
+
+def disk_of(template, size):
+    """GET /disk/case: what making a case of `template` at `size` writes, as start's disk guard counts it: ((MB, the
+    cases folder, what), None), or (None, the refusal start would give)."""
+    why = problem(template, size)
+    return (None, md_api._refuse(*why)) if why else (case_disk(template, size), None)
 
 
 # --------------------------------------------------------------------------
@@ -381,8 +399,10 @@ def main(argv):
     why = problem(template, size) or refusal(name, replace)
     if why:
         sys.exit(why[1])
-    if not job:                                 # a job's memory was checked when it was admitted (jobs.submit)
+    if not job:                                 # a job's memory and disk were checked at its admission (jobs.submit)
         ok, msg = ramguard.check_cells(TEMPLATES[template]["sizes"][size]["cells"], "mesh")
+        if ok:
+            ok, msg = diskguard.check(*case_disk(template, size, name))
         if not ok:
             sys.exit(msg)
     return make(template, name, size, replace)

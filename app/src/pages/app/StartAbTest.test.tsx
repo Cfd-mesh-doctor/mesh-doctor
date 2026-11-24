@@ -80,14 +80,17 @@ describe("an A/B test's numbers", () => {
 
 /** Your own engine: these runs and A/B tests, a 16 GB computer with 4 cores, the jobs, and what POST /jobs answers
  *  (a queued job named as the engine names the test). */
-function ownEngine(ui: ReactElement, at: string, { runs = [run("wing-fix", "/cases/wing")], tests = [], jobs = [], refuse, variants = true }: {
+function ownEngine(ui: ReactElement, at: string, { runs = [run("wing-fix", "/cases/wing")], tests = [], jobs = [], refuse, variants = true, disk }: {
   runs?: RepairSummary[];
   tests?: string[];
   jobs?: Job[];
   refuse?: EngineError;
   variants?: boolean;
+  /** the MB GET /disk/abtest says the test needs (API 1.12), of 393 GB free: nothing, as an older engine, unless given */
+  disk?: number;
 } = {}) {
   const posted: unknown[] = [];
+  const asked: string[] = [];
   const transport: Transport = {
     kind: "engine",
     scope: "test",
@@ -106,6 +109,10 @@ function ownEngine(ui: ReactElement, at: string, { runs = [run("wing-fix", "/cas
       if (route === "/jobs") return { items: jobs } as T;
       if (route === "/machine") return MACHINE as T;
       if (route === "/variants" && variants) return structuredClone(DEMO_VARIANTS) as T;
+      if (route === "/disk/abtest" && disk != null) {
+        asked.push(path);
+        return { needMb: disk, freeMb: 402_339, keepMb: 1024, folder: "workspace" } as T;
+      }
       if (route === "/abtests") {
         const brief = { step: "done", updated: null, finished: "2026-11-23 11:00:00", ratios: { p: 0.9 }, verdict: null };
         return { items: tests, tests: Object.fromEntries(tests.map((n) => [n, brief])) } as T;
@@ -113,7 +120,7 @@ function ownEngine(ui: ReactElement, at: string, { runs = [run("wing-fix", "/cas
       throw new EngineError("not-found", "no such route", 404);
     },
   };
-  return { ...renderScreen(ui, { path: "/app/abtests", at, transport }), posted };
+  return { ...renderScreen(ui, { path: "/app/abtests", at, transport }), posted, asked };
 }
 
 const dialog = () => screen.getByRole("dialog");
@@ -245,6 +252,7 @@ function ownDemo(name: string, idle = false) {
   const demo = demoTransport(undefined, 0);
   const posted: unknown[] = [];
   const started: Job[] = [];
+  const asked: string[] = [];
   const transport: Transport = {
     kind: "engine",
     scope: "own",
@@ -255,6 +263,10 @@ function ownDemo(name: string, idle = false) {
         started.unshift({ ...job(b.kind, b.params.name, "queued"), params: b.params } as Job);
         return structuredClone(started[0]) as T;
       }
+      if (path.startsWith("/disk/abextend?")) {             // what running it longer writes (API 1.12)
+        asked.push(path);
+        return { needMb: 106, freeMb: 402_339, keepMb: 1024, folder: "workspace" } as T;
+      }
       const answer = await demo.request<T>(method, path, body, signal);
       if (path.split("?")[0] === "/jobs") {
         const list = answer as JobList;
@@ -263,7 +275,7 @@ function ownDemo(name: string, idle = false) {
       return answer;
     },
   };
-  return { ...renderScreen(<AbTest />, { path: "/app/abtests/:name", at: `/app/abtests/${name}`, transport }), posted };
+  return { ...renderScreen(<AbTest />, { path: "/app/abtests/:name", at: `/app/abtests/${name}`, transport }), posted, asked };
 }
 
 describe("running an A/B test longer", () => {
@@ -339,5 +351,37 @@ describe("a test just started", () => {
     expect(screen.getByText(/^not enough memory: the solve needs about 3\.5 GB; 1\.2 GB free/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "its job" })).toHaveAttribute("href",
       `/app/jobs?job=${encodeURIComponent(job("abtest", "wing-fix", "failed").id)}`);
+  });
+});
+
+describe("what an A/B test and running it longer take on the disk", () => {
+  it("says what the test writes in the engine's workspace, for the run and the settings picked", async () => {
+    const user = userEvent.setup();
+    const { asked } = ownEngine(<AbTests />, "/app/abtests", { disk: 484 });
+    await user.click(await screen.findByRole("button", { name: "Start an A/B test" }));
+    await waitFor(() => expect(dialog()).toHaveTextContent(
+      "The test needs about 484 MB of disk space; the disk the engine's workspace is on has 393 GB free."));
+    expect(asked).toContain("/disk/abtest?name=wing-fix&iters=200&init=auto");
+    const second = pick("Second run");
+    await within(second).findByRole("option", { name: "Original mesh, SIMPLEC (consistent yes, U 0.9)" });
+    await user.selectOptions(second, "simplec");
+    await user.clear(field("Iterations"));
+    await user.type(field("Iterations"), "400");
+    await waitFor(() => expect(asked.at(-1)).toBe("/disk/abtest?name=wing-fix&iters=400&init=auto&variant=simplec"));
+    // Iterations the engine refuses aren't asked about.
+    await user.clear(field("Iterations"));
+    expect(dialog()).not.toHaveTextContent("of disk space");
+  });
+
+  it("says what running it longer writes, for the iteration it continues to", async () => {
+    const user = userEvent.setup();
+    const { asked } = ownDemo("ahmed25-coarse-fix", true);
+    await user.click(await screen.findByRole("button", { name: "Run longer" }));
+    await waitFor(() => expect(dialog()).toHaveTextContent(
+      "The continuation needs about 106 MB of disk space; the disk the engine's workspace is on has 393 GB free."));
+    expect(asked).toContain("/disk/abextend?name=ahmed25-coarse-fix&to=400");
+    await user.clear(field("Continue to iteration"));
+    await user.type(field("Continue to iteration"), "1000");
+    await waitFor(() => expect(asked.at(-1)).toBe("/disk/abextend?name=ahmed25-coarse-fix&to=1000"));
   });
 });

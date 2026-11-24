@@ -166,7 +166,7 @@ export const GROUPS: ProblemGroup[] = [
         ],
         [
           "\"Not enough free disk space\"",
-          "before it starts a solve, the engine works out the space that the new case it makes and the solve's results need, and the disk the cases are on has less free (it keeps 1 GB spare). Inside WSL, Linux's own disk is a file on a Windows drive, C: unless it was moved, and that drive can fill first",
+          "before it starts a solve, a repair, an A/B test or a new case, the engine works out the space the job writes (its copy or its new case, and its results), and the disk it writes on has less free (it keeps 1 GB spare): the cases folder's for a solve or a new case, the engine's workspace's for a repair or an A/B test. Inside WSL, Linux's own disk is a file on a Windows drive, C: unless it was moved, and that drive can fill first",
           "delete runs or results you no longer need, such as old runs' processor folders and written times, or free space on the Windows drive, then try again",
         ],
         [

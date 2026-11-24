@@ -4,7 +4,9 @@ import { QueryClient, keepPreviousData, skipToken, useMutation, useQuery, useQue
 import { api } from "./client";
 import { useEngine } from "./context";
 import { asEngineError } from "./errors";
-import { isActive, type AbtestDetail, type Job, type JobList, type JobRequest, type RunDetail } from "./types";
+import {
+  isActive, type AbtestDetail, type DiskJobKind, type Job, type JobList, type JobRequest, type RunDetail,
+} from "./types";
 
 export function makeQueryClient(): QueryClient {
   return new QueryClient({
@@ -140,6 +142,27 @@ export function useDisk(name: string | null, writes?: number) {
     staleTime: 30_000,
     // the same case's answer while one for other times written comes, not another case's
     placeholderData: (previous, query) => (query?.queryKey[2] === name ? previous : undefined),
+  });
+}
+
+/** The param of a job a GET /disk/{kind} answer is for: while it stays the same, the last answer shows while the next
+ * comes (other iterations, another mesh size), but never another case's, run's or template's. */
+const DISK_SUBJECT: Record<DiskJobKind, string> = { repair: "source", abtest: "name", abextend: "name", case: "template" };
+
+/** What a repair, an A/B test, its continuation or a new case writes on the disk, as the engine's disk guard counts it
+ * before the job starts, and the free space there (API 1.12), for the job's dialog, from the params it would start
+ * the job with; null: not asked. An engine before API 1.12 has no such route (not-found) and doesn't check the disk
+ * for these jobs: the dialogs then say nothing of it. */
+export function useDiskJob(kind: DiskJobKind, query: Record<string, string | number> | null) {
+  const { transport } = useEngine();
+  const subject = DISK_SUBJECT[kind];
+  return useQuery({
+    queryKey: [transport?.scope, "disk-job", kind, query],
+    queryFn: transport && query ? ({ signal }) => api.diskJob(transport, kind, query, signal) : skipToken,
+    staleTime: 30_000,
+    placeholderData: (previous, last) =>
+      query && (last?.queryKey[3] as Record<string, unknown> | null | undefined)?.[subject] === query[subject]
+        ? previous : undefined,
   });
 }
 
