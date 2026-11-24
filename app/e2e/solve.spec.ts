@@ -383,4 +383,15 @@ test("the Cases screen plans a transient run of a case you made that has a resul
   await expect(dialog).toBeHidden();
   // A case with no result yet has none to plan from.
   await expect(page.getByRole("button", { name: "Plan a transient run of wing" })).toHaveCount(0);
+  // A transient run starts from a solved copy: the plan opens Solve a case you made… with this case picked.
+  await page.getByRole("button", { name: "Plan a transient run of motorBike" }).click();
+  await dialog.getByRole("link", { name: "Solve a case you made…" }).click();
+  const copy = page.getByRole("dialog", { name: "Solve a copy of a case you made" });
+  await expect(copy.getByLabel("Case")).toHaveValue("motorBike");
+  await expect(copy.getByLabel("Name of the copy")).toHaveValue("motorBike-run");
+  await expect(page).toHaveURL(/\/app\/solve$/);                  // the address drops ?copy= once it is open
+  await copy.getByRole("button", { name: "Cancel" }).click();
+  await expect(copy).toBeHidden();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/app\/cases$/);
 });

@@ -440,7 +440,8 @@ function CopyForm({ source: asked, onDone }: { source?: string; onDone: () => vo
   const id = useId();
   const yours = useMemo(() => yourCases(s.cases.data), [s.cases.data]);
   const [picked, setPicked] = useState<string | null>(asked ?? null);
-  const source = picked ?? yours[0] ?? null;
+  // the one asked for (an address's), else the first of yours: never a case Mesh Doctor made, or none
+  const source = picked != null && yours.includes(picked) ? picked : yours[0] ?? null;
   const taken = useMemo(() => copyTaken(s.cases.data?.items, s.jobs.data?.items), [s.cases.data, s.jobs.data]);
   const [typedName, setTypedName] = useState<string | null>(null);      // null: the name suggested for the case
   const name = typedName ?? (source ? copyName(source, taken) : "");

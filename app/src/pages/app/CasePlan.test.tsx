@@ -88,8 +88,9 @@ describe("Plan a transient run of a case you made", () => {
     expect(screen.getByRole("dialog")).toHaveTextContent(
       "From its result at time 300: the time step a transient run would need at each largest Courant number");
     expect(screen.getByRole("dialog")).toHaveTextContent("A transient run starts from a solved run of a case Mesh Doctor "
-      + "made: Solve a case you made…, on the Solve screen, solves a copy of this one, and that run's page starts one.");
-    expect(dialog().getByRole("link", { name: "Solve screen" })).toHaveAttribute("href", "/app/solve");
+      + "made: Solve a case you made…, on the Solve screen with this case picked, solves a copy of it, and that run's "
+      + "page starts one.");
+    expect(dialog().getByRole("link", { name: "Solve a case you made…" })).toHaveAttribute("href", "/app/solve?copy=mine");
 
     await user.click(await dialog().findByRole("button", { name: "Plan" }));
     await waitFor(() => expect(posted).toEqual([{ kind: "tplan", params: { name: "mine" } }]));

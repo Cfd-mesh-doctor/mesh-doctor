@@ -4,13 +4,14 @@
 // found, and a warning's or a problem's fix with its command to copy, then the largest mesh the free memory takes.
 // Then New case: a case made from a template (API 1.5, NewCase.tsx), and Runs: each case Mesh Doctor made with its
 // solve (API 1.6: GET /runs), what it is doing and how far it has come, a link to its page (Run.tsx) and Solve… for
-// one not solved yet (SolveDialog.tsx), and Solve a case you made…, which solves a copy of one of yours (CopyDialog).
+// one not solved yet (SolveDialog.tsx), and Solve a case you made…, which solves a copy of one of yours (CopyDialog):
+// /solve?copy=<case> opens it with that case picked, as the Cases screen's plan of a case you made links it.
 // A transient run of a solved run (started from that run's page) is listed as one, in seconds.
 // Verify install, under Ready to solve?, solves the coarse Ahmed body as the accuracy check did and compares its drag
 // (VerifyInstall.tsx). What the screen does next is listed under them until then.
 import { CircleCheck, CircleX, CopyPlus, ExternalLink, FolderPlus, Play, RefreshCw, TriangleAlert } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link, useSearchParams } from "react-router";
 import { RunStateBadge } from "@/components/shared/badges";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
@@ -311,7 +312,19 @@ function Runs() {
   const active = jobs.data?.items.some((j) => j.kind === "solve" && isActive(j.state)) ?? false;
   const runs = useRuns(active);
   const [solving, setSolving] = useState<string | null>(null);
-  const [copying, setCopying] = useState(false);
+  // Solve a case you made… while it is open: the case it opens with picked, "" for the first of yours. An address
+  // opens it with a case of yours picked (/solve?copy=<case>, as the Cases screen's plan of a case you made links
+  // it), then drops it, so going back to this screen doesn't open it again.
+  const [params, setParams] = useSearchParams();
+  const [copying, setCopying] = useState<string | null>(() => params.get("copy"));
+  useEffect(() => {
+    if (!params.has("copy")) return;
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("copy");
+      return next;
+    }, { replace: true, preventScrollReset: true });
+  }, [params, setParams]);
   const to = useAppPath();
   const old = runs.isError && !runs.data && asEngineError(runs.error).code === "not-found";
   const rows = useMemo(() => runRows(cases.data?.made, runs.data?.items, jobs.data?.items), [cases.data, runs.data, jobs.data]);
@@ -355,7 +368,7 @@ function Runs() {
         )}
       </CardContent>
       <CardFooter className="flex-wrap">
-        <Button size="sm" variant="secondary" onClick={() => setCopying(true)} disabled={old}>
+        <Button size="sm" variant="secondary" onClick={() => setCopying("")} disabled={old}>
           <CopyPlus aria-hidden /> Solve a case you made…
         </Button>
         <span className="text-muted-foreground">
@@ -367,7 +380,9 @@ function Runs() {
         <SolveDialog open onOpenChange={(o) => { if (!o) setSolving(null); }}
           target={{ name: solving, run: null, transientOf: cases.data?.made?.[solving]?.transientOf }} />
       )}
-      {copying && <CopyDialog open onOpenChange={(o) => { if (!o) setCopying(false); }} />}
+      {copying != null && (
+        <CopyDialog open source={copying || undefined} onOpenChange={(o) => { if (!o) setCopying(null); }} />
+      )}
     </Card>
   );
 }

@@ -212,7 +212,8 @@ export function TransientPlanCard({ run }: { run: RunDetail }) {
  * The Cases screen's Plan a transient run of a case you made, once it has a result (`result`: its latest written time
  * with its face flux, GET /cases' `results`, API 1.8): the plan a tplan job makes of it, as of a run. A transient run
  * starts from a solved run of a case Mesh Doctor made, so a case you made is planned only: Solve a case you made…, on
- * the Solve screen, solves a copy of it, and that run's page starts one.
+ * the Solve screen, solves a copy of it, and that run's page starts one. The dialog links it with this case picked
+ * (/solve?copy=<case>).
  */
 export function CasePlanDialog({ name, result, open, onOpenChange }: {
   name: string;
@@ -240,9 +241,9 @@ export function CasePlanDialog({ name, result, open, onOpenChange }: {
             since={later ? `The case has a later result since, at time ${result}: Plan again plans from there.` : null} />
         )}
         <p className="text-[13px] text-muted-foreground">
-          A transient run starts from a solved run of a case Mesh Doctor made: Solve a case you made…, on the{" "}
-          <Link to={to("/solve")} className={LINK}>Solve screen</Link>, solves a copy of this one, and that run&apos;s
-          page starts one.
+          A transient run starts from a solved run of a case Mesh Doctor made:{" "}
+          <Link to={to(`/solve?copy=${encodeURIComponent(name)}`)} className={LINK}>Solve a case you made…</Link>, on
+          the Solve screen with this case picked, solves a copy of it, and that run&apos;s page starts one.
         </p>
       </div>
       <DialogActions>

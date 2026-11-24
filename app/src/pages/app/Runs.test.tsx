@@ -99,6 +99,8 @@ function engine(o: {
   kind?: "engine" | "demo"; freeMb?: number; noDisk?: boolean; validations?: Record<string, RunValidation | EngineError>;
   /** its API version (GET /), when it says one */
   api?: string;
+  /** the cases of yours in its cases folder: mine, unless given */
+  yours?: string[];
 } = {}) {
   const posted: { path: string; body?: unknown }[] = [];
   const judged: string[] = [];
@@ -120,7 +122,7 @@ function engine(o: {
       }
       const made = o.made ?? {};
       if (route === "/cases") {
-        const items = ["mine", ...Object.keys(made)];
+        const items = [...(o.yours ?? ["mine"]), ...Object.keys(made)];
         return { items, cells: Object.fromEntries(items.map((n) => [n, 480_000])), made } as T;
       }
       if (route === "/runs" && !o.noRuns) return { items: [...runs.values()] } as T;
@@ -166,9 +168,9 @@ function engine(o: {
   return { transport, posted, judged, validated };
 }
 
-const solvePage = (o: Parameters<typeof engine>[0]) => {
+const solvePage = (o: Parameters<typeof engine>[0], at?: string) => {
   const e = engine(o);
-  return { ...renderScreen(<Solve />, { path: "/app/solve", transport: e.transport }), posted: e.posted };
+  return { ...renderScreen(<Solve />, { path: "/app/solve", at, transport: e.transport }), posted: e.posted };
 };
 const runPage = (name: string, o: Parameters<typeof engine>[0]) => {
   const e = engine(o);
@@ -284,6 +286,24 @@ describe("solving a copy of a case you made", () => {
     await user.click(dialog().getByRole("button", { name: "Solve a copy" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/app/solve/mine-fine"));
     expect(posted).toEqual([{ path: "/jobs", body: { kind: "solve", params: { name: "mine-fine", source: "mine", to: 2000, np: 4 } } }]);
+  });
+
+  it("opens from an address with a case of yours picked, as the Cases screen's plan of one links it", async () => {
+    const user = userEvent.setup();
+    const view = solvePage({ yours: ["mine", "wing"] }, "/app/solve?copy=wing");
+    expect(await dialog().findByRole("heading", { name: "Solve a copy of a case you made" })).toBeInTheDocument();
+    expect(await dialog().findByRole("combobox", { name: "Case" })).toHaveValue("wing");
+    expect(dialog().getByRole("textbox", { name: "Name of the copy" })).toHaveValue("wing-run");
+    await waitFor(() => expect(view.router.state.location.search).toBe(""));   // dropped: going back won't open it
+    await user.click(dialog().getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await user.click(screen.getByRole("button", { name: "Solve a case you made…" }));     // the button: the first
+    expect(await dialog().findByRole("combobox", { name: "Case" })).toHaveValue("mine");
+    view.unmount();
+    // a case Mesh Doctor made isn't one of yours to copy: the first of yours is picked
+    solvePage({ yours: ["mine", "wing"], made: { "mine-run": { copyOf: "mine" } } }, "/app/solve?copy=mine-run");
+    expect(await dialog().findByRole("combobox", { name: "Case" })).toHaveValue("mine");
+    expect(dialog().getByRole("textbox", { name: "Name of the copy" })).toHaveValue("mine-run-2");
   });
 
   it("warns when the copy and what its solve writes won't fit on the disk; an engine before API 1.7 says nothing", async () => {
