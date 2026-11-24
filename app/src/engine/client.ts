@@ -123,9 +123,12 @@ export const api = {
   variants: (t: Transport, signal?: AbortSignal) => t.request<VariantList>("GET", "/variants", undefined, signal),
   /** The computer the engine runs on (API 1.1); an older engine answers not-found. */
   machine: (t: Transport, signal?: AbortSignal) => t.request<MachineInfo>("GET", "/machine", undefined, signal),
-  /** The free space for a new case, and with `name`, what solving that case takes on the disk (API 1.7). */
-  disk: (t: Transport, name: string | null, signal?: AbortSignal) =>
-    t.request<DiskInfo>("GET", name != null ? `/disk?case=${encodeURIComponent(name)}` : "/disk", undefined, signal),
+  /** The free space for a new case, and with `name`, what solving that case takes on the disk (API 1.7): a transient
+   * run's stretch writing `writes` times (API 1.10; an older engine leaves it out, and says four). */
+  disk: (t: Transport, name: string | null, signal?: AbortSignal, writes?: number) =>
+    t.request<DiskInfo>("GET", name != null
+      ? `/disk?case=${encodeURIComponent(name)}${writes != null ? `&writes=${writes}` : ""}`
+      : "/disk", undefined, signal),
   /** The engine's self check (API 1.4), run for this answer; an older engine answers not-found. */
   readiness: (t: Transport, signal?: AbortSignal) => t.request<Readiness>("GET", "/check", undefined, signal),
   templates: (t: Transport, signal?: AbortSignal) => t.request<TemplateList>("GET", "/templates", undefined, signal),

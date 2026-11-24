@@ -11,7 +11,10 @@ URANS keeps the steady run's own RAS model, in time, and can run at a larger Cou
 3 outer correctors a time step (as the transient plan's hours assume), and a time step that OpenFOAM adjusts to the
 Courant number asked for.  The new case's times are seconds of flow from 0; by default it runs 8 flow times over the
 body (8 L/U, from its force coefficients' lRef and its freestream speed, as the transient plan takes them).  The
-steady run is only read, and its latest result must be joined (solve.py joins it when a stretch ends).
+steady run is only read, and its latest result must be joined (solve.py joins it when a stretch ends).  Each stretch
+writes WRITES times (4) evenly to its end, or as many as the run asks for (--writes, at most MAX_WRITES), and a
+transient run keeps every time it writes (purgeWrite 0), for pictures of the flow over time: on several processes the
+latest of each stretch is joined, and the others stay split on its processes.
 
 Its function objects go in system/functions, which OpenFOAM 14 reads again when the file changes as the run solves (a
 controlDict's own `functions` it reads only at the start), with one more that is off at first: a fieldAverage
@@ -29,6 +32,8 @@ import tplan
 MODELS = ("DDES", "URANS")
 MAX_CO = 20.0                    # PIMPLE with 3 outer correctors; past this the time step outruns them
 MAX_DDES_CO = 2.0                # DDES resolves eddies: about 1, as the transient plan says
+WRITES = 4                       # the times a stretch of a transient run writes, unless it asks for more or fewer
+MAX_WRITES = 200                 # the most a stretch may write: a transient run keeps every one (purgeWrite 0)
 OUTER = tplan.OUTER
 LES = """LES
 {
@@ -155,10 +160,10 @@ def unsupported(case, model):
     return None
 
 
-def make(steady, case, co, model, to):
+def make(steady, case, co, model, to, writes=WRITES):
     """Make the new folder `case` a transient run of the steady run in folder `steady`: its mesh and settings
-    (templates.copy), its latest result as the start (0), and transient settings (settings()).  The new case's cell
-    count."""
+    (templates.copy), its latest result as the start (0), and transient settings (settings()), writing `writes` times
+    to `to`.  The new case's cell count."""
     cells = templates.copy(steady, case)
     _, src = result(steady)
     zero = os.path.join(case, "0")
@@ -166,7 +171,7 @@ def make(steady, case, co, model, to):
     for n in os.listdir(src):                    # the solved fields, and the flux: not what function objects wrote
         if n in fields or n == "phi":
             shutil.copyfile(os.path.join(src, n), os.path.join(zero, n))
-    settings(case, co, model, to, start_dt(os.path.basename(steady), result(steady)[0], co, to))
+    settings(case, co, model, to, start_dt(os.path.basename(steady), result(steady)[0], co, to), writes)
     return cells
 
 
@@ -211,12 +216,14 @@ def _edit(case, rel, change):
         f.write(text)
 
 
-def settings(case, co, model, to, dt):
-    """Turn the copied steady settings transient (unsupported() says which it can)."""
+def settings(case, co, model, to, dt, writes=WRITES):
+    """Turn the copied steady settings transient (unsupported() says which it can): `writes` times written to `to`,
+    and every one kept."""
     def control(t):
         for entry, value in (("startFrom", "startTime"), ("startTime", 0), ("beginTime", 0), ("endTime", to),
                              ("deltaT", dt), ("adjustTimeStep", "yes"), ("maxCo", co),
-                             ("writeControl", "adjustableRunTime"), ("writeInterval", f"{to / 4:.6g}")):
+                             ("writeControl", "adjustableRunTime"), ("writeInterval", f"{to / writes:.6g}"),
+                             ("purgeWrite", 0)):
             t = _entry(t, entry, value)
         return t
 

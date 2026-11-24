@@ -3,11 +3,11 @@ import { describe, expect, it } from "vitest";
 import type { DiskInfo, Job, Run } from "@/engine/types";
 import {
   MAX_TO, atText, averagingText, copyName, copyNameProblem, copyTaken, current, diskCheck, diskSpace, formatTime,
-  isTransient,
+  isTransient, keptText,
   madeFrom, madeOfJob, ofText,
   procChoices, runRows, runShown, solveCommand, solveJobOf, solveStep, stretchFraction, stretchesText, suggestedProcs,
-  suggestedTime, suggestedTo, timeInput, timeNumber, timeProblem, toProblem, totalForces, transientCommand,
-  transientText, yourCases,
+  suggestedTime, suggestedTo, takesWrites, timeInput, timeNumber, timeProblem, toProblem, totalForces, transientCommand,
+  transientText, writesHint, writesProblem, yourCases,
 } from "./solveStart";
 
 const run = (name: string, more: Partial<Run> = {}): Run => ({
@@ -225,6 +225,47 @@ describe("a transient run", () => {
       .toMatch(/^Its flow is averaged from 0\.0005 s, once its forces had settled: each/);
     // Not a run that averages: steady, or made by an engine before API 1.9
     expect([averagingText(null, true), averagingText(undefined, false)]).toEqual([null, null]);
+  });
+
+  it("writes the times asked for each stretch, evenly to its end, and keeps every one (API 1.10)", () => {
+    // Asked for only of an engine that takes them: an older one writes four and refuses the param
+    expect(["1.10", "1.11", "2.0", "1.9", "1.6", "1.0", "", null, undefined, "x"].map(takesWrites))
+      .toEqual([true, true, true, false, false, false, false, false, false, false]);
+    expect(["1", "4", "16", "200"].map(writesProblem)).toEqual([null, null, null, null]);
+    for (const bad of ["", "0", "201", "4.5", "-2", "1e2", "many", " 4"]) {
+      expect(writesProblem(bad)).toBe("Give a whole number from 1 to 200.");
+    }
+    const each = "each kept: the flow at that time, with its mean once it averages it, for pictures of the flow over time.";
+    expect(writesHint(8, 0, 0.0004)).toBe(`Every 0.00005 s, ${each}`);
+    expect(writesHint(4, 0.0011, 0.0017)).toBe(`Every 0.00015 s, ${each}`);
+    expect([writesHint(4, 0, null), writesHint(4, 0.0011, 0.0011)]).toEqual([`Evenly to the end, ${each}`,
+      `Evenly to the end, ${each}`]);
+    // The command says them when they aren't the four it writes unasked
+    expect(transientCommand("ahmed-ddes", "ahmed", 1, "DDES", 0.2088, 6, 40))
+      .toBe("meshdoctor solve ahmed-ddes --steady ahmed --co 1 --model DDES --to 0.2088 --writes 40 --np 6");
+    expect(transientCommand("ahmed-ddes", "ahmed", 1, "DDES", 0.2088, 6, 4)).not.toContain("--writes");
+    expect(solveCommand("ahmed-ddes", 0.0017, null, undefined, 16)).toBe("meshdoctor solve ahmed-ddes --to 0.0017 --writes 16");
+    expect(solveCommand("ahmed-ddes", 0.0017, 4, undefined, null)).toBe("meshdoctor solve ahmed-ddes --to 0.0017 --np 4");
+  });
+
+  it("says the written times it keeps: how many, from when to when, and which are joined on several processes", () => {
+    const tw = { ...t.transient!, writes: 4 };
+    expect(keptText({ ...t, transient: tw, times: [0.0001, 0.0002, 0.0005, 0.0011], joined: [0.0005, 0.0011] }))
+      .toBe("It keeps 4 written times, from 0.0001 s to 0.0011 s; it writes 4 times a stretch. 2 of them are joined, "
+        + "the others split on its processes: paraFoam opens them all as a Decomposed Case.");
+    expect(keptText({ ...t, transient: tw, times: [0.0001, 0.0002], joined: [] })).toBe("It keeps 2 written times, "
+      + "from 0.0001 s to 0.0002 s; it writes 4 times a stretch. They are split on its processes: paraFoam opens them "
+      + "as a Decomposed Case.");
+    expect(keptText({ ...t, transient: tw, times: [0.0001, 0.0002], joined: [0.0002] }))
+      .toMatch(/ 1 of them is joined, the others split on its processes: paraFoam opens them all as a Decomposed Case\.$/);
+    // Unsplit, or every one joined: nothing to open as a Decomposed Case
+    const one = { ...t, nProcs: 1, transient: { ...tw, writes: 1 }, times: [0.0004], joined: [0.0004] };
+    expect(keptText(one)).toBe("It keeps one written time, 0.0004 s; it writes once a stretch.");
+    expect(keptText({ ...t, transient: tw, times: [0.0001, 0.0002], joined: [0.0001, 0.0002] }))
+      .toBe("It keeps 2 written times, from 0.0001 s to 0.0002 s; it writes 4 times a stretch.");
+    // An older engine says no times, or no writes; nothing written yet keeps none
+    expect([keptText(t), keptText({ ...t, times: [] })]).toEqual([null, null]);
+    expect(keptText({ ...t, times: [0.0005], joined: [0.0005] })).toBe("It keeps one written time, 0.0005 s.");
   });
 });
 

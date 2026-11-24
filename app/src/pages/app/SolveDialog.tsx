@@ -7,8 +7,9 @@
 // iteration 2,000, as the accuracy check did: its name and processes, then the same, in one job. A transient run of a
 // solved steady run (TransientDialog, from its transient plan) is a new case of the steady run's mesh, settings and
 // latest result: its name, DDES or URANS, the largest Courant number with the plan's time step and hours at it, the
-// time in s to solve to and the processes, then the same; a transient run continues by time. The demo can't start
-// jobs: it says so and gives the command that does the same in a terminal.
+// time in s to solve to and the processes, then the same; a transient run continues by time. A transient run writes
+// four times a stretch, or the times written asked for, each kept (API 1.10; an older engine writes four and isn't
+// asked). The demo can't start jobs: it says so and gives the command that does the same in a terminal.
 import { CopyPlus, FastForward, Play, ShieldCheck, Waves } from "lucide-react";
 import { useId, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
@@ -18,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { DialogActions, DialogClose, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input, Segmented } from "@/components/ui/misc";
 import { useAppPath, useEngine } from "@/engine/context";
-import { useCases, useDisk, useJobs, useMachine, useRuns, useStartJob } from "@/engine/hooks";
+import { useCases, useDisk, useEngineInfo, useJobs, useMachine, useRuns, useStartJob } from "@/engine/hooks";
 import { JOB_KIND_LABEL, isActive, type Run, type RunDetail, type TransientPlan } from "@/engine/types";
 import { machineFields } from "@/estimate/machine";
 import { formatInt } from "@/lib/format";
@@ -26,9 +27,9 @@ import { cn } from "@/lib/utils";
 import { FIELD, GB, JobDialog, Note } from "./dialogParts";
 import { stepMemory } from "./repairStart";
 import {
-  FIRST_TO, copyName, copyNameProblem, copyTaken, diskCheck, diskSpace, formatTime, isTransient, procChoices,
-  solveCommand, suggestedProcs, suggestedTime, suggestedTo, timeInput, timeProblem, toProblem, transientCommand,
-  yourCases, type DiskCheck,
+  FIRST_TO, WRITES, copyName, copyNameProblem, copyTaken, diskCheck, diskSpace, formatTime, isTransient, procChoices,
+  solveCommand, suggestedProcs, suggestedTime, suggestedTo, takesWrites, timeInput, timeProblem, toProblem,
+  transientCommand, writesHint, writesProblem, yourCases, type DiskCheck,
 } from "./solveStart";
 import {
   MODELS, coProblem, flowHint, planAtText, suggestedCo, transientName, transientProcs, type Model,
@@ -116,9 +117,12 @@ function useSolveStart() {
   const jobs = useJobs();
   const machine = useMachine();
   const start = useStartJob();
+  const info = useEngineInfo();
   const demo = mode === "demo";
   return {
     demo, cases, jobs, machine, start,
+    /** It takes the times a transient run writes a stretch (API 1.10); the demo only gives the command. */
+    writable: demo || takesWrites(info.data?.apiVersion),
     cores: machine.data ? machineFields(machine.data).cores : undefined,
     busy: jobs.data?.items.find((j) => isActive(j.state)),
     computer: demo ? "the demo engine's computer" : "your engine's computer",
@@ -129,13 +133,37 @@ function useSolveStart() {
 }
 type SolveStart = ReturnType<typeof useSolveStart>;
 
+/** The times each stretch of a transient run writes, evenly to its end, each kept (API 1.10). */
+function WritesField({ id, typed, onChange, problem, hint }: {
+  id: string; typed: string; onChange: (typed: string) => void; problem: string | null; hint: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={`${id}-writes`} className="block text-sm font-medium">Times written</label>
+      <Input
+        id={`${id}-writes`}
+        value={typed}
+        onChange={(e) => onChange(e.target.value.trim())}
+        inputMode="numeric"
+        aria-invalid={problem ? true : undefined}
+        aria-describedby={`${id}-writes-hint`}
+        autoComplete="off"
+        className={cn("max-w-40 tabular-nums", problem && "border-danger")}
+      />
+      <p id={`${id}-writes-hint`} className={cn("text-xs", problem ? "text-danger" : "text-muted-foreground")}>
+        {problem ?? hint}
+      </p>
+    </div>
+  );
+}
+
 /** Where the solve ends: an iteration, or a transient run's time in s (`seconds`). */
 function ToField({ id, typed, onChange, problem, hint, seconds = false }: {
   id: string; typed: string; onChange: (typed: string) => void; problem: string | null; hint: string; seconds?: boolean;
 }) {
   return (
     <div className="space-y-1.5">
-      <label htmlFor={`${id}-to`} className="text-sm font-medium">{seconds ? "Solve to (s)" : "Solve to iteration"}</label>
+      <label htmlFor={`${id}-to`} className="block text-sm font-medium">{seconds ? "Solve to (s)" : "Solve to iteration"}</label>
       <Input
         id={`${id}-to`}
         value={typed}
@@ -156,7 +184,7 @@ function ToField({ id, typed, onChange, problem, hint, seconds = false }: {
 function ProcsField({ id, np, onPick, s }: { id: string; np: number; onPick: (np: number) => void; s: SolveStart }) {
   return (
     <div className="space-y-1.5">
-      <label htmlFor={`${id}-np`} className="text-sm font-medium">Processes</label>
+      <label htmlFor={`${id}-np`} className="block text-sm font-medium">Processes</label>
       <select id={`${id}-np`} className={cn(FIELD, "max-w-40")} value={np}
         onChange={(e) => onPick(Number(e.target.value))} aria-describedby={`${id}-np-hint`}>
         {procChoices(s.cores).map((n) => <option key={n} value={n}>{n}</option>)}
@@ -274,15 +302,22 @@ function SolveForm({ target, onDone }: { target: SolveTarget; onDone: () => void
   const problem = transient ? timeProblem(typed, written) : toProblem(typed, written);
   const [picked, setPicked] = useState<number | null>(null);
   const np = picked ?? suggestedProcs(s.cores);
-  const ready = !s.demo && !problem && !s.busy && !s.start.isPending;
+  // A transient run's times written a stretch: its own, unless changed (API 1.10)
+  const asks = transient && s.writable;
+  const own = run?.transient?.writes ?? WRITES;
+  const [typedWrites, setTypedWrites] = useState(String(own));
+  const writesBad = asks ? writesProblem(typedWrites) : null;
+  const writes = asks && !writesBad ? Number(typedWrites) : null;
+  const ready = !s.demo && !problem && !writesBad && !s.busy && !s.start.isPending;
   const procs = run?.nProcs;
   const on = procs && procs > 1 ? `on the run's ${procs} processes` : "unsplit, as the run was";
-  const disk = useDisk(s.demo ? null : name);
+  const disk = useDisk(s.demo ? null : name, writes ?? undefined);
+  const writing = asks ? "the times you ask for on the way, each kept" : "four times on the way";
 
   const submit = () => {
     if (!ready) return;
     s.start.mutate(
-      { kind: "solve", params: { name, to: Number(typed), ...(first ? { np } : {}) } },
+      { kind: "solve", params: { name, to: Number(typed), ...(first ? { np } : {}), ...(writes != null ? { writes } : {}) } },
       { onSuccess: () => { onDone(); s.open(name); } },
     );
   };
@@ -294,10 +329,10 @@ function SolveForm({ target, onDone }: { target: SolveTarget; onDone: () => void
         {transient
           ? first
             ? "The engine splits the transient run over the processes you pick and solves it in time from the steady "
-              + "result it starts from, to the time you give. It writes the solution four times on the way; Stop "
-              + "writes the time it has reached, and a later solve continues from the latest one written."
+              + `result it starts from, to the time you give. It writes the solution ${writing}; Stop writes the time `
+              + "it has reached, and a later solve continues from the latest one written."
             : `The transient run continues from ${formatTime(written)}, the latest time written, ${on}, to the time `
-              + "you give, writing four times on the way."
+              + `you give, writing ${writing}.`
           : first
             ? "The engine splits the case over the processes you pick, starts the flow with potentialFoam and runs "
               + "foamRun to the iteration you give, as the case's own Allrun does. It writes the solution about four "
@@ -314,12 +349,17 @@ function SolveForm({ target, onDone }: { target: SolveTarget; onDone: () => void
               + "on from where it ended."
             : transient ? `Past ${formatTime(written)}, the latest time written.`
               : `Past ${formatInt(written)}, the latest iteration written.`} />
+        {asks && (
+          <WritesField id={id} typed={typedWrites} onChange={setTypedWrites} problem={writesBad}
+            hint={writesHint(writes ?? own, written, problem ? null : Number(typed))} />
+        )}
         {first && <ProcsField id={id} np={np} onPick={setPicked} s={s} />}
         <Notes s={s} cells={s.cases.data?.cells?.[name] ?? null} what="solve this case"
-          disk={diskCheck(disk.data, null, first, first ? np : procs ?? 1)}
+          disk={writesBad ? null : diskCheck(disk.data, null, first, first ? np : procs ?? 1)}
           spends={first ? "The solve needs" : "The continuation needs"} />
-        {s.demo && !problem && (
-          <DemoCommand verb={first ? "Solve" : "Continue"} command={solveCommand(name, Number(typed), first ? np : null)} />
+        {s.demo && !problem && !writesBad && (
+          <DemoCommand verb={first ? "Solve" : "Continue"}
+            command={solveCommand(name, Number(typed), first ? np : null, undefined, writes !== own ? writes : null)} />
         )}
       </div>
 
@@ -523,15 +563,18 @@ function TransientForm({ target, onDone }: { target: TransientTarget; onDone: ()
   const np = picked ?? transientProcs(plan, procChoices(s.cores), suggestedProcs(s.cores));
   const co = Number(coText);
   const to = Number(typedTo);
-  const ready = !s.demo && !nameProblem && !coBad && !toBad && !s.busy && !s.start.isPending;
+  const [typedWrites, setTypedWrites] = useState(String(WRITES));
+  const writesBad = s.writable ? writesProblem(typedWrites) : null;
+  const writes = writesBad ? WRITES : Number(typedWrites);
+  const ready = !s.demo && !nameProblem && !coBad && !toBad && !writesBad && !s.busy && !s.start.isPending;
   const planned = planIteration(plan);
   const flow = flowHint(plan);
-  const disk = useDisk(s.demo ? null : steady);
+  const disk = useDisk(s.demo ? null : steady, s.writable && !writesBad ? writes : undefined);
 
   const submit = () => {
     if (!ready) return;
     s.start.mutate(
-      { kind: "solve", params: { name, steady, maxCo: co, model, to, np } },
+      { kind: "solve", params: { name, steady, maxCo: co, model, to, np, ...(s.writable ? { writes } : {}) } },
       { onSuccess: () => { onDone(); s.open(name); } },
     );
   };
@@ -543,8 +586,8 @@ function TransientForm({ target, onDone }: { target: TransientTarget; onDone: ()
         The engine makes a new case of {steady}&apos;s mesh, settings and latest result
         {run.written > 0 ? ` (iteration ${formatInt(run.written)})` : ""} with its face flux, and solves it in time from
         there, with no potentialFoam: PIMPLE with 3 outer correctors and a time step OpenFOAM adjusts to the largest
-        Courant number you give. It writes four times on the way; Stop writes the time it has reached, and Continue goes
-        on from there. {steady} is only read.
+        Courant number you give. It writes {s.writable ? "the times you ask for on the way, and keeps each one" : "four times on the way"};
+        Stop writes the time it has reached, and Continue goes on from there. {steady} is only read.
       </DialogDescription>
 
       <div className="mt-5 space-y-5">
@@ -573,7 +616,7 @@ function TransientForm({ target, onDone }: { target: TransientTarget; onDone: ()
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor={`${id}-co`} className="text-sm font-medium">Largest Courant number</label>
+          <label htmlFor={`${id}-co`} className="block text-sm font-medium">Largest Courant number</label>
           <Input
             id={`${id}-co`}
             value={coText}
@@ -591,17 +634,22 @@ function TransientForm({ target, onDone }: { target: TransientTarget; onDone: ()
 
         <ToField id={id} typed={typedTo} onChange={setTypedTo} problem={toBad} seconds
           hint={flow ?? "The plan doesn't know the body's length: give the time in s, such as 8 lengths of flow over it."} />
+        {s.writable && (
+          <WritesField id={id} typed={typedWrites} onChange={setTypedWrites} problem={writesBad}
+            hint={writesHint(writes, 0, toBad ? null : to)} />
+        )}
         <ProcsField id={id} np={np} onPick={setPicked} s={s} />
         <Notes s={s} cells={s.cases.data?.cells?.[steady] ?? null} what="start the transient run"
-          disk={diskCheck(disk.data, "transient", true, np)} spends="The transient run and its solve need" />
+          disk={writesBad ? null : diskCheck(disk.data, "transient", true, np)}
+          spends="The transient run and its solve need" />
         {planStale(plan, run) && planned != null && (
           <Note tone="info">
             The plan is from iteration {formatInt(planned)}, and {steady} has been solved to iteration{" "}
             {formatInt(run.written)} since: Plan again for the numbers of its latest result.
           </Note>
         )}
-        {s.demo && !nameProblem && !coBad && !toBad && (
-          <DemoCommand verb="Start a transient run" command={transientCommand(name, steady, co, model, to, np)} />
+        {s.demo && !nameProblem && !coBad && !toBad && !writesBad && (
+          <DemoCommand verb="Start a transient run" command={transientCommand(name, steady, co, model, to, np, writes)} />
         )}
       </div>
 

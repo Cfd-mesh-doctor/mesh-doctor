@@ -1479,6 +1479,8 @@ export interface operations {
             query?: {
                 /** @description a case in the cases folder (GET /cases) */
                 case?: string;
+                /** @description with `case`: the times each stretch of a transient run writes, for transientSolveMb (a new transient run of it) and, when it is a transient run, continueMb (API 1.10) */
+                writes?: number;
             };
             header?: never;
             path?: never;
@@ -1495,7 +1497,7 @@ export interface operations {
                     "application/json": {
                         /** @description with `case`: what solving it takes on the disk */
                         case: {
-                            /** @description what a continuation of it writes as it goes: on several processes its latest time joined, and its written times when it keeps every one (purgeWrite 0), a transient run's with its averaged flow; null when it has no mesh to measure */
+                            /** @description what a continuation of it writes as it goes: on several processes its latest time joined, and its written times when it keeps every one (purgeWrite 0), a transient run's with its averaged flow, `writes` of them (else its own); null when it has no mesh to measure */
                             continueMb: {
                                 /** @description on one process */
                                 one: number;
@@ -1515,7 +1517,7 @@ export interface operations {
                             } | null;
                             /** @description a transient run of it: its copy, with its latest result in place of its initial fields; null when it has no joined result to start from */
                             transientMb: number | null;
-                            /** @description what a transient run of it writes as it goes from the start: as solveMb, with its averaged flow in each written time; null when it has no joined result to start from, or no mesh to measure (API 1.9) */
+                            /** @description what a transient run of it writes as it goes from the start: its split, and its `writes` written times (else 4), each kept, with its averaged flow, and on several processes its latest time joined; null when it has no joined result to start from, or no mesh to measure (API 1.9) */
                             transientSolveMb?: {
                                 /** @description on one process */
                                 one: number;
@@ -1689,6 +1691,8 @@ export interface operations {
                         template?: string;
                         /** @description the iteration to solve to (a whole number; 2000 by default), or for a transient run the time in s (a new one's default: 8 flow times over the body, 8 L/U); past the latest written one */
                         to?: number;
+                        /** @description for a transient run, new (with steady) or continued: the times each stretch writes, evenly to its end, each kept (a new one's default 4; a continuation's, the run's own), which its later stretches write too (API 1.10) */
+                        writes?: number;
                     };
                 } | {
                     /** @enum {unknown} */
@@ -2362,6 +2366,8 @@ export interface operations {
                             finished: string | null;
                             /** @description the last iteration in its solver log (a transient run's: the time in s, as are its other times) */
                             iteration: number | null;
+                            /** @description those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10) */
+                            joined?: number[];
                             /** @description the case it solves: a case in the cases folder that Mesh Doctor made */
                             name: string;
                             /** @description the processes it runs on; 1: the case isn't split */
@@ -2382,12 +2388,16 @@ export interface operations {
                                 from: number;
                                 to: number;
                             }[];
+                            /** @description the written times it keeps, oldest first, not its start: its processors' and its own when it is split (a transient run keeps every one; a steady run as many as its controlDict's purgeWrite says) (API 1.10) */
+                            times?: number[];
                             /** @description a transient run: the steady run it started from, and the time of that run's result it took (at), its largest Courant number and its model; null for a steady run (API 1.6) */
                             transient?: {
                                 at: string;
                                 maxCo: number | null;
                                 model: string | null;
                                 steady: string;
+                                /** @description the times each of its stretches writes, evenly to its end: it keeps every one (4 for a run that never asked) (API 1.10) */
+                                writes?: number;
                             } | null;
                             /** @description when its status last changed (UTC) */
                             updated: string | null;
@@ -2443,6 +2453,8 @@ export interface operations {
                         finished: string | null;
                         /** @description the last iteration in its solver log (a transient run's: the time in s, as are its other times) */
                         iteration: number | null;
+                        /** @description those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10) */
+                        joined?: number[];
                         /** @description itself, Stop, and its convergence judge (GET /judge?case=) */
                         links?: Record<string, unknown>;
                         /** @description the case it solves: a case in the cases folder that Mesh Doctor made */
@@ -2465,12 +2477,16 @@ export interface operations {
                             from: number;
                             to: number;
                         }[];
+                        /** @description the written times it keeps, oldest first, not its start: its processors' and its own when it is split (a transient run keeps every one; a steady run as many as its controlDict's purgeWrite says) (API 1.10) */
+                        times?: number[];
                         /** @description a transient run: the steady run it started from, and the time of that run's result it took (at), its largest Courant number and its model; null for a steady run (API 1.6) */
                         transient?: {
                             at: string;
                             maxCo: number | null;
                             model: string | null;
                             steady: string;
+                            /** @description the times each of its stretches writes, evenly to its end: it keeps every one (4 for a run that never asked) (API 1.10) */
+                            writes?: number;
                         } | null;
                         /** @description when its status last changed (UTC) */
                         updated: string | null;
@@ -2561,6 +2577,8 @@ export interface operations {
                             finished: string | null;
                             /** @description the last iteration in its solver log (a transient run's: the time in s, as are its other times) */
                             iteration: number | null;
+                            /** @description those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10) */
+                            joined?: number[];
                             /** @description the case it solves: a case in the cases folder that Mesh Doctor made */
                             name: string;
                             /** @description the processes it runs on; 1: the case isn't split */
@@ -2581,12 +2599,16 @@ export interface operations {
                                 from: number;
                                 to: number;
                             }[];
+                            /** @description the written times it keeps, oldest first, not its start: its processors' and its own when it is split (a transient run keeps every one; a steady run as many as its controlDict's purgeWrite says) (API 1.10) */
+                            times?: number[];
                             /** @description a transient run: the steady run it started from, and the time of that run's result it took (at), its largest Courant number and its model; null for a steady run (API 1.6) */
                             transient?: {
                                 at: string;
                                 maxCo: number | null;
                                 model: string | null;
                                 steady: string;
+                                /** @description the times each of its stretches writes, evenly to its end: it keeps every one (4 for a run that never asked) (API 1.10) */
+                                writes?: number;
                             } | null;
                             /** @description when its status last changed (UTC) */
                             updated: string | null;
@@ -2680,6 +2702,8 @@ export interface operations {
                         finished: string | null;
                         /** @description the last iteration in its solver log (a transient run's: the time in s, as are its other times) */
                         iteration: number | null;
+                        /** @description those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10) */
+                        joined?: number[];
                         /** @description itself, Stop, and its convergence judge (GET /judge?case=) */
                         links?: Record<string, unknown>;
                         /** @description the case it solves: a case in the cases folder that Mesh Doctor made */
@@ -2702,12 +2726,16 @@ export interface operations {
                             from: number;
                             to: number;
                         }[];
+                        /** @description the written times it keeps, oldest first, not its start: its processors' and its own when it is split (a transient run keeps every one; a steady run as many as its controlDict's purgeWrite says) (API 1.10) */
+                        times?: number[];
                         /** @description a transient run: the steady run it started from, and the time of that run's result it took (at), its largest Courant number and its model; null for a steady run (API 1.6) */
                         transient?: {
                             at: string;
                             maxCo: number | null;
                             model: string | null;
                             steady: string;
+                            /** @description the times each of its stretches writes, evenly to its end: it keeps every one (4 for a run that never asked) (API 1.10) */
+                            writes?: number;
                         } | null;
                         /** @description when its status last changed (UTC) */
                         updated: string | null;

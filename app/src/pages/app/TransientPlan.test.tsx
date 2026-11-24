@@ -60,9 +60,10 @@ const job = (state: Job["state"], more: Partial<Job> = {}) =>
 
 /** Your own engine (or the demo, by `kind`) with these job kinds (those of API 1.6 by default), jobs and plan (none by
  * default: not-found), and `cases` (GET /cases; with them, a computer of 8 cores). A job it starts waits to start;
- * `refuse`: the error it answers instead of starting one. */
+ * `refuse`: the error it answers instead of starting one. `api`: its API version (1.6 by default). */
 function engine(o: {
   kinds?: string[]; jobs?: Job[]; plan?: TransientPlan; refuse?: EngineError; kind?: "engine" | "demo"; cases?: CaseList;
+  api?: string;
 } = {}) {
   const posted: unknown[] = [];
   const asked: string[] = [];
@@ -85,12 +86,14 @@ function engine(o: {
       if (route === "/cases" && o.cases) return structuredClone(o.cases) as T;
       if (route === "/machine" && o.cases) return { cpus: 16, cores: 8, memoryMb: 32_000, ramLimitMb: null } as T;
       if (route === "/disk" && o.cases) {         // as the coarse Ahmed body takes it, a transient solve averaged
+        // each written time past the 4 it writes unasked (API 1.10's `writes`)
+        const more = Number(new URLSearchParams(path.split("?")[1] ?? "").get("writes") ?? 4) - 4;
         return { freeMb: 402_339, keepMb: 1024, case: { name: "ahmed", copyMb: 65, transientMb: 103,
           solveMb: { several: 212, one: 78 }, continueMb: { several: 39, one: 0 },
-          transientSolveMb: { several: 445, one: 164 } } } as T;
+          transientSolveMb: { several: 445 + 84 * more, one: 164 + 75 * more } } } as T;
       }
       if (route === "/") {
-        return { apiVersion: "1.6", version: "0.2.0", jobKinds: o.kinds ?? ["repair", "abtest", "abextend", "case",
+        return { apiVersion: o.api ?? "1.6", version: "0.2.0", jobKinds: o.kinds ?? ["repair", "abtest", "abextend", "case",
           "solve", "tplan"] } as T;
       }
       if (route === "/jobs") return { items: structuredClone(jobs) } as T;
@@ -233,6 +236,8 @@ describe("Plan a transient run", () => {
     expect(to).toHaveAccessibleDescription("8 flow times over the body (8 L/U: 1.044 m at 40 m/s), which the plan's hours "
       + "are for.");
     expect(await dialog.findByRole("combobox", { name: "Processes" })).toHaveValue("6");     // the steady run's
+    expect(dialog.queryByRole("textbox", { name: "Times written" })).toBeNull();      // API 1.6 writes four, unasked
+    expect(screen.getByRole("dialog")).toHaveTextContent("It writes four times on the way;");
     expect(await dialog.findByText(/^The solve needs about/)).toBeInTheDocument();
     // the new case, then what its solve writes on 6 processes with its averaged flow (API 1.9): 103 + 445 MB
     await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent("The transient run and its solve need "
@@ -262,6 +267,43 @@ describe("Plan a transient run", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/app/solve/ahmed-ddes-2"));
     expect(posted).toEqual([{ kind: "solve", params: { name: "ahmed-ddes-2", steady: "ahmed", maxCo: 0.8, model: "DDES",
       to: 0.1, np: 4 } }]);
+  });
+
+  it("asks an engine at API 1.10 the times the run writes, says the disk space they take, and sends them", async () => {
+    const user = userEvent.setup();
+    const { posted, router } = show({ jobs: [job("done")], plan: PLAN, cases: CASES, api: "1.10" });
+    await enabled("Start a transient run…");
+    await user.click(button("Start a transient run…"));
+    const dialog = within(screen.getByRole("dialog", { name: "Start a transient run of ahmed" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("It writes the times you ask for on the way, and keeps each one;");
+    const each = "each kept: the flow at that time, with its mean once it averages it, for pictures of the flow over time.";
+    const writes = dialog.getByRole("textbox", { name: "Times written" });
+    expect(writes).toHaveValue("4");
+    expect(writes).toHaveAccessibleDescription(`Every 0.0522 s, ${each}`);
+    await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent("The transient run and its solve need "
+      + "about 548 MB of disk space"));
+    // 16 a stretch: each 12 more written times on 6 processes, asked of the engine's disk guard
+    await user.clear(writes);
+    await user.type(writes, "16");
+    expect(writes).toHaveAccessibleDescription(`Every 0.01305 s, ${each}`);
+    await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent("The transient run and its solve need "
+      + "about 1.5 GB of disk space; the disk the cases are on has 393 GB free."));
+    // Not a whole number from 1 to 200: it says so, says no disk space, and starts nothing
+    for (const bad of ["0", "201", "2.5"]) {
+      await user.clear(writes);
+      await user.type(writes, bad);
+      expect(writes).toHaveAccessibleDescription("Give a whole number from 1 to 200.");
+      expect(writes).toHaveAttribute("aria-invalid", "true");
+      expect(dialog.getByRole("button", { name: "Start the transient run" })).toBeDisabled();
+      expect(screen.getByRole("dialog")).not.toHaveTextContent("of disk space");
+    }
+    await user.clear(writes);
+    await user.type(writes, "40");
+    await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent("need about 3.5 GB of disk space"));
+    await user.click(dialog.getByRole("button", { name: "Start the transient run" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/app/solve/ahmed-ddes-2"));
+    expect(posted).toEqual([{ kind: "solve", params: { name: "ahmed-ddes-2", steady: "ahmed", maxCo: 1, model: "DDES",
+      to: 0.2088, np: 6, writes: 40 } }]);
   });
 
   it("starts no transient run before a plan, and says when the plan is from an earlier result", async () => {

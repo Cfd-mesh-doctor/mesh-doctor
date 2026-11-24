@@ -6,7 +6,8 @@ later continued from its latest written time, or stopped early at a written time
     python3 -m meshdoctor solve <case> [--to N] [--np P]
     python3 -m meshdoctor solve <srcCase> <name> [--to N] [--np P]
     python3 -m meshdoctor solve <name> --template <template> [--size S] [--to N] [--np P]
-    python3 -m meshdoctor solve <name> --steady <run> [--co C] [--model DDES|URANS] [--to SECONDS] [--np P]
+    python3 -m meshdoctor solve <name> --steady <run> [--co C] [--model DDES|URANS] [--to SECONDS] [--writes N]
+                                [--np P]
 
 <case> is a case in the cases folder that Mesh Doctor made (python3 -m meshdoctor new, or a copy made here).  A case
 you made is never changed, so it is solved through a copy: with <srcCase> and a new <name>, its mesh and settings,
@@ -20,6 +21,9 @@ latest to N, on the same processes.  With --steady, the new case <name> is a tra
 (transient.py): its mesh, settings and latest result, solved in time with DDES (the default) or URANS at a largest
 Courant number of C (1 by default) to SECONDS of flow (8 L/U by default), with no potentialFoam, as it starts from the
 steady flow.  A transient run counts seconds, not iterations: its --to, its progress and its continuations are times.
+Each of its stretches writes 4 times, evenly to its end, or N (--writes, 1 to 200; given with a continuation, the run
+writes N a stretch from then on), and it keeps every time it writes, for pictures of the flow over time; on several
+processes the latest of each stretch is joined.
 It averages its flow (transient.py's meanFlow: UMean, pMean, UPrime2Mean, pPrime2Mean) from when its forces have
 settled: as it solves, the solve reads its forces every AVERAGE_CHECK_S, and before each stretch, and once they have
 settled (the transient judge's rule) switches the averaging on, which OpenFOAM takes up at its next time step; its
@@ -50,6 +54,7 @@ MAX_ITERS = 100_000
 TIME = re.compile(rb"^Time = ([0-9.eE+-]+)s?[ \t]*$", re.M)
 NAME_RULE = "a case name is letters, digits and _ . - (not . or - first), at most 80 characters"
 WHOLE = "a steady run counts whole iterations: give a whole number"
+STEADY_WRITES = "the times a stretch writes go with a transient run; a steady run writes about four times a stretch"
 SKEW_S = 60     # OpenFOAM re-reads a changed controlDict only once its time is past the one it read by more than its
                 # fileModificationSkew (10 s in OpenFOAM 14, 30 s in some), so a Stop moves the file's time on past it
 AVERAGE_CHECK_S = 30            # a transient run's forces are read this often as it solves, until they have settled
@@ -106,12 +111,40 @@ def latest(case):
 
 
 def transient_of(case):
-    """A transient run's origin, from its marker: {steady, at, maxCo, model}; None for a steady run."""
+    """A transient run's origin, from its marker: {steady, at, maxCo, model, writes}; None for a steady run.  `writes`:
+    the times each stretch writes (transient.WRITES for a run that never asked, as one made before it could)."""
     doc = md_api._read_json(os.path.join(case, jobs.CASE_MARKER))
     if not isinstance(doc, dict) or not doc.get("transientOf"):
         return None
     return {"steady": str(doc["transientOf"]), "at": str(doc.get("at") or ""), "maxCo": doc.get("maxCo"),
-            "model": doc.get("model")}
+            "model": doc.get("model"), "writes": doc["writes"] if writes_ok(doc.get("writes")) else transient.WRITES}
+
+
+def writes_ok(writes):
+    """Is `writes` the times a stretch may write: a whole number from 1 to transient.MAX_WRITES?"""
+    return isinstance(writes, int) and not isinstance(writes, bool) and 1 <= writes <= transient.MAX_WRITES
+
+
+def times(case):
+    """The written times run folder `case` keeps, as numbers, oldest first, and those of them joined: (times, joined).
+    Its processors' and its own (joined) when it is split, else its own; not its start (0)."""
+    def listed(folder):
+        out = set()
+        try:
+            names = os.listdir(folder)
+        except OSError:
+            return out
+        for n in names:
+            try:
+                t = float(n)
+            except ValueError:
+                continue
+            if t > 0 and math.isfinite(t) and os.path.isdir(os.path.join(folder, n)):
+                out.add(num(n))
+        return out
+    joined = listed(case)
+    kept = (listed(os.path.join(case, "processor0")) | joined) if split(case) else joined
+    return sorted(kept), sorted(joined)
 
 
 def own_size(template):
@@ -131,10 +164,12 @@ def default_to(name, to, steady=None):
     return 2000
 
 
-def refusal(name, to, nproc=None, source=None, template=None, size=None, steady=None, co=None, model=None):
+def refusal(name, to, nproc=None, source=None, template=None, size=None, steady=None, co=None, model=None,
+            writes=None):
     """Why case `name` can't be solved to iteration `to` (a time in s for a transient run) now, as (code, message) with
     no paths, or None.  With a `source`, `name` is the new case a copy of it goes in; with a `template`, the new case
-    made from it; with a `steady` run, the new transient run of it, at a largest Courant number `co` with `model`."""
+    made from it; with a `steady` run, the new transient run of it, at a largest Courant number `co` with `model`.
+    `writes`, the times a stretch writes, goes with a transient run, new or continued."""
     if not md_api.SAFE.match(name):
         return "bad-request", NAME_RULE
     if to is not None and not math.isfinite(to):
@@ -148,6 +183,10 @@ def refusal(name, to, nproc=None, source=None, template=None, size=None, steady=
         return "bad-request", "a mesh size goes with a template"
     if (co is not None or model is not None) and steady is None:
         return "bad-request", "a Courant number and a model go with a steady run, to start a transient run of it"
+    if writes is not None and not writes_ok(writes):
+        return "bad-request", f"the times a stretch writes is a whole number from 1 to {transient.MAX_WRITES}"
+    if writes is not None and (source is not None or template is not None):
+        return "bad-request", STEADY_WRITES
     if (template is not None or source is not None) and not whole:
         return "bad-request", WHOLE
     if template is not None:
@@ -171,6 +210,8 @@ def refusal(name, to, nproc=None, source=None, template=None, size=None, steady=
     if made.get("state") != "done":
         return "not-ready", f"{name} has no mesh yet: make it again first"
     unsteady = transient_of(case) is not None
+    if writes is not None and not unsteady:
+        return "bad-request", f"{name} is a steady run: {STEADY_WRITES}"
     if to is None:
         return "bad-request", (f"{name} is a transient run: give the time in s to continue it to" if unsteady else
                                "give the iteration to solve to")
@@ -258,30 +299,34 @@ def _mesh_mb(case):
     return diskguard.mb(diskguard.size(poly)) if os.path.isdir(poly) else None
 
 
-def disk(name):
+def disk(name, writes=None):
     """GET /disk's case: what solving case `name` takes on the disk, in MB.  A copy of it (copyMb), a transient run of
     it (transientMb: its copy, with its latest result in place of its initial fields; None with no joined result),
     and what a solve writes as it goes, on several processes or one (diskguard.solve_mb): from the start (solveMb),
-    as a copy of it does too, and continued (continueMb), a transient run's with its averages; and a transient run of
-    it from the start (transientSolveMb, with its averages; None with no joined result); None with no mesh to
-    measure."""
+    as a copy of it does too, and continued (continueMb), a transient run's with its averages and every time it
+    writes kept; and a transient run of it from the start (transientSolveMb, with its averages and every time it
+    writes kept; None with no joined result); None with no mesh to measure.  A transient run's stretch writes
+    `writes` times, else its own; a new transient run of it, `writes`, else transient.WRITES."""
     case = case_dir(name)
-    mesh, purge, made = _mesh_mb(case), _purge(case), transient.make_size(case)
-    averaged = transient_of(case) is not None
+    mesh, made, of = _mesh_mb(case), transient.make_size(case), transient_of(case)
 
-    def solves(first, avg=averaged):
-        return None if mesh is None else {k: diskguard.solve_mb(mesh, purge, n, first, avg)
+    def solves(first, unsteady, n_writes):
+        purge = 0 if unsteady else _purge(case)
+        return None if mesh is None else {k: diskguard.solve_mb(mesh, purge, n, first, unsteady, n_writes)
                                           for k, n in (("several", 2), ("one", 1))}
+    own = (writes or of["writes"]) if of else diskguard.STRETCH           # a steady run writes about four a stretch
     return {"name": name, "copyMb": diskguard.mb(templates.copy_size(case)),
-            "transientMb": None if made is None else diskguard.mb(made), "solveMb": solves(True),
-            "continueMb": solves(False), "transientSolveMb": None if made is None else solves(True, True)}
+            "transientMb": None if made is None else diskguard.mb(made),
+            "solveMb": solves(True, of is not None, own), "continueMb": solves(False, of is not None, own),
+            "transientSolveMb": None if made is None else solves(True, True, writes or transient.WRITES)}
 
 
-def disk_need(name, nproc, source=None, template=None, size=None, steady=None):
+def disk_need(name, nproc, source=None, template=None, size=None, steady=None, writes=None):
     """What the solve job of case `name` writes on the disk, for the disk guard: (MB, what needs it, with its verb).
     The new case it makes (a copy of `source`, a transient run of `steady`, or `template`'s mesh at `size`), then what
     it writes as it goes (diskguard.solve_mb): from the start on `nproc` processes, or continued on the run's own
-    split.  None when the mesh it solves can't be measured."""
+    split; a transient run's `writes` times a stretch (else its own), each kept.  None when the mesh it solves can't
+    be measured."""
     if template is not None:
         mesh = diskguard.mesh_mb(templates.TEMPLATES[template]["sizes"][size or own_size(template)]["cells"])
         solved = diskguard.solve_mb(mesh, _purge(os.path.join(templates.EXAMPLES, template)), nproc)
@@ -294,14 +339,15 @@ def disk_need(name, nproc, source=None, template=None, size=None, steady=None):
         if made is None or mesh is None:
             return None
         what = f"the copy of {source}" if source is not None else f"the transient run of {steady}"
-        return (diskguard.mb(made) + diskguard.solve_mb(mesh, _purge(src), nproc, averaged=steady is not None),
-                f"{what} and its solve need")
+        solved = (diskguard.solve_mb(mesh, _purge(src), nproc) if source is not None else
+                  diskguard.solve_mb(mesh, 0, nproc, averaged=True, writes=writes or transient.WRITES))
+        return diskguard.mb(made) + solved, f"{what} and its solve need"
     case = case_dir(name)
-    mesh, first = _mesh_mb(case), latest(case) == 0
+    mesh, first, of = _mesh_mb(case), latest(case) == 0, transient_of(case)
     if mesh is None:
         return None
-    return (diskguard.solve_mb(mesh, _purge(case), nproc if first else split(case) or 1, first,
-                               transient_of(case) is not None),
+    return (diskguard.solve_mb(mesh, 0 if of else _purge(case), nproc if first else split(case) or 1, first,
+                               of is not None, writes or (of["writes"] if of else diskguard.STRETCH)),
             f"the solve of {name} needs" if first else f"the continuation of {name} needs")
 
 
@@ -315,16 +361,17 @@ def _plain(path):
     return re.sub(r"/\*.*?\*/|//[^\n]*", "", text, flags=re.S)
 
 
-def start(name, to, nproc, source=None, template=None, size=None, steady=None, co=None, model=None):
+def start(name, to, nproc, source=None, template=None, size=None, steady=None, co=None, model=None, writes=None):
     """Start a solve job (POST /jobs, kind "solve"): the job, or a refusal, as md_api's other starts answer.  With a
     `source`, the job first copies that case into the new case `name`, then solves the copy; with a `template`, it
     first makes `name` from the template (at `size`, else the template's own), then solves it; with a `steady` run, it
     first makes `name` a transient run of it (transient.py), then solves that to `to` s.  With no `to`: 2,000
-    iterations, or 8 flow times for a new transient run (default_to)."""
+    iterations, or 8 flow times for a new transient run (default_to).  `writes`: the times each stretch of a
+    transient run writes, from this one on (else 4 for a new one, the run's own for a continuation)."""
     if steady is not None:
         co, model = num(1.0 if co is None else co), model or "DDES"
     to = default_to(name, to, steady)
-    why = refusal(name, to, nproc, source, template, size, steady, co, model)
+    why = refusal(name, to, nproc, source, template, size, steady, co, model, writes)
     if why:
         return md_api._refuse(*why)
     ws = config.settings()["workspace"]
@@ -335,14 +382,14 @@ def start(name, to, nproc, source=None, template=None, size=None, steady=None, c
     cmd = [sys.executable, os.path.join(PKG, "solve.py"), "run", *([] if source is None else [source]), name,
            *(["--template", made["template"], "--size", made["size"]] if made else []),
            *(["--steady", steady, "--co", str(co), "--model", model] if unsteady else []), "--to", str(to),
-           "--np", str(nproc)]
+           *([] if writes is None else ["--writes", str(writes)]), "--np", str(nproc)]
     params = {"name": name, "to": to, "np": nproc, **({} if source is None else {"source": source}), **made,
-              **unsteady}
+              **unsteady, **({} if writes is None else {"writes": writes})}
     # a case made first needs its mesh's memory, more than its solve's; else the solve's own (a transient run's is
     # its steady run's: the same mesh)
     ram = ((templates.TEMPLATES[template]["sizes"][made["size"]]["cells"], "mesh") if made
            else (case_dir(steady if steady is not None else name if source is None else source), "solve"))
-    need = disk_need(name, nproc, source, template, size, steady)        # the new case, and what the solve writes
+    need = disk_need(name, nproc, source, template, size, steady, writes)    # the new case, and what it writes
     disk = None if need is None else (need[0], case_dir(name), need[1])
     return md_api._submit("solve", params, name, cmd, log=f"{LOGS}/{name}_to_{to}.log", ram=ram,   # a log per stretch
                           disk=disk)
@@ -420,7 +467,7 @@ def describe(name):
             "start": st.get("start", 0), "end": st.get("end"), "written": latest(case), "nProcs": st.get("nProcs"),
             "stretches": st.get("stretches", []), "started": st.get("started"), "updated": st.get("time"),
             "finished": st.get("finished"), "error": st.get("error"), "transient": of,
-            "averaging": transient.averaging(case, st) if of else None}
+            "averaging": transient.averaging(case, st) if of else None, **dict(zip(("times", "joined"), times(case)))}
 
 
 # --------------------------------------------------------------------------
@@ -533,13 +580,15 @@ def _fail(status, program, rc):
     return 1
 
 
-def run(name, to, nproc, source=None, template=None, size=None, steady=None, co=None, model=None):
+def run(name, to, nproc, source=None, template=None, size=None, steady=None, co=None, model=None, writes=None):
     """Solve case `name` to iteration `to` (a time in s for a transient run): from 0 on `nproc` processes, else from
     the latest written one on the run's own split.  With a `source`, `name` is made first, as a copy of it (_copy);
     with a `template`, it is made first from the template, as a case job makes one (templates.build); with a `steady`
-    run, it is made first as a transient run of it (_make_transient).  0 when it ran to `to` or was stopped at a
+    run, it is made first as a transient run of it (_make_transient), writing `writes` times a stretch (4 unless
+    asked), which a transient run's continuation can change from then on.  0 when it ran to `to` or was stopped at a
     written time."""
-    why = refusal(name, to, source=source, template=template, size=size, steady=steady, co=co, model=model)
+    why = refusal(name, to, source=source, template=template, size=size, steady=steady, co=co, model=model,
+                  writes=writes)
     if why:
         _say(why[1])
         return 1
@@ -557,11 +606,13 @@ def run(name, to, nproc, source=None, template=None, size=None, steady=None, co=
             made.step("copying")
         elif steady is not None:                              # and a transient run of a steady one, being made
             made = templates.Status(case, transientOf=steady, at=transient.result(case_dir(steady))[0], maxCo=co,
-                                    model=model)
+                                    model=model, writes=writes or transient.WRITES)
             made.step("copying")
         else:
             size = size or own_size(template)
             made = templates.Status(case, template=template, size=size)     # its marker: a case made here, being made
+    if writes is not None and not copied:       # a transient run's continuation: its writes from now on
+        _remember_writes(case, writes)
     start_at = latest(case)
     first = start_at == 0                       # nothing written yet (as the template's Allrun): split, then start
     nproc = (nproc if first else split(case)) or 1
@@ -586,7 +637,7 @@ def run(name, to, nproc, source=None, template=None, size=None, steady=None, co=
     try:
         if source is not None and not _copy(source, case, made):
             return 1
-        if steady is not None and not _make_transient(steady, case, made, co, model, to):
+        if steady is not None and not _make_transient(steady, case, made, co, model, to, writes or transient.WRITES):
             return 1
         if template is not None:
             t = templates.TEMPLATES[template]
@@ -622,14 +673,27 @@ def _copy(source, case, made):
     return True
 
 
-def _make_transient(steady, case, made, co, model, to):
+def _remember_writes(case, writes):
+    """A transient run's continuation asked for `writes` times a stretch: the run's marker keeps it, for this stretch
+    and the ones after."""
+    path = os.path.join(case, jobs.CASE_MARKER)
+    doc = md_api._read_json(path)
+    if isinstance(doc, dict) and doc.get("transientOf") and doc.get("writes") != writes:
+        doc["writes"] = writes
+        tmp = path + ".tmp"                     # as templates.Status writes it: whole, or not at all
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(doc, f, indent=1)
+        os.replace(tmp, path)
+
+
+def _make_transient(steady, case, made, co, model, to, writes):
     """Make the new case a transient run of the steady run (transient.make): its mesh, settings and latest result,
-    with settings for a transient solve.  On any failure the folder goes, so its name is free again.  True once it is
-    made."""
+    with settings for a transient solve, writing `writes` times a stretch.  On any failure the folder goes, so its
+    name is free again.  True once it is made."""
     _say(f"making a transient run of {steady} ({model}, largest Courant number {co:g}, to {to:g} s): its mesh, "
          "settings and latest result")
     try:
-        cells = transient.make(case_dir(steady), case, co, model, to)
+        cells = transient.make(case_dir(steady), case, co, model, to, writes)
     except (OSError, ValueError) as e:          # shutil.Error too; ValueError: a settings file it couldn't read
         _discard(case)
         _say(f"the transient run of {steady} couldn't be made: {_reason(e) if isinstance(e, OSError) else e}")
@@ -657,16 +721,18 @@ def _discard(case):
 
 def _solve(case, name, first, start_at, to, nproc, status, unsteady=False):
     """Solve to `to`.  A transient run (`unsteady`) starts from its latest written time by name (in parallel, OpenFOAM
-    looks for the latest time in the case's own folder, which a stretch that was cut short hasn't joined), writes four
-    times a stretch at run times OpenFOAM's time steps land on, and has no potentialFoam: it starts from the steady
-    run's flow."""
+    looks for the latest time in the case's own folder, which a stretch that was cut short hasn't joined), writes its
+    `writes` times a stretch (transient_of) at run times OpenFOAM's time steps land on, keeps every one (purgeWrite 0,
+    a run made before it from then on too), and has no potentialFoam: it starts from the steady run's flow."""
     parallel = nproc > 1
     when = (lambda t: f"{t:g} s") if unsteady else (lambda t: f"iteration {t}")
     _say(f"{name}: {'solving' if first else 'continuing'} from {when(start_at)} to {f'{to:g} s' if unsteady else to}"
          f"{f' on {nproc} processes' if parallel else ''}")
-    begin = latest_name(case)                   # OpenFOAM 14 writes at beginTime + k writeInterval: the 4th is `to`
+    begin = latest_name(case)                   # OpenFOAM 14 writes at beginTime + k writeInterval: the last is `to`
+    writes = transient_of(case)["writes"] if unsteady else None
     entries = ((("startFrom", "startTime"), ("startTime", begin), ("beginTime", begin), ("stopAt", "endTime"),
-                ("endTime", to), ("writeInterval", f"{(to - start_at) / 4:.6g}")) if unsteady else
+                ("endTime", to), ("writeInterval", f"{(to - start_at) / writes:.6g}"), ("purgeWrite", 0))
+               if unsteady else
                (("startFrom", "latestTime"), ("stopAt", "endTime"), ("endTime", to),
                 ("writeInterval", write_interval(start_at, to))))
     for entry, value in entries:
@@ -821,10 +887,10 @@ def main(argv):
         number("--co")
     if steady is not None:
         co, model = num(1.0 if co is None else co), model or "DDES"
-    to, nproc = default_to(name, number("--to"), steady), opt("--np", 4)
+    to, nproc, writes = default_to(name, number("--to"), steady), opt("--np", 4), opt("--writes", None)
     if (to is not None and not 0 < to <= MAX_ITERS) or not 1 <= nproc <= 64:
         sys.exit(f"--to is 1 to {MAX_ITERS:,} (seconds for a transient run) and --np 1 to 64")
-    why = refusal(name, to, nproc, source, template, size, steady, co, model)
+    why = refusal(name, to, nproc, source, template, size, steady, co, model, writes)
     if why:
         sys.exit(why[1])
     if not job and solving(name):               # a job's own solve is its job, which solving counts
@@ -837,11 +903,11 @@ def main(argv):
             ok, msg = ramguard.check(case_dir(steady or (name if source is None else source)), "solve")
         if not ok:
             sys.exit(msg)
-        need = disk_need(name, nproc, source, template, size, steady)    # and the disk, as jobs.submit checks it
+        need = disk_need(name, nproc, source, template, size, steady, writes)    # the disk, as jobs.submit checks
         ok, msg = diskguard.check(need[0], case_dir(name), need[1]) if need else (True, "")
         if not ok:
             sys.exit(msg)
-    return run(name, to, nproc, source, template, size, steady, co, model)
+    return run(name, to, nproc, source, template, size, steady, co, model, writes)
 
 
 if __name__ == "__main__":

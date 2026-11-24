@@ -10,8 +10,9 @@
 // the accuracy check (VerifyInstall.tsx's RunComparison, GET /runs/{name}/validation), and Plan a transient run
 // (TransientPlan.tsx) says what a transient run of it would take, and starts one. A transient run (`transient`)
 // counts time in s: its progress, stretches, charts and Continue are in seconds, it names the steady run it started
-// from, and says from when it averages its flow (`averaging`, API 1.9: once its forces have settled), and its judge
-// is the transient judge, in time steps, which the live page answers while it solves and once it has ended.
+// from, and says from when it averages its flow (`averaging`, API 1.9: once its forces have settled) and the written
+// times it keeps (`times`, `joined`, API 1.10: every one, the times each stretch writes), and its judge is the
+// transient judge, in time steps, which the live page answers while it solves and once it has ended.
 import { ArrowLeft, CircleStop, FastForward, ListChecks, Play } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
@@ -37,8 +38,8 @@ import { SolveDialog } from "./SolveDialog";
 import { TransientPlanCard } from "./TransientPlan";
 import { RunComparison } from "./VerifyInstall";
 import {
-  atText, averagingText, current, formatTime, isTransient, madeFrom, madeOfJob, ofText, runShown, solveJobOf,
-  solveStep, stretchFraction, stretchesText, timeNumber, totalForces, transientText,
+  atText, averagingText, current, formatTime, isTransient, keptText, madeFrom, madeOfJob, ofText, runShown,
+  solveJobOf, solveStep, stretchFraction, stretchesText, timeNumber, totalForces, transientText,
 } from "./solveStart";
 import { formatStep } from "./tplan";
 import { VERIFY, isVerifyName } from "./verify";
@@ -97,6 +98,8 @@ function StatusCard({ shown, run, job, live, stopping, outside }: {
   const stretches = stretchesText(run.stretches, transient);
   const ended = shown !== "running" && shown !== "queued";
   const averaged = averagingText(run.averaging, ended);
+  // A transient run's written times, each kept: for pictures of the flow over time
+  const times = run.transient ? keptText(run) : null;
   const at = atText(run.written, transient);
   const kept = `What it wrote is kept, to ${at}: Continue solves on from there.`;
   const jobLink = job && <Link to={to(`/jobs?job=${encodeURIComponent(job.id)}`)} className={LINK}>its job</Link>;
@@ -148,6 +151,7 @@ function StatusCard({ shown, run, job, live, stopping, outside }: {
         <p className="text-muted-foreground">
           {[sofar, split].filter(Boolean).join(", ")}.
         </p>
+        {times && <p className="text-muted-foreground">{times}</p>}
         {shown === "failed" && (
           <p className="text-danger">
             {run.error || job?.error || "The solve stopped with an error."}

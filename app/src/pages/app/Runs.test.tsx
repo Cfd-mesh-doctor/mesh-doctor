@@ -97,6 +97,8 @@ const SHORT: RunValidation = {
 function engine(o: {
   made?: Record<string, Made>; runs?: Run[]; jobs?: Job[]; live?: (r: Run) => unknown; noRuns?: boolean;
   kind?: "engine" | "demo"; freeMb?: number; noDisk?: boolean; validations?: Record<string, RunValidation | EngineError>;
+  /** its API version (GET /), when it says one */
+  api?: string;
 } = {}) {
   const posted: { path: string; body?: unknown }[] = [];
   const judged: string[] = [];
@@ -125,10 +127,17 @@ function engine(o: {
       if (route === "/jobs") return { items: o.jobs ?? [] } as T;
       if (route === "/machine") return MACHINE as T;
       if (route === "/disk" && !o.noDisk) {
-        const name = new URLSearchParams(path.split("?")[1] ?? "").get("case");
+        const query = new URLSearchParams(path.split("?")[1] ?? "");
+        const name = query.get("case");
+        const more = Number(query.get("writes") ?? 4) - 4;     // a transient run's written times past 4 (API 1.10)
         return { freeMb: o.freeMb ?? 402_339, keepMb: 1024, case: name == null ? null : {
-          name, copyMb: 65, transientMb: 103, solveMb: { several: 212, one: 78 }, continueMb: { several: 39, one: 0 },
+          name, copyMb: 65, transientMb: 103, solveMb: { several: 212, one: 78 },
+          continueMb: { several: 39 + 20 * more, one: 0 },
         } } as T;
+      }
+      if (route === "/" && o.api) {
+        return { apiVersion: o.api, version: "0.2.0", jobKinds: ["repair", "abtest", "abextend", "case", "solve",
+          "tplan"] } as T;
       }
       if (route === "/judge") {
         judged.push(path);
@@ -528,6 +537,39 @@ describe("a run's page", () => {
     await user.click(dialog().getByRole("button", { name: "Continue" }));
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0]).toEqual({ path: "/jobs", body: { kind: "solve", params: { name: "t", to: 0.002 } } });
+  });
+
+  it("says the written times a transient run keeps, and asks an engine at API 1.10 how many it writes on", async () => {
+    const user = userEvent.setup();
+    const ended = T({ state: "stopped", step: "done", iteration: 0.0004, written: 0.0004, end: 0.001,
+      stretches: [{ from: 0, to: 0.0004 }], finished: HOUR_AGO, transient: { steady: "s", at: "300", maxCo: 1,
+        model: "DDES", writes: 4 }, times: [0.0001, 0.0002, 0.0003, 0.0004], joined: [0.0004] });
+    const { posted } = runPage("t", { made: { t: { transientOf: "s" } }, runs: [ended], live: transientLive, api: "1.10" });
+    expect(await screen.findByText(/^It keeps 4 written times/)).toHaveTextContent("It keeps 4 written times, from "
+      + "0.0001 s to 0.0004 s; it writes 4 times a stretch. 1 of them is joined, the others split on its processes: "
+      + "paraFoam opens them all as a Decomposed Case.");
+
+    await user.click(screen.getByRole("button", { name: "Continue…" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("The transient run continues from 0.0004 s, the latest time "
+      + "written, on the run's 4 processes, to the time you give, writing the times you ask for on the way, each kept.");
+    const each = "each kept: the flow at that time, with its mean once it averages it, for pictures of the flow over time.";
+    const writes = dialog().getByRole("textbox", { name: "Times written" });
+    expect(writes).toHaveValue("4");                                       // its own
+    expect(writes).toHaveAccessibleDescription(`Every 0.00015 s, ${each}`);
+    expect(await dialog().findByText(/^The continuation needs about/)).toHaveTextContent("The continuation needs about "
+      + "39 MB of disk space; the disk the cases are on has 393 GB free.");
+    await user.clear(writes);
+    await user.type(writes, "12");
+    expect(writes).toHaveAccessibleDescription(`Every 0.00005 s, ${each}`);
+    await waitFor(() => expect(dialog().getByText(/^The continuation needs about/)).toHaveTextContent("The continuation "
+      + "needs about 199 MB of disk space"));
+    await user.clear(writes);
+    expect(writes).toHaveAccessibleDescription("Give a whole number from 1 to 200.");
+    expect(dialog().getByRole("button", { name: "Continue" })).toBeDisabled();
+    await user.type(writes, "12");
+    await user.click(dialog().getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]).toEqual({ path: "/jobs", body: { kind: "solve", params: { name: "t", to: 0.001, writes: 12 } } });
   });
 
   it("says how a run of the Ahmed body template compares with the accuracy check once it has ended", async () => {

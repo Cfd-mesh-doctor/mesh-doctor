@@ -274,6 +274,55 @@ test("a transient run's page follows it in seconds with the transient judge, sto
   await expect.poll(() => engine.started).toEqual([{ kind: "solve", params: { name: "ahmed-coarse-ddes", to: 0.002 } }]);
 });
 
+test("at API 1.10 a transient run writes the times asked for each stretch, keeps each one, and says which", async ({ page }) => {
+  const kept = transientRun("ahmed-coarse-ddes", { state: "stopped", step: "done", iteration: 0.0004, written: 0.0004,
+    stretches: [{ from: 0, to: 0.0004 }], finished: new Date().toISOString(),
+    transient: { steady: "ahmed-coarse", at: "300", maxCo: 1, model: "DDES", writes: 4 },
+    times: [0.0001, 0.0002, 0.0003, 0.0004], joined: [0.0004] });
+  const engine = await mockEngine(page, {
+    made: { ...made, "ahmed-coarse-ddes": { transientOf: "ahmed-coarse" } },
+    runs: [solved300(), kept], noJobs: true, kinds: KINDS, tplans: { "ahmed-coarse": PLAN },
+  });
+  engine.apiVersion = "1.10";
+  await pair(page);
+  const each = "each kept: the flow at that time, with its mean once it averages it, for pictures of the flow over time.";
+  // A new transient run of the steady run: 16 times a stretch, which the disk guard counts
+  await page.goto("/app/solve/ahmed-coarse");
+  await page.getByRole("button", { name: "Start a transient run…" }).click();
+  const start = page.getByRole("dialog", { name: "Start a transient run of ahmed-coarse" });
+  await expect(start).toContainText("It writes the times you ask for on the way, and keeps each one;");
+  await expect(start.getByLabel("Times written")).toHaveValue("4");
+  await expect(start.getByText(`Every 0.0522 s, ${each}`)).toBeVisible();
+  await expect(start).toContainText("The transient run and its solve need about 548 MB of disk space");
+  await start.getByLabel("Times written").fill("16");
+  await expect(start.getByText(`Every 0.01305 s, ${each}`)).toBeVisible();
+  await expect(start).toContainText("The transient run and its solve need about 1.5 GB of disk space; the disk the cases "
+    + "are on has 393 GB free.");
+  await start.getByLabel("Times written").fill("0");
+  await expect(start.getByText("Give a whole number from 1 to 200.")).toBeVisible();
+  await expect(start.getByRole("button", { name: "Start the transient run" })).toBeDisabled();
+  await start.getByRole("button", { name: "Cancel" }).click();
+
+  // The transient run's page: the times it keeps, one of them joined
+  await page.goto("/app/solve/ahmed-coarse-ddes");
+  await expect(page.getByText("It keeps 4 written times, from 0.0001 s to 0.0004 s; it writes 4 times a stretch. 1 of "
+    + "them is joined, the others split on its processes: paraFoam opens them all as a Decomposed Case.")).toBeVisible();
+  // Continued with 12 a stretch, from then on
+  await page.getByRole("button", { name: "Continue…" }).click();
+  const dialog = page.getByRole("dialog", { name: "Continue ahmed-coarse-ddes" });
+  await expect(dialog).toContainText("writing the times you ask for on the way, each kept.");
+  await expect(dialog.getByLabel("Times written")).toHaveValue("4");                        // its own
+  await expect(dialog.getByText(`Every 0.00015 s, ${each}`)).toBeVisible();
+  await expect(dialog).toContainText("The continuation needs about 39 MB of disk space");
+  await dialog.getByLabel("Times written").fill("12");
+  await expect(dialog.getByText(`Every 0.00005 s, ${each}`)).toBeVisible();
+  await expect(dialog).toContainText("The continuation needs about 199 MB of disk space");
+  await dialog.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect.poll(() => engine.started).toEqual([{ kind: "solve", params: { name: "ahmed-coarse-ddes", to: 0.001,
+    writes: 12 } }]);
+  expect(engine.requests.some((r) => r.url().includes("/disk?case=ahmed-coarse-ddes&writes=12"))).toBe(true);
+});
+
 test("a case you made is solved through a copy: the case, the copy's name, then its run's page", async ({ page }) => {
   const engine = await mockEngine(page, { made: { "wing-run": { copyOf: "wing" } }, runs: [], noJobs: true });
   await pair(page);

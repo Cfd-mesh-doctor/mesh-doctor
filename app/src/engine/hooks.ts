@@ -129,14 +129,17 @@ export function useMachine(enabled = true) {
 }
 
 /** What solving case `name` takes on the disk, and the free space the engine's disk guard checks a solve against (API
- * 1.7), for the solve dialogs; null: not asked. An engine before API 1.7 has no such route (not-found) and doesn't
- * check the disk: the dialogs then say nothing of it. */
-export function useDisk(name: string | null) {
+ * 1.7), for the solve dialogs, with a transient run's stretch writing `writes` times (API 1.10); null: not asked. An
+ * engine before API 1.7 has no such route (not-found) and doesn't check the disk: the dialogs then say nothing of
+ * it. */
+export function useDisk(name: string | null, writes?: number) {
   const { transport } = useEngine();
   return useQuery({
-    queryKey: [transport?.scope, "disk", name],
-    queryFn: transport && name != null ? ({ signal }) => api.disk(transport, name, signal) : skipToken,
+    queryKey: [transport?.scope, "disk", name, writes ?? null],
+    queryFn: transport && name != null ? ({ signal }) => api.disk(transport, name, signal, writes) : skipToken,
     staleTime: 30_000,
+    // the same case's answer while one for other times written comes, not another case's
+    placeholderData: (previous, query) => (query?.queryKey[2] === name ? previous : undefined),
   });
 }
 

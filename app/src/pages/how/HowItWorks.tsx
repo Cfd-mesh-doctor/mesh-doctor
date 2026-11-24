@@ -376,7 +376,12 @@ export function HowItWorks() {
                 plan's, when one was made of the same result. <code>--model URANS</code> keeps the steady run's own RAS
                 model and can run at a Courant number up to 20, with its outer correctors relaxed above 1. It runs 8
                 flow times over the body (8 L/U) unless <code>--to</code> gives the time in s, and writes four times a
-                stretch; <code>meshdoctor solve &lt;name&gt; --to S</code> continues it from its latest written time.
+                stretch unless <code>--writes W</code> asks for more or fewer (up to 200), evenly to its end, keeping
+                every one: the flow at each time, for pictures of it over time;{" "}
+                <code>meshdoctor solve &lt;name&gt; --to S</code> continues it from its latest written time, and a
+                continuation's <code>--writes</code> goes for its later stretches too. On several processes each time
+                stays split on them, but the latest of each stretch, which is joined: ParaView opens them all as a
+                Decomposed Case.
                 It averages its flow from when its forces have settled, so the start-up isn't in the average: its
                 function objects go in <code>system/functions</code>, which OpenFOAM reads again when it changes as the
                 run solves, with a <code>fieldAverage</code> (<code>UMean</code>, <code>pMean</code>,{" "}
@@ -388,11 +393,13 @@ export function HowItWorks() {
               <p>
                 In the web app, a solved run's plan has Start a transient run: you give its name, DDES or URANS, the
                 largest Courant number (the dialog shows the plan's time step, steps and hours at it), the time to
-                solve to (8 L/U by default) and the processes. Its page follows it in seconds: its time and time step,
+                solve to (8 L/U by default), the times it writes a stretch, each kept, with the disk space they take
+                said first, and the processes. Its page follows it in seconds: its time and time step,
                 its residuals and forces over time, its time step and Courant number (mean and largest) at each time
                 step, and the transient judge over the last half of its time steps, its means from when the forces
                 settled (shaded on the forces chart), and from when the run averages its flow, with the latest time
-                written with the average. Stop and Continue work as for a steady run, with the time in s.
+                written with the average, and the written times it keeps. Stop and Continue work as for a steady
+                run, with the time in s; Continue asks the times it writes a stretch too.
               </p>
             </Step>
 

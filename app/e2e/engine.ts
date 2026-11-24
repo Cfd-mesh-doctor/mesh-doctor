@@ -309,15 +309,19 @@ export async function mockEngine(
     // A 16 GB laptop with no RAM limit (API 1.1).
     if (path === "/machine") return json(200, { cpus: 8, cores: 4, memoryMb: 16_000, ramLimitMb: null });
     // Its disk (API 1.7), where solving any of its cases takes what the coarse Ahmed body's does: a copy of 65 MB, and
-    // 212 MB written on several processes; 445 MB for a transient run, with its averaged flow (API 1.9).
+    // 212 MB written on several processes; 445 MB for a transient run, with its averaged flow (API 1.9), and more for
+    // each written time past the 4 a stretch of one writes unasked (API 1.10's `writes`).
     if (path === "/disk") {
-      const name = new URL(req.url()).searchParams.get("case");
+      const query = new URL(req.url()).searchParams;
+      const name = query.get("case");
+      const more = Number(query.get("writes") ?? 4) - 4;
       if (name != null && !state.cases.includes(name)) {
         return json(404, { error: { code: "not-found", message: `no case ${name} in the cases folder` } });
       }
       return json(200, { freeMb: opts.diskFreeMb ?? 402_339, keepMb: 1024, case: name == null ? null : {
-        name, copyMb: 65, transientMb: 103, solveMb: { several: 212, one: 78 }, continueMb: { several: 39, one: 0 },
-        transientSolveMb: { several: 445, one: 164 } } });
+        name, copyMb: 65, transientMb: 103, solveMb: { several: 212, one: 78 },
+        continueMb: { several: 39 + 20 * more, one: 0 },
+        transientSolveMb: { several: 445 + 84 * more, one: 164 + 75 * more } } });
     }
     if (path === "/check" && opts.check !== null) return json(200, opts.check ?? readiness());
     if (path === "/templates" && opts.templates !== null) return json(200, opts.templates ?? TEMPLATES);

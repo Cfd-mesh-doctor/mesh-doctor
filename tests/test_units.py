@@ -2364,7 +2364,16 @@ echo End
         self.assertEqual((st, doc["case"]), (200, {"name": "yours", "copyMb": 1, "transientMb": 1,
                                                    "solveMb": {"several": 4, "one": 2},
                                                    "continueMb": {"several": 1, "one": 0},
-                                                   "transientSolveMb": {"several": 6, "one": 3}}))
+                                                   "transientSolveMb": {"several": 10, "one": 6}}))
+        # a transient run keeps every time it writes: 4 a stretch unless it asks (API 1.10), on 2 processes
+        # 1.05 + 16 x 0.8 x 2.1 + 0.6 x 2.1 = 29.19 MB of a 1 MB mesh, and 16 x 0.6 x 2.1 = 20.16 on one
+        with mock.patch.object(diskguard, "free_mb", lambda folder: 5000):
+            st, doc, _ = self.api.handle("GET", "/api/v1/disk", {"case": "yours", "writes": "16"})
+        self.assertEqual((st, doc["case"]["transientSolveMb"], doc["case"]["solveMb"], doc["case"]["continueMb"]),
+                         (200, {"several": 30, "one": 21}, {"several": 4, "one": 2}, {"several": 1, "one": 0}))
+        for bad in ("0", "201", "4.5", "many"):
+            st, doc, _ = self.api.handle("GET", "/api/v1/disk", {"case": "yours", "writes": bad})
+            self.assertEqual((st, doc["error"]["code"]), (400, "bad-request"), bad)
         st, doc, _ = self.api.handle("GET", "/api/v1/disk", {"case": "nope"})
         self.assertEqual((st, doc["error"]["code"]), (404, "not-found"))
         st, doc, _ = self.api.handle("GET", "/api/v1/disk", {"case": "../x"})
@@ -2510,8 +2519,8 @@ class TransientSolveTest(unittest.TestCase):
         control = got["system/controlDict"]
         for line in (r"startFrom\s+startTime;", r"startTime\s+0;", r"beginTime\s+0;", r"endTime\s+0\.2088;",
                      r"deltaT\s+1\.044e-05;", r"adjustTimeStep\s+yes;", r"maxCo\s+1;",
-                     r"writeControl\s+adjustableRunTime;", r"writeInterval\s+0\.0522;"):
-            self.assertRegex(control, "(?m)^" + line)
+                     r"writeControl\s+adjustableRunTime;", r"writeInterval\s+0\.0522;", r"purgeWrite\s+0;"):
+            self.assertRegex(control, "(?m)^" + line)                       # 4 times, each kept (the template's 2)
         self.assertNotIn("maxDeltaT", control)                              # the Courant number alone sets it
         # its function objects are in system/functions, which OpenFOAM reads again as it solves, with its averaging off
         self.assertNotRegex(control, r"(?m)^functions\b")
@@ -2780,7 +2789,10 @@ class TransientSolveTest(unittest.TestCase):
         st, run, _ = self.api.handle("GET", "/api/v1/runs/ahmedT", {})
         self.assertEqual(schema.check(run, self.api.RUN_ONE), [])
         self.assertEqual((run["written"], run["iteration"], run["transient"]),
-                         (0.0004, 0.0004, {"steady": "steady", "at": "40", "maxCo": 1, "model": "DDES"}))
+                         (0.0004, 0.0004, {"steady": "steady", "at": "40", "maxCo": 1, "model": "DDES", "writes": 4}))
+        # each time it wrote is kept, on its processors (the stand-in reconstructPar joins none)
+        self.assertEqual((run["times"], run["joined"]), ([0.0001, 0.0002, 0.0003, 0.0004], []))
+        self.assertRegex(control, r"(?m)^purgeWrite\s+0;")
         self.assertIsNone(self.s.describe("steady")["transient"])
         self.assertEqual(self.api.handle("GET", "/api/v1/cases", {})[1]["made"]["ahmedT"], {"transientOf": "steady"})
         # Continued by time: from its latest written time, which the next stretch's writes line up from
@@ -2832,6 +2844,90 @@ class TransientSolveTest(unittest.TestCase):
         self.assertRegex(self.text("ahmedT", "system/controlDict"), r"(?m)^stopAt\s+endTime;")
         self.assertEqual(self.s.latest(case), 0.00135)
         self.assertRefused(self.post({"name": "steady", "to": 60.5}), 400, "bad-request", "whole number")
+
+    def test_a_transient_run_writes_the_times_asked_for_each_stretch_and_keeps_every_one(self):
+        import diskguard, schema
+        self.steady()
+        # 8 times a stretch, evenly to its end, each kept (API 1.10)
+        rc, lines = self.solve("ahmedW", 0.0004, 2, None, None, None, "steady", 1, "DDES", 8)
+        self.assertEqual(rc, 0, lines)
+        case = os.path.join(self.cases, "ahmedW")
+        control = self.text("ahmedW", "system/controlDict")
+        for line in (r"writeInterval\s+5e-05;", r"purgeWrite\s+0;"):
+            self.assertRegex(control, "(?m)^" + line)
+        eight = [f"{i * 5e-5:.6g}" for i in range(1, 9)]
+        self.assertEqual(self.times("ahmedW"), ["0", *eight])
+        st, run, _ = self.api.handle("GET", "/api/v1/runs/ahmedW", {})
+        self.assertEqual(schema.check(run, self.api.RUN_ONE), [])
+        self.assertEqual((run["transient"]["writes"], run["times"], run["joined"]),
+                         (8, [float(t) for t in eight], []))
+        os.makedirs(os.path.join(case, "0.0004"))                           # as reconstructPar joins the latest
+        run = self.s.describe("ahmedW")
+        self.assertEqual((run["times"], run["joined"]), ([float(t) for t in eight], [0.0004]))
+        # Continued with 2 a stretch, which it writes from then on
+        rc, lines = self.solve("ahmedW", 0.001, 4, None, None, None, None, None, None, 2)
+        self.assertEqual((rc, lines[-1]), (0, "ahmedW: solved to 0.001 s"), lines)
+        self.assertRegex(self.text("ahmedW", "system/controlDict"), r"(?m)^writeInterval\s+0\.0003;")
+        self.assertEqual(self.times("ahmedW")[-3:], ["0.0004", "0.0007", "0.001"])
+        self.assertEqual(self.s.transient_of(case)["writes"], 2)
+        rc, lines = self.solve("ahmedW", 0.0016, 4)
+        self.assertEqual(rc, 0, lines)
+        self.assertRegex(self.text("ahmedW", "system/controlDict"), r"(?m)^writeInterval\s+0\.0003;")
+        self.assertEqual(len(self.s.describe("ahmedW")["times"]), 12)
+        # What a continuation writes: its own 2 a stretch, or the 16 asked for, each kept, with its averages
+        mesh = self.s._mesh_mb(case)
+        self.assertEqual(self.s.disk_need("ahmedW", 4), (diskguard.solve_mb(mesh, 0, 2, False, True, 2),
+                                                         "the continuation of ahmedW needs"))
+        self.assertEqual(self.s.disk_need("ahmedW", 4, writes=16)[0], diskguard.solve_mb(mesh, 0, 2, False, True, 16))
+        self.assertEqual(self.s.disk("ahmedW", 16)["continueMb"],
+                         {"several": diskguard.solve_mb(mesh, 0, 2, False, True, 16),
+                          "one": diskguard.solve_mb(mesh, 0, 1, False, True, 16)})
+        # A job asks for it as a param, and its command says it
+        with mock.patch.object(self.jobs, "busy", lambda ws=None: None):
+            st, doc, _ = self.post({"name": "ahmedW", "to": 0.004, "writes": 16})
+            self.assertEqual((st, doc["params"]), (202, {"name": "ahmedW", "to": 0.004, "np": 4, "writes": 16}))
+            self.assertEqual(self.launched[-1][-6:], ["--to", "0.004", "--writes", "16", "--np", "4"])
+            st, doc, _ = self.post({"name": "ahmedX", "steady": "steady", "writes": 40, "np": 2})
+            self.assertEqual((st, doc["params"]), (202, {"name": "ahmedX", "to": 0.2088, "np": 2, "steady": "steady",
+                                                        "maxCo": 1, "model": "DDES", "writes": 40}))
+            self.assertEqual(self.launched[-1][-6:], ["--to", "0.2088", "--writes", "40", "--np", "2"])
+            for params, text in (({"name": "t", "steady": "steady", "writes": 0}, "params.writes"),
+                                 ({"name": "t", "steady": "steady", "writes": 201}, "params.writes"),
+                                 ({"name": "t", "steady": "steady", "writes": 2.5}, "params.writes"),
+                                 ({"name": "t", "source": "mine", "writes": 8}, "go with a transient run"),
+                                 ({"name": "t", "template": "ahmed-body", "writes": 8}, "go with a transient run"),
+                                 ({"name": "steady", "to": 60, "writes": 8}, "steady is a steady run: the times")):
+                self.assertRefused(self.post(params), 400, "bad-request", text)
+        for argv, said in ((["ahmedW", "--to", "0.005", "--writes", "many"], "--writes takes a whole number"),
+                           (["ahmedW", "--to", "0.005", "--writes", "0"], "a whole number from 1 to 200")):
+            with self.assertRaises(SystemExit) as e:
+                self.s.main(argv)
+            self.assertIn(said, str(e.exception))
+        # A run made before it could ask wrote 4 a stretch and kept the template's 2: continued, it keeps every one
+        marker = os.path.join(case, self.jobs.CASE_MARKER)
+        with open(marker) as f:
+            doc = json.load(f)
+        del doc["writes"]
+        with open(marker, "w") as f:
+            json.dump(doc, f)
+        path = os.path.join(case, "system", "controlDict")
+        with open(path) as f:
+            text = re.sub(r"(?m)^purgeWrite\s+0;", "purgeWrite      2;", f.read())
+        with open(path, "w") as f:
+            f.write(text)
+        self.assertEqual((self.s.transient_of(case)["writes"], self.s.describe("ahmedW")["transient"]["writes"]),
+                         (4, 4))
+        rc, lines = self.solve("ahmedW", 0.002, 4)
+        self.assertEqual(rc, 0, lines)
+        control = self.text("ahmedW", "system/controlDict")
+        for line in (r"writeInterval\s+0\.0001;", r"purgeWrite\s+0;"):
+            self.assertRegex(control, "(?m)^" + line)
+        # Unsplit, each time it writes is its own, joined
+        rc, lines = self.solve("ahmedS", 0.0004, 1, None, None, None, "steady", 1, "DDES")
+        self.assertEqual(rc, 0, lines)
+        run = self.s.describe("ahmedS")
+        self.assertEqual((run["nProcs"], run["times"], run["joined"]),
+                         (1, [0.0001, 0.0002, 0.0003, 0.0004], [0.0001, 0.0002, 0.0003, 0.0004]))
 
     def test_a_transient_runs_time_left_counts_its_time_steps(self):
         saved = dict(self.api._live)
@@ -2985,7 +3081,11 @@ class DiskGuardTest(unittest.TestCase):
                          ((100, 1, 2), 245), ((100, 9, 2), 485), ((1, 2, 2), 4),
                          # a transient run's written times hold its averages too: 2.1 times as much
                          ((100, 2, 6, True, True), 567), ((100, 2, 1, True, True), 252),
-                         ((100, 2, 6, False, True), 126), ((100, 0, 1, False, True), 504)):
+                         ((100, 2, 6, False, True), 126), ((100, 0, 1, False, True), 504),
+                         # and as many written times as a transient run's stretch asks for, each kept
+                         ((100, 0, 6, True, True, 4), 903), ((100, 0, 6, True, True, 16), 2919),
+                         ((100, 0, 1, True, True, 16), 2016), ((100, 0, 6, False, True, 16), 2814),
+                         ((100, 2, 2, True, False, 1), 245)):
             self.assertEqual(self.g.solve_mb(*args), mb, args)
         self.assertEqual(self.g.mesh_mb(480_000), 66)                        # the coarse Ahmed body's: 65.6 MB
 

@@ -15,7 +15,8 @@ processes, and its written times.  Measured after 2,000 iterations of the Ahmed 
   a written time, joined (or solved on one process)     0.6 times the mesh
 
 A stretch writes about four times (solve.write_interval) and keeps as many as its controlDict's purgeWrite says (the
-templates keep 2; 0 keeps every one); on several processes, its latest time is joined at its end.  So a solve from
+templates keep 2; 0 keeps every one); on several processes, its latest time is joined at its end.  A transient run's
+stretch writes as many times as it asks for (4 unless it says), and keeps every one (transient.py).  So a solve from
 the start of a template's case writes 3.25 times its mesh on several processes, as measured (3.2 for all three), and
 1.2 times on one.  A continuation adds its latest time, joined, and only when every written time is kept, its own.
 A transient run's written times hold its averages too, once its forces have settled (transient.py): UMean, pMean,
@@ -78,16 +79,16 @@ def mesh_mb(cells):
     return _up(cells * MESH_KB_PER_CELL / 1024)
 
 
-def solve_mb(mesh, purge, nproc, first=True, averaged=False):
-    """The MB a stretch of a solve writes as it goes, from the MB of its mesh, on `nproc` processes, keeping `purge`
-    written times (its controlDict's purgeWrite; 0: every one).  From the start (`first`): its split and the times it
-    keeps; a continuation: the times it adds, none when it keeps only the latest few (each new one takes an older
-    one's place), as its split is there already.  On several processes, its latest time joined too.  A transient
-    run's written times hold its averages too (`averaged`: AVERAGED more)."""
+def solve_mb(mesh, purge, nproc, first=True, averaged=False, writes=STRETCH):
+    """The MB a stretch of a solve writes as it goes, from the MB of its mesh, on `nproc` processes, writing `writes`
+    times and keeping `purge` (its controlDict's purgeWrite; 0: every one).  From the start (`first`): its split and
+    the times it keeps; a continuation: the times it adds, none when it keeps only the latest few (each new one takes
+    an older one's place), as its split is there already.  On several processes, its latest time joined too.  A
+    transient run's written times hold its averages too (`averaged`: AVERAGED more)."""
     several = nproc > 1
     grow = 1 + AVERAGED if averaged else 1
-    kept = purge if 0 < purge < STRETCH else STRETCH
-    added = kept if first else (0 if purge > 0 else STRETCH)
+    kept = purge if 0 < purge < writes else writes
+    added = kept if first else (0 if purge > 0 else writes)
     times = (SPLIT if several and first else 0) + added * WRITTEN["split" if several else "joined"] * grow
     return _up(mesh * (times + (WRITTEN["joined"] * grow if several else 0)))
 

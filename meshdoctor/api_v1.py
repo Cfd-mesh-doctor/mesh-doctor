@@ -27,8 +27,9 @@ import tplan
 import validate
 import version
 
-API_VERSION = "1.9"
+API_VERSION = "1.10"
 PREFIX = "/api/v1"
+WRITES_MAX = solve.transient.MAX_WRITES   # the most times a stretch of a transient run writes
 MAX_BODY = 64 * 1024
 
 # error code -> HTTP status.  md_api refusals carry one of these codes.
@@ -564,7 +565,10 @@ RUN = {"type": "object", "required": ["name", "state", "step", "iteration", "sta
                                  "it took (at), its largest Courant number and its model; null for a steady run "
                                  "(API 1.6)", "properties": {
                       "steady": {"type": "string"}, "at": {"type": "string"},
-                      "maxCo": {"type": ["number", "null"]}, "model": {"type": ["string", "null"]}}},
+                      "maxCo": {"type": ["number", "null"]}, "model": {"type": ["string", "null"]},
+                      "writes": {"type": "integer", "minimum": 1, "maximum": WRITES_MAX,
+                                 "description": "the times each of its stretches writes, evenly to its end: it keeps "
+                                                "every one (4 for a run that never asked) (API 1.10)"}}},
     "averaging": {"type": ["object", "null"], "required": ["from", "settled", "written"],
                   "description": "a transient run's averaged flow (the fieldAverage meanFlow: UMean, pMean, UPrime2Mean "
                                  "and pPrime2Mean in each time it writes), which the solve switches on once its forces "
@@ -576,7 +580,14 @@ RUN = {"type": "object", "required": ["name", "state", "step", "iteration", "sta
                                                              "time the solver was at when it was switched on"),
                       "settled": dict(_NUM_OR_NULL, description="when its forces had settled then, in s"),
                       "written": dict(_NUM_OR_NULL, description="the latest time written with it, in s; null before "
-                                                                "one")}}}}
+                                                                "one")}},
+    "times": {"type": "array", "items": {"type": "number"},
+              "description": "the written times it keeps, oldest first, not its start: its processors' and its own "
+                             "when it is split (a transient run keeps every one; a steady run as many as its "
+                             "controlDict's purgeWrite says) (API 1.10)"},
+    "joined": {"type": "array", "items": {"type": "number"},
+               "description": "those of its times that are joined, the whole mesh's, in the case's own folder: every "
+                              "one when it isn't split, else the latest of each stretch (API 1.10)"}}}
 RUN_ONE = dict(RUN, properties=dict(RUN["properties"], links={
     "type": "object", "description": "itself, Stop, and its convergence judge (GET /judge?case=)"}))
 
@@ -796,6 +807,11 @@ JOBS = {
                                      "description": "with steady: DDES (kOmegaSSTDES with F2 shielding: the wake's "
                                                     "eddies resolved, the boundary layers RANS; the default), or "
                                                     "URANS (the steady run's RAS model, in time)"},
+                           "writes": {"type": "integer", "minimum": 1, "maximum": WRITES_MAX,
+                                      "description": "for a transient run, new (with steady) or continued: the times "
+                                                     "each stretch writes, evenly to its end, each kept (a new "
+                                                     "one's default 4; a continuation's, the run's own), which its "
+                                                     "later stretches write too (API 1.10)"},
                            "to": {"type": "number", "minimum": 0, "maximum": solve.MAX_ITERS,
                                   "description": "the iteration to solve to (a whole number; 2000 by default), or "
                                                  "for a transient run the time in s (a new one's default: 8 flow "
@@ -804,7 +820,8 @@ JOBS = {
                                   "description": "processes for a solve from iteration 0 (1: not split); a "
                                                  "continuation keeps the run's own"}}, ["name"]),
         "start": lambda a: solve.start(a["name"], a.get("to"), a["np"], a.get("source"), a.get("template"),
-                                       a.get("size"), a.get("steady"), a.get("maxCo"), a.get("model")),
+                                       a.get("size"), a.get("steady"), a.get("maxCo"), a.get("model"),
+                                       a.get("writes")),
         "links": lambda n: {"run": f"{PREFIX}/runs/{n}"},
     },
     "tplan": {
@@ -868,17 +885,22 @@ DISK_CASE = {"type": ["object", "null"], "required": ["name", "copyMb", "transie
                                          "transient run of it does too; null when it has no mesh to measure"),
     "continueMb": dict(_SOLVES, description="what a continuation of it writes as it goes: on several processes its "
                                             "latest time joined, and its written times when it keeps every one "
-                                            "(purgeWrite 0), a transient run's with its averaged flow; null when it "
-                                            "has no mesh to measure"),
-    "transientSolveMb": dict(_SOLVES, description="what a transient run of it writes as it goes from the start: as "
-                                                  "solveMb, with its averaged flow in each written time; null when it "
-                                                  "has no joined result to start from, or no mesh to measure "
-                                                  "(API 1.9)")}}
+                                            "(purgeWrite 0), a transient run's with its averaged flow, `writes` of "
+                                            "them (else its own); null when it has no mesh to measure"),
+    "transientSolveMb": dict(_SOLVES, description="what a transient run of it writes as it goes from the start: its "
+                                                  "split, and its `writes` written times (else 4), each kept, with its "
+                                                  "averaged flow, and on several processes its latest time joined; "
+                                                  "null when it has no joined result to start from, or no mesh to "
+                                                  "measure (API 1.9)")}}
 
 
 @route("GET", "/disk", "The free space for a new case in the cases folder, which the disk guard checks a solve "
        "against, and with `case`, what solving that case takes on the disk, in MB (API 1.7)",
-       query={"case": {"schema": NAME, "description": "a case in the cases folder (GET /cases)"}},
+       query={"case": {"schema": NAME, "description": "a case in the cases folder (GET /cases)"},
+              "writes": {"schema": {"type": "integer", "minimum": 1, "maximum": WRITES_MAX},
+                         "description": "with `case`: the times each stretch of a transient run writes, for "
+                                        "transientSolveMb (a new transient run of it) and, when it is a transient "
+                                        "run, continueMb (API 1.10)"}},
        ok={"type": "object", "required": ["freeMb", "keepMb", "case"], "properties": {
            "freeMb": {"type": ["integer", "null"], "minimum": 0,
                       "description": "the free space for a new case in the cases folder: its disk's, and inside WSL 2 "
@@ -895,7 +917,7 @@ def disk(p, q, b):
     if q.get("case"):
         if not os.path.isfile(os.path.join(root, q["case"], "system", "controlDict")):
             raise ApiError("not-found", "no case " + q["case"] + " in the cases folder")
-        doc["case"] = solve.disk(q["case"])
+        doc["case"] = solve.disk(q["case"], q.get("writes"))
     return doc
 
 

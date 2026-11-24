@@ -90,9 +90,11 @@ their spread, not just "it improved".
   (a wing-tip vortex, a tyre wake) can't converge. `meshdoctor transient-plan <run>` says which time step the mesh
   allows at a largest Courant number of 1, 5 and 20, how many hours each takes, and which cells set it (`--sets DIR`
   writes them as a cell set). It only reads the case. Then `meshdoctor solve <name> --steady <run> [--co C]
-  [--model DDES|URANS] [--to SECONDS]` makes `<name>` a transient run that starts from the steady flow (DDES at a
-  Courant number of 1 by default, to 8 flow times). Its `--to`, its progress and its continuations are seconds of
-  flow, not iterations. It averages its flow (`UMean`, `pMean`, `UPrime2Mean`, `pPrime2Mean`) once its forces have
+  [--model DDES|URANS] [--to SECONDS] [--writes W]` makes `<name>` a transient run that starts from the steady flow
+  (DDES at a Courant number of 1 by default, to 8 flow times). Its `--to`, its progress and its continuations are
+  seconds of flow, not iterations. It writes W times a stretch (4 by default, up to 200), evenly to its end, and keeps
+  every one: the flow at each time, for pictures of it over time (a continuation's `--writes` goes on from then);
+  the disk guard counts them before it starts. It averages its flow (`UMean`, `pMean`, `UPrime2Mean`, `pPrime2Mean`) once its forces have
   settled: the solve switches the averaging on then, so the start-up isn't in it, and says from when; so does the run's
   page in the web app.
 - **Following a solve.** `meshdoctor judge <case>` says whether it has converged: it compares its last 200

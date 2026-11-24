@@ -19,6 +19,10 @@ export const MAX_TO = 100_000;
 export const DEFAULT_NP = 4;
 /** The most processes the engine takes. */
 export const MAX_NP = 64;
+/** The times each stretch of a transient run writes unless asked, and the most it may (meshdoctor/transient.py's
+ * WRITES and MAX_WRITES): it keeps every one (API 1.10). */
+export const WRITES = 4;
+export const MAX_WRITES = 200;
 
 /** What the engine says when a case can't be solved from here because it predates the solve job (API 1.6). */
 export const OLD_ENGINE_RUNS = "Your engine is older than this page and can't solve cases from here yet. Update Mesh "
@@ -125,6 +129,47 @@ export function averagingText(a: Run["averaging"], ended: boolean): string | nul
     ? `${since}, but it ended before it wrote a time with the average in. Continue it, and each time it writes holds `
       + `${AVERAGES}.`
     : `${since}: each time it writes from now on holds ${AVERAGES}.`;
+}
+
+/** Does the engine take the times each stretch of a transient run writes (API 1.10's `writes`)? An older one writes
+ * four and refuses the param, so the dialogs ask for it only then. */
+export function takesWrites(apiVersion: string | null | undefined): boolean {
+  const m = /^(\d+)\.(\d+)/.exec(apiVersion ?? "");
+  return m != null && (Number(m[1]) > 1 || (Number(m[1]) === 1 && Number(m[2]) >= 10));
+}
+
+/** What is wrong with the times written as typed, or null: a whole number from 1 to MAX_WRITES. */
+export function writesProblem(typed: string): string | null {
+  const n = /^\d+$/.test(typed) ? Number(typed) : NaN;
+  return n >= 1 && n <= MAX_WRITES ? null : `Give a whole number from 1 to ${MAX_WRITES}.`;
+}
+
+/** The times written, in words, under their field: how often over the stretch from `from` to `to` (when it is
+ * known), and that each is kept. */
+export function writesHint(writes: number, from: number, to: number | null): string {
+  const often = to != null && to > from ? `Every ${formatTime((to - from) / writes)}` : "Evenly to the end";
+  return `${often}, each kept: the flow at that time, with its mean once it averages it, for pictures of the flow `
+    + "over time.";
+}
+
+/** The written times a transient run keeps, in words (API 1.10's `times` and `joined`): how many, from when to
+ * when, how many it writes a stretch, and on several processes which are joined; null before it says. */
+export function keptText(run: Pick<Run, "times" | "joined" | "nProcs" | "transient">): string | null {
+  const times = run.times;
+  const first = times?.[0];
+  const last = times?.[times.length - 1];
+  if (!times || first == null || last == null) return null;
+  const n = times.length;
+  const which = n === 1
+    ? `one written time, ${formatTime(first)}`
+    : `${formatInt(n)} written times, from ${formatTime(first)} to ${formatTime(last)}`;
+  const writes = run.transient?.writes;
+  const each = writes == null ? "" : `; it writes ${writes === 1 ? "once" : `${formatInt(writes)} times`} a stretch`;
+  const kept = `It keeps ${which}${each}.`;
+  const joined = run.joined?.length;
+  if (joined == null || joined >= n || (run.nProcs ?? 1) <= 1) return kept;
+  return `${kept} ${joined === 0 ? "They are" : `${formatInt(joined)} of them ${joined === 1 ? "is" : "are"} joined, `
+    + "the others"} split on its processes: paraFoam opens ${joined === 0 ? "them" : "them all"} as a Decomposed Case.`;
 }
 
 /** How far the stretch a run is in has come, from where it started to where it runs to (0 to 1); undefined until
@@ -316,12 +361,18 @@ export function totalForces(live: Pick<RunLive, "forces" | "forceInfo">): {
 }
 
 /** The terminal command that does the same: `meshdoctor solve`, with --np for a first solve only (a continuation
- * keeps the run's own), and the case it copies first for a copy of yours. */
-export function solveCommand(name: string, to: number, np: number | null, source?: string): string {
-  return `meshdoctor solve ${source ? `${source} ` : ""}${name} --to ${to}${np == null ? "" : ` --np ${np}`}`;
+ * keeps the run's own), the case it copies first for a copy of yours, and a transient run's times written a stretch
+ * when they change (`writes`). */
+export function solveCommand(name: string, to: number, np: number | null, source?: string, writes?: number | null): string {
+  return `meshdoctor solve ${source ? `${source} ` : ""}${name} --to ${to}${writes == null ? "" : ` --writes ${writes}`}`
+    + (np == null ? "" : ` --np ${np}`);
 }
 
-/** The terminal command that starts a transient run `name` of steady run `steady`. */
-export function transientCommand(name: string, steady: string, co: number, model: string, to: number, np: number): string {
-  return `meshdoctor solve ${name} --steady ${steady} --co ${co} --model ${model} --to ${to} --np ${np}`;
+/** The terminal command that starts a transient run `name` of steady run `steady`, writing `writes` times a stretch
+ * (said when not the engine's own WRITES). */
+export function transientCommand(
+  name: string, steady: string, co: number, model: string, to: number, np: number, writes = WRITES,
+): string {
+  return `meshdoctor solve ${name} --steady ${steady} --co ${co} --model ${model} --to ${to}`
+    + `${writes === WRITES ? "" : ` --writes ${writes}`} --np ${np}`;
 }
