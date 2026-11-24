@@ -1,6 +1,7 @@
 # Find surface faces with unphysical pressure (Cp below LIM) on a solved OpenFOAM case, say how much
 # extra force each spot carries against its surroundings, and render close-ups of the worst spot.
-#   pvbatch --force-offscreen-rendering pressure_spots.py <case.foam> decomposed|reconstructed OUTDIR PREFIX \n#       --walls p1,p2,... [--uinf 15] [--rho 1.205]
+#   pvbatch --force-offscreen-rendering pressure_spots.py <case.foam> decomposed|reconstructed OUTDIR PREFIX
+#       --walls p1,p2,... [--uinf 15] [--rho 1.205] [--mean]   (--mean: a transient run's mean pressure, pMean)
 # Axes: x forward (flow toward -x), z up. Read-only on the case. Forces use OpenFOAM's sign convention: drag = -Fx, downforce = -Fz.
 import math
 import os
@@ -30,6 +31,8 @@ if not opt('--walls'):
     sys.exit('give the wall patches of the model: --walls body,wing,wheel')
 UINF = float(opt('--uinf') or 15)
 RHO = float(opt('--rho') or 1.205)   # the forces function object's rhoInf
+MEAN = '--mean' in sys.argv[5:]      # a transient run's mean flow: pMean in place of p
+PF, FLOW = ('pMean', ' of the mean flow') if MEAN else ('p', '')
 Q = 0.5 * UINF ** 2                  # kinematic dynamic pressure (p is p/rho)
 LIM, NEAR = -5.0, 0.05        # Cp below LIM is a spot; spot faces within NEAR (m) of each other form one spot
 CAR = opt('--walls').split(',')
@@ -51,7 +54,7 @@ def reader(patches):
     r.SkipZeroTime = 1
     r.UpdatePipelineInformation()
     r.MeshRegions = ['patch/' + p for p in patches]
-    r.CellArrays = ['p']
+    r.CellArrays = [PF]
     return r
 
 
@@ -64,7 +67,7 @@ def faces(patch, t):
     ca = g.GetCells()
     off = v2n(ca.GetOffsetsArray()).astype(np.int64)
     con = v2n(ca.GetConnectivityArray()).astype(np.int64)
-    p = v2n(g.GetCellData().GetArray('p')).astype(float)
+    p = v2n(g.GetCellData().GetArray(PF)).astype(float)
     n = np.diff(off)
     nxt = np.arange(len(con)) + 1
     nxt[off[1:] - 1] = off[:-1]
@@ -148,7 +151,7 @@ except Exception:
 cpf = Calculator(Input=reader(CAR))
 cpf.AttributeType = 'Cell Data'
 cpf.ResultArrayName = 'Cp'
-cpf.Function = 'p/%g' % Q
+cpf.Function = '%s/%g' % (PF, Q)
 d = Show(cpf, V)
 ColorBy(d, ('CELLS', 'Cp'))
 l = GetColorTransferFunction('Cp')
@@ -170,7 +173,7 @@ for loc in ['Upper Left Corner', 'UpperLeftCorner']:
     except Exception:
         pass
 Render(V)
-NOTE = NOTE1.replace('{it}', '%g' % t) + ': Cp on the model (cell values).\n' + NOTE2
+NOTE = NOTE1.replace('{it}', '%g' % t) + ': Cp%s on the model (cell values).\n' % FLOW + NOTE2
 
 
 def look(name, title, dirn, dist, edges=False):

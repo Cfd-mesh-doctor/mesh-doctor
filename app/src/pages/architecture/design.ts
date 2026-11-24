@@ -61,7 +61,7 @@ export const DESIGN: DocSection[] = [
             [
               "`pictures.py`",
               "core + CLI",
-              "pictures of a solved case's flow: `make()` runs the paraview-post scripts with ParaView's `pvbatch`, offscreen, on a folder of links to the case in the workspace (its `constant`, `system` and the time pictured), so the case is only read; the pictures and `pictures.json`, their list, go in the workspace's `.pictures/<case>/<time>/`. A `pictures` job runs it (API 1.15)"
+              "pictures of a solved case's flow: `make()` runs the paraview-post scripts with ParaView's `pvbatch`, offscreen, on a folder of links to the case in the workspace (its `constant`, `system` and the time pictured), so the case is only read; the pictures and `pictures.json`, their list, go in the workspace's `.pictures/<case>/<time>/` (`<time>_mean/` for a transient run's mean flow); a computer's first set starts with the vortex script's self test, in `.pictures/.selftest/`, kept once it has passed. A `pictures` job runs it (API 1.15; the mean flow and the self test, API 1.16)"
             ],
             [
               "`repair.py`, `abtest.py`",

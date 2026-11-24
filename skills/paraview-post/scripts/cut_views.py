@@ -9,7 +9,9 @@
 # model's centre plane (on its symmetry plane, for a half model), a flat cut halfway up it seen from above, and a cross
 # cut one model height behind it; they are written to OUTDIR/cuts.json, so their titles go with the pictures.
 # Usage (WSL): PYTHONPATH=/usr/lib/python3/dist-packages pvbatch --force-offscreen-rendering cut_views.py \
-#              CASE.foam decomposed|reconstructed OUTDIR CUTS.json "note under every title; {it} = iteration" \n#              --walls p1,p2,... [--uinf 15]   (p must be kinematic, p/rho, as in incompressible solvers)
+#              CASE.foam decomposed|reconstructed OUTDIR CUTS.json "note under every title; {it} = iteration"
+#              --walls p1,p2,... [--uinf 15] [--mean]   (p must be kinematic, p/rho, as in incompressible solvers)
+# --mean: a transient run's mean flow (UMean and pMean, from its fieldAverage) in place of U and p.
 import json
 import math
 import os
@@ -31,6 +33,8 @@ if '--walls' not in sys.argv and '--selftest' not in sys.argv:
     sys.exit('give the wall patches of the model: --walls body,wing,wheel (names from constant/polyMesh/boundary)')
 CAR = _opt('--walls', 'none').split(',')
 UINF = float(_opt('--uinf', '15'))
+MEAN = '--mean' in sys.argv          # a transient run's mean flow, in place of U and p
+PF, UF = ('pMean', 'UMean') if MEAN else ('p', 'U')
 QINF = 0.5 * UINF ** 2             # p is kinematic (p/rho): Cp = p / QINF
 INK, GREY = [0.12, 0.12, 0.14], [0.78, 0.78, 0.80]
 STEP = 0.002                        # probe spacing (m); a cut may set its own "step"
@@ -82,28 +86,31 @@ def reader(regions, arrays):
     return r
 
 
-rs = reader(['patch/' + p for p in CAR], ['p'])
+rs = reader(['patch/' + p for p in CAR], [PF])
 tv = rs.TimestepValues
 tv = list(tv) if hasattr(tv, '__len__') else [tv]
 TIME = max(tv)
 V.ViewTime = TIME
 NOTE = NOTE.replace('{it}', '%g' % TIME)
 car = MergeBlocks(Input=rs)
-ri = reader(['internalMesh'], ['p', 'U'])
+ri = reader(['internalMesh'], [PF, UF])
 vol = CellDatatoPointData(Input=ri) if KIND == 'decomposed' else ri   # a reconstructed read interpolates itself
-vol = Calculator(Input=vol, AttributeType='Point Data', ResultArrayName='Cp', Function='p/%g' % QINF)
+vol = Calculator(Input=vol, AttributeType='Point Data', ResultArrayName='Cp', Function='%s/%g' % (PF, QINF))
 vol = Calculator(Input=vol, AttributeType='Point Data', ResultArrayName='Cpt',
-                 Function='(p+0.5*(U_X*U_X+U_Y*U_Y+U_Z*U_Z))/%g' % QINF)
+                 Function='({p}+0.5*({u}_X*{u}_X+{u}_Y*{u}_Y+{u}_Z*{u}_Z))/{q:g}'.format(p=PF, u=UF, q=QINF))
 vol.UpdatePipeline(TIME)
 log('time', TIME, 'volume', vol.GetDataInformation().GetNumberOfCells(), 'cells')
 
 LUTS = {
-    'U': (('POINTS', 'U', 'Magnitude'), '|U| (m/s)', '%.0f', None, 'Viridis (matplotlib)', (0.0, 1.5 * UINF)),
+    'U': (('POINTS', UF, 'Magnitude'), '|%s| (m/s)' % UF, '%.0f', None, 'Viridis (matplotlib)', (0.0, 1.5 * UINF)),
     'Cp': (('POINTS', 'Cp'), 'Cp', '%.1f', [-2.5, 0.231, 0.299, 0.754, 0.0, 0.865, 0.865, 0.865,
                                             1.0, 0.706, 0.016, 0.150], None, (-2.5, 1.0)),
     'Cpt': (('POINTS', 'Cpt'), 'Cp,t', '%.1f', None, 'Inferno (matplotlib)', (0.0, 1.0)),
 }
 WORDS = {'U': 'speed', 'Cp': 'pressure coefficient Cp', 'Cpt': 'total pressure coefficient Cp,t (1 = no losses)'}
+if MEAN:
+    WORDS = {'U': 'speed of the mean flow', 'Cp': 'pressure coefficient Cp of the mean flow',
+             'Cpt': 'total pressure coefficient Cp,t of the mean flow (1 = no losses)'}
 
 
 def apply_lut(name):

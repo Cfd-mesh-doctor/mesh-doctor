@@ -362,18 +362,10 @@ def forces_settled(case):
         return None
 
 
-def _averaged(case):
-    """(from, written): the latest written time that holds the averaging's own record (uniform/meanFlowProperties), in
-    the run's own folder or its processor0, and that time less the record's totalTime of U; None before one."""
-    best = None
-    for root in (case, os.path.join(case, "processor0")):
-        for name, value in times(root).items():
-            props = os.path.join(root, name, "uniform", AVERAGE + "Properties")
-            if (best is None or value > best[1]) and (os.path.isfile(props) or os.path.isfile(props + ".gz")):
-                best = (props, value)
-    if best is None:
-        return None
-    props, value = best
+def average_from(folder, value):
+    """When the mean flow in a written time's folder began, in s: that time (`value`) less how long U has been
+    averaged (its totalTime), from the averaging's own record there (uniform/meanFlowProperties); None without one."""
+    props = os.path.join(folder, "uniform", AVERAGE + "Properties")
     text = read(props)
     if not text and os.path.isfile(props + ".gz"):
         try:
@@ -382,9 +374,22 @@ def _averaged(case):
         except (OSError, EOFError, zlib.error):
             return None
     m = re.search(r"(?<![\w.])U\s*\{[^}]*?\btotalTime\s+(" + caseinfo.NUM + r")\s*;", plain(text))
-    if m is None:
+    return None if m is None else float(f"{value - float(m.group(1)):.6g}")
+
+
+def _averaged(case):
+    """(from, written): the latest written time that holds the averaging's own record (uniform/meanFlowProperties), in
+    the run's own folder or its processor0, and when its mean flow began (average_from); None before one."""
+    best = None
+    for root in (case, os.path.join(case, "processor0")):
+        for name, value in times(root).items():
+            props = os.path.join(root, name, "uniform", AVERAGE + "Properties")
+            if (best is None or value > best[1]) and (os.path.isfile(props) or os.path.isfile(props + ".gz")):
+                best = (os.path.join(root, name), value)
+    if best is None:
         return None
-    return float(f"{value - float(m.group(1)):.6g}"), value
+    began = average_from(*best)
+    return None if began is None else (began, best[1])
 
 
 def averaging(case, doc=None):

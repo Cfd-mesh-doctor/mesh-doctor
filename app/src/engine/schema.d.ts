@@ -1989,10 +1989,15 @@ export interface operations {
                          * @default cuts,vortices,spots
                          */
                         kinds?: string;
+                        /**
+                         * @description a transient run's mean flow (UMean and pMean) in place of the flow at that time: a time written once its averaging is on (GET /runs' averaging); its set is <time>_mean (API 1.16)
+                         * @default false
+                         */
+                        mean?: boolean;
                         /** @description a case in the cases folder with a written result: a run (GET /runs), or a case you made (GET /cases) */
                         name: string;
                         /**
-                         * @description the written time to picture, as its folder says it (default: the latest on the case's whole mesh)
+                         * @description the written time to picture, as its folder says it (default: the latest on the case's whole mesh; with mean, the latest with a mean flow)
                          * @default
                          */
                         time?: string;

@@ -4129,10 +4129,22 @@ a = sys.argv[1:]
 if a == ["--version"]:
     print("paraview version 5.10.0")
     sys.exit(0)
+if a[2:3] == ["--selftest"]:
+    import json
+    with open(os.path.join(os.path.dirname(a[3]), "selftests"), "a") as f:
+        f.write(a[3] + "\\n")
+    how = os.environ.get("MD_TEST_SELFTEST", "pass")
+    if how == "crash":
+        sys.exit(9)
+    with open(os.path.join(a[3], "selftest.json"), "w") as f:
+        json.dump({"passed": how == "pass", "reason": "the test vortex came out red" if how == "pass" else
+                   "the picture of the test vortex is blank: ParaView drew nothing offscreen"}, f)
+    sys.exit(0 if how == "pass" else 3)
 script, foam = os.path.basename(a[1]), a[2]
 view = os.path.dirname(foam)
 with open(os.path.join(os.path.dirname(view), "seen"), "a") as f:
-    f.write(script + " " + os.environ.get("PYTHONPATH", "") + " " + " ".join(sorted(os.listdir(view))) + "\\n")
+    f.write(script + " " + os.environ.get("PYTHONPATH", "") + " " + " ".join(sorted(os.listdir(view)))
+            + (" --mean" if "--mean" in a else "") + "\\n")
 out = a[3] if script == "vortex_views.py" else a[4]
 if os.environ.get("MD_TEST_PV_FAILS") == script:
     sys.exit(2)
@@ -4170,7 +4182,8 @@ for n in names:
             patch.start()
             self.addCleanup(patch.stop)
 
-    def case(self, cuts=True, times=("200",)):
+    def case(self, cuts=True, times=("200",), mean=None):
+        """The case ahmedP in the cases folder; `mean`: {a time with a mean flow: how long it was averaged, in s}."""
         case = os.path.join(self.tmp, "cases", "ahmedP")
         for d in ("system", os.path.join("constant", "polyMesh")) + tuple(times):
             os.makedirs(os.path.join(case, d))
@@ -4182,8 +4195,13 @@ for n in names:
                     "    ahmed\n    {\n        type wall;\n        inGroups List<word> 2(ahmedGroup wall);\n    }\n"
                     "    ground\n    {\n        type wall;\n        inGroups 1(wall);\n    }\n)\n")
         for t in times:
-            for field in ("U", "p"):
+            for field in ("U", "p") + (self.p.MEAN if t in (mean or {}) else ()):
                 open(os.path.join(case, t, field), "w").close()
+            if t in (mean or {}):                                       # the averaging's own record of how long
+                os.makedirs(os.path.join(case, t, "uniform"))
+                with open(os.path.join(case, t, "uniform", "meanFlowProperties"), "w") as f:
+                    f.write("FoamFile\n{\n    object meanFlowProperties;\n}\nU\n{\n    totalIter 6;\n    totalTime "
+                            + mean[t] + ";\n}\np\n{\n    totalIter 6;\n    totalTime " + mean[t] + ";\n}\n")
         if cuts:
             shutil.copy(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "examples", "ahmed-body",
                                      "cuts.json"), case)
@@ -4267,6 +4285,65 @@ for n in names:
         with open(os.path.join(out, "pictures.json")) as f:
             self.assertEqual(json.load(f), doc)
 
+    def test_the_mean_flow_of_a_run_that_has_averaged_it(self):
+        plain = self.case(times=("0.0003",))
+        self.assertEqual(self.p.why_not(plain, mean=True),
+                         ("not-ready", "ahmedP has no mean flow (UMean and pMean): a transient run writes it in each "
+                                       "time once its averaging is on, from when its forces have settled"))
+        shutil.rmtree(os.path.join(self.tmp, "cases"))
+        case = self.case(times=("0.0003", "0.0006"), mean={"0.0006": "0.00029"})
+        self.assertEqual((self.p.times(case), self.p.mean_times(case)), (["0.0003", "0.0006"], ["0.0006"]))
+        self.assertIsNone(self.p.why_not(case, mean=True))
+        self.assertEqual(self.p.why_not(case, "0.0003", mean=True),
+                         ("bad-request", "ahmedP's time 0.0003 has no mean flow (UMean and pMean); its latest times "
+                                         "with one: 0.0006"))
+        cmds, _ = self.p.plan(case, "/view", "/set", self.p.KINDS, "pvbatch", True, 0.00031)
+        self.assertEqual({k: c[-1] for k, c in cmds.items()}, {k: "--mean" for k in self.p.KINDS})
+        for c in cmds.values():                                         # each picture says what it shows
+            self.assertIn("ahmedP, the mean flow from 0.00031 s to {it} s", c)
+        out = os.path.join(self.tmp, "set")
+        with mock.patch.object(self.p, "plan", wraps=self.p.plan) as plan:
+            doc = self.p.make(case, out, "0.0006", self.p.KINDS, mean=True)
+        self.assertEqual(plan.call_args[0][5:], (True, 0.00031))       # from when it began: 0.0006 s less 0.00029 s
+        self.assertEqual((doc["time"], doc["mean"]), ("0.0006", True))
+        titles = [p["title"] for p in doc["pictures"]]
+        self.assertEqual(titles[1:3], ["Side cut on the centreline, seen from the side (+y), nose to the left: speed "
+                                       "of the mean flow", "Vortices of the mean flow, Q = 21,000 1/s², from behind"])
+        self.assertEqual(titles[5], "The worst spot of unphysical pressure (Cp below -5) in the mean flow, close up, "
+                                    "with the surface mesh")
+        with open(os.path.join(out, "seen")) as f:
+            self.assertEqual([line.rsplit(" ", 1)[1] for line in f.read().splitlines()], ["--mean"] * 3)
+
+    def test_a_computers_first_set_starts_with_the_self_test(self):
+        case, st = self.case(), os.path.join(self.tmp, "work", ".pictures", self.p.SELFTEST)
+        ran = os.path.join(os.path.dirname(st), "selftests")            # the stand-in's list of the self tests run
+        doc = self.p.make(case, os.path.join(self.tmp, "a"), "200", ("spots",), selftest_dir=st)
+        self.assertEqual((doc["notes"], sorted(os.listdir(st))), ([], [self.p.MARK, "selftest.json"]))
+        self.assertIn("pictures: the vortex script's self test\n", sys.stdout.getvalue())     # in the job's log
+        self.p.make(case, os.path.join(self.tmp, "b"), "200", ("spots",), selftest_dir=st)   # passed: not again
+        with open(ran) as f:
+            self.assertEqual(f.read().splitlines(), [st])
+        shutil.rmtree(st)
+        with mock.patch.dict(os.environ, {"MD_TEST_SELFTEST": "fail"}):
+            doc = self.p.make(case, os.path.join(self.tmp, "c"), "200", ("spots",), selftest_dir=st)
+        self.assertEqual(doc["notes"], ["ParaView's self test didn't pass (the picture of the test vortex is blank: "
+                                        "ParaView drew nothing offscreen), so these pictures may be blank or wrongly "
+                                        "coloured; it runs again with the next set"])
+        self.assertEqual(len(doc["pictures"]), 3)                       # the set is made all the same
+        with mock.patch.dict(os.environ, {"MD_TEST_SELFTEST": "crash"}):
+            doc = self.p.make(case, os.path.join(self.tmp, "d"), "200", ("spots",), selftest_dir=st)
+        self.assertRegex(doc["notes"][0], r"^ParaView's self test didn't pass \(ParaView stopped, exit 9\), so ")
+        with open(ran) as f:
+            self.assertEqual(len(f.read().splitlines()), 3)             # until it passes, it runs each time
+        shutil.rmtree(st)
+        mine = os.path.join(self.tmp, "mine")
+        os.makedirs(mine)
+        os.symlink(mine, st)                                            # a link in its place isn't followed
+        doc = self.p.make(case, os.path.join(self.tmp, "e"), "200", ("spots",), selftest_dir=st)
+        self.assertRegex(doc["notes"][0], r"^ParaView's self test didn't pass \(its folder is in the way: it isn't "
+                                          r"one Mesh Doctor made\)")
+        self.assertEqual((os.listdir(mine), os.path.islink(st)), ([], True))
+
     def test_a_case_that_cant_be_pictured_says_why(self):
         self.assertEqual(self.p.why_not(self.case(times=()))[0], "not-ready")
         shutil.rmtree(os.path.join(self.tmp, "cases"))
@@ -4299,10 +4376,11 @@ for n in names:
         open(os.path.join(out + ".new", self.p.MARK), "w").close()
         self.assertEqual(len(self.p.make(case, out, "200", ("vortices",))["pictures"]), 3)
 
-    def test_the_job_pictures_a_case_of_the_cases_folder_into_the_workspace(self):
-        import api_v1, jobs, schema
-        case, ws = self.case(times=("100", "200")), os.path.join(self.tmp, "work")
-        launched, ram = [], []
+    def jobs_here(self, case):
+        """POST /jobs of picture jobs of `case`, launched nowhere: (the workspace, the commands launched, the memory
+        checks, post)."""
+        import api_v1, jobs
+        ws, launched, ram = os.path.join(self.tmp, "work"), [], []
         for patch in (mock.patch.dict(os.environ, {"MESHDOCTOR_CASES": os.path.dirname(case),
                                                    "MESHDOCTOR_WORKSPACE": ws}),
                       mock.patch.object(jobs, "_spawn", lambda argv: launched.append(argv) or 2 ** 22 + 9),
@@ -4314,11 +4392,16 @@ for n in names:
         def post(params):
             body = json.dumps({"kind": "pictures", "params": params}).encode()
             return api_v1.handle("POST", "/api/v1/jobs", {}, body, "application/json")
+        return ws, launched, ram, post
 
+    def test_the_job_pictures_a_case_of_the_cases_folder_into_the_workspace(self):
+        import jobs, schema
+        case = self.case(times=("100", "200"))
+        ws, launched, ram, post = self.jobs_here(case)
         st, job, _ = post({"name": "ahmedP", "kinds": "vortices,spots,vortices"})
         self.assertEqual(st, 202, job)
-        self.assertEqual((job["kind"], job["params"]),
-                         ("pictures", {"name": "ahmedP", "time": "200", "kinds": ["vortices", "spots"]}))
+        self.assertEqual((job["kind"], job["params"]), ("pictures", {"name": "ahmedP", "time": "200",
+                                                                     "kinds": ["vortices", "spots"], "mean": False}))
         self.assertEqual((job["log"], job["result"]),
                          (".pictures/ahmedP/200.log", ".pictures/ahmedP/200/pictures.json"))
         self.assertEqual(ram, [(case, "pictures")])                       # ParaView's memory, on the case's mesh
@@ -4333,12 +4416,28 @@ for n in names:
         self.assertEqual((st, doc["error"]["code"], len(launched)), (409, "busy", 1))
         self.assertEqual(schema.validate(jobs.get(job["id"]), "job"), [])  # the job schema has the kind
 
+    def test_a_mean_flow_job_makes_its_own_set(self):
+        case = self.case(times=("0.0003", "0.0006"), mean={"0.0006": "0.0003"})
+        ws, launched, _, post = self.jobs_here(case)
+        st, doc, _ = post({"name": "ahmedP", "time": "0.0003", "mean": True})
+        self.assertEqual((st, doc["error"]["message"]),
+                         (400, "ahmedP's time 0.0003 has no mean flow (UMean and pMean); its latest times with one: "
+                               "0.0006"))
+        st, job, _ = post({"name": "ahmedP", "mean": True})              # the latest time with one
+        self.assertEqual(st, 202, job)
+        self.assertEqual((job["params"], job["log"]),
+                         ({"name": "ahmedP", "time": "0.0006", "kinds": list(self.p.KINDS), "mean": True},
+                          ".pictures/ahmedP/0.0006_mean.log"))
+        self.assertEqual(launched[0][-3:], ["--out", os.path.join(ws, ".pictures", "ahmedP", "0.0006_mean"),
+                                            "--mean"])
+
     def test_the_job_takes_a_time_and_the_kinds(self):
         import api_v1, schema
         params = api_v1.JOBS["pictures"]["params"]
-        for good in ({"name": "ahmed"}, {"name": "ahmed", "time": "0.0012", "kinds": "cuts,spots"}):
+        for good in ({"name": "ahmed"}, {"name": "ahmed", "time": "0.0012", "kinds": "cuts,spots", "mean": True}):
             self.assertEqual(schema.check(good, params), [], good)
-        for bad in ({"name": "ahmed", "kinds": "cuts,photos"}, {"name": "ahmed", "time": "../0"}):
+        for bad in ({"name": "ahmed", "kinds": "cuts,photos"}, {"name": "ahmed", "time": "../0"},
+                    {"name": "ahmed", "mean": "yes"}):
             self.assertNotEqual(schema.check(bad, params), [], bad)
 
 

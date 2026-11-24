@@ -1760,7 +1760,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.15"
+    "version": "1.16"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -3764,7 +3764,7 @@
                   },
                   {
                     "additionalProperties": false,
-                    "description": "make pictures of a solved case's flow with ParaView, offscreen, at a written time: cuts from its cut list (cuts.json), its vortices, and any spot of unphysical pressure on its walls (Cp below -5: a numerical error). The case is only read: ParaView reads it through a folder of links, and the pictures go in the workspace, with a list of them (API 1.15)",
+                    "description": "make pictures of a solved case's flow with ParaView, offscreen, at a written time, or of a transient run's mean flow: cuts from its cut list (cuts.json) or made from its model's size, its vortices, and any spot of unphysical pressure on its walls (Cp below -5: a numerical error). The case is only read: ParaView reads it through a folder of links, and the pictures go in the workspace, with a list of them; a computer's first set starts with ParaView's self test (API 1.15; the mean flow and the self test, API 1.16)",
                     "properties": {
                       "kind": {
                         "enum": [
@@ -3780,6 +3780,11 @@
                             "pattern": "^(cuts|vortices|spots)(,(cuts|vortices|spots))*$",
                             "type": "string"
                           },
+                          "mean": {
+                            "default": false,
+                            "description": "a transient run's mean flow (UMean and pMean) in place of the flow at that time: a time written once its averaging is on (GET /runs' averaging); its set is <time>_mean (API 1.16)",
+                            "type": "boolean"
+                          },
                           "name": {
                             "description": "a case in the cases folder with a written result: a run (GET /runs), or a case you made (GET /cases)",
                             "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
@@ -3787,7 +3792,7 @@
                           },
                           "time": {
                             "default": "",
-                            "description": "the written time to picture, as its folder says it (default: the latest on the case's whole mesh)",
+                            "description": "the written time to picture, as its folder says it (default: the latest on the case's whole mesh; with mean, the latest with a mean flow)",
                             "pattern": "^([0-9][0-9.eE+-]*)?$",
                             "type": "string"
                           }

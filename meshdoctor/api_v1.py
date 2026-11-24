@@ -28,7 +28,7 @@ import tplan
 import validate
 import version
 
-API_VERSION = "1.15"
+API_VERSION = "1.16"
 PREFIX = "/api/v1"
 WRITES_MAX = solve.transient.MAX_WRITES   # the most times a stretch of a transient run writes
 MAX_BODY = 64 * 1024
@@ -844,20 +844,28 @@ JOBS = {
         "links": lambda n: {"tplan": f"{PREFIX}/tplans/{n}"},
     },
     "pictures": {
-        "summary": "make pictures of a solved case's flow with ParaView, offscreen, at a written time: cuts from its "
-                   "cut list (cuts.json), its vortices, and any spot of unphysical pressure on its walls (Cp below "
-                   "-5: a numerical error). The case is only read: ParaView reads it through a folder of links, and "
-                   "the pictures go in the workspace, with a list of them (API 1.15)",
+        "summary": "make pictures of a solved case's flow with ParaView, offscreen, at a written time, or of a "
+                   "transient run's mean flow: cuts from its cut list (cuts.json) or made from its model's size, its "
+                   "vortices, and any spot of unphysical pressure on its walls (Cp below -5: a numerical error). The "
+                   "case is only read: ParaView reads it through a folder of links, and the pictures go in the "
+                   "workspace, with a list of them; a computer's first set starts with ParaView's self test (API "
+                   "1.15; the mean flow and the self test, API 1.16)",
         "params": _params({"name": dict(NAME, description="a case in the cases folder with a written result: a run "
                                                           "(GET /runs), or a case you made (GET /cases)"),
                            "time": {"type": "string", "default": "", "pattern": r"^([0-9][0-9.eE+-]*)?$",
                                     "description": "the written time to picture, as its folder says it (default: "
-                                                   "the latest on the case's whole mesh)"},
+                                                   "the latest on the case's whole mesh; with mean, the latest with "
+                                                   "a mean flow)"},
                            "kinds": {"type": "string", "default": ",".join(pictures.KINDS),
                                      "pattern": r"^(cuts|vortices|spots)(,(cuts|vortices|spots))*$",
-                                     "description": "what to make, comma-separated: cuts, vortices, spots"}},
+                                     "description": "what to make, comma-separated: cuts, vortices, spots"},
+                           "mean": {"type": "boolean", "default": False,
+                                    "description": "a transient run's mean flow (UMean and pMean) in place of the "
+                                                   "flow at that time: a time written once its averaging is on (GET "
+                                                   "/runs' averaging); its set is <time>_mean (API 1.16)"}},
                           ["name"]),
-        "start": lambda a: pictures.start(a["name"], a["time"] or None, tuple(dict.fromkeys(a["kinds"].split(",")))),
+        "start": lambda a: pictures.start(a["name"], a["time"] or None, tuple(dict.fromkeys(a["kinds"].split(","))),
+                                          a["mean"]),
         "links": lambda n: {},
     },
 }

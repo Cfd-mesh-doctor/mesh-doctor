@@ -8,13 +8,17 @@
 #
 # Usage (WSL): PYTHONPATH=/usr/lib/python3/dist-packages pvbatch --force-offscreen-rendering vortex_views.py \
 #              CASE.foam OUTDIR "Q1,Q2,..." --walls p1,p2,... [--views rear34,top,side,front34,zoom]
-#              [--zoom PATCH] [--note "text; {it}"]
+#              [--zoom PATCH] [--note "text; {it}"] [--mean]
 # Axes: x forward (the flow goes toward -x), z up, the model on a ground at z = 0. --zoom PATCH adds a close-up view
-# around that patch.
+# around that patch. --mean: the vortices of a transient run's mean flow (UMean, from its fieldAverage) in place of U.
 #              vortex_views.py --selftest OUTDIR      (a synthetic vortex: checks the pipeline and the colour sign)
+# The self test's verdict goes in OUTDIR/selftest.json, {passed, reason, wx, drawn, red, blue}: its picture from
+# behind must show the test vortex, red (an offscreen renderer that draws nothing gives a blank picture); it exits 3
+# when it didn't pass.
 # Q values in 1/s^2. Files: OUTDIR/Q<value>_<view>.png. Q comes from the reader's point velocity (cell-to-point) with
 # the Gradient filter's faster approximation (cell gradients averaged to the points), so it is a little smoothed:
 # the Q values are levels to look at, not the solver's own numbers. Read-only on the case.
+import json
 import math
 import os
 import sys
@@ -42,6 +46,8 @@ NOTE = opt('--note', 'OpenFOAM result, iteration {it}')
 W, H = 1920, 1080
 ASPECT = W / H
 CAR = opt('--walls', 'none').split(',')
+MEAN = '--mean' in sys.argv
+UF = 'UMean' if MEAN else 'U'          # the velocity read: a transient run's mean flow, with --mean
 GREY = [0.78, 0.78, 0.80]
 INK = [0.12, 0.12, 0.14]
 T0 = time.time()
@@ -247,14 +253,14 @@ def times(r):
         return [] if tv is None else [float(tv)]
 
 
-def qcriterion(vol):
-    """Point arrays 'Q' and 'Vorticity' from the point velocity U (no 9-component gradient array kept)."""
+def qcriterion(vol, field='U'):
+    """Point arrays 'Q' and 'Vorticity' from the point velocity `field` (no 9-component gradient array kept)."""
     for name in ('Gradient', 'GradientOfUnstructuredDataSet'):
         maker = globals().get(name)
         if maker is None:
             continue
         g = maker(Input=vol)
-        setp(g, ScalarArray=['POINTS', 'U'], ComputeGradient=0, ComputeVorticity=1, ComputeQCriterion=1,
+        setp(g, ScalarArray=['POINTS', field], ComputeGradient=0, ComputeVorticity=1, ComputeQCriterion=1,
              FasterApproximation=1, VorticityArrayName='Vorticity', QCriterionArrayName='Q')
         update(g)
         keys = g.PointData.keys()
@@ -302,9 +308,9 @@ def pictures(car_src, field, boxes, wake_x):
         log('Q = %g: %d triangles; colour range +-%g 1/s' % (q, src.GetDataInformation().GetNumberOfCells(), r), mem())
         for key in VIEWS:
             words, d, up, par, bk = VIEWDEF[key]
-            title = ('Vortices: Q-criterion iso-surface at Q = %s 1/s^2;  %s\n'
+            title = ('Vortices%s: Q-criterion iso-surface at Q = %s 1/s^2;  %s\n'
                      'Coloured by x-vorticity: red = the air turns clockwise seen from behind, blue = anticlockwise, '
-                     'white = it turns about another axis' % (fmtq(q), words))
+                     'white = it turns about another axis' % (' of the mean flow' if MEAN else '', fmtq(q), words))
             steps = [lambda: show(src, wx=r), lambda: frame(boxes[bk], d, up, par)]
             if car_src is not None:
                 steps.insert(0, lambda: show(car_src))
@@ -315,8 +321,27 @@ def pictures(car_src, field, boxes, wake_x):
         Delete(iso)
 
 
+def colours(path):
+    """The shares of the middle of a picture (clear of its title and its colour bar) that are drawn (not near white),
+    red and blue."""
+    from vtkmodules.util.numpy_support import vtk_to_numpy
+    from vtkmodules.vtkIOImage import vtkPNGReader
+    r = vtkPNGReader()
+    r.SetFileName(path)
+    r.Update()
+    img = r.GetOutput()
+    w, h, _ = img.GetDimensions()
+    a = vtk_to_numpy(img.GetPointData().GetScalars()).reshape(h, w, -1)[:, :, :3].astype(int)
+    m = a[int(0.15 * h):int(0.80 * h), int(0.10 * w):int(0.75 * w)]      # (its rows go from the bottom up)
+    R, G, B = m[..., 0], m[..., 1], m[..., 2]
+    n = float(R.size)
+    return (float((m.min(axis=2) < 230).sum()) / n, float(((R > G + 60) & (R > B + 60)).sum()) / n,
+            float(((B > R + 40) & (B > G + 20)).sum()) / n)
+
+
 def selftest():
-    """A Gaussian vortex turning about +x (w_x > 0) in a uniform -x stream: its Q tube must come out red."""
+    """A Gaussian vortex turning about +x (w_x > 0) in a uniform -x stream: its Q tube must come out red.  Its verdict
+    goes in OUTDIR/selftest.json; True when it passed."""
     global NOTE, VIEWS
     NOTE = 'Self-test: a synthetic vortex turning about +x (w_x > 0), so it must be red (clockwise seen from behind)'
     VIEWS = ['rear34', 'side']
@@ -333,8 +358,30 @@ def selftest():
     from vtk.numpy_interface import dataset_adapter as dsa
     iso = Contour(Input=g, ContourBy=['POINTS', 'Q'], Isosurfaces=[10.0])
     w = dsa.WrapDataObject(sm.Fetch(iso)).PointData['Vorticity']
+    wx = float(w[:, 0].mean())
     log('self-test: on the Q = 10 tube, w_x averages %.2f and w_y, w_z %.2f, %.2f (expected: w_x positive, the others '
-        'about 0)' % (float(w[:, 0].mean()), float(w[:, 1].mean()), float(w[:, 2].mean())))
+        'about 0)' % (wx, float(w[:, 1].mean()), float(w[:, 2].mean())))
+    saved = 'Q10_rear34' in DONE
+    drawn, red, blue = colours(os.path.join(OUT, 'Q10_rear34.png')) if saved else (0.0, 0.0, 0.0)
+    if not saved:
+        why = "the test vortex's picture wasn't saved"
+    elif drawn < 0.005:
+        why = 'the picture of the test vortex is blank: ParaView drew nothing offscreen'
+    elif wx <= 0:
+        why = 'the test vortex turns the wrong way: its x-vorticity averages %.2f 1/s' % wx
+    elif blue > red:
+        why = 'the test vortex came out blue, not red: the colours are the wrong way round'
+    elif red < 0.01:
+        why = 'the test vortex came out without its colour: drawn, but not red'
+    else:
+        why = None
+    doc = {'passed': why is None, 'reason': why or 'the test vortex came out red', 'wx': round(wx, 3),
+           'drawn': round(drawn, 4), 'red': round(red, 4), 'blue': round(blue, 4)}
+    with open(os.path.join(OUT, 'selftest.json'), 'w') as f:
+        json.dump(doc, f, indent=1)
+    log('self-test: %s: %s (the middle of its picture from behind: %.1f %% drawn, %.1f %% red, %.1f %% blue)'
+        % ('passed' if why is None else 'FAILED', doc['reason'], 100 * drawn, 100 * red, 100 * blue))
+    return why is None
 
 
 def main():
@@ -353,14 +400,20 @@ def main():
         pad = 0.5 * max(zb[1] - zb[0], zb[3] - zb[2], zb[5] - zb[4])
         boxes['wheel'] = [zb[0] - pad, zb[1] + pad, zb[2] - pad, zb[3] + pad, max(cb[4], zb[4] - pad), zb[5] + pad]
     log('case', CASE, 'time', TIME, 'model', cb, mem())
-    ri = reader(['internalMesh'], ['U'], poly=0)                   # poly 0: a third fewer cells than split polyhedra
+    ri = reader(['internalMesh'], [UF], poly=0)                    # poly 0: a third fewer cells than split polyhedra
     update(ri)
-    log('volume', ri.GetDataInformation().GetNumberOfCells(), 'cells', mem())
-    g = qcriterion(ri)
+    log('volume', ri.GetDataInformation().GetNumberOfCells(), 'cells' + (', the mean flow' if MEAN else ''), mem())
+    g = qcriterion(ri, UF)
     pictures(car, g, boxes, cb[0] - 1.25)
 
 
+PASSED = True
 try:
-    selftest() if SELFTEST else main()
+    if SELFTEST:
+        PASSED = selftest()
+    else:
+        main()
 finally:
     log('done: %d images, failed: %s' % (len(DONE), FAILED or 'none'), mem())
+if not PASSED:
+    sys.exit(3)
