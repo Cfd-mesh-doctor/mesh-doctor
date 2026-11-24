@@ -56,7 +56,7 @@ export const DESIGN: DocSection[] = [
             [
               "`tplan.py`",
               "core + CLI",
-              "the transient plan: `plan()` returns a `tplan` document, from Mesh Doctor's `foamCourantCells` (OpenFOAM's `CourantNo` where it isn't built); it runs OpenFOAM only in a throwaway shadow case, so the case is only read. A `tplan` job (`start()`) writes it to `<workspace>/.tplans/<case>.json`, which `GET /tplans/{name}` answers, and the cell set of the fastest cells to `<workspace>/.tplans/<case>.sets`"
+              "the transient plan: `plan()` returns a `tplan` document, from Mesh Doctor's `foamCourantCells` (OpenFOAM's `CourantNo` where it isn't built); it runs OpenFOAM only in a throwaway shadow case, so the case is only read. A `tplan` job (`start()`) writes it to `<workspace>/.tplans/<case>.json`, which `GET /tplans/{name}` answers, and the cell set of the fastest cells to `<workspace>/.tplans/<case>.sets` (a split case's for its whole mesh too, where it has the one it was split from, each cell found by its processor's `cellProcAddressing`)"
             ],
             [
               "`repair.py`, `abtest.py`",
@@ -385,7 +385,7 @@ export const DESIGN: DocSection[] = [
             [
               "`GET /tplans/{name}`",
               "(new)",
-              "the transient plan a `tplan` job made of a case in the cases folder, from its latest result (`tplan` schema): the time step a transient run would need at each max Courant number, which cells set it (where they are, their nearest wall, the flow's speed and their shape there, and the cell set of them the job wrote), and the steps and hours such a run would take; `404 not-found` before a plan (API 1.6)"
+              "the transient plan a `tplan` job made of a case in the cases folder, from its latest result (`tplan` schema): the time step a transient run would need at each max Courant number, which cells set it (where they are, their nearest wall, the flow's speed and their shape there, and the cell set of them the job wrote, and whether it is for the whole mesh), and the steps and hours such a run would take; `404 not-found` before a plan (API 1.6)"
             ]
           ]
         }

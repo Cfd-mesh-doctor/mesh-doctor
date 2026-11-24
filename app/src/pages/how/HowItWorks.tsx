@@ -350,8 +350,10 @@ export function HowItWorks() {
                   <code>--sets &lt;folder&gt;</code> also writes those cells as the cell set{" "}
                   <code>fastestCells</code>, laid out as the case is (
                   <code>[processorN/]constant/polyMesh/sets/fastestCells</code>): copy its folders into the case to see
-                  the cells in paraFoam (Include Sets, and Decomposed Case for a case on processors) or to pick them
-                  with <code>topoSet</code>.
+                  the cells in paraFoam (Include Sets) or to pick them with <code>topoSet</code>. A case split on
+                  processes gets it for each process, and for its whole mesh too where it has the one it was split
+                  from: each cell is found there by its processor's <code>cellProcAddressing</code>. Without that, it
+                  is for each process only (in paraFoam, a Decomposed Case), and the plan says why.
                 </li>
               </ul>
               <p>

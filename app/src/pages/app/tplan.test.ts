@@ -104,6 +104,22 @@ describe("a transient plan in words", () => {
       + "(Include Sets) or pick them with topoSet.");
   });
 
+  it("says a split case's cell set is for its whole mesh too, or for each process only (as before 1.2)", () => {
+    const split = { ...PLAN, schemaVersion: "1.2", decomposed: true, cellSet: { name: "fastestCells", cells: 5, whole: true } };
+    expect(cellSetLine(split)).toBe("The 5 fastest are saved as the cell set `fastestCells` in the workspace "
+      + "(`.tplans/ahmed.sets`, laid out as the case is: for its whole mesh and for each of its 2 processes): copy its "
+      + "folders into the case to see them in paraFoam (Include Sets) or pick them with topoSet.");
+    // the case had no whole mesh it was split from (a note says why), or an engine before 1.2 planned it
+    const only = "The 5 fastest are saved as the cell set `fastestCells` in the workspace (`.tplans/ahmed.sets`, laid "
+      + "out as the case is: for each of its 2 processes only): copy its folders into the case to see them in paraFoam "
+      + "(Include Sets, as a Decomposed Case) or pick them with topoSet run in parallel.";
+    expect(cellSetLine({ ...split, cellSet: { ...split.cellSet, whole: false } })).toBe(only);
+    expect(cellSetLine({ ...split, schemaVersion: "1.1", cellSet: { name: "fastestCells", cells: 5 } })).toBe(only);
+    expect(cellSetLine({ ...split, processors: 1 })).toMatch(/laid out as the case is: for its whole mesh and for its one process\): /);
+    // a case that isn't split: its set is on its whole mesh, as ever
+    expect(cellSetLine({ ...split, decomposed: false, processors: 1 })).toBe(cellSetLine({ ...PLAN, cellSet: split.cellSet }));
+  });
+
   it("says what it was planned from, and whether the run has been solved further since", () => {
     expect(planMade(PLAN)).toBe("Planned from iteration 300 of this run, in 12 s.");
     expect(planMade(PLAN, "case")).toBe("Planned from its result at time 300, in 12 s.");     // a case you made's

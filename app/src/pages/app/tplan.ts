@@ -124,12 +124,19 @@ export function regionLines(p: TransientPlan, n = 3): string[] {
 }
 
 /** Where the plan saved its fastest cells as a cell set, to see in paraFoam or pick with topoSet; null when it saved
- * none (a plan made with OpenFOAM's CourantNo, where foamCourantCells isn't built, or by an engine before it). */
+ * none (a plan made with OpenFOAM's CourantNo, where foamCourantCells isn't built, or by an engine before it). A split
+ * case's is for each of its processes, and for its whole mesh too where the engine found its cells there (`whole`,
+ * from each processor's cellProcAddressing); an engine before that wrote it for each process only. */
 export function cellSetLine(p: TransientPlan): string | null {
   if (!p.cellSet) return null;
+  const split = p.decomposed === true;
+  const whole = !split || p.cellSet.whole === true;
+  const each = (p.processors ?? 1) > 1 ? `each of its ${planProcs(p)}` : "its one process";
+  const where = !split ? "" : whole ? `: for its whole mesh and for ${each}` : `: for ${each} only`;
   return `The ${formatInt(p.cellSet.cells)} fastest are saved as the cell set \`${p.cellSet.name}\` in the workspace `
-    + `(\`.tplans/${p.case}.sets\`, laid out as the case is): copy its folders into the case to see them in paraFoam `
-    + "(Include Sets) or pick them with topoSet.";
+    + `(\`.tplans/${p.case}.sets\`, laid out as the case is${where}): copy its folders into the case to see them in `
+    + (whole ? "paraFoam (Include Sets) or pick them with topoSet."
+      : "paraFoam (Include Sets, as a Decomposed Case) or pick them with topoSet run in parallel.");
 }
 
 /** The iteration (a steady run's time) the plan was made from; null for a time that isn't a number. */

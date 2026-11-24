@@ -23,13 +23,15 @@ The case is only read: OpenFOAM runs in a throwaway shadow case whose mesh,
 settings, flux and speed are links to it, so what it writes lands in a
 temporary folder.  --sets DIR writes the fastest cells as the cell set
 fastestCells into DIR, in the case's layout ([processorN/]constant/polyMesh/
-sets/fastestCells), for a picture, a repair or topoSet in a copy of the case.
-The web app starts the same as a `tplan` job (POST /api/v1/jobs) on a case in
-the cases folder, which writes the plan to <workspace>/.tplans/<case>.json and
-the cell set to <workspace>/.tplans/<case>.sets; GET /api/v1/tplans/{case}
-answers the plan.
+sets/fastestCells), for a picture, a repair or topoSet in a copy of the case:
+a case split on processors gets it on each of them, and on its whole mesh too
+where it has the one it was split from, each cell found there by its
+processor's cellProcAddressing.  The web app starts the same as a `tplan` job
+(POST /api/v1/jobs) on a case in the cases folder, which writes the plan to
+<workspace>/.tplans/<case>.json and the cell set to
+<workspace>/.tplans/<case>.sets; GET /api/v1/tplans/{case} answers the plan.
 """
-import argparse, array, collections, glob, gzip, json, math, os, re, shutil, statistics, sys, tempfile, time
+import argparse, array, collections, glob, gzip, json, math, os, re, shutil, statistics, struct, sys, tempfile, time
 
 import caseinfo, config, md_api, prog, ramguard, schema
 
@@ -47,6 +49,11 @@ SET = "fastestCells"           # the cell set of the fastest cells that --sets w
 SET_MARK = ".meshdoctor-sets"  # in a folder --sets wrote: only such a folder is ever replaced
 CHUNK = 1 << 20
 TIME_DIR = re.compile(r"^\d+(\.\d+)?(e[-+]?\d+)?$")
+HEADER = re.compile(rb"\bFoamFile\s*\{([^}]*)\}")
+LIST = re.compile(rb"\s*(?:(?://[^\n]*|/\*.*?\*/)\s*)*(\d+)\s*([({])?", re.S)    # after the header: N( or N{
+UNIFORM = re.compile(rb"\s*(\d+)\s*\}")
+TOKEN = re.compile(rb"\S+")
+END = re.compile(rb"(?:\s|//[^\n]*)*")     # how a file ends: white space and its // *** // line
 
 
 # ---- reading OpenFOAM fields -------------------------------------------------------
@@ -78,6 +85,57 @@ def read_internal(path):
     if len(out) != n * ncomp:
         raise ValueError(f"{path}: {len(out)} values, expected {n * ncomp}")
     return out
+
+
+def _ends(raw, at):
+    """Nothing but white space and // comments from `at` to the end of `raw`, a few kB at most: where a file ends."""
+    return len(raw) - at <= 4096 and END.fullmatch(raw, at) is not None
+
+
+def read_labels(path, want=()):
+    """A labelList file, such as a processor's cellProcAddressing (the label in the whole mesh of each of its
+    cells): (its length, {i: its i-th label, for each i in `want`}).  ASCII or binary, plain or .gz; a binary one's
+    labels are of 32 or 64 bits as its header's arch says, or where it has none (OpenFOAM 14 writes none), as puts
+    the list's end where it is.  With nothing wanted, only its start is read."""
+    want, name = set(want), os.path.basename(path)
+    opener = gzip.open if path.endswith(".gz") else open
+    with opener(path, "rb") as fh:
+        raw = fh.read() if want else fh.read(CHUNK)
+    head = HEADER.search(raw)
+    m = head and LIST.match(raw, head.end())
+    if not m:
+        raise ValueError(f"{name}: not a list of labels")
+    n, at, opened = int(m.group(1)), m.end(), m.group(2)
+    if not want:
+        return n, {}
+    if max(want) >= n:
+        raise ValueError(f"{name}: has {n} labels, not {max(want) + 1}")
+    if opened == b"{":                            # n times one label: how OpenFOAM writes a list all the same
+        v = UNIFORM.match(raw, at)
+        if not v:
+            raise ValueError(f"{name}: its list isn't closed")
+        return n, dict.fromkeys(want, int(v.group(1)))
+    if opened != b"(":
+        raise ValueError(f"{name}: not a list of labels")
+    if re.search(rb"\bformat\s+binary", head.group(1)):
+        arch = re.search(rb"label\s*=\s*(32|64)", head.group(1))
+        for size in (int(arch.group(1)) // 8,) if arch else (4, 8):
+            if raw[at + n * size:at + n * size + 1] == b")" and _ends(raw, at + n * size + 1):
+                break
+        else:
+            raise ValueError(f"{name}: not {n} labels of 32 or 64 bits")
+        fmt = (">" if re.search(rb"\bMSB\b", head.group(1)) else "<") + ("i" if size == 4 else "q")
+        return n, {i: struct.unpack_from(fmt, raw, at + i * size)[0] for i in want}
+    end = raw.find(b")", at)                      # ASCII: N ( a b c ... ), on one line or one a line
+    if end < 0:
+        raise ValueError(f"{name}: its list isn't closed")
+    got, k = {}, -1
+    for k, v in enumerate(TOKEN.finditer(raw, at, end)):
+        if k in want:
+            got[k] = int(v.group())
+    if k + 1 != n:
+        raise ValueError(f"{name}: {k + 1} labels, not {n}")
+    return n, got
 
 
 def _field(d, name):
@@ -382,11 +440,42 @@ def cell_set(labels, name=SET):
             f"{len(labels)}\n(\n" + "".join(f"{c}\n" for c in labels) + ")\n")
 
 
-def write_sets(dest, p):
-    """Write the plan's fastest cells as the cell set SET into folder `dest`, in the case's layout: constant/polyMesh/
-    sets/SET, or processorN/constant/polyMesh/sets/SET on every processor of a decomposed case (empty where it has
-    none, as OpenFOAM reads a set on each).  Written whole beside `dest`, then put in place; a `dest` already there
-    is replaced only if this wrote it (its SET_MARK file), so no folder of yours is ever removed."""
+def whole_cells(case, nproc, by):
+    """The fastest cells of a case split on `nproc` processors (`by`: each processor's, as its own labels) as labels
+    of its whole mesh, sorted, each found by its processor's cellProcAddressing (the label in the whole mesh of each
+    of its cells): (labels, None), or (None, why not) where the case hasn't the whole mesh it was split from."""
+    whole = ramguard.owner_cells(os.path.join(case, "constant", "polyMesh"))
+    if not whole:
+        return None, "the case has no whole mesh (constant/polyMesh)"
+    out, total = [], 0
+    for n in range(nproc):
+        name, poly = f"processor{n}", os.path.join(case, f"processor{n}", "constant", "polyMesh")
+        path = _field(poly, "cellProcAddressing")
+        if not path:
+            return None, f"{name} has no cellProcAddressing, which says where its cells are in the whole mesh"
+        try:
+            size, labels = read_labels(path, by.get(n, ()))
+        except (OSError, ValueError) as e:
+            return None, f"{name}'s cellProcAddressing can't be read ({e})"
+        cells = ramguard.owner_cells(poly)
+        if size != cells:
+            return None, (f"{name}'s cellProcAddressing is of {size:,} cells and its mesh of "
+                          f"{f'{cells:,}' if cells else 'an unknown number'}: it was meshed again since it was split")
+        total += size
+        out += labels.values()
+    if total != whole or not all(0 <= c < whole for c in out):
+        return None, (f"its processors' {total:,} cells aren't the whole mesh's {whole:,}: the whole mesh was made "
+                      "again since it was split")
+    return sorted(out), None
+
+
+def write_sets(dest, p, case):
+    """Write the plan's fastest cells as the cell set SET into folder `dest`, in the layout of `case`, the case it
+    planned: constant/polyMesh/sets/SET, or processorN/constant/polyMesh/sets/SET on every processor of a split case
+    (empty where it has none, as OpenFOAM reads a set on each) and constant/polyMesh/sets/SET too where the case has
+    the whole mesh it was split from (whole_cells).  Written whole beside `dest`, then put in place; a `dest` already
+    there is replaced only if this wrote it (its SET_MARK file), so no folder of yours is ever removed.  Returns why
+    a split case's set isn't on its whole mesh too, or None where it is."""
     dest = os.path.abspath(dest)
     if os.path.islink(dest) or (os.path.lexists(dest) and not os.path.isfile(os.path.join(dest, SET_MARK))):
         raise ValueError(f"{os.path.basename(dest)} is there already and isn't a folder of cell sets this wrote: "
@@ -394,24 +483,34 @@ def write_sets(dest, p):
     by = {}
     for proc, cell in p["fastestCells"]:
         by.setdefault(proc, []).append(cell)
-    procs = [f"processor{n}" for n in range(p["processors"])] if p.get("decomposed") else [""]
+    why, nproc = None, p["processors"]
+    if p.get("decomposed"):
+        sets = {f"processor{n}": sorted(by.get(n, [])) for n in range(nproc)}
+        labels, why = whole_cells(case, nproc, by)
+        if labels is not None:
+            sets[""] = labels
+        where = (f", on its whole mesh and on each of its {nproc} processors" if why is None else
+                 f", on each of its {nproc} processors (not on its whole mesh: {why})")
+    else:
+        sets, where = {"": sorted(by.get(0, []))}, ""
     tmp, old = f"{dest}.{os.getpid()}.tmp", f"{dest}.{os.getpid()}.old"
     shutil.rmtree(tmp, ignore_errors=True)
     try:
-        for n, sub in enumerate(procs):
+        for sub, cells in sets.items():
             d = os.path.join(tmp, sub, "constant", "polyMesh", "sets")
             os.makedirs(d)
             with open(os.path.join(d, SET), "w") as f:
-                f.write(cell_set(sorted(by.get(n, []))))
+                f.write(cell_set(cells))
         with open(os.path.join(tmp, SET_MARK), "w") as f:
             f.write(f"The cell set {SET}: the {len(p['fastestCells'])} fastest cells of the transient plan of "
-                    f"{p['case']} at {p['time']}, which set its time step.\n")
+                    f"{p['case']} at {p['time']}, which set its time step{where}.\n")
         if os.path.lexists(dest):
             os.replace(dest, old)
         os.replace(tmp, dest)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
         shutil.rmtree(old, ignore_errors=True)
+    return why
 
 
 def summary(p):
@@ -522,7 +621,8 @@ def main(argv=None):
     ap.add_argument("--top", type=int, default=TOP, help="the fastest cells to locate (default %(default)s)")
     ap.add_argument("-o", "--out", help="write the plan here (JSON) instead of printing it")
     ap.add_argument("--sets", help=f"also write the fastest cells as the cell set {SET} into this folder, in the "
-                                   "case's layout ([processorN/]constant/polyMesh/sets): a new folder, or one this "
+                                   "case's layout ([processorN/]constant/polyMesh/sets; a split case's on its whole "
+                                   "mesh too where it has the one it was split from): a new folder, or one this "
                                    "wrote before")
     a = ap.parse_args(argv)
     try:
@@ -540,8 +640,10 @@ def main(argv=None):
     try:
         p = plan(a.case, a.time, targets, a.outer, a.flow_time, a.length, a.top)
         if a.sets and p.get("fastestCells") is not None:     # foamCourantCells' plans know their cells
-            write_sets(a.sets, p)
-            p["cellSet"] = {"name": SET, "cells": len(p["fastestCells"])}
+            why = write_sets(a.sets, p, a.case)
+            p["cellSet"] = {"name": SET, "cells": len(p["fastestCells"]), "whole": why is None}
+            if why:
+                p["notes"].append(f"The cell set {SET} is on each processor only, not on the whole mesh: {why}.")
     except (ValueError, RuntimeError, MemoryError) as e:
         sys.exit(f"transient-plan: {e}")
     except OSError as e:

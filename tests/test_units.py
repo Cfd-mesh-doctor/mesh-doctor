@@ -455,6 +455,37 @@ def write_field(path, values, ncomp=1, binary=True, gz=False):
         f.write(data)
 
 
+def write_labels(path, labels, binary=False, size=4, arch=True, order="<"):
+    """An OpenFOAM labelList file such as cellProcAddressing (gzipped where `path` ends in .gz): ASCII (a short
+    list on one line, as OpenFOAM writes 10 or fewer), or binary of 32 or 64 bit labels, with an arch in its header
+    or none (OpenFOAM 14 writes none)."""
+    import gzip, struct
+    head = "FoamFile\n{\n    format      %s;\n" % ("binary" if binary else "ascii")
+    if arch:
+        head += '    arch        "%s;label=%d;scalar=64";\n' % ("MSB" if order == ">" else "LSB", 8 * size)
+    head += ('    class       labelList;\n    location    "constant/polyMesh";\n    object      cellProcAddressing;\n'
+             "}\n// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //\n\n\n")
+    n = len(labels)
+    if binary:     # N, then (its bytes), or nothing for none
+        body = f"{n}\n".encode() + (b"(" + struct.pack(f"{order}{n}{'iq'[size == 8]}", *labels) + b")" if n else b"")
+    elif n <= 10:
+        body = f"{n}({' '.join(map(str, labels))})".encode()
+    else:
+        body = (f"{n}\n(\n" + "".join(f"{c}\n" for c in labels) + ")").encode()
+    data = head.encode() + body + b"\n\n\n// " + b"*" * 73 + b" //\n"
+    with (gzip.open(path, "wb") if path.endswith(".gz") else open(path, "wb")) as f:
+        f.write(data)
+
+
+def write_owner(poly, cells):
+    """A polyMesh owner file's header, with its cell count in its note, as OpenFOAM writes it (its list isn't read)."""
+    os.makedirs(poly, exist_ok=True)
+    with open(os.path.join(poly, "owner"), "w") as f:
+        f.write('FoamFile\n{\n    format      ascii;\n    class       labelList;\n    note        "nPoints:%d  '
+                'nCells:%d  nFaces:%d  nInternalFaces:%d";\n    location    "constant/polyMesh";\n    object      '
+                'owner;\n}\n\n0()\n' % (8 * cells, cells, 6 * cells, 3 * cells))
+
+
 def write_cells(root, cells, gmax, ntop, lo=-4.0, width=0.02):
     """What foamCourantCells writes for one processor, in root/meshDoctor/courant/cells.txt: cells are (rate, (x, y,
     z), volume, aspect ratio, non-orthogonality, speed, wall distance, wall), -1 and "-" where it can't tell; gmax is
@@ -671,7 +702,8 @@ class TransientPlanTest(unittest.TestCase):
         dest = os.path.join(self.d, "plan.sets")
         p = {"case": "steady", "time": "300", "processors": 3, "decomposed": True,
              "fastestCells": [[2, 7], [0, 5], [2, 3]]}
-        self.tp.write_sets(dest, p)
+        # a split case with no whole mesh: on its processors only, and it says why
+        self.assertEqual(self.tp.write_sets(dest, p, self.case), "the case has no whole mesh (constant/polyMesh)")
         sets = lambda sub: os.path.join(dest, sub, "constant", "polyMesh", "sets", "fastestCells")      # noqa: E731
         with open(sets("processor2")) as f:
             text = f.read()
@@ -679,10 +711,14 @@ class TransientPlanTest(unittest.TestCase):
         self.assertTrue(text.endswith("}\n\n2\n(\n3\n7\n)\n"), text)
         with open(sets("processor1")) as f:                    # on every processor, empty where it has none
             self.assertTrue(f.read().endswith("}\n\n0\n(\n)\n"))
-        self.assertTrue(os.path.isfile(os.path.join(dest, ".meshdoctor-sets")))
+        self.assertEqual(sorted(os.listdir(dest)), [".meshdoctor-sets", "processor0", "processor1", "processor2"])
+        with open(os.path.join(dest, ".meshdoctor-sets")) as f:
+            self.assertIn("set its time step, on each of its 3 processors (not on its whole mesh: the case has no "
+                          "whole mesh (constant/polyMesh)).", f.read())
         # again: a whole new folder in its place, nothing of the old one left and nothing beside it
         open(os.path.join(dest, "stale"), "w").close()
-        self.tp.write_sets(dest, dict(p, processors=1, decomposed=False, fastestCells=[[0, 9], [0, 4]]))
+        self.assertIsNone(self.tp.write_sets(dest, dict(p, processors=1, decomposed=False,
+                                                        fastestCells=[[0, 9], [0, 4]]), self.case))
         with open(sets("")) as f:
             self.assertTrue(f.read().endswith("}\n\n2\n(\n4\n9\n)\n"))
         self.assertEqual(sorted(os.listdir(dest)), [".meshdoctor-sets", "constant"])
@@ -694,9 +730,125 @@ class TransientPlanTest(unittest.TestCase):
         os.symlink(dest, link)
         for there in (mine, link):
             with self.assertRaisesRegex(ValueError, "isn't a folder of cell sets this wrote: not replacing it"):
-                self.tp.write_sets(there, p)
+                self.tp.write_sets(there, p, self.case)
         self.assertEqual(os.listdir(mine), ["keep"])
         self.assertEqual(sorted(os.listdir(self.d)), ["link", "mine", "plan.sets"])
+
+    def test_a_split_cases_set_is_on_its_whole_mesh_too_each_cell_found_by_its_processors_cellProcAddressing(self):
+        # a whole mesh of 28 cells split on 4 processors, the label in the whole mesh of each of their cells written
+        # four ways: ASCII a label a line; binary of 32 bits gzipped, with no arch (as OpenFOAM 14 writes it); binary
+        # of 64 bits with its arch; ASCII on one line
+        whole_of = [[27, 3, 14, 0, 9, 21, 5, 18, 11, 24, 7, 16], [2, 25, 13, 8, 20, 1, 26], [6, 19, 12, 23, 4, 17],
+                    [10, 22, 15]]
+        ways = [("", {}), (".gz", {"binary": True, "arch": False}), ("", {"binary": True, "size": 8}), ("", {})]
+        poly = lambda n: os.path.join(self.case, f"processor{n}", "constant", "polyMesh")      # noqa: E731
+        addr = lambda n: os.path.join(poly(n), "cellProcAddressing" + ways[n][0])            # noqa: E731
+        whole = os.path.join(self.case, "constant", "polyMesh")
+        write_owner(whole, 28)
+        for n, labels in enumerate(whole_of):
+            write_owner(poly(n), len(labels))
+            write_labels(addr(n), labels, **ways[n][1])
+        p = {"case": "steady", "time": "300", "processors": 4, "decomposed": True,
+             "fastestCells": [[2, 5], [0, 11], [1, 0], [0, 3], [1, 6], [2, 0]]}
+        dest = os.path.join(self.d, "plan.sets")
+        sets = lambda sub: os.path.join(dest, sub, "constant", "polyMesh", "sets", "fastestCells")      # noqa: E731
+        before = self.listing()
+
+        def cells(sub):
+            with open(sets(sub)) as f:
+                n, rest = f.read().split("}\n\n")[1].split("\n(\n")
+            return int(n), [int(c) for c in rest.split()[:-1]]
+        self.assertIsNone(self.tp.write_sets(dest, p, self.case))
+        self.assertEqual(self.listing(), before)                         # the case is only read
+        # on its whole mesh: 17 is processor2's cell 5, 16 processor0's cell 11, and so on
+        self.assertEqual(cells(""), (6, [0, 2, 6, 16, 17, 26]))
+        self.assertEqual([cells(f"processor{n}") for n in range(4)], [(2, [3, 11]), (2, [0, 6]), (2, [0, 5]), (0, [])])
+        with open(os.path.join(dest, ".meshdoctor-sets")) as f:
+            self.assertIn("set its time step, on its whole mesh and on each of its 4 processors.", f.read())
+        # 64 bits with no arch: read as where the list ends says
+        write_labels(addr(2), whole_of[2], binary=True, size=8, arch=False)
+        self.assertIsNone(self.tp.write_sets(dest, p, self.case))
+        self.assertEqual(cells(""), (6, [0, 2, 6, 16, 17, 26]))
+
+        def says(path, old, new, opener=open):
+            """Change `old` to `new` in the file, as a torn or hand-edited one would be."""
+            with opener(path, "rb") as fh:
+                s = fh.read()
+            with opener(path, "wb") as fh:
+                fh.write(s.replace(old, new, 1))
+        import gzip
+        # where the case hasn't the whole mesh it was split from: on its processors only, and why
+        for say, change, undo in [
+                ("processor3 has no cellProcAddressing, which says where its cells are in the whole mesh",
+                 lambda: os.rename(addr(3), addr(3) + ".x"), lambda: os.rename(addr(3) + ".x", addr(3))),
+                # 7 labels said, 6 there
+                ("processor1's cellProcAddressing can't be read (cellProcAddressing.gz: not 7 labels of 32 or 64 bits)",
+                 lambda: (write_labels(addr(1), whole_of[1][:6], binary=True, arch=False),
+                          says(addr(1), b"\n6\n(", b"\n7\n(", gzip.open)),
+                 lambda: write_labels(addr(1), whole_of[1], binary=True, arch=False)),
+                # its last label, 16, gone
+                ("processor0's cellProcAddressing can't be read (cellProcAddressing: 11 labels, not 12)",
+                 lambda: says(addr(0), b"\n16\n)", b"\n)"), lambda: write_labels(addr(0), whole_of[0])),
+                ("processor0's cellProcAddressing is of 12 cells and its mesh of 13: it was meshed again since it was "
+                 "split", lambda: write_owner(poly(0), 13), lambda: write_owner(poly(0), 12)),
+                ("its processors' 28 cells aren't the whole mesh's 30: the whole mesh was made again since it was "
+                 "split",
+                 lambda: write_owner(whole, 30), lambda: write_owner(whole, 28)),
+                ("the case has no whole mesh (constant/polyMesh)",
+                 lambda: os.remove(os.path.join(whole, "owner")), lambda: write_owner(whole, 28))]:
+            change()
+            try:
+                self.assertEqual(self.tp.write_sets(dest, p, self.case), say)
+            finally:
+                undo()
+            self.assertFalse(os.path.exists(sets("")), say)
+            self.assertEqual(cells("processor0"), (2, [3, 11]))
+        self.assertIsNone(self.tp.write_sets(dest, p, self.case))             # all as it was
+        self.assertEqual(cells(""), (6, [0, 2, 6, 16, 17, 26]))
+
+    def test_read_labels(self):
+        f = os.path.join(self.d, "labels")
+        for kw in ({}, {"binary": True}, {"binary": True, "size": 8}, {"binary": True, "arch": False},
+                   {"binary": True, "size": 8, "arch": False}, {"binary": True, "order": ">"},
+                   {"binary": True, "size": 8, "order": ">"}):
+            for labels in ([5, 0, 2**31 - 1, 7], list(range(40, 0, -1))):
+                write_labels(f, labels, **kw)
+                self.assertEqual(self.tp.read_labels(f, [0, 2, len(labels) - 1]),
+                                 (len(labels), {0: labels[0], 2: labels[2], len(labels) - 1: labels[-1]}), kw)
+                self.assertEqual(self.tp.read_labels(f), (len(labels), {}))             # its length only
+        write_labels(f, [8, 2**40], binary=True, size=8)
+        self.assertEqual(self.tp.read_labels(f, [1]), (2, {1: 2**40}))
+        write_labels(f + ".gz", list(range(12)), binary=True, arch=False)
+        self.assertEqual(self.tp.read_labels(f + ".gz", [11]), (12, {11: 11}))
+        # a binary list of none has no ( ); a list all the same is N{label}
+        write_labels(f, [], binary=True, arch=False)
+        self.assertEqual(self.tp.read_labels(f), (0, {}))
+        with open(f, "w") as fh:
+            fh.write("FoamFile\n{\n    format      ascii;\n    class       labelList;\n}\n// * * //\n\n5{7}\n")
+        self.assertEqual(self.tp.read_labels(f, [0, 4]), (5, {0: 7, 4: 7}))
+        for text, said in [("FoamFile\n{\n    format      ascii;\n}\n\n3(1 2 3)\n", None),
+                           ("3(1 2 3)\n", "not a list of labels"),
+                           ("FoamFile\n{\n    format      ascii;\n}\n\nnone\n", "not a list of labels"),
+                           ("FoamFile\n{\n    format      ascii;\n}\n\n3(1 2 3\n", "its list isn't closed"),
+                           ("FoamFile\n{\n    format      ascii;\n}\n\n3(1 2)\n", "2 labels, not 3"),
+                           ("FoamFile\n{\n    format      ascii;\n}\n\n3\n", "not a list of labels")]:
+            with open(f, "w") as fh:
+                fh.write(text)
+            if said is None:
+                self.assertEqual(self.tp.read_labels(f, [2]), (3, {2: 3}))
+                with self.assertRaisesRegex(ValueError, "has 3 labels, not 4"):
+                    self.tp.read_labels(f, [3])
+            else:
+                with self.assertRaisesRegex(ValueError, said):
+                    self.tp.read_labels(f, [0])
+        write_labels(f, list(range(12)), binary=True)
+        with open(f, "rb") as fh:
+            torn = fh.read()[:-120]
+        with open(f, "wb") as fh:
+            fh.write(torn)
+        with self.assertRaisesRegex(ValueError, "not 12 labels of 32 or 64 bits"):
+            self.tp.read_labels(f, [0])
+        self.assertEqual(self.tp.read_labels(f), (12, {}))         # its length is still at its start
 
     def test_plan_errors(self):
         os.makedirs(os.path.join(self.case, "system"))
@@ -839,14 +991,32 @@ class TransientPlanJobTest(unittest.TestCase):
         self.assertEqual(doc["courantPerSecond"]["max"], 100.0)
         self.assertEqual([o["maxCo"] for o in doc["options"]], [1.0, 5.0, 20.0])
         self.assertAlmostEqual(doc["options"][0]["deltaT"], 0.01)
-        # its 19 fastest cells (all but one of them) as the cell set fastestCells, on each processor
-        self.assertEqual(doc["cellSet"], {"name": "fastestCells", "cells": 19})
+        # its 19 fastest cells (all but one of them) as the cell set fastestCells, on each processor only, as the
+        # case has no whole mesh, which a note says
+        self.assertEqual(doc["cellSet"], {"name": "fastestCells", "cells": 19, "whole": False})
         self.assertEqual(sorted(os.listdir(sets)), [".meshdoctor-sets", "processor0", "processor1"])
+        self.assertEqual(doc["notes"][-1], "The cell set fastestCells is on each processor only, not on the whole "
+                                           "mesh: the case has no whole mesh (constant/polyMesh).")
         n = 0
         for p in (0, 1):
             with open(os.path.join(sets, f"processor{p}", "constant", "polyMesh", "sets", "fastestCells")) as f:
                 n += int(f.read().split("}\n\n")[1].split("\n")[0])
         self.assertEqual(n, 19)
+        # with the whole mesh it was split from (processor0 the even cells, processor1 the odd), there too
+        write_owner(os.path.join(case, "constant", "polyMesh"), 20)
+        for p in (0, 1):
+            write_owner(os.path.join(case, f"processor{p}", "constant", "polyMesh"), 10)
+            write_labels(os.path.join(case, f"processor{p}", "constant", "polyMesh", "cellProcAddressing"),
+                         list(range(p, 20, 2)))
+        with mock.patch.object(self.tp, "courant_cells", courant_cells), contextlib.redirect_stderr(io.StringIO()):
+            self.tp.main([case, "-o", out, "--sets", sets])
+        st, doc = self.get("ahmed")
+        self.assertEqual((st, doc["cellSet"]), (200, {"name": "fastestCells", "cells": 19, "whole": True}))
+        self.assertNotIn("The cell set", " ".join(doc["notes"]))
+        self.assertEqual(sorted(os.listdir(sets)), [".meshdoctor-sets", "constant", "processor0", "processor1"])
+        with open(os.path.join(sets, "constant", "polyMesh", "sets", "fastestCells")) as f:
+            self.assertTrue(f.read().endswith("}\n\n19\n(\n" + "".join(
+                f"{c}\n" for c in sorted(2 * cell + p for p, cell in doc["fastestCells"])) + ")\n"))
 
         def failing(into, t, nproc, ntop):
             log = os.path.join(into, "log.foamCourantCells")

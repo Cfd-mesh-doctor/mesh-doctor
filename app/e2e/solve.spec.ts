@@ -162,7 +162,10 @@ test("a run's transient plan: the time step at each Courant number, its cost, an
   await expect(page.getByText(/^62 cells of 478,901 are within 2× of the largest Courant number/)).toBeVisible();
   await expect(page.getByText("38 cells near (−0.0635, 0.18, 0.322) m, about 2.6 mm across and 2.4 mm from the wall "
     + "ahmed, where the flow is up to 55 m/s")).toBeVisible();
-  await expect(page.getByText(/^The 100 fastest are saved as the cell set fastestCells in the workspace/)).toBeVisible();
+  await expect(page.getByText(/^The 100 fastest are saved as the cell set fastestCells in the workspace/)).toHaveText(
+    "The 100 fastest are saved as the cell set fastestCells in the workspace (.tplans/ahmed-coarse.sets, laid out as "
+    + "the case is: for its whole mesh and for each of its 6 processes): copy its folders into the case to see them in "
+    + "paraFoam (Include Sets) or pick them with topoSet.");
   await expect(page.getByText("Planned from iteration 300 of this run, in 2 s.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Plan again" })).toBeEnabled();
 });

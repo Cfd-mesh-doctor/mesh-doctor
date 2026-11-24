@@ -37,15 +37,23 @@ def _owner_cells(path):
     return int(m.group(1)) if m else None
 
 
-def mesh_cells(case):
-    """Cell count from the polyMesh owner header (serial, else summed over processors)."""
+def owner_cells(poly):
+    """The cell count in a polyMesh folder's owner header (owner or owner.gz), or None."""
     for name in ("owner", "owner.gz"):
-        n = _owner_cells(os.path.join(case, "constant", "polyMesh", name))
+        n = _owner_cells(os.path.join(poly, name))
         if n:
             return n
+    return None
+
+
+def mesh_cells(case):
+    """Cell count from the polyMesh owner header (serial, else summed over processors)."""
+    n = owner_cells(os.path.join(case, "constant", "polyMesh"))
+    if n:
+        return n
     total = 0
     for d in glob.glob(os.path.join(case, "processor*", "constant", "polyMesh")):
-        n = _owner_cells(os.path.join(d, "owner")) or _owner_cells(os.path.join(d, "owner.gz"))
+        n = owner_cells(d)
         if not n:
             return None
         total += n

@@ -147,7 +147,7 @@ export const MATCHING = {
  *  places' walls, speeds and shapes (foamCourantCells') are those of a plan of the same mesh solved on to 2000 (the
  *  fourth's made up to match), and it saved the cell set of its 100 fastest cells. */
 export const PLAN = {
-  schemaVersion: "1.1", case: "ahmed-coarse", time: "300", processors: 6, decomposed: true, tool: "foamCourantCells",
+  schemaVersion: "1.2", case: "ahmed-coarse", time: "300", processors: 6, decomposed: true, tool: "foamCourantCells",
   cells: 478_901,
   courantPerSecond: { median: 4329.14, p99: 15320.4, p999: 20357.4, p9999: 29466.6, max: 54448.3, withoutTop: 24803.3 },
   top: 100, cellsWithin2x: 62,
@@ -161,7 +161,7 @@ export const PLAN = {
     { nCells: 3, centre: [-1.04556, 0.193505, 0.0518287], h: 0.00274267, maxRate: 27844.4, wall: "ahmed",
       wallDist: 0.000912, speed: 47.2108, aspectRatio: 4.21, maxNonOrtho: 39.8 },
   ],
-  cellSet: { name: "fastestCells", cells: 100 },
+  cellSet: { name: "fastestCells", cells: 100, whole: true },
   speed: 40, length: 1.044, flowTime: 0.2088, flowTimeSource: "8 L/U", secondsPerIteration: 0.4, outerCorrectors: 3,
   options: [
     { maxCo: 1, deltaT: 1.83661e-5, deltaTWithoutTop: 4.03171e-5, stepsPerSecond: 54448.3, hoursPerFlowSecond: 18.1494,

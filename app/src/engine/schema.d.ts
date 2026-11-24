@@ -959,6 +959,8 @@ export interface components {
             cellSet?: {
                 cells: number;
                 name: string;
+                /** @description it is on the whole mesh, in constant/polyMesh/sets/<name>: always for a case that isn't split; for a split one, where it has the whole mesh it was split from, each cell found there by its processor's cellProcAddressing (a note says why not). A plan before 1.2 has none: a split case's set was on its processors only */
+                whole?: boolean;
             };
             /** @description cells whose Courant number is within 2x of the largest: the ones that set the time step */
             cellsWithin2x: number;
