@@ -9,7 +9,8 @@ A solve of a case you made makes a new case the same way: a copy of its mesh and
 A new case always goes in a new folder: Mesh Doctor never changes a case you made.  A name that is taken is
 refused, except a case made here before (it holds a .meshdoctor-case.json), which --replace deletes and makes
 again, as after a mesh that failed.  The free memory is checked first (the RAM guard's mesh figure).  The app
-starts the same thing as a `case` job (POST /api/v1/jobs), which runs `templates.py make`.
+starts the same thing as a `case` job (POST /api/v1/jobs), which runs `templates.py make`; a solve job with a
+template makes its case the same way (build()), then solves it (solve.py).
 """
 import json, os, re, shlex, shutil, signal, subprocess, sys, time
 
@@ -293,7 +294,10 @@ def make(template, name, size, replace=False):
     before = signal.getsignal(signal.SIGTERM)
     signal.signal(signal.SIGTERM, stop)
     try:
-        return _build(case, name, t, s, status)
+        why = build(case, name, t, s, status)
+        if why:
+            _say(why)
+        return 1 if why else 0
     except KeyboardInterrupt:
         status.end("cancelled")
         _say("stopped")
@@ -302,16 +306,17 @@ def make(template, name, size, replace=False):
         signal.signal(signal.SIGTERM, signal.SIG_DFL if before is None else before)
 
 
-def _build(case, name, t, s, status):
-    """make()'s work in the new folder: the copy, its size, then Allmesh, which the marker follows."""
+def build(case, name, t, s, status):
+    """make()'s work in the new folder, and a solve job's with a template (solve.py): the copy, its size, then Allmesh,
+    which `status` follows (the marker; for a solve, the marker and the run's status file).  None once the case has
+    its mesh, else why not, naming no folders."""
     status.step("copying")
     _say(f"{name}: the {t['label']} template, {s['label'].lower()} mesh (about {s['cells']:,} cells)")
     src = os.path.join(EXAMPLES, status.doc["template"])
     shutil.copytree(src, case, ignore=_skip(src), dirs_exist_ok=True)
     if s["blocks"] and not _blocks(case, t["blocks"], s["blocks"]):
         status.end("failed")
-        _say(f"the template's system/blockMeshDict has no {t['blocks']} blocks to resize")
-        return 1
+        return f"the template's system/blockMeshDict has no {t['blocks']} blocks to resize"
     status.step("geometry")
     bashrc = shlex.quote(config.settings()["bashrc"])
     p = subprocess.Popen(["bash", "-c", f"source {bashrc} >/dev/null 2>&1; "
@@ -326,18 +331,17 @@ def _build(case, name, t, s, status):
     cells = ramguard.mesh_cells(case)
     if rc != 0 or not cells:
         at = watch.step()
+        status.step(at)                         # where it failed, which a quick Allmesh ends before a poll sees
         status.end("failed")
         if at != "geometry":
             program = at.split(":")[0]
-            _say(f"the mesh failed at {program}: see log.{program} in the case's folder")
-        elif rc == 2:
-            _say(f"OpenFOAM's environment didn't load: check the bashrc setting ({prog.name()} config)")
-        else:
-            _say("the mesh failed while making the geometry: see the job's log")
-        return 1
+            return f"the mesh failed at {program}: see log.{program} in the case's folder"
+        if rc == 2:
+            return f"OpenFOAM's environment didn't load: check the bashrc setting ({prog.name()} config)"
+        return "the mesh failed while making the geometry: see the job's log"
     status.end("done", cells)
     _say(f"{name}: {cells:,} cells, ready in the cases folder")
-    return 0
+    return None
 
 
 def _print_templates():

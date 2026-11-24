@@ -4,6 +4,7 @@
 import { isPlainName } from "@/engine/commands";
 import { isActive, type CaseList, type Job, type Made, type Run, type RunLive, type RunShown } from "@/engine/types";
 import { formatInt } from "@/lib/format";
+import { caseStep } from "./caseStart";
 
 /** The iteration a first solve runs to: the solve job's own default. */
 export const FIRST_TO = 2000;
@@ -30,9 +31,14 @@ const SOLVE_STEPS: Record<string, string> = {
   done: "Done",
 };
 
-/** A solve's step in plain words; one this app doesn't know reads as the engine says it. */
+/** A solve's step in plain words; one this app doesn't know reads as the engine says it. A solve that makes its case
+ * from a template first (Verify install) is meshing, then at the mesh's own step ("meshing: snappyHexMesh: refining"),
+ * which reads as a new case's does. */
 export function solveStep(step: string | null | undefined): string | null {
-  return step ? (SOLVE_STEPS[step] ?? step) : null;
+  if (!step) return null;
+  if (step === "meshing") return "Making the case from its template";
+  if (step.startsWith("meshing: ")) return caseStep(step.slice("meshing: ".length));
+  return SOLVE_STEPS[step] ?? step;
 }
 
 /** A run's state as the screens show it (RunShown). */
@@ -75,10 +81,12 @@ export function madeFrom(made: Made | null | undefined): string | null {
   return null;
 }
 
-/** What a solve job makes its case from: the case you made that it copies (its `source`), if it is a copy. */
+/** What a solve job makes its case from: the case you made that it copies (its `source`), or the template it makes
+ * it from (its `template`), if it makes one. */
 export function madeOfJob(job: Job | undefined): Made | null {
-  const source = job?.kind === "solve" ? job.params.source : undefined;
-  return typeof source === "string" && source ? { copyOf: source } : null;
+  const { source, template } = job?.kind === "solve" ? job.params : {};
+  if (typeof source === "string" && source) return { copyOf: source };
+  return typeof template === "string" && template ? { template } : null;
 }
 
 /** One line of the runs list: a case Mesh Doctor made, what from, its run once it has one, and its solve job. */

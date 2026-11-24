@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { expect, test } from "@playwright/test";
 import { testReport } from "../src/report/testReport";
-import { ENGINE, mockEngine, pairingLink } from "./engine";
+import { ENGINE, MATCHING, mockEngine, pairingLink, run } from "./engine";
 import { lineBreaks } from "./text";
 
 test.describe("in a browser that hasn't seen the tour", () => {
@@ -127,6 +127,27 @@ test("on the smallest phones your own app's screens don't scroll sideways", asyn
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(overflow, `${path} is wider than a ${width} px screen`).toBeLessThanOrEqual(1);
     }
+  }
+});
+
+test("on the smallest phones Verify install's answer fits, its chart within the card", async ({ page }) => {
+  const solved = run("verify-install", { state: "done", step: "done", iteration: 2000, written: 2000, nProcs: 6,
+    stretches: [{ from: 0, to: 2000 }], finished: new Date().toISOString() });
+  await mockEngine(page, { made: { "verify-install": { template: "ahmed-body" } }, runs: [solved], noJobs: true,
+    validations: { "verify-install": MATCHING } });
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  for (const width of [360, 320]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/app/solve");
+    const card = page.locator("section").filter({ has: page.getByRole("heading", { name: "Verify install", exact: true }) });
+    const chart = card.getByRole("img", { name: /^Drag coefficient of each case/ });
+    await expect(chart).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow, `the Solve screen is wider than a ${width} px screen`).toBeLessThanOrEqual(1);
+    const [c, k] = [await card.boundingBox(), await chart.boundingBox()];
+    expect(k!.x + k!.width, `the chart is wider than its card at ${width} px`).toBeLessThanOrEqual(c!.x + c!.width + 1);
   }
 });
 

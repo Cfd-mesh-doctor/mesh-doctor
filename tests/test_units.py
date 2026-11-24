@@ -1785,6 +1785,139 @@ echo End
         self.assertEqual(self.s.write_interval(0, 2000), 500)
         self.assertEqual(self.s.write_interval(2000, 2300), 50)       # 2300's largest divisor <= 75
 
+    def template(self):
+        """A stand-in Ahmed body template: TemplatesTest's Allmesh, which here also makes 0/ from initial/ as the real
+        one does, and the settings a solve needs."""
+        import templates
+        src = os.path.join(self.d, "examples", "ahmed-body")
+        files = {"Allmesh": TemplatesTest.ALLMESH + "rm -rf 0 && cp -r initial 0\n",
+                 "system/blockMeshDict": "blocks ( hex (0 1 2 3 4 5 6 7) (130 15 15) simpleGrading (1 1 1) );\n",
+                 "system/controlDict": self.CONTROL, "system/decomposeParDict": "numberOfSubdomains 4;\n",
+                 "initial/U": "internalField uniform (40 0 0);\n"}
+        for rel, text in files.items():
+            os.makedirs(os.path.dirname(os.path.join(src, rel)), exist_ok=True)
+            with open(os.path.join(src, rel), "w") as f:
+                f.write(text)
+        patcher = mock.patch.object(templates, "EXAMPLES", os.path.dirname(src))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_a_solve_job_with_a_template_checks_it_as_a_case_job_does_and_its_mesh_for_memory(self):
+        for params, status, code, text in (
+                ({"name": "fresh", "template": "ahmed-body", "source": "mine"}, 400, "bad-request", "not both"),
+                ({"name": "fresh", "size": "coarse"}, 400, "bad-request", "goes with a template"),
+                ({"name": "fresh", "template": "nope"}, 404, "not-found", "no template nope"),
+                ({"name": "fresh", "template": "wheel-wing", "size": "fine"}, 400, "bad-request", "has no fine mesh"),
+                ({"name": "fresh", "template": "../x"}, 400, "bad-request", "template"),
+                ({"name": "fresh", "template": "ahmed-body", "size": "huge"}, 400, "bad-request", "size"),
+                ({"name": "made", "template": "ahmed-body"}, 409, "exists", "exists already"),
+                ({"name": "mine", "template": "ahmed-body"}, 409, "exists", "never changed")):
+            self.assertRefused(self.post(params), status, code, text)
+        with mock.patch.object(self.s.os, "cpu_count", lambda: 8):
+            self.assertRefused(self.post({"name": "fresh", "template": "ahmed-body", "np": 9}), 400, "bad-request",
+                               "8 processors")
+        need = int(480_000 * 2.2 / 1024) + 512                  # the coarse mesh's, more than its solve's
+        with mock.patch.object(self.s.ramguard, "available_mb", lambda: need - 1):
+            self.assertRefused(self.post({"name": "fresh", "template": "ahmed-body", "size": "coarse"}), 409,
+                               "not-enough-memory", "mesh of 480,000 cells")
+        self.assertEqual(self.launched, [])
+        st, doc, _ = self.post({"name": "fresh", "template": "ahmed-body", "size": "coarse", "to": 40, "np": 2})
+        self.assertEqual(st, 202, doc)
+        self.assertEqual((doc["params"], doc["log"], doc["links"]["run"]), (
+            {"name": "fresh", "to": 40, "np": 2, "template": "ahmed-body", "size": "coarse"}, ".runs/fresh_to_40.log",
+            "/api/v1/runs/fresh"))
+        argv = self.launched[0]
+        self.assertEqual(argv[argv.index("--") + 1:][2:], ["run", "fresh", "--template", "ahmed-body", "--size",
+                                                            "coarse", "--to", "40", "--np", "2"])
+
+    def test_a_solve_job_with_no_size_makes_the_templates_own(self):
+        st, doc, _ = self.post({"name": "fresh", "template": "ahmed-body"})
+        self.assertEqual((st, doc["params"]["size"]), (202, "medium"))
+        argv = self.launched[0]
+        self.assertEqual(argv[argv.index("--") + 1:][2:6], ["run", "fresh", "--template", "ahmed-body"])
+        self.assertEqual(argv[-6:-4], ["--size", "medium"])
+
+    def test_a_template_is_meshed_then_solved_in_the_one_job(self):
+        self.template()
+        rc, lines = self.solve("fresh", 40, 2, None, "ahmed-body", "coarse")
+        self.assertEqual(rc, 0, lines)
+        self.assertIn("fresh: 480 cells, ready in the cases folder", lines)
+        self.assertEqual(lines[-1], "fresh: solved to iteration 40")
+        case = os.path.join(self.cases, "fresh")
+        with open(os.path.join(case, self.jobs.CASE_MARKER)) as f:
+            mark = json.load(f)
+        self.assertEqual((mark["template"], mark["size"], mark["state"], mark["cells"]),
+                         ("ahmed-body", "coarse", "done", 480))
+        with open(os.path.join(case, "system", "blockMeshDict")) as f:
+            self.assertIn("(104 12 12)", f.read())                          # the coarse mesh's blocks
+        run = self.s.describe("fresh")
+        self.assertEqual((run["state"], run["step"], run["written"], run["nProcs"], run["stretches"]),
+                         ("done", "done", 40, 2, [{"from": 0, "to": 40}]))
+        doc = self.api.handle("GET", "/api/v1/cases", {})[1]
+        self.assertEqual((doc["made"]["fresh"], doc["cells"]["fresh"]), ({"template": "ahmed-body"}, 480))
+        self.assertIn("solved to iteration 40 already", self.s.refusal("fresh", 40)[1])
+        rc, lines = self.solve("fresh", 60, 2)                             # then continued as any case made here
+        self.assertEqual((rc, lines[0]), (0, "fresh: continuing from iteration 40 to 60 on 2 processes"))
+
+    def test_a_template_whose_mesh_fails_says_where_and_leaves_no_case_to_solve(self):
+        self.template()
+        with mock.patch.dict(os.environ, {"MD_TEST_FAIL": "1"}):
+            rc, lines = self.solve("fresh", 40, 2, None, "ahmed-body", "coarse")
+        said = "the mesh failed at snappyHexMesh: see log.snappyHexMesh in the case's folder"
+        self.assertEqual((rc, lines[-1]), (1, said))
+        run = self.api.handle("GET", "/api/v1/runs/fresh", {})[1]
+        self.assertEqual((run["state"], run["step"], run["error"], run["written"]),
+                         ("failed", "meshing: snappyHexMesh: refining", said, 0))
+        with open(os.path.join(self.cases, "fresh", self.jobs.CASE_MARKER)) as f:
+            self.assertEqual(json.load(f)["state"], "failed")
+        self.assertNotIn("fresh", self.api.handle("GET", "/api/v1/cases", {})[1]["items"])
+        self.assertRefused(self.post({"name": "fresh"}), 409, "not-ready", "no mesh yet")
+
+    def test_while_a_template_is_meshed_its_run_says_so_and_a_cancel_keeps_its_folder(self):
+        import templates
+        self.template()
+        seen = {}
+
+        def meshing(case, name, t, s, status):                             # what its run says while it is meshed
+            for step in ("copying", "geometry", "snappyHexMesh: refining"):
+                status.step(step)
+            with mock.patch.object(self.s, "solving", lambda n: True):
+                seen["run"], seen["stop"] = self.s.describe("fresh"), self.s.stop("fresh")
+            seen["progress"] = self.jobs.progress({"kind": "solve", "name": "fresh",
+                                                   "created": "2000-01-01T00:00:00Z"}, os.path.join(self.d, "work"))
+            raise KeyboardInterrupt
+        with mock.patch.object(templates, "build", meshing):
+            rc, lines = self.solve("fresh", 40, 2, None, "ahmed-body", "coarse")
+        self.assertEqual((rc, lines[-1]), (130, "stopped"))
+        self.assertEqual((seen["run"]["state"], seen["run"]["step"], seen["run"]["written"]),
+                         ("running", "meshing: snappyHexMesh: refining", 0))
+        self.assertEqual(seen["stop"][1][0], "not-ready")
+        self.assertIn("fresh is being meshed: Stop works once it solves", seen["stop"][1][1])
+        self.assertEqual((seen["progress"]["step"], seen["progress"]["fraction"]),
+                         ("meshing: snappyHexMesh: refining", 0.0))
+        case = os.path.join(self.cases, "fresh")
+        with open(os.path.join(case, self.jobs.CASE_MARKER)) as f:
+            self.assertEqual(json.load(f)["state"], "cancelled")
+        self.assertEqual(self.s.describe("fresh")["state"], "cancelled")
+        self.assertTrue(os.path.isdir(case))                                # kept, as a case job's is
+
+    def test_the_command_makes_a_case_from_a_template_then_solves_it(self):
+        self.template()
+        for argv, said in ((["fresh", "--template"], "--template takes a name"),
+                           (["mine", "fresh", "--template", "ahmed-body"], "not both"),
+                           (["fresh", "--size", "coarse"], "goes with a template")):
+            with self.assertRaises(SystemExit) as e:
+                self.s.main(argv)
+            self.assertIn(said, str(e.exception))
+        asked, out = [], io.StringIO()
+        with mock.patch.object(self.s.ramguard, "check_cells",
+                               lambda cells, step: asked.append((cells, step)) or (True, "")), \
+                contextlib.redirect_stdout(out):
+            rc = self.s.main(["fresh", "--template", "ahmed-body", "--size", "coarse", "--to", "10", "--np", "1"])
+        self.assertEqual(rc, 0, out.getvalue())
+        self.assertEqual(asked, [(480_000, "mesh")])                       # the memory of the mesh it makes
+        self.assertEqual((self.s.describe("fresh")["written"], self.s.split(os.path.join(self.cases, "fresh"))), (10, 0))
+
 
 class MachineTest(unittest.TestCase):
     """GET /api/v1/machine: what the app's size estimator fills in (ramguard.machine)."""
@@ -2556,6 +2689,118 @@ class LeakCheckTest(unittest.TestCase):
         r = self.run_module("with open(__file__) as f:\n            f.read()", "-W", "error::ResourceWarning")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertNotIn("Exception ignored", r.stderr)
+
+
+class ValidateTest(unittest.TestCase):
+    """validate.py: Verify install, a run of the Ahmed body template against the wind tunnel and against the
+    accuracy check's own run of the same mesh (GET /api/v1/runs/{name}/validation), on runs written here."""
+
+    def setUp(self):
+        import api_v1, jobs, validate
+        self.api, self.jobs, self.v = api_v1, jobs, validate
+        self.d = tempfile.mkdtemp(prefix="validate_test_")
+        self.addCleanup(shutil.rmtree, self.d, True)
+        self.cases = os.path.join(self.d, "cases")
+        os.makedirs(self.cases)
+        env = mock.patch.dict(os.environ, {"MESHDOCTOR_CASES": self.cases,
+                                           "MESHDOCTOR_WORKSPACE": os.path.join(self.d, "work")})
+        env.start()
+        self.addCleanup(env.stop)
+
+    def run_of(self, name, cd, to=2000, size="coarse", marker=None):
+        """A run of the template solved to `to`: its marker, its status file and its forceCoeffs file."""
+        case = os.path.join(self.cases, name)
+        os.makedirs(case)
+        with open(os.path.join(case, self.jobs.CASE_MARKER), "w") as f:
+            json.dump(marker or {"madeBy": "Mesh Doctor", "template": "ahmed-body", "size": size, "state": "done",
+                                 "cells": 480_000}, f)
+        with open(os.path.join(case, self.jobs.SOLVE_STATUS), "w") as f:
+            json.dump({"state": "done", "step": "done", "iteration": to, "start": 0, "end": to, "nProcs": 6,
+                       "stretches": [{"from": 0, "to": to}]}, f)
+        self.coeffs(case, 0, to, cd)
+        return case
+
+    @staticmethod
+    def coeffs(case, start, to, cd, cl=lambda i: 0.298):
+        """forceCoeffs' file of a stretch from `start`, as OpenFOAM 14 writes it: Cm, Cd, Cl, Cl(f), Cl(r)."""
+        out = os.path.join(case, "postProcessing", "forceCoeffs", str(start))
+        os.makedirs(out)
+        with open(os.path.join(out, "forceCoeffs.dat"), "w") as f:
+            f.write("# Force coefficients\n# magUInf       : 4.00000000e+01\n# Time          \tCm              \t"
+                    "Cd              \tCl              \tCl(f)           \tCl(r)           \n")
+            for i in range(start + 1, to + 1):
+                f.write(f"{i:<16}\t{0.07:.8e}\t{cd(i):.8e}\t{cl(i):.8e}\t{0.2:.8e}\t{0.1:.8e}\n")
+
+    @staticmethod
+    def settled(i):                             # 0.2985 then 0.2995 over the last 500: a mean of 0.299
+        return 0.31 if i <= 1500 else 0.2985 if i <= 1750 else 0.2995
+
+    def get(self, name):
+        st, doc, _ = self.api.handle("GET", f"/api/v1/runs/{name}/validation", {})
+        return st, doc
+
+    def test_a_run_like_the_accuracy_checks_matches_it(self):
+        import schema
+        self.run_of("verify-install", self.settled)
+        st, doc = self.get("verify-install")
+        self.assertEqual(st, 200, doc)
+        ok = next(r.ok for r in self.api.ROUTES if r.template == "/runs/{name}/validation")
+        self.assertEqual(schema.check(doc, ok), [])
+        self.assertEqual(doc, {
+            "name": "verify-install", "state": "done", "template": "ahmed-body", "size": "coarse", "slant": 25,
+            "cells": 480_000, "iterations": 2000, "window": 500, "cd": 0.299, "cl": 0.298, "drift": 0.34,
+            "tunnel": {"cd": 0.285, "difference": 4.91},
+            "published": {"cd": 0.299, "cl": 0.298, "iterations": 2000, "difference": 0.0},
+            "comparable": True, "matches": True})
+        self.assertNotIn("-0.0", json.dumps(doc))
+
+    def test_a_continuation_s_own_file_wins_where_the_two_overlap(self):
+        case = self.run_of("cont", lambda i: 0.31, to=1600)                 # stopped at 1600, then continued from 1500
+        self.coeffs(case, 1500, 2000, lambda i: 0.299)
+        doc = self.get("cont")[1]
+        self.assertEqual((doc["iterations"], doc["window"], doc["cd"], doc["drift"]), (2000, 500, 0.299, 0.0))
+
+    def test_a_run_short_of_2000_iterations_or_off_by_more_than_2_percent_doesnt_match(self):
+        self.run_of("short", self.settled, to=1000)
+        doc = self.get("short")[1]
+        self.assertEqual((doc["iterations"], doc["window"], doc["comparable"], doc["matches"]), (1000, 250, False, False))
+        self.run_of("off", lambda i: 0.31)
+        doc = self.get("off")[1]
+        self.assertEqual((doc["cd"], doc["published"]["difference"], doc["comparable"], doc["matches"]),
+                         (0.31, 3.68, True, False))
+        self.run_of("medium", lambda i: 0.2815, size="medium")             # each size against its own run
+        doc = self.get("medium")[1]
+        self.assertEqual((doc["published"]["cd"], doc["published"]["difference"], doc["matches"]), (0.28, 0.54, True))
+
+    def test_only_a_run_of_the_template_with_forces_is_compared(self):
+        for name, marker in (("copy", {"state": "done", "copyOf": "mine"}), ("wing", {"state": "done", "template":
+                             "wheel-wing", "size": "medium"}), ("odd", {"state": "done", "template": "ahmed-body",
+                                                                         "size": "huge"})):
+            self.run_of(name, self.settled, marker=marker)
+            st, doc = self.get(name)
+            self.assertEqual((st, doc["error"]["code"]), (422, "unsupported"), name)
+            self.assertIn("isn't made from the Ahmed body template", doc["error"]["message"])
+        self.run_of("early", self.settled, to=5)                            # 5 rows: nothing to average yet
+        st, doc = self.get("early")
+        self.assertEqual((st, doc["error"]["code"]), (409, "not-ready"))
+        err = self.get("nope")[1]["error"]
+        self.assertEqual((err["code"], err["message"]), ("not-found", "no run nope"))
+        self.assertEqual(self.get(".x")[0], 400)
+        self.assertEqual(self.v.of_run("../x"), (None, ("bad-request", "bad run name")))
+        for st, doc in (self.get("nope"), self.get("early")):
+            self.assertNotIn(self.d, json.dumps(doc))                       # never this machine's folders
+
+    def test_the_numbers_it_compares_with_are_the_accuracy_checks(self):
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs", "validation.md")
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        rows = [line.split("|")[1:-1] for line in text.splitlines() if line.startswith("| ")]
+        table = {r[0].strip(): [c.strip() for c in r] for r in rows[1:]}
+        for size, ours in self.v.PUBLISHED.items():
+            row = table[size]
+            self.assertEqual((row[1], float(row[3]), float(row[5]), float(row[6])),
+                             (f"{self.v.SLANT} deg", ours["cd"], ours["cl"], self.v.TUNNEL), size)
+        self.assertIn(f"{self.v.ITERATIONS} iterations per case", text)
 
 
 if __name__ == "__main__":

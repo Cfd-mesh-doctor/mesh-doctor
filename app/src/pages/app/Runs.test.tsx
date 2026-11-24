@@ -160,7 +160,8 @@ describe("the Solve screen's runs", () => {
     expect(screen.getByRole("button", { name: "Solve a case you made…" })).toBeEnabled();
     view.unmount();
     solvePage({ made: { c: { template: "ahmed-body" } }, noRuns: true });
-    expect(await screen.findByText(/^Your engine is older than this page and can't solve cases from here yet/)).toBeInTheDocument();
+    const runs = within(screen.getByRole("heading", { name: "Runs" }).closest("section")!);
+    expect(await runs.findByText(/^Your engine is older than this page and can't solve cases from here yet/)).toBeInTheDocument();
     expect(OLD_ENGINE_RUNS).toContain("`git pull`");
     expect(screen.queryByRole("list", { name: "Runs" })).toBeNull();
     expect(screen.getByRole("button", { name: "Solve a case you made…" })).toBeDisabled();

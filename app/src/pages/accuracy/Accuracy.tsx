@@ -15,7 +15,7 @@ import { useTitle } from "@/lib/useTitle";
 import { aboutPage } from "@/pages/docs/entries";
 import { cn } from "@/lib/utils";
 import { CdChart } from "./CdChart";
-import { RESULTS, RUN, cases, readable } from "./results";
+import { RESULTS, RUN, VERIFY, cases, readable } from "./results";
 
 const link = "font-medium text-primary underline-offset-4 hover:underline";
 
@@ -124,6 +124,34 @@ export function Accuracy() {
             no stilts. Every refinement level follows the background cell size, so each mesh step roughly doubles the
             cells.
           </p>
+        </Card>
+
+        <Card className="mt-4">
+          <CardHeader>
+            <div>
+              <CardTitle>Verify your install</CardTitle>
+              <CardDescription>
+                The coarse mesh alone checks that your OpenFOAM and Mesh Doctor give the answer above, in about 15
+                minutes on 6 cores.
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              It makes the coarse case from the template and solves it to iteration 2000, as the run in the table did.
+              Its drag over the last 500 iterations should be within 2&nbsp;% of the table&apos;s 0.299; a run with
+              OpenFOAM 14 gave 0.2986. Further off than that, something in your setup differs from the one tested
+              here: the OpenFOAM version, a changed template, or a solve stopped short.
+            </p>
+            <div className="min-w-0 space-y-3">
+              {VERIFY.map((line) => <CopyCommand key={line} command={line} />)}
+              <p className="text-[13px] text-muted-foreground">
+                Or from the web app:{" "}
+                <Link to="/app/solve" className={link}>Verify install</Link>, on the Solve screen, starts the same and
+                shows the answer beside this page&apos;s chart.
+              </p>
+            </div>
+          </CardContent>
         </Card>
 
         <div className="mt-4 grid grid-cols-1 items-start gap-4 lg:grid-cols-2">

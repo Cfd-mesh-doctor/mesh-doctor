@@ -81,6 +81,16 @@ function runLive(r: RunDoc) {
   };
 }
 
+/** GET /runs/verify-install/validation (Verify install, API 1.6) as a real coarse run with OpenFOAM 14 answered it:
+ *  the same answer as the accuracy check's run of that mesh. */
+export const MATCHING = {
+  name: "verify-install", state: "done", template: "ahmed-body", size: "coarse", slant: 25, cells: 478_901,
+  iterations: 2000, window: 500, cd: 0.2986, cl: 0.2978, drift: -0.11,
+  tunnel: { cd: 0.285, difference: 4.76 },
+  published: { cd: 0.299, cl: 0.298, iterations: 2000, difference: -0.15 },
+  comparable: true, matches: true,
+};
+
 /** GET /templates (API 1.5): the engine's two templates, the Ahmed body in three mesh sizes. */
 const TEMPLATES = {
   items: [
@@ -122,6 +132,8 @@ export async function mockEngine(
     made?: Record<string, { template?: string; copyOf?: string }>;
     /** Their solves (GET /runs), each as run() makes it; a running one has a solve job running too. */
     runs?: RunDoc[];
+    /** Verify install's comparison of a run (GET /runs/{name}/validation), by its name. */
+    validations?: Record<string, unknown>;
   } = {},
 ): Promise<MockEngine> {
   const state: MockEngine = {
@@ -163,7 +175,7 @@ export async function mockEngine(
     if (path === "/cases") return json(200, { items: state.cases, ...(opts.made && { made: opts.made }) });
     // Its solves (API 1.6): Stop ends a running one at the iteration it has reached, and its job with it.
     if (path === "/runs" && opts.runs) return json(200, { items: [...runs.values()] });
-    const solve = /^\/runs\/([^/]+)(\/live|\/stop)?$/.exec(path);
+    const solve = /^\/runs\/([^/]+)(\/live|\/stop|\/validation)?$/.exec(path);
     const r = solve && runs.get(decodeURIComponent(solve[1]!));
     if (solve && !r) return json(404, { error: { code: "not-found", message: `no run ${solve[1]}` } });
     if (solve && r && solve[2] === "/stop" && req.method() === "POST") {
@@ -177,6 +189,10 @@ export async function mockEngine(
       return json(200, answer);
     }
     if (solve && r && solve[2] === "/live") return json(200, runLive(r));
+    if (solve && r && solve[2] === "/validation") {
+      const v = opts.validations?.[r.name];
+      return v ? json(200, v) : json(422, { error: { code: "unsupported", message: `${r.name} isn't made from the Ahmed body template` } });
+    }
     if (solve && r && !solve[2]) return json(200, r);
     if (path === "/judge") return json(200, { verdict: "converged", window: 200, group: "body",
       average: { drag: { mean: 41.8, u: 0.2 }, downforce: { mean: 181.4, u: 0.9 } } });

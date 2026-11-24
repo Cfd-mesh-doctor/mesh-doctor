@@ -166,7 +166,7 @@ describe("the Solve screen's other parts", () => {
     renderScreen(<Solve />, { path, transport: engine(withChecks({})) });
     const next = within(screen.getByRole("heading", { name: "Coming next on this screen" }).closest("section")!);
     expect(next.getAllByRole("listitem").map((li) => li.textContent)).toEqual([
-      expect.stringMatching(/^Verify install: /), expect.stringMatching(/^Transient runs: /),
+      expect.stringMatching(/^Transient runs: /),
     ]);
     expect(next.getByRole("link", { name: "Try it on the Ahmed body" })).toHaveAttribute("href", "/app/first-run");
     expect(next.getByRole("link", { name: /^the Ahmed body/ })).toHaveAttribute("href", expect.stringContaining("examples/ahmed-body"));

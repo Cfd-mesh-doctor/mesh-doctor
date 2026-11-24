@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { renderScreen } from "@/test/render";
 import { Accuracy } from "./Accuracy";
+import { VERIFY } from "./results";
 
 describe("Accuracy check", () => {
   it("sums up the validation run, charts each case against the wind tunnel and reads one out", async () => {
@@ -31,7 +32,11 @@ describe("Accuracy check", () => {
     expect(within(steep).getAllByRole("cell").map((c) => c.textContent?.replace(/\s/g, " "))).toEqual([
       "35°", "35°", "0.84 M", "0.408", "−0.15 %", "0.445", "0.26", "+57 %", "24 min",
     ]);
-    expect(screen.getAllByRole("button", { name: /^Copy “/ })).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: /^Copy “/ })).toHaveLength(4);
     expect(screen.getByRole("button", { name: /^Copy “\.\/Allvalidate 6 2000/ })).toBeInTheDocument();
+    // Verify your install: the coarse mesh alone, and the same from the web app's Solve screen.
+    const verify = within(screen.getByRole("heading", { name: "Verify your install" }).closest("section")!);
+    expect(verify.getByRole("button", { name: `Copy “${VERIFY[0]}”` })).toBeInTheDocument();
+    expect(verify.getByRole("link", { name: "Verify install" })).toHaveAttribute("href", "/app/solve");
   });
 });

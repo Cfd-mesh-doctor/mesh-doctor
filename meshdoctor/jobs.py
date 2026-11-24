@@ -144,8 +144,8 @@ PROGRESS = {
         ("checkMesh", 0.9), ("done", 1.0)]),
     # solve.py's status file in the case; while solving, its own fraction follows the iterations
     "solve": ("{cases}/{name}/" + SOLVE_STATUS, [
-        ("copying", 0.0), ("decomposing", 0.01), ("potentialFoam", 0.03), ("solving", 0.05), ("reconstructing", 0.97),
-        ("done", 1.0)]),
+        ("copying", 0.0), ("meshing", 0.0), ("decomposing", 0.01), ("potentialFoam", 0.03), ("solving", 0.05),
+        ("reconstructing", 0.97), ("done", 1.0)]),
 }
 
 

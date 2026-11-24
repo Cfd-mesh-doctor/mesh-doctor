@@ -62,6 +62,9 @@ export type RunDetail = Json<operations["get_run"]["responses"][200]>;
 export type RunLive = Json<operations["run_live"]["responses"][200]>;
 /** The judge on a case's solver logs and forces (GET /judge?case=). */
 export type CaseJudge = Json<operations["judge"]["responses"][200]>;
+/** Verify install (API 1.6): a run of the Ahmed body template against the wind tunnel and against the accuracy
+ *  check's run of the same mesh, its drag and lift over the last quarter of its iterations. */
+export type RunValidation = Json<operations["run_validation"]["responses"][200]>;
 
 /** The API major version this app speaks; the engine reports major.minor and any 1.x works. */
 export const API_MAJOR = 1;

@@ -219,6 +219,19 @@ export function useCaseJudge(name: string, enabled: boolean, version: number | n
   });
 }
 
+/** Verify install's comparison of a run (GET /runs/{name}/validation), once the run has ended (`enabled`). A run
+ * continued further ends somewhere else, so `version` (the iteration it ended at) is part of the key. A refusal (an
+ * engine from before the route, a run not made from the template) isn't asked again. */
+export function useRunValidation(name: string, enabled: boolean, version: number | null = null) {
+  const { transport } = useEngine();
+  return useQuery({
+    queryKey: [transport?.scope, "run-validation", name, version],
+    queryFn: transport && enabled ? ({ signal }) => api.runValidation(transport, name, signal) : skipToken,
+    retry: false,
+    staleTime: 5 * 60_000,
+  });
+}
+
 /** Stops a run: the solver writes the iteration it is at and ends. The run's answer goes into its page at once; then
  * it, the runs and the jobs are asked for again. */
 export function useStopRun() {

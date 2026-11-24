@@ -131,6 +131,8 @@ meshdoctor pair [--new] [--open]      # pair the web app with this engine; --new
 
 Without the `bin/` launcher or pip, `python3 -m meshdoctor <command>` from the clone does the same.
 
+**Verify your install:** `meshdoctor solve <name> --template <template>` makes a case from a template, then solves it, in one go. `meshdoctor solve verify-install --template ahmed-body --size coarse --to 2000 --np 6` solves the coarse Ahmed body as the accuracy check did, in about 15 minutes; its drag should be within 2 % of the check's (see [Accuracy check](docs/validation.md#verify-your-install)). The web app's Verify install does the same.
+
 **Sharing a result:** `meshdoctor report <name>` writes one file with the repair, its map and its A/B test, with this machine's paths removed. Open it at `http://localhost:8765/report`, or send the `--html` version, which opens anywhere with a double-click and never goes online. `--viewer` writes the empty viewer as one file, for a shared folder or a static web host. It still holds the case's geometry and patch names, so share it like the case itself.
 
 The dashboard's data is also a versioned JSON API under `/api/v1`, described at `http://localhost:8765/api/v1/openapi.json` (see [Architecture](docs/architecture.md#api-v1)). Starting a job through it needs the launch token from a dashboard page, or the web app's pairing key.

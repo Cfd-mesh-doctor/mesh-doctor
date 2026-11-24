@@ -5,7 +5,8 @@
 // Then New case: a case made from a template (API 1.5, NewCase.tsx), and Runs: each case Mesh Doctor made with its
 // solve (API 1.6: GET /runs), what it is doing and how far it has come, a link to its page (Run.tsx) and Solve… for
 // one not solved yet (SolveDialog.tsx), and Solve a case you made…, which solves a copy of one of yours (CopyDialog).
-// What the screen does next is listed under them until then.
+// Verify install, under Ready to solve?, solves the coarse Ahmed body as the accuracy check did and compares its drag
+// (VerifyInstall.tsx). What the screen does next is listed under them until then.
 import { CircleCheck, CircleX, CopyPlus, ExternalLink, FolderPlus, Play, RefreshCw, TriangleAlert } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
@@ -30,6 +31,7 @@ import { NewCaseDialog } from "./NewCase";
 import { CopyDialog, SolveDialog } from "./SolveDialog";
 import { CHECK_COMMAND, OLD_ENGINE, cellsAtMost, sentence } from "./readiness";
 import { OLD_ENGINE_RUNS, current, madeFrom, runRows, solveStep, stretchFraction, type RunRow } from "./solveStart";
+import { VerifyInstall } from "./VerifyInstall";
 
 const STATE = {
   ok: { icon: CircleCheck, colour: "text-success", said: "OK" },
@@ -378,7 +380,6 @@ function ComingNext() {
       </CardHeader>
       <CardContent>
         <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-          <li>Verify install: the coarse Ahmed body&apos;s drag against the wind tunnel&apos;s, beside the accuracy check.</li>
           <li>Transient runs: the time step, the Courant number and its worst cells, the averaging window and the transient judge.</li>
         </ul>
       </CardContent>
@@ -395,6 +396,7 @@ export function Solve() {
         description="Set up and run OpenFOAM cases on the computer the engine runs on. First, whether it has everything a solve needs."
       />
       <ReadinessCard />
+      <VerifyInstall />
       <NewCase />
       <Runs />
       <ComingNext />

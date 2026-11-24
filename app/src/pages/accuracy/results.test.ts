@@ -2,14 +2,14 @@
 // The accuracy page quotes the validation run: its numbers and commands must be the doc's.
 import { describe, expect, it } from "vitest";
 import { markdownCode, markdownTables, readDoc } from "@/test/markdown";
-import { RESULTS, RUN, cases, readable } from "./results";
+import { RESULTS, RUN, VERIFY, cases, readable } from "./results";
 
 describe("the accuracy check's results", () => {
   const doc = readDoc("validation.md");
 
   it("are the table and commands of docs/validation.md", () => {
     expect(markdownTables(doc)).toEqual([RESULTS]);
-    expect(markdownCode(doc)).toEqual([RUN]);
+    expect(markdownCode(doc)).toEqual([RUN, VERIFY]);
   });
 
   it("read as numbers for the chart", () => {

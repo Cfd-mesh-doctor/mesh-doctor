@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { expect, test, type Page } from "@playwright/test";
-import { mockEngine, pairingLink, run } from "./engine";
+import { MATCHING, mockEngine, pairingLink, run } from "./engine";
 
 /** Pairs with the pretend engine. */
 async function pair(page: Page) {
@@ -38,6 +38,48 @@ test("the Solve screen lists the cases Mesh Doctor made with their solves, and s
   await expect(page.getByRole("heading", { name: "wheel-wing", level: 1 })).toBeVisible();
   await expect(page.getByText("Starting", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Job details" })).toBeVisible();
+});
+
+test("Verify install solves the coarse Ahmed body as the accuracy check did, and the screen follows it", async ({ page }) => {
+  const engine = await mockEngine(page, { made: {}, runs: [], noJobs: true });
+  await pair(page);
+  await page.goto("/app/solve");
+  const card = page.locator("section").filter({ has: page.getByRole("heading", { name: "Verify install", exact: true }) });
+  await expect(card.getByText("meshdoctor solve verify-install --template ahmed-body --size coarse --to 2000 --np 6"))
+    .toBeVisible();
+  await card.getByRole("button", { name: "Verify install…" }).click();
+  const dialog = page.getByRole("dialog", { name: "Verify install" });
+  await expect(dialog.getByLabel("Name")).toHaveValue("verify-install");
+  await expect(dialog.getByLabel("Processes")).toHaveValue("4");            // the 4 cores the engine's computer has
+  await dialog.getByRole("button", { name: "Verify install", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page).toHaveURL(/\/app\/solve$/);
+  expect(engine.started).toEqual([{ kind: "solve", params: { name: "verify-install", template: "ahmed-body", size: "coarse",
+    to: 2000, np: 4 } }]);
+  await expect(card.getByText("Waiting to start")).toBeVisible();
+  await expect(card.getByRole("link", { name: "verify-install" })).toHaveAttribute("href", "/app/solve/verify-install");
+});
+
+test("a Verify install solved to 2,000 gives the accuracy check's answer, drawn beside that check's run", async ({ page }) => {
+  const solved = run("verify-install", {
+    state: "done", step: "done", iteration: 2000, written: 2000, nProcs: 6, stretches: [{ from: 0, to: 2000 }],
+    started: new Date(Date.now() - 900_000).toISOString(), finished: new Date(Date.now() - 30_000).toISOString(),
+  });
+  await mockEngine(page, { made: { "verify-install": { template: "ahmed-body" } }, runs: [solved], noJobs: true,
+    validations: { "verify-install": MATCHING } });
+  await pair(page);
+  await page.goto("/app/solve");
+  const card = page.locator("section").filter({ has: page.getByRole("heading", { name: "Verify install", exact: true }) });
+  await expect(card.getByText("Same answer", { exact: true })).toBeVisible();
+  await expect(card.getByText(/^Its drag is within 2 % of the accuracy check's run of the same mesh/)).toBeVisible();
+  await expect(card.getByRole("img", { name: /^Drag coefficient of each case/ })).toHaveAttribute("aria-label",
+    /Accuracy check, coarse mesh, 0\.299 against 0\.285 \(\+4\.8 %\); Your install, coarse mesh, 0\.299 against 0\.285/);
+  await card.locator('[data-row="1"]').hover();
+  await expect(card.getByText(/Cd 0\.299 against 0\.285 in the wind tunnel, \+4\.8 %\. Lift Cl 0\.298; drift over the last 500 iterations −0\.11 %; solved in 15 min with its mesh\./))
+    .toBeVisible();
+  await card.getByRole("link", { name: "The whole accuracy check" }).click();
+  await expect(page).toHaveURL(/\/accuracy$/);
+  await expect(page.getByRole("heading", { name: "Verify your install" })).toBeVisible();
 });
 
 test("a run's page follows its solve, stops it and continues it", async ({ page }) => {

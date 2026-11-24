@@ -21,6 +21,11 @@ export const RUN = [
   "./Allvalidate 6 2000          # ranks, iterations per case; writes ../ahmed_validation/results.md",
 ];
 
+/** The command that verifies an install: the coarse mesh alone (the doc's "Verify your install"). */
+export const VERIFY = [
+  "meshdoctor solve verify-install --template ahmed-body --size coarse --to 2000 --np 6",
+];
+
 /** "25 deg" as "25°", and the doc's "-" as a minus sign. */
 export function readable(cell: string): string {
   return cell.replace(/(\d) deg\b/g, "$1°").replace(/^-(?=\d)/, "−");
@@ -35,9 +40,12 @@ export interface Case {
   difference: string;
   drift: string;
   cl: number;
+  /** how long it took ("" when it isn't known) */
   time: string;
   /** the 25° runs land within a few percent; the 35° one is the known miss of steady RANS */
   miss: boolean;
+  /** the iterations its Cd, Cl and drift are taken over: the accuracy check's last 500 unless it says */
+  window?: number;
 }
 
 /** The results as numbers, for the chart. */

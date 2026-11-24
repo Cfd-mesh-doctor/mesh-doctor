@@ -2914,7 +2914,7 @@
                   },
                   {
                     "additionalProperties": false,
-                    "description": "solve a case Mesh Doctor made to an iteration: while none is written it splits the case, starts the flow with potentialFoam and runs foamRun; once one is written it continues from the latest. With a source, it first makes the case as a copy of a case you made",
+                    "description": "solve a case Mesh Doctor made to an iteration: while none is written it splits the case, starts the flow with potentialFoam and runs foamRun; once one is written it continues from the latest. With a source, it first makes the case as a copy of a case you made; with a template, it first makes it from the template, as a case job does",
                     "properties": {
                       "kind": {
                         "enum": [
@@ -2925,7 +2925,7 @@
                         "additionalProperties": false,
                         "properties": {
                           "name": {
-                            "description": "a case in the cases folder that Mesh Doctor made (a case job's, or a copy); with a source, the new case the copy goes in, a name not taken there",
+                            "description": "a case in the cases folder that Mesh Doctor made (a case job's, or a copy); with a source or a template, the new case it makes, a name not taken there",
                             "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
                             "type": "string"
                           },
@@ -2936,8 +2936,21 @@
                             "minimum": 1,
                             "type": "integer"
                           },
+                          "size": {
+                            "description": "with a template: one of its mesh sizes (default: the template's own)",
+                            "enum": [
+                              "coarse",
+                              "medium",
+                              "fine"
+                            ]
+                          },
                           "source": {
                             "description": "a case you made, to solve a copy of: its mesh and settings, not its results, are copied into the cases folder as name (a case you made is never changed). It needs its mesh joined, its 0 (or 0.orig) fields and a steady foamRun setup",
+                            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+                            "type": "string"
+                          },
+                          "template": {
+                            "description": "a template (GET /templates) to make the case from first, as a case job does (Verify install: the Ahmed body's coarse mesh, solved to 2000)",
                             "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
                             "type": "string"
                           },
@@ -4129,7 +4142,7 @@
                             ]
                           },
                           "step": {
-                            "description": "copying (a copy of a case you made), decomposing, potentialFoam, solving, reconstructing or done",
+                            "description": "copying (a copy of a case you made), meshing or meshing: <its mesh's step> (a case made from a template first), decomposing, potentialFoam, solving, reconstructing or done",
                             "type": "string"
                           },
                           "stretches": {
@@ -4293,7 +4306,7 @@
                       ]
                     },
                     "step": {
-                      "description": "copying (a copy of a case you made), decomposing, potentialFoam, solving, reconstructing or done",
+                      "description": "copying (a copy of a case you made), meshing or meshing: <its mesh's step> (a case made from a template first), decomposing, potentialFoam, solving, reconstructing or done",
                       "type": "string"
                     },
                     "stretches": {
@@ -4542,7 +4555,7 @@
                           ]
                         },
                         "step": {
-                          "description": "copying (a copy of a case you made), decomposing, potentialFoam, solving, reconstructing or done",
+                          "description": "copying (a copy of a case you made), meshing or meshing: <its mesh's step> (a case made from a template first), decomposing, potentialFoam, solving, reconstructing or done",
                           "type": "string"
                         },
                         "stretches": {
@@ -4787,7 +4800,7 @@
                       ]
                     },
                     "step": {
-                      "description": "copying (a copy of a case you made), decomposing, potentialFoam, solving, reconstructing or done",
+                      "description": "copying (a copy of a case you made), meshing or meshing: <its mesh's step> (a case made from a template first), decomposing, potentialFoam, solving, reconstructing or done",
                       "type": "string"
                     },
                     "stretches": {
@@ -4854,6 +4867,174 @@
           }
         },
         "summary": "Stop a run at a written iteration: it writes the iteration it is at and ends, so a later solve job continues from there.  Needs the token or pairing key (API 1.6)"
+      }
+    },
+    "/runs/{name}/validation": {
+      "get": {
+        "operationId": "run_validation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "cd": {
+                      "description": "its drag coefficient: the window's mean",
+                      "type": "number"
+                    },
+                    "cells": {
+                      "description": "its mesh's cells",
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "cl": {
+                      "description": "its lift coefficient: the window's mean",
+                      "type": "number"
+                    },
+                    "comparable": {
+                      "description": "solved to the accuracy check's iterations or more",
+                      "type": "boolean"
+                    },
+                    "drift": {
+                      "description": "percent: the drag of the window's second half against its first; near 0 once it has settled",
+                      "type": "number"
+                    },
+                    "iterations": {
+                      "description": "the last iteration with force coefficients",
+                      "type": "integer"
+                    },
+                    "matches": {
+                      "description": "comparable, and its drag within 2 % of the accuracy check's: the install gives the same answer",
+                      "type": "boolean"
+                    },
+                    "name": {
+                      "description": "the run: a case made from the Ahmed body template",
+                      "type": "string"
+                    },
+                    "published": {
+                      "description": "the accuracy check's run of the same mesh (docs/validation.md)",
+                      "properties": {
+                        "cd": {
+                          "type": "number"
+                        },
+                        "cl": {
+                          "type": "number"
+                        },
+                        "difference": {
+                          "description": "percent: this run's drag against it",
+                          "type": "number"
+                        },
+                        "iterations": {
+                          "description": "what it was solved to",
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "cd",
+                        "cl",
+                        "iterations",
+                        "difference"
+                      ],
+                      "type": "object"
+                    },
+                    "size": {
+                      "description": "its mesh: the accuracy check has a run of each",
+                      "enum": [
+                        "coarse",
+                        "medium",
+                        "fine"
+                      ]
+                    },
+                    "slant": {
+                      "description": "the body's rear slant, in degrees",
+                      "type": "integer"
+                    },
+                    "state": {
+                      "description": "stopped: ended at a written iteration before its end (Stop); interrupted: its status says running but its job is gone (the computer restarted, or the job was killed)",
+                      "enum": [
+                        "running",
+                        "done",
+                        "stopped",
+                        "failed",
+                        "cancelled",
+                        "interrupted"
+                      ]
+                    },
+                    "template": {
+                      "description": "the template it was made from (ahmed-body)",
+                      "type": "string"
+                    },
+                    "tunnel": {
+                      "properties": {
+                        "cd": {
+                          "description": "the wind tunnel's drag coefficient (Ahmed, Ramm & Faltin 1984)",
+                          "type": "number"
+                        },
+                        "difference": {
+                          "description": "percent: this run's drag against it",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "cd",
+                        "difference"
+                      ],
+                      "type": "object"
+                    },
+                    "window": {
+                      "description": "the iterations its drag and lift are averaged over: the last quarter, as the accuracy check takes them",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "state",
+                    "template",
+                    "size",
+                    "slant",
+                    "cells",
+                    "iterations",
+                    "window",
+                    "cd",
+                    "cl",
+                    "drift",
+                    "tunnel",
+                    "published",
+                    "comparable",
+                    "matches"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "Verify install: how a run of the Ahmed body template compares with the wind tunnel and with the accuracy check's run of the same mesh (docs/validation.md), its drag and lift taken over the last quarter of its iterations (API 1.6)"
       }
     },
     "/schemas/{kind}": {

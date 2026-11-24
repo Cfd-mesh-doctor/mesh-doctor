@@ -21,8 +21,15 @@ describe("a solve's words", () => {
     expect(solveStep("decomposing")).toBe("Splitting the case (decomposePar)");
     expect(solveStep("solving")).toBe("Solving (foamRun)");
     expect(solveStep("copying")).toBe("Copying your case");
-    expect(solveStep("meshing")).toBe("meshing");
+    expect(solveStep("renumbering")).toBe("renumbering");
     expect(solveStep("")).toBeNull();
+  });
+
+  it("names a template's mesh steps, while a solve makes its case first, as a new case's", () => {
+    expect(solveStep("meshing")).toBe("Making the case from its template");
+    expect(solveStep("meshing: snappyHexMesh: refining")).toBe("Refining the mesh around the shape (snappyHexMesh)");
+    expect(solveStep("meshing: checkMesh")).toBe("Checking the mesh (checkMesh)");
+    expect(solveStep("meshing: something new")).toBe("something new");
   });
 
   it("shows its job's state while that waits or runs, else the run's, else unsolved", () => {
@@ -90,6 +97,8 @@ describe("a copy of a case you made", () => {
     expect(madeFrom(null)).toBeNull();
     expect(madeOfJob(job("w", "queued", "solve", { name: "w", source: "wing" }))).toEqual({ copyOf: "wing" });
     expect(madeOfJob(job("w", "queued"))).toBeNull();
+    expect(madeOfJob(job("v", "running", "solve", { name: "v", template: "ahmed-body", size: "coarse" })))
+      .toEqual({ template: "ahmed-body" });
     expect(madeOfJob(job("w", "queued", "repair", { name: "w", source: "wing" }))).toBeNull();
   });
 

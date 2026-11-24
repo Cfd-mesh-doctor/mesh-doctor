@@ -10,8 +10,18 @@ import type { Case } from "./results";
 const M = { top: 4, right: 14, bottom: 34, left: 14 };
 const ROW = 50; // per case: its label line, then its track
 const TRACK = 32; // the track's height within the row
-const DOMAIN = [0.2, 0.45] as const;
-const TICKS = [0.2, 0.25, 0.3, 0.35, 0.4, 0.45];
+const STEP = 0.05;
+
+/** The axis: 0.2 to 0.45, which the accuracy check's cases need, and wider by steps of 0.05 for a case outside it
+ * (an install whose answer is far off). */
+function axis(cases: readonly Case[]): { domain: [number, number]; ticks: number[] } {
+  const all = cases.flatMap((c) => [c.cd, c.tunnel]).filter(Number.isFinite);
+  const lo = Math.min(0.2, Math.floor(Math.min(...all) / STEP + 1e-9) * STEP);
+  const hi = Math.max(0.45, Math.ceil(Math.max(...all) / STEP - 1e-9) * STEP);
+  const ticks: number[] = [];
+  for (let i = 0; lo + i * STEP <= hi + 1e-9; i++) ticks.push(Number((lo + i * STEP).toFixed(2)));
+  return { domain: [lo, hi], ticks };
+}
 
 export function CdChart({ cases }: { cases: Case[] }) {
   const box = useRef<HTMLDivElement>(null);
@@ -31,7 +41,8 @@ export function CdChart({ cases }: { cases: Case[] }) {
 
   const w = width ?? 640;
   const height = M.top + cases.length * ROW + M.bottom;
-  const X = (v: number) => M.left + ((v - DOMAIN[0]) / (DOMAIN[1] - DOMAIN[0])) * (w - M.left - M.right);
+  const { domain: [lo, hi], ticks } = axis(cases);
+  const X = (v: number) => M.left + ((v - lo) / (hi - lo)) * (w - M.left - M.right);
   const label = "Drag coefficient of each case, the Mesh Doctor run against the wind tunnel: " +
     cases.map((c) => `${c.name}, ${c.cd.toFixed(3)} against ${c.tunnel} (${c.difference})`).join("; ") + ".";
   const a = active == null ? undefined : cases[active];
@@ -48,7 +59,7 @@ export function CdChart({ cases }: { cases: Case[] }) {
           <>
             <svg width={w} height={height} role="img" aria-label={label} className="block">
               <g className="text-[11px] tabular-nums">
-                {TICKS.map((t) => (
+                {ticks.map((t) => (
                   <g key={t}>
                     <line x1={X(t)} x2={X(t)} y1={M.top} y2={height - M.bottom} className="stroke-border" />
                     <text x={X(t)} y={height - M.bottom + 16} textAnchor="middle" className="fill-muted-foreground">{t.toFixed(2)}</text>
@@ -92,8 +103,9 @@ export function CdChart({ cases }: { cases: Case[] }) {
         {a ? (
           <>
             <span className="font-medium text-foreground">{a.name}</span> ({a.cells} cells): Cd {a.cd.toFixed(3)} against{" "}
-            {a.tunnel} in the wind tunnel, {a.difference}. Lift Cl {a.cl.toFixed(3)}; drift over the last 500 iterations{" "}
-            {a.drift}; solved in {a.time}.{a.miss && " Steady RANS keeps the flow on the slant here, while in the tunnel it separates."}
+            {a.tunnel} in the wind tunnel, {a.difference}. Lift Cl {a.cl.toFixed(3)}; drift over the last {a.window ?? 500}{" "}
+            iterations {a.drift}{a.time && <>; solved in {a.time}</>}.
+            {a.miss && " Steady RANS keeps the flow on the slant here, while in the tunnel it separates."}
           </>
         ) : "Point at a case, or tap it, for all its numbers."}
       </p>

@@ -3,8 +3,10 @@
 // processes, whether the solve fits in the memory of the engine's computer, then POST /jobs (a `solve` job) and the
 // run's page. A continuation goes on from the latest iteration written, on the run's own processes. A case you made is
 // solved through a copy (CopyDialog): the case and the copy's name, then the same; the job makes the copy first, as a
-// new case of its own. The demo can't start jobs: it says so and gives the command that does the same in a terminal.
-import { CopyPlus, FastForward, Play } from "lucide-react";
+// new case of its own. Verify install (VerifyDialog) makes the coarse Ahmed body from its template and solves it to
+// iteration 2,000, as the accuracy check did: its name and processes, then the same, in one job. The demo can't start
+// jobs: it says so and gives the command that does the same in a terminal.
+import { CopyPlus, FastForward, Play, ShieldCheck } from "lucide-react";
 import { useId, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { CopyCommand } from "@/components/shared/CopyCommand";
@@ -13,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { DialogActions, DialogClose, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/misc";
 import { useAppPath, useEngine } from "@/engine/context";
-import { useCases, useJobs, useMachine, useStartJob } from "@/engine/hooks";
+import { useCases, useJobs, useMachine, useRuns, useStartJob } from "@/engine/hooks";
 import { JOB_KIND_LABEL, isActive, type Run } from "@/engine/types";
 import { machineFields } from "@/estimate/machine";
 import { formatInt } from "@/lib/format";
@@ -24,6 +26,7 @@ import {
   FIRST_TO, copyName, copyNameProblem, copyTaken, procChoices, solveCommand, suggestedProcs, suggestedTo, toProblem,
   yourCases,
 } from "./solveStart";
+import { VERIFY, VERIFY_CELLS, verifyCommand, verifyName, verifyNameProblem, verifyProcs, verifyTaken } from "./verify";
 
 /** What the dialog solves: a case Mesh Doctor made, and its run once it has one (then the solve continues it). */
 export interface SolveTarget {
@@ -60,7 +63,21 @@ export function CopyDialog({ open, onOpenChange, source }: {
   );
 }
 
-/** What both dialogs need: the engine and its computer, the big job it runs now, and starting a solve job. */
+/** The Verify install dialog: the coarse Ahmed body made from its template and solved to iteration 2,000, under a
+ * free name (verify-install, then -2, -3…). It is made afresh each time it opens; `onStarted` hears the job's name. */
+export function VerifyDialog({ open, onOpenChange, onStarted }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onStarted?: (name: string) => void;
+}) {
+  return (
+    <JobDialog open={open} onOpenChange={onOpenChange}>
+      <VerifyForm onDone={(name) => { onOpenChange(false); onStarted?.(name); }} />
+    </JobDialog>
+  );
+}
+
+/** What the dialogs need: the engine and its computer, the big job it runs now, and starting a solve job. */
 function useSolveStart() {
   const { mode } = useEngine();
   const to = useAppPath();
@@ -123,21 +140,25 @@ function ProcsField({ id, np, onPick, s }: { id: string; np: number; onPick: (np
   );
 }
 
-/** Whether the solve fits in the memory of the engine's computer, and the big job it runs now, if any. */
-function Notes({ s, cells, what }: { s: SolveStart; cells: number | null; what: string }) {
-  const memory = stepMemory("solver", cells, s.machine.data);
+/** Whether the solve (or, for a case it makes from a template, its mesh: `step` snappy) fits in the memory of the
+ * engine's computer, and the big job it runs now, if any. */
+function Notes({ s, cells, what, step = "solver" }: {
+  s: SolveStart; cells: number | null; what: string; step?: "solver" | "snappy";
+}) {
+  const memory = stepMemory(step, cells, s.machine.data);
   const { busy, computer, Computer } = s;
+  const needs = step === "snappy" ? "Its mesh, more than its solve, needs" : "The solve needs";
   return (
     <div className="space-y-2">
       {memory ? (
         memory.fits ? (
           <Note tone="ok">
-            The solve needs about <GB value={memory.need} /> of memory; {computer} has <GB value={memory.have} />
+            {needs} about <GB value={memory.need} /> of memory; {computer} has <GB value={memory.have} />
             {memory.limited ? " (its RAM limit)" : ""}.
           </Note>
         ) : (
           <Note tone="warn">
-            The solve needs about <GB value={memory.need} /> of memory, more than {computer} can give it: a job may
+            {needs} about <GB value={memory.need} /> of memory, more than {computer} can give it: a job may
             use 90&nbsp;% of its <GB value={memory.have} />{memory.limited ? " (its RAM limit)" : ""}. The engine
             refuses a solve that won&apos;t fit in its free memory.
           </Note>
@@ -242,6 +263,68 @@ function SolveForm({ target, onDone }: { target: SolveTarget; onDone: () => void
       <Actions s={s} ready={ready}>
         {first ? <Play aria-hidden /> : <FastForward aria-hidden />}
         {s.start.isPending ? "Starting…" : first ? "Solve" : "Continue"}
+      </Actions>
+    </form>
+  );
+}
+
+function VerifyForm({ onDone }: { onDone: (name: string) => void }) {
+  const s = useSolveStart();
+  const runs = useRuns(false);
+  const id = useId();
+  const taken = useMemo(() => verifyTaken(s.cases.data?.items, runs.data?.items, s.jobs.data?.items),
+    [s.cases.data, runs.data, s.jobs.data]);
+  const [typedName, setTypedName] = useState<string | null>(null);      // null: the free name suggested
+  const name = typedName ?? verifyName(taken);
+  const nameProblem = verifyNameProblem(name, taken);
+  const [picked, setPicked] = useState<number | null>(null);
+  const np = picked ?? verifyProcs(s.cores);
+  const ready = !s.demo && !nameProblem && !s.busy && !s.start.isPending;
+
+  const submit = () => {
+    if (!ready) return;
+    s.start.mutate(
+      { kind: "solve", params: { name, template: VERIFY.template, size: VERIFY.size, to: VERIFY.to, np } },
+      { onSuccess: () => onDone(name) },
+    );
+  };
+
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); submit(); }} noValidate>
+      <DialogTitle>Verify install</DialogTitle>
+      <DialogDescription>
+        The engine makes the coarse Ahmed body from its template (about {formatInt(VERIFY_CELLS)} cells), then solves
+        it to iteration {formatInt(VERIFY.to)}, as the accuracy check&apos;s run of that mesh was: about 15 minutes on
+        6 processes. Its drag is then compared with that run&apos;s and the wind tunnel&apos;s, on this screen.
+      </DialogDescription>
+
+      <div className="mt-5 space-y-5">
+        <div className="space-y-1.5">
+          <label htmlFor={`${id}-name`} className="text-sm font-medium">Name</label>
+          <Input
+            id={`${id}-name`}
+            value={name}
+            onChange={(e) => setTypedName(e.target.value.trim())}
+            aria-invalid={nameProblem ? true : undefined}
+            aria-describedby={`${id}-name-hint`}
+            autoComplete="off"
+            spellCheck={false}
+            className={cn("font-mono", nameProblem && "border-danger")}
+          />
+          <p id={`${id}-name-hint`} className={cn("text-xs", nameProblem ? "text-danger" : "text-muted-foreground")}>
+            {nameProblem ?? "A new case in the cases folder: the job makes it there, then solves it."}
+          </p>
+        </div>
+        <ProcsField id={id} np={np} onPick={setPicked} s={s} />
+        <Notes s={s} cells={VERIFY_CELLS} what="verify the install" step="snappy" />
+        {s.demo && !nameProblem && <DemoCommand verb="Verify install" command={verifyCommand(name, np)} />}
+      </div>
+
+      {s.start.isError && <ErrorPanel compact className="mt-4" error={s.start.error} />}
+
+      <Actions s={s} ready={ready}>
+        <ShieldCheck aria-hidden />
+        {s.start.isPending ? "Starting…" : "Verify install"}
       </Actions>
     </form>
   );

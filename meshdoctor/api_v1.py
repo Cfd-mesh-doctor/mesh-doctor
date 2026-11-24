@@ -23,6 +23,7 @@ import ramguard
 import schema
 import solve
 import templates
+import validate
 import version
 
 API_VERSION = "1.6"
@@ -519,7 +520,8 @@ RUN = {"type": "object", "required": ["name", "state", "step", "iteration", "sta
     "state": {"enum": ["running", "done", "stopped", "failed", "cancelled", "interrupted"],
               "description": "stopped: ended at a written iteration before its end (Stop); interrupted: its status "
                              "says running but its job is gone (the computer restarted, or the job was killed)"},
-    "step": {"type": "string", "description": "copying (a copy of a case you made), decomposing, potentialFoam, "
+    "step": {"type": "string", "description": "copying (a copy of a case you made), meshing or meshing: <its mesh's "
+                                             "step> (a case made from a template first), decomposing, potentialFoam, "
                                              "solving, reconstructing or done"},
     "iteration": dict(_INT_OR_NULL, description="the last iteration in its solver log"),
     "start": {"type": "integer", "description": "the iteration the latest stretch started from"},
@@ -560,6 +562,46 @@ def stop_run(p, q, b):
     if why:
         raise ApiError(*why)
     return _run_out(run)
+
+
+_AGAINST = {"type": "number", "description": "percent: this run's drag against it"}
+VALIDATION = {"type": "object", "required": ["name", "state", "template", "size", "slant", "cells", "iterations",
+                                              "window", "cd", "cl", "drift", "tunnel", "published", "comparable",
+                                              "matches"], "properties": {
+    "name": {"type": "string", "description": "the run: a case made from the Ahmed body template"},
+    "state": RUN["properties"]["state"],
+    "template": {"type": "string", "description": "the template it was made from (ahmed-body)"},
+    "size": {"enum": templates.SIZES, "description": "its mesh: the accuracy check has a run of each"},
+    "slant": {"type": "integer", "description": "the body's rear slant, in degrees"},
+    "cells": dict(_INT_OR_NULL, description="its mesh's cells"),
+    "iterations": {"type": "integer", "description": "the last iteration with force coefficients"},
+    "window": {"type": "integer", "description": "the iterations its drag and lift are averaged over: the last "
+                                                 "quarter, as the accuracy check takes them"},
+    "cd": {"type": "number", "description": "its drag coefficient: the window's mean"},
+    "cl": {"type": "number", "description": "its lift coefficient: the window's mean"},
+    "drift": {"type": "number", "description": "percent: the drag of the window's second half against its first; "
+                                               "near 0 once it has settled"},
+    "tunnel": {"type": "object", "required": ["cd", "difference"], "properties": {
+        "cd": {"type": "number", "description": "the wind tunnel's drag coefficient (Ahmed, Ramm & Faltin 1984)"},
+        "difference": _AGAINST}},
+    "published": {"type": "object", "required": ["cd", "cl", "iterations", "difference"],
+                  "description": "the accuracy check's run of the same mesh (docs/validation.md)", "properties": {
+                      "cd": {"type": "number"}, "cl": {"type": "number"},
+                      "iterations": {"type": "integer", "description": "what it was solved to"},
+                      "difference": _AGAINST}},
+    "comparable": {"type": "boolean", "description": "solved to the accuracy check's iterations or more"},
+    "matches": {"type": "boolean", "description": f"comparable, and its drag within {validate.MATCH:g} % of the "
+                                                  "accuracy check's: the install gives the same answer"}}}
+
+
+@route("GET", "/runs/{name}/validation", "Verify install: how a run of the Ahmed body template compares with the "
+       "wind tunnel and with the accuracy check's run of the same mesh (docs/validation.md), its drag and lift taken "
+       "over the last quarter of its iterations (API 1.6)", ok=VALIDATION)
+def run_validation(p, q, b):
+    doc, why = validate.of_run(_name(p["name"]))
+    if why:
+        raise ApiError(*why)
+    return doc
 
 
 _SOLVER = LIVE["properties"]["solver"]
@@ -658,21 +700,27 @@ JOBS = {
     "solve": {
         "summary": "solve a case Mesh Doctor made to an iteration: while none is written it splits the case, starts "
                    "the flow with potentialFoam and runs foamRun; once one is written it continues from the latest. "
-                   "With a source, it first makes the case as a copy of a case you made",
+                   "With a source, it first makes the case as a copy of a case you made; with a template, it first "
+                   "makes it from the template, as a case job does",
         "params": _params({"name": dict(NAME, description="a case in the cases folder that Mesh Doctor made (a case "
-                                                          "job's, or a copy); with a source, the new case the copy "
-                                                          "goes in, a name not taken there"),
+                                                          "job's, or a copy); with a source or a template, the new "
+                                                          "case it makes, a name not taken there"),
                            "source": dict(NAME, description="a case you made, to solve a copy of: its mesh and "
                                                             "settings, not its results, are copied into the cases "
                                                             "folder as name (a case you made is never changed). It "
                                                             "needs its mesh joined, its 0 (or 0.orig) fields and a "
                                                             "steady foamRun setup"),
+                           "template": dict(NAME, description="a template (GET /templates) to make the case from "
+                                                              "first, as a case job does (Verify install: the Ahmed "
+                                                              "body's coarse mesh, solved to 2000)"),
+                           "size": {"enum": templates.SIZES, "description": "with a template: one of its mesh sizes "
+                                                                            "(default: the template's own)"},
                            "to": {"type": "integer", "minimum": 1, "maximum": solve.MAX_ITERS, "default": 2000,
                                   "description": "the iteration to solve to; past the latest written one"},
                            "np": {"type": "integer", "minimum": 1, "maximum": 64, "default": 4,
                                   "description": "processes for a solve from iteration 0 (1: not split); a "
                                                  "continuation keeps the run's own"}}, ["name"]),
-        "start": lambda a: solve.start(a["name"], a["to"], a["np"], a.get("source")),
+        "start": lambda a: solve.start(a["name"], a["to"], a["np"], a.get("source"), a.get("template"), a.get("size")),
         "links": lambda n: {"run": f"{PREFIX}/runs/{n}"},
     },
 }

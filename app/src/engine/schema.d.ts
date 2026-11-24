@@ -461,6 +461,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/runs/{name}/validation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Verify install: how a run of the Ahmed body template compares with the wind tunnel and with the accuracy check's run of the same mesh (docs/validation.md), its drag and lift taken over the last quarter of its iterations (API 1.6) */
+        get: operations["run_validation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/schemas/{kind}": {
         parameters: {
             query?: never;
@@ -1513,15 +1530,22 @@ export interface operations {
                     /** @enum {unknown} */
                     kind: "solve";
                     params: {
-                        /** @description a case in the cases folder that Mesh Doctor made (a case job's, or a copy); with a source, the new case the copy goes in, a name not taken there */
+                        /** @description a case in the cases folder that Mesh Doctor made (a case job's, or a copy); with a source or a template, the new case it makes, a name not taken there */
                         name: string;
                         /**
                          * @description processes for a solve from iteration 0 (1: not split); a continuation keeps the run's own
                          * @default 4
                          */
                         np?: number;
+                        /**
+                         * @description with a template: one of its mesh sizes (default: the template's own)
+                         * @enum {unknown}
+                         */
+                        size?: "coarse" | "medium" | "fine";
                         /** @description a case you made, to solve a copy of: its mesh and settings, not its results, are copied into the cases folder as name (a case you made is never changed). It needs its mesh joined, its 0 (or 0.orig) fields and a steady foamRun setup */
                         source?: string;
+                        /** @description a template (GET /templates) to make the case from first, as a case job does (Verify install: the Ahmed body's coarse mesh, solved to 2000) */
+                        template?: string;
                         /**
                          * @description the iteration to solve to; past the latest written one
                          * @default 2000
@@ -2195,7 +2219,7 @@ export interface operations {
                              * @enum {unknown}
                              */
                             state: "running" | "done" | "stopped" | "failed" | "cancelled" | "interrupted";
-                            /** @description copying (a copy of a case you made), decomposing, potentialFoam, solving, reconstructing or done */
+                            /** @description copying (a copy of a case you made), meshing or meshing: <its mesh's step> (a case made from a template first), decomposing, potentialFoam, solving, reconstructing or done */
                             step: string;
                             /** @description the stretches solved so far, oldest first */
                             stretches: {
@@ -2262,7 +2286,7 @@ export interface operations {
                          * @enum {unknown}
                          */
                         state: "running" | "done" | "stopped" | "failed" | "cancelled" | "interrupted";
-                        /** @description copying (a copy of a case you made), decomposing, potentialFoam, solving, reconstructing or done */
+                        /** @description copying (a copy of a case you made), meshing or meshing: <its mesh's step> (a case made from a template first), decomposing, potentialFoam, solving, reconstructing or done */
                         step: string;
                         /** @description the stretches solved so far, oldest first */
                         stretches: {
@@ -2362,7 +2386,7 @@ export interface operations {
                              * @enum {unknown}
                              */
                             state: "running" | "done" | "stopped" | "failed" | "cancelled" | "interrupted";
-                            /** @description copying (a copy of a case you made), decomposing, potentialFoam, solving, reconstructing or done */
+                            /** @description copying (a copy of a case you made), meshing or meshing: <its mesh's step> (a case made from a template first), decomposing, potentialFoam, solving, reconstructing or done */
                             step: string;
                             /** @description the stretches solved so far, oldest first */
                             stretches: {
@@ -2458,7 +2482,7 @@ export interface operations {
                          * @enum {unknown}
                          */
                         state: "running" | "done" | "stopped" | "failed" | "cancelled" | "interrupted";
-                        /** @description copying (a copy of a case you made), decomposing, potentialFoam, solving, reconstructing or done */
+                        /** @description copying (a copy of a case you made), meshing or meshing: <its mesh's step> (a case made from a template first), decomposing, potentialFoam, solving, reconstructing or done */
                         step: string;
                         /** @description the stretches solved so far, oldest first */
                         stretches: {
@@ -2469,6 +2493,85 @@ export interface operations {
                         updated: string | null;
                         /** @description the latest iteration written, which a continuation starts from */
                         written: number;
+                    };
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    run_validation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description its drag coefficient: the window's mean */
+                        cd: number;
+                        /** @description its mesh's cells */
+                        cells: number | null;
+                        /** @description its lift coefficient: the window's mean */
+                        cl: number;
+                        /** @description solved to the accuracy check's iterations or more */
+                        comparable: boolean;
+                        /** @description percent: the drag of the window's second half against its first; near 0 once it has settled */
+                        drift: number;
+                        /** @description the last iteration with force coefficients */
+                        iterations: number;
+                        /** @description comparable, and its drag within 2 % of the accuracy check's: the install gives the same answer */
+                        matches: boolean;
+                        /** @description the run: a case made from the Ahmed body template */
+                        name: string;
+                        /** @description the accuracy check's run of the same mesh (docs/validation.md) */
+                        published: {
+                            cd: number;
+                            cl: number;
+                            /** @description percent: this run's drag against it */
+                            difference: number;
+                            /** @description what it was solved to */
+                            iterations: number;
+                        };
+                        /**
+                         * @description its mesh: the accuracy check has a run of each
+                         * @enum {unknown}
+                         */
+                        size: "coarse" | "medium" | "fine";
+                        /** @description the body's rear slant, in degrees */
+                        slant: number;
+                        /**
+                         * @description stopped: ended at a written iteration before its end (Stop); interrupted: its status says running but its job is gone (the computer restarted, or the job was killed)
+                         * @enum {unknown}
+                         */
+                        state: "running" | "done" | "stopped" | "failed" | "cancelled" | "interrupted";
+                        /** @description the template it was made from (ahmed-body) */
+                        template: string;
+                        tunnel: {
+                            /** @description the wind tunnel's drag coefficient (Ahmed, Ramm & Faltin 1984) */
+                            cd: number;
+                            /** @description percent: this run's drag against it */
+                            difference: number;
+                        };
+                        /** @description the iterations its drag and lift are averaged over: the last quarter, as the accuracy check takes them */
+                        window: number;
                     };
                 };
             };
