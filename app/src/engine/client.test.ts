@@ -107,6 +107,21 @@ describe("httpTransport", () => {
       + "memory in `.wslconfig`.");
   });
 
+  it("gives the disk guard's own numbers: what the solve needs, what is free and what the engine keeps", () => {
+    // meshdoctor/diskguard.py's refusal, as POST /jobs answers it.
+    const said = "not enough disk space: the copy of wing and its solve need about 1,977 MB, and the disk has 2.9 GB "
+      + "free (the engine keeps 1.0 GB free). Delete runs or results you no longer need, then try again.";
+    const fix = "Delete runs or results you no longer need, then try again. On Windows, WSL's own disk is a file on a "
+      + "Windows drive (C:, unless it was moved): free space there too.";
+    expect(explain(new EngineError("not-enough-disk", said, 409))).toEqual({
+      title: "Not enough free disk space",
+      hint: "It needs about 1,977 MB of disk space, and the disk has 2.9 GB free; the engine keeps 1.0 GB of that for "
+        + `everything else. ${fix}`,
+      troubleshooting: true,
+    });
+    expect(explain(new EngineError("not-enough-disk", "what the engine said")).hint).toBe(fix);
+  });
+
   it("names the job in the way when the engine runs one already", () => {
     // meshdoctor/jobs.py's refusals: a job of its own, or an OpenFOAM run it didn't start.
     const job = "job 20261123-104610-repair-wing-fix-b349 (repair wing-fix) is running; one big job at a time (RAM)";

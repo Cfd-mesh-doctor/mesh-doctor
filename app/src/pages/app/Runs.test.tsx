@@ -67,10 +67,12 @@ function transientLive(r: Run) {
   };
 }
 
-/** Your own engine (or the demo, by `kind`) with these made cases, runs and jobs. */
+/** Your own engine (or the demo, by `kind`) with these made cases, runs and jobs, and the free space of its disk in MB
+ * (`freeMb`, 393 GB by default; `noDisk`: it doesn't say, as an engine before API 1.7), where solving any case takes
+ * what the coarse Ahmed body's does. */
 function engine(o: {
   made?: Record<string, Made>; runs?: Run[]; jobs?: Job[]; live?: (r: Run) => unknown; noRuns?: boolean;
-  kind?: "engine" | "demo";
+  kind?: "engine" | "demo"; freeMb?: number; noDisk?: boolean;
 } = {}) {
   const posted: { path: string; body?: unknown }[] = [];
   const judged: string[] = [];
@@ -97,6 +99,12 @@ function engine(o: {
       if (route === "/runs" && !o.noRuns) return { items: [...runs.values()] } as T;
       if (route === "/jobs") return { items: o.jobs ?? [] } as T;
       if (route === "/machine") return MACHINE as T;
+      if (route === "/disk" && !o.noDisk) {
+        const name = new URLSearchParams(path.split("?")[1] ?? "").get("case");
+        return { freeMb: o.freeMb ?? 402_339, keepMb: 1024, case: name == null ? null : {
+          name, copyMb: 65, transientMb: 103, solveMb: { several: 212, one: 78 }, continueMb: { several: 39, one: 0 },
+        } } as T;
+      }
       if (route === "/judge") {
         judged.push(path);
         return { verdict: "converged", window: 200, group: "body", average: { drag: { mean: 41.8, u: 0.2 } } } as T;
@@ -161,6 +169,8 @@ describe("the Solve screen's runs", () => {
     expect(within(procs).getAllByRole("option").map((o) => o.textContent)).toEqual(["1", "2", "3", "4"]);
     await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent(
       /The solve needs about \d+(\.\d)? GB of memory; your engine's computer has 15\.6 GB\./));
+    await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent(
+      "The solve needs about 212 MB of disk space; the disk the cases are on has 393 GB free."));
     await user.selectOptions(procs, "2");
     expect(procs).toHaveAccessibleDescription(
       "The case is split into 2 parts (decomposePar), each solved by a process of its own (mpirun). A continuation keeps the same. Your engine's computer has 4 cores.");
@@ -223,9 +233,29 @@ describe("solving a copy of a case you made", () => {
     expect(dialog().getByRole("textbox", { name: "Solve to iteration" })).toHaveValue("2000");
     expect(dialog().getByRole("combobox", { name: "Processes" })).toHaveValue("4");
     await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent(/The solve needs about \d+(\.\d)? GB of memory/));
+    await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent(
+      "The copy and its solve need about 277 MB of disk space; the disk the cases are on has 393 GB free."));
     await user.click(dialog().getByRole("button", { name: "Solve a copy" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/app/solve/mine-fine"));
     expect(posted).toEqual([{ path: "/jobs", body: { kind: "solve", params: { name: "mine-fine", source: "mine", to: 2000, np: 4 } } }]);
+  });
+
+  it("warns when the copy and what its solve writes won't fit on the disk; an engine before API 1.7 says nothing", async () => {
+    const user = userEvent.setup();
+    const view = solvePage({ made: { "mine-run": { copyOf: "mine" } }, freeMb: 1200 });
+    await user.click(await screen.findByRole("button", { name: "Solve a case you made…" }));
+    await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent("The copy and its solve need about 277 MB "
+      + "of disk space, more than the disk the cases are on can give: it has 1.2 GB free, and the engine keeps 1.0 GB of "
+      + "that for everything else. Delete runs or results you no longer need: the engine refuses a solve that won't fit."));
+    expect(dialog().getByRole("button", { name: "Solve a copy" })).toBeEnabled();              // the engine decides
+    await user.selectOptions(dialog().getByRole("combobox", { name: "Processes" }), "1");      // unsplit, it writes less
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "The copy and its solve need about 143 MB of disk space; the disk the cases are on has 1.2 GB free.");
+    view.unmount();
+    solvePage({ made: { "mine-run": { copyOf: "mine" } }, noDisk: true });
+    await user.click(await screen.findByRole("button", { name: "Solve a case you made…" }));
+    await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent(/The solve needs about \d+(\.\d)? GB of memory/));
+    expect(screen.getByRole("dialog")).not.toHaveTextContent(/disk space/);
   });
 
   it("says when there is no case of yours to copy, and gives the command in the demo", async () => {
@@ -328,6 +358,8 @@ describe("a run's page", () => {
     expect(dialog().getByRole("heading", { name: "Continue b" })).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toHaveTextContent(
       "The solve continues from iteration 150, the latest written, on the run's 4 processes, to the iteration you give.");
+    await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent(
+      "The continuation needs about 39 MB of disk space; the disk the cases are on has 393 GB free."));
     expect(dialog().queryByRole("combobox", { name: "Processes" })).toBeNull();
     const to = dialog().getByRole("textbox", { name: "Solve to iteration" });
     expect(to).toHaveValue("1150");

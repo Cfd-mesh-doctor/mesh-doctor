@@ -2315,6 +2315,46 @@ echo End
         self.assertEqual(asked, [(480_000, "mesh")])                       # the memory of the mesh it makes
         self.assertEqual((self.s.describe("fresh")["written"], self.s.split(os.path.join(self.cases, "fresh"))), (10, 0))
 
+    def test_a_solve_is_refused_when_its_new_case_and_what_it_writes_wont_fit_on_the_disk(self):
+        import diskguard
+        self.yours()
+        keep = diskguard.KEEP_MB
+        for params, what, mb in (
+                ({"name": "copy1", "source": "yours", "np": 2}, "the copy of yours and its solve need", 1 + 4),
+                ({"name": "made", "to": 100, "np": 2}, "the solve of made needs", 4),     # its split and 2 times
+                ({"name": "fresh", "template": "ahmed-body", "size": "coarse", "np": 2},
+                 "fresh's mesh and its solve need", 66 + 215)):
+            need = self.s.disk_need(params["name"], 2, params.get("source"), params.get("template"), params.get("size"))
+            self.assertEqual(need, (mb, what))
+            with mock.patch.object(diskguard, "free_mb", lambda folder: mb + keep - 1):
+                self.assertRefused(self.post(params), 409, "not-enough-disk",
+                                   f"{what} about {mb} MB, and the disk has {diskguard.text(mb + keep - 1)} free (the engine keeps "
+                                   "1.0 GB free)")
+        self.assertEqual(self.launched, [])
+        self.assertFalse(os.path.exists(os.path.join(self.cases, "copy1")))
+        with mock.patch.object(diskguard, "free_mb", lambda folder: 4 + keep - 1), self.assertRaises(SystemExit) as e:
+            self.s.main(["yours", "copy2", "--to", "10", "--np", "2"])      # the command checks it too
+        self.assertTrue(str(e.exception).startswith("not enough disk space: the copy of yours and its solve need"))
+        self.assertFalse(os.path.exists(os.path.join(self.cases, "copy2")))
+        with mock.patch.object(diskguard, "free_mb", lambda folder: 5 + keep):
+            st, doc, _ = self.post({"name": "copy1", "source": "yours", "np": 2})
+        self.assertEqual(st, 202, doc)
+
+    def test_the_disk_route_says_the_free_space_and_what_solving_a_case_takes(self):
+        import diskguard
+        self.yours()
+        with mock.patch.object(diskguard, "free_mb", lambda folder: 5000):
+            self.assertEqual(self.api.handle("GET", "/api/v1/disk")[:2],
+                             (200, {"freeMb": 5000, "keepMb": 1024, "case": None}))
+            st, doc, _ = self.api.handle("GET", "/api/v1/disk", {"case": "yours"})
+        self.assertEqual((st, doc["case"]), (200, {"name": "yours", "copyMb": 1, "transientMb": 1,
+                                                   "solveMb": {"several": 4, "one": 2},
+                                                   "continueMb": {"several": 1, "one": 0}}))
+        st, doc, _ = self.api.handle("GET", "/api/v1/disk", {"case": "nope"})
+        self.assertEqual((st, doc["error"]["code"]), (404, "not-found"))
+        st, doc, _ = self.api.handle("GET", "/api/v1/disk", {"case": "../x"})
+        self.assertEqual((st, doc["error"]["code"]), (400, "bad-request"))
+
 
 TRANSIENT_FOAMRUN = '''#!/usr/bin/env python3
 # foamRun in time, as OpenFOAM 14 runs one with adjustTimeStep: from startTime (by name) to endTime, five time steps
@@ -2413,6 +2453,28 @@ class TransientSolveTest(unittest.TestCase):
     def status(self, name="ahmedT"):
         with open(os.path.join(self.cases, name, self.jobs.SOLVE_STATUS)) as f:
             return json.load(f)
+
+    def test_a_transient_run_is_measured_as_it_is_made_and_refused_when_it_wont_fit(self):
+        import diskguard, transient
+        src = self.steady()
+        new = os.path.join(self.cases, "ahmedT")
+        need = transient.make_size(src, new)
+        os.mkdir(new)
+        transient.make(src, new, 1, "DDES", 0.2088)
+
+        def sizes(root):
+            return {os.path.relpath(os.path.join(d, n), root): os.path.getsize(os.path.join(d, n))
+                    for d, _, names in os.walk(root) for n in names}
+        before, after = sizes(src), sizes(new)
+        # its fields as made, and its settings as copied, before they are made transient
+        self.assertEqual(need, sum(after[r] if r.startswith("0" + os.sep) else before[r] for r in after))
+        self.assertIsNone(transient.make_size(os.path.join(self.cases, "made")))     # no result to start from
+        mb, what = self.s.disk_need("ahmedT2", 2, steady="steady")
+        self.assertEqual(what, "the transient run of steady and its solve need")
+        with mock.patch.object(diskguard, "free_mb", lambda folder: mb + diskguard.KEEP_MB - 1):
+            self.assertRefused(self.post({"name": "ahmedT2", "steady": "steady", "np": 2}), 409, "not-enough-disk",
+                               f"{what} about {mb} MB")
+        self.assertEqual(self.launched, [])
 
     def test_a_transient_run_has_the_steady_runs_mesh_settings_and_flow_made_transient(self):
         import transient
@@ -2696,6 +2758,92 @@ class TransientSolveTest(unittest.TestCase):
         with self.assertRaises(SystemExit) as e:
             self.s.main(["t"])                                                 # a transient run says its time
         self.assertIn("give the time in s to continue it to", str(e.exception))
+
+
+class DiskGuardTest(unittest.TestCase):
+    """diskguard.py: what a copy writes, measured as the copy walks it; what a solve writes, from its mesh; the free
+    space, at most the Windows drive's inside WSL; and the refusal, with its numbers."""
+
+    def setUp(self):
+        import diskguard, templates
+        self.g, self.t = diskguard, templates
+        self.d = tempfile.mkdtemp(prefix="disk_test_")
+        self.addCleanup(shutil.rmtree, self.d, True)
+
+    @staticmethod
+    def write(root, files):
+        for rel, text in files.items():
+            path = os.path.join(root, rel)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as f:
+                f.write(text)
+
+    @staticmethod
+    def bytes_in(root):
+        return sum(os.path.getsize(os.path.join(d, n)) for d, _, names in os.walk(root) for n in names)
+
+    def test_a_copy_is_measured_file_by_file_as_the_copy_walks_it(self):
+        src, outside = os.path.join(self.d, "cases", "yours"), os.path.join(self.d, "surfaces")
+        self.write(outside, {"body.stl": "solid body\n" * 50})
+        self.write(src, {"system/controlDict": "application foamRun;\n", "constant/polyMesh/owner": "o" * 4000,
+                         "constant/polyMesh/faces": "f" * 9000, "0.orig/U": "internalField uniform (40 0 0);\n",
+                         "100/U": "a result\n" * 99, "processor0/constant/polyMesh/owner": "split\n" * 99,
+                         "postProcessing/forces/0/forces.dat": "100 40\n" * 99, "log.foamRun": "Time = 100\n",
+                         ".meshdoctor-solve.json": "{}"})
+        os.symlink(outside, os.path.join(src, "constant", "triSurface"))     # followed, as the copy follows it
+        os.symlink(os.path.join(self.d, "gone"), os.path.join(src, "constant", "old"))     # dangling: left out
+        os.symlink(src, os.path.join(src, "constant", "again"))            # round to the case itself: left out
+        new = os.path.join(self.d, "cases", "copy")
+        os.mkdir(new)
+        need = self.t.copy_size(src, new)
+        self.t.copy(src, new)
+        self.assertEqual(sorted(os.listdir(new)), ["0", "0.orig", "constant", "system"])
+        self.assertEqual(need, self.bytes_in(new))                          # 0.orig twice: it is the copy's 0 too
+        self.assertEqual(self.t.copy_size(src), need)                       # and for a copy not named yet
+        self.assertEqual(self.g.mb(need), 1)
+        self.assertEqual((self.g.mb(0), self.g.mb(self.g.MB), self.g.mb(self.g.MB + 1)), (0, 1, 2))
+        loop = os.path.join(self.d, "loop")
+        self.write(loop, {"f": "0123456789"})
+        os.symlink(loop, os.path.join(loop, "me"))                          # round and round: it still ends
+        self.assertGreaterEqual(self.g.size(loop), 10)
+
+    def test_a_solve_writes_its_split_and_the_times_it_keeps_from_the_size_of_its_mesh(self):
+        # (mesh MB, purgeWrite, processes[, from the start]): the measured 3.25 and 1.2 times the mesh, keeping 2
+        for args, mb in (((100, 2, 6), 325), ((100, 2, 1), 120), ((100, 2, 6, False), 60), ((100, 2, 1, False), 0),
+                         ((100, 0, 6), 485), ((100, 0, 1), 240), ((100, 0, 6, False), 380), ((100, 0, 1, False), 240),
+                         ((100, 1, 2), 245), ((100, 9, 2), 485), ((1, 2, 2), 4)):
+            self.assertEqual(self.g.solve_mb(*args), mb, args)
+        self.assertEqual(self.g.mesh_mb(480_000), 66)                        # the coarse Ahmed body's: 65.6 MB
+
+    def test_inside_wsl_the_free_space_is_at_most_the_windows_drives_that_holds_linuxs_disk(self):
+        from collections import namedtuple
+        usage, gb = namedtuple("usage", "total used free"), 1024 * self.g.MB
+
+        def disk_usage(path):
+            return usage(0, 0, 3 * gb if path == self.g.WINDOWS_DRIVE else 50 * gb)
+        with mock.patch.object(self.g.shutil, "disk_usage", disk_usage), \
+                mock.patch.object(self.g.os.path, "ismount", lambda p: p == self.g.WINDOWS_DRIVE):
+            with mock.patch.object(self.g, "_wsl", lambda: True):
+                self.assertEqual(self.g.free_mb(os.path.join(self.d, "cases", "new")), 3 * 1024)   # the drive's
+                self.assertIsNone(self.g._windows_free("/mnt/d/cases"))     # a case on a Windows drive: its own
+            with mock.patch.object(self.g, "_wsl", lambda: False):
+                self.assertEqual(self.g.free_mb(os.path.join(self.d, "cases", "new")), 50 * 1024)
+        self.assertIsInstance(self.g._wsl(), bool)
+        self.assertIsInstance(self.g.free_mb(self.d), int)
+
+    def test_a_job_that_wont_fit_with_the_space_kept_free_is_refused_with_its_numbers(self):
+        what = "the copy of yours and its solve need"
+        with mock.patch.object(self.g, "free_mb", lambda folder: 3000):
+            self.assertEqual(self.g.check(3000 - self.g.KEEP_MB, self.d, what),
+                             (True, "the copy of yours and its solve need about 1.9 GB, and the disk has 2.9 GB free"))
+            self.assertEqual(self.g.check(3000 - self.g.KEEP_MB + 1, self.d, what), (False, (
+                "not enough disk space: the copy of yours and its solve need about 1.9 GB, and the disk has 2.9 GB "
+                "free (the engine keeps 1.0 GB free). Delete runs or results you no longer need, then try again.")))
+        with mock.patch.object(self.g, "free_mb", lambda folder: None):
+            self.assertTrue(self.g.check(10 ** 9, self.d, what)[0])          # unknown free space: let through
+        self.assertTrue(self.g.check(None, self.d, what)[0])                 # and an unknown need
+        for mb, text in ((0, "1 MB"), (70, "70 MB"), (1023, "1,023 MB"), (2458, "2.4 GB"), (421_888, "412 GB")):
+            self.assertEqual(self.g.text(mb), text)
 
 
 class MachineTest(unittest.TestCase):

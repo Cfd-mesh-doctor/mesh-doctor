@@ -15,14 +15,14 @@ Where the code is today, where it is going, and why. The goal is that Mesh Docto
                   |
  jobs         Job model + Runner:  LocalRunner (today)  |  Slurm / remote worker (later)
                   |
- core         case reading, repair, A/B, judge, map, RAM guard, config   (no HTTP, no UI)
+ core         case reading, repair, A/B, judge, map, RAM and disk guards, config   (no HTTP, no UI)
                   |
  OpenFOAM     foamMeshDoctor, foamResidualHotspots, checkMesh, foamRun, ...
 ```
 
 Rules between layers:
 - **core** never imports `api`, `web` or `jobs`, never prints for a UI, and returns plain data (dicts that match the schemas below). The CLI and the API are its only callers.
-- **jobs** is the only place that starts long-running processes. Admission rules (one big job at a time, the RAM guard) live here, so every client gets them.
+- **jobs** is the only place that starts long-running processes. Admission rules (one big job at a time, the RAM guard, and for a solve the disk guard) live here, so every client gets them.
 - **api** translates HTTP to core and jobs calls. It holds the security checks (host and origin, token, plain names) and nothing else.
 - **web** talks only to `/api/v1`. It never reads files or assumes it is served from the same machine as the worker.
 
@@ -30,11 +30,11 @@ Rules between layers:
 
 | Today | Layer | Notes |
 |---|---|---|
-| `caseinfo.py`, `ramguard.py`, `config.py`, `mapdata.py` | core | already free of HTTP and UI |
+| `caseinfo.py`, `ramguard.py`, `diskguard.py`, `config.py`, `mapdata.py` | core | already free of HTTP and UI |
 | `tplan.py` | core + CLI | the transient plan: `plan()` returns a `tplan` document, from Mesh Doctor's `foamCourantCells` (OpenFOAM's `CourantNo` where it isn't built); it runs OpenFOAM only in a throwaway shadow case, so the case is only read. A `tplan` job (`start()`) writes it to `<workspace>/.tplans/<case>.json`, which `GET /tplans/{name}` answers, and the cell set of the fastest cells to `<workspace>/.tplans/<case>.sets` |
 | `repair.py`, `abtest.py` | core + CLI | the library functions (`full`, `fix`, `judge`, `run_one`, ...) are core; their `main()` is CLI |
 | `md_api.py` | api | reads results; checks job requests and hands them to `jobs.py`; refusals carry an error code |
-| `jobs.py`, `jobrun.py` | jobs | job files, admission (one big job, RAM guard), the LocalRunner and its wrapper, cancel |
+| `jobs.py`, `jobrun.py` | jobs | job files, admission (one big job, RAM guard, disk guard), the LocalRunner and its wrapper, cancel |
 | `api_v1.py` | api | the `/api/v1` route table, request checks, error format and OpenAPI document |
 | `server.py` | api | HTTP, the security checks, the live monitors, and the old `/api/md/*`, `/api/run` and `/api/status` routes |
 | `web/*.html` | web | five pages: HTML and CSS, plus the page's own script in `web/js/` |
@@ -113,6 +113,7 @@ All routes live under `/api/v1` (`meshdoctor/api_v1.py`). The routes are a table
 | `GET /live` | `/api/status` | the live (transient) case: forces, averaging window, time step, processes, memory |
 | `GET /variants` | `/api/md/variants` | solver-setting variants for an A/B second run |
 | `GET /machine` | | the computer the engine runs on, as Linux sees it (inside WSL, what WSL was given): processors, physical cores, memory and the RAM guard's `ram_limit_mb`; the app's size estimator fills in its memory and solver ranks from it (API 1.1) |
+| `GET /disk` | (new) | the free space for a new case in the cases folder (inside WSL 2, at most that of the Windows drive that holds Linux's own disk), which the disk guard checks a solve against; with `?case=`, what solving that case takes on the disk: a copy of it, a transient run of it, and a solve from the start or continued, on several processes or one (API 1.7) |
 | `GET /check` | (CLI only) | is this computer ready: `meshdoctor check` as JSON. Python, numpy, the cases folder and the workspace, OpenFOAM 14, the programs a repair, an A/B test and a solve run (`mpirun` among them) and the memory, each `ok`, `warn` or `fail` with what was found, the fix and a command for it, never this machine's folders; and the largest mesh a repair or a solve could take in the memory free now, by the RAM guard. The app's Solve screen opens with it. Each answer runs the checks (a second or two), one at a time (API 1.4) |
 | `GET /templates` | (CLI only) | the cases the engine can make: the templates in `examples/` (the Ahmed body, a wheel and a front wing), each with its mesh sizes and about how many cells each one makes. A `case` job makes one; `meshdoctor new` lists the same (API 1.5) |
 | `POST /jobs` | `/api/md/start`, `abstart`, `abextend` | start a repair, A/B test, A/B extension, new case, solve or transient plan (202 Accepted, the job document) |
@@ -146,7 +147,7 @@ A new repair or A/B test refuses to replace an existing run of the same name (`4
 | `forbidden` | 403 | unknown Host, another site's Origin, or a missing or wrong launch token |
 | `not-found` | 404 | no such route, run, case or log |
 | `method-not-allowed` | 405 | wrong method; the `Allow` header says which |
-| `exists`, `busy`, `not-ready`, `not-enough-memory`, `schema-version` | 409 | the request is fine, but the worker's state refuses it: the run exists, another OpenFOAM job is running, the run it needs is not finished, the RAM guard says no, or a result file is from a newer Mesh Doctor |
+| `exists`, `busy`, `not-ready`, `not-enough-memory`, `not-enough-disk`, `schema-version` | 409 | the request is fine, but the worker's state refuses it: the run exists, another OpenFOAM job is running, the run it needs is not finished, the RAM guard or the disk guard says no, or a result file is from a newer Mesh Doctor |
 | `too-large`, `unsupported-media-type` | 413, 415 | job bodies are JSON (`Content-Type: application/json`), at most 64 KB |
 | `unsupported` | 422 | something Mesh Doctor cannot do yet, such as an A/B test of a decomposed-only mesh |
 | `internal`, `unavailable` | 500, 503 | a bug (details go to the server window), or a route this server does not run |
@@ -183,7 +184,7 @@ The pages are plain HTML and CSS with no build step, so they can be served by th
 ```
 
 - **States:** `queued` → `running` → `done` | `failed` | `cancelled`. Paths are relative to the workspace, so a job means the same thing on another worker.
-- **Admission** happens in `jobs.submit`, so every client gets the same rules. Only one big job runs at a time, judged from the job files, from solves run in a terminal (`meshdoctor solve`, whose status files name their processes) and from OpenFOAM processes started outside Mesh Doctor (from `/proc`). The RAM guard runs before the job is written.
+- **Admission** happens in `jobs.submit`, so every client gets the same rules. Only one big job runs at a time, judged from the job files, from solves run in a terminal (`meshdoctor solve`, whose status files name their processes) and from OpenFOAM processes started outside Mesh Doctor (from `/proc`). The RAM guard runs before the job is written, and for a solve the disk guard (`diskguard.py`): the new case it makes (a copy of a case you made, a transient run, or a template's mesh) and what it writes as it goes, its split and its written times worked out from the size of its mesh, must fit in the cases folder's free space with 1 GB to spare.
 - **The LocalRunner** starts `jobrun.py`, a small wrapper, detached from the server. Init adopts it, so a finished job leaves no zombie process, and a job keeps running if the server stops. The wrapper:
   - runs the command, an argument list with no shell, at nice 5 in its own process group;
   - writes the log;

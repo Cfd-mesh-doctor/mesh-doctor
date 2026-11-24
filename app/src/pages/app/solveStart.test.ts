@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { describe, expect, it } from "vitest";
-import type { Job, Run } from "@/engine/types";
+import type { DiskInfo, Job, Run } from "@/engine/types";
 import {
-  MAX_TO, atText, copyName, copyNameProblem, copyTaken, current, formatTime, isTransient, madeFrom, madeOfJob, ofText,
+  MAX_TO, atText, copyName, copyNameProblem, copyTaken, current, diskCheck, diskSpace, formatTime, isTransient,
+  madeFrom, madeOfJob, ofText,
   procChoices, runRows, runShown, solveCommand, solveJobOf, solveStep, stretchFraction, stretchesText, suggestedProcs,
   suggestedTime, suggestedTo, timeInput, timeNumber, timeProblem, toProblem, totalForces, transientCommand,
   transientText, yourCases,
@@ -215,5 +216,43 @@ describe("a run's forces", () => {
   it("are none for a case that writes none", () => {
     expect(totalForces({ forces: {}, forceInfo: { total: null, groups: [] } })).toEqual(
       { group: null, rows: [], vertical: "downforce" });
+  });
+});
+
+describe("what a solve takes on the disk", () => {
+  // GET /disk for the coarse Ahmed body (API 1.7), as measured: a copy of 65 MB, 212 MB written on several processes.
+  const disk = (freeMb: number | null, more: Partial<NonNullable<DiskInfo["case"]>> = {}): DiskInfo => ({
+    freeMb, keepMb: 1024, case: {
+      name: "wing", copyMb: 65, transientMb: 103, solveMb: { several: 212, one: 78 }, continueMb: { several: 39, one: 0 },
+      ...more,
+    },
+  });
+
+  it("is the new case it makes, then what it writes as it goes, on the processes it runs on", () => {
+    expect(diskCheck(disk(402_339), "copy", true, 4)).toEqual({ need: 277, free: 402_339, keep: 1024, fits: true });
+    expect(diskCheck(disk(402_339), "copy", true, 1)?.need).toBe(65 + 78);              // unsplit
+    expect(diskCheck(disk(402_339), "transient", true, 6)?.need).toBe(103 + 212);
+    expect(diskCheck(disk(402_339), null, true, 2)?.need).toBe(212);                    // a case it made, solved
+    expect(diskCheck(disk(402_339), null, false, 4)?.need).toBe(39);                    // and continued
+    expect(diskCheck(disk(402_339), null, false, 1)?.need).toBe(0);
+  });
+
+  it("fits with the space the engine keeps free to spare, as its disk guard checks, and no less", () => {
+    expect(diskCheck(disk(277 + 1024), "copy", true, 4)?.fits).toBe(true);
+    expect(diskCheck(disk(277 + 1023), "copy", true, 4)?.fits).toBe(false);
+  });
+
+  it("is not said when the engine doesn't say it: before API 1.7, or a space or size it can't measure", () => {
+    expect(diskCheck(undefined, "copy", true, 4)).toBeNull();
+    expect(diskCheck({ ...disk(5000), case: null }, "copy", true, 4)).toBeNull();
+    expect(diskCheck(disk(null), "copy", true, 4)).toBeNull();
+    expect(diskCheck(disk(5000, { solveMb: null, continueMb: null }), "copy", true, 4)).toBeNull();
+    expect(diskCheck(disk(5000, { transientMb: null }), "transient", true, 4)).toBeNull();
+    expect(diskCheck(disk(5000, { transientMb: null }), "copy", true, 4)?.need).toBe(277);
+  });
+
+  it("is worded as the engine words it", () => {
+    expect([0, 70, 1023, 2458, 421_888, 1_200_000].map(diskSpace))
+      .toEqual(["1 MB", "70 MB", "1,023 MB", "2.4 GB", "412 GB", "1,172 GB"]);
   });
 });

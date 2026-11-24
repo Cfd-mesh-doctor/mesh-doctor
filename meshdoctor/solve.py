@@ -23,13 +23,15 @@ steady flow.  A transient run counts seconds, not iterations: its --to, its prog
 The run's state is in the case's .meshdoctor-solve.json, which GET /api/v1/runs lists.  The app starts the same thing
 as a `solve` job (POST /api/v1/jobs, with a `source` to solve a copy, a `template` to make the case first, or a
 `steady` run to start a transient one from), which runs `solve.py run`; Stop (POST /api/v1/runs/{name}/stop) ends it
-at a written time.  A solve run here, in a terminal, has no job: its status file names its process, so the engine
+at a written time.  Before a solve starts, the disk guard (diskguard.py) checks that the new case it makes and
+what it writes as it goes fit on the disk.  A solve run here, in a terminal, has no job: its status file names its process, so the engine
 knows that it solves (GET /api/v1/runs says running, not interrupted), Stop works on it as on a job's, and no job
 starts until it has ended (jobs.busy).  Ctrl+C ends it too, cancelled at the iteration it wrote last.
 """
 import json, math, os, re, shlex, shutil, signal, subprocess, sys, time
 
 import config
+import diskguard
 import jobs
 import md_api
 import prog
@@ -240,6 +242,60 @@ def copy_refusal(source):
     return None
 
 
+def _purge(case):
+    """The written times case folder `case` keeps: its controlDict's purgeWrite (0, or none set: every one)."""
+    m = re.search(r"^[ \t]*purgeWrite[ \t]+(\d+)[ \t]*;", _plain(os.path.join(case, "system", "controlDict")), re.M)
+    return int(m.group(1)) if m else 0
+
+
+def _mesh_mb(case):
+    """The MB of case folder `case`'s mesh (constant/polyMesh), or None when it has none."""
+    poly = os.path.join(case, "constant", "polyMesh")
+    return diskguard.mb(diskguard.size(poly)) if os.path.isdir(poly) else None
+
+
+def disk(name):
+    """GET /disk's case: what solving case `name` takes on the disk, in MB.  A copy of it (copyMb), a transient run of
+    it (transientMb: its copy, with its latest result in place of its initial fields; None with no joined result),
+    and what a solve writes as it goes, on several processes or one (diskguard.solve_mb): from the start (solveMb),
+    as a copy of it or a transient run of it does too, and continued (continueMb); None with no mesh to measure."""
+    case = case_dir(name)
+    mesh, purge, made = _mesh_mb(case), _purge(case), transient.make_size(case)
+
+    def solves(first):
+        return None if mesh is None else {k: diskguard.solve_mb(mesh, purge, n, first)
+                                          for k, n in (("several", 2), ("one", 1))}
+    return {"name": name, "copyMb": diskguard.mb(templates.copy_size(case)),
+            "transientMb": None if made is None else diskguard.mb(made), "solveMb": solves(True),
+            "continueMb": solves(False)}
+
+
+def disk_need(name, nproc, source=None, template=None, size=None, steady=None):
+    """What the solve job of case `name` writes on the disk, for the disk guard: (MB, what needs it, with its verb).
+    The new case it makes (a copy of `source`, a transient run of `steady`, or `template`'s mesh at `size`), then what
+    it writes as it goes (diskguard.solve_mb): from the start on `nproc` processes, or continued on the run's own
+    split.  None when the mesh it solves can't be measured."""
+    if template is not None:
+        mesh = diskguard.mesh_mb(templates.TEMPLATES[template]["sizes"][size or own_size(template)]["cells"])
+        solved = diskguard.solve_mb(mesh, _purge(os.path.join(templates.EXAMPLES, template)), nproc)
+        return mesh + solved, f"{name}'s mesh and its solve need"
+    if source is not None or steady is not None:
+        src = case_dir(source if source is not None else steady)
+        made = (templates.copy_size(src, case_dir(name)) if source is not None
+                else transient.make_size(src, case_dir(name)))
+        mesh = _mesh_mb(src)
+        if made is None or mesh is None:
+            return None
+        what = f"the copy of {source}" if source is not None else f"the transient run of {steady}"
+        return diskguard.mb(made) + diskguard.solve_mb(mesh, _purge(src), nproc), f"{what} and its solve need"
+    case = case_dir(name)
+    mesh, first = _mesh_mb(case), latest(case) == 0
+    if mesh is None:
+        return None
+    return (diskguard.solve_mb(mesh, _purge(case), nproc if first else split(case) or 1, first),
+            f"the solve of {name} needs" if first else f"the continuation of {name} needs")
+
+
 def _plain(path):
     """An OpenFOAM dictionary's text without its comments ('' when it can't be read)."""
     try:
@@ -277,7 +333,10 @@ def start(name, to, nproc, source=None, template=None, size=None, steady=None, c
     # its steady run's: the same mesh)
     ram = ((templates.TEMPLATES[template]["sizes"][made["size"]]["cells"], "mesh") if made
            else (case_dir(steady if steady is not None else name if source is None else source), "solve"))
-    return md_api._submit("solve", params, name, cmd, log=f"{LOGS}/{name}_to_{to}.log", ram=ram)   # a log per stretch
+    need = disk_need(name, nproc, source, template, size, steady)        # the new case, and what the solve writes
+    disk = None if need is None else (need[0], case_dir(name), need[1])
+    return md_api._submit("solve", params, name, cmd, log=f"{LOGS}/{name}_to_{to}.log", ram=ram,   # a log per stretch
+                          disk=disk)
 
 
 def stop(name):
@@ -742,6 +801,10 @@ def main(argv):
             ok, msg = ramguard.check_cells(cells, "mesh")
         else:                                   # a transient run's: its steady run's, the same mesh
             ok, msg = ramguard.check(case_dir(steady or (name if source is None else source)), "solve")
+        if not ok:
+            sys.exit(msg)
+        need = disk_need(name, nproc, source, template, size, steady)    # and the disk, as jobs.submit checks it
+        ok, msg = diskguard.check(need[0], case_dir(name), need[1]) if need else (True, "")
         if not ok:
             sys.exit(msg)
     return run(name, to, nproc, source, template, size, steady, co, model)

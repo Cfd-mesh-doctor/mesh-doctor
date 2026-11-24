@@ -27,14 +27,15 @@ import tplan
 import validate
 import version
 
-API_VERSION = "1.6"
+API_VERSION = "1.7"
 PREFIX = "/api/v1"
 MAX_BODY = 64 * 1024
 
 # error code -> HTTP status.  md_api refusals carry one of these codes.
 STATUS = {
     "bad-request": 400, "forbidden": 403, "not-found": 404, "method-not-allowed": 405,
-    "exists": 409, "finished": 409, "busy": 409, "not-ready": 409, "not-enough-memory": 409, "schema-version": 409,
+    "exists": 409, "finished": 409, "busy": 409, "not-ready": 409, "not-enough-memory": 409, "not-enough-disk": 409,
+    "schema-version": 409,
     "too-large": 413, "unsupported-media-type": 415, "unsupported": 422,
     "internal": 500, "unavailable": 503,
 }
@@ -823,6 +824,49 @@ def _job(job_id):
                           "description": "the ram_limit_mb setting: the most memory a job may use; null if none"}}})
 def machine(p, q, b):
     return ramguard.machine()
+
+
+_SOLVES = {"type": ["object", "null"], "required": ["several", "one"], "properties": {
+    "several": {"type": "integer", "minimum": 0, "description": "on several processes"},
+    "one": {"type": "integer", "minimum": 0, "description": "on one process"}}}
+DISK_CASE = {"type": ["object", "null"], "required": ["name", "copyMb", "transientMb", "solveMb", "continueMb"],
+             "description": "with `case`: what solving it takes on the disk", "properties": {
+    "name": NAME,
+    "copyMb": {"type": "integer", "minimum": 0,
+               "description": "a copy of it, as a solve of a case you made makes one: its mesh, settings and initial "
+                              "fields, as the copy walks it (links followed)"},
+    "transientMb": {"type": ["integer", "null"], "minimum": 0,
+                    "description": "a transient run of it: its copy, with its latest result in place of its initial "
+                                   "fields; null when it has no joined result to start from"},
+    "solveMb": dict(_SOLVES, description="what a solve of it from the start writes as it goes: its split and its "
+                                         "written times (meshdoctor/diskguard.py), as a solve of a copy of it or of a "
+                                         "transient run of it does too; null when it has no mesh to measure"),
+    "continueMb": dict(_SOLVES, description="what a continuation of it writes as it goes: on several processes its "
+                                            "latest time joined, and its written times when it keeps every one "
+                                            "(purgeWrite 0); null when it has no mesh to measure")}}
+
+
+@route("GET", "/disk", "The free space for a new case in the cases folder, which the disk guard checks a solve "
+       "against, and with `case`, what solving that case takes on the disk, in MB (API 1.7)",
+       query={"case": {"schema": NAME, "description": "a case in the cases folder (GET /cases)"}},
+       ok={"type": "object", "required": ["freeMb", "keepMb", "case"], "properties": {
+           "freeMb": {"type": ["integer", "null"], "minimum": 0,
+                      "description": "the free space for a new case in the cases folder: its disk's, and inside WSL 2 "
+                                     "at most that of the Windows drive that holds Linux's own disk; null when it "
+                                     "can't be read"},
+           "keepMb": {"type": "integer", "minimum": 0,
+                      "description": "kept free for everything else: the disk guard refuses a solve when the new case "
+                                     "it makes, what it writes and this are more than freeMb"},
+           "case": DISK_CASE}})
+def disk(p, q, b):
+    import diskguard
+    root = md_api.run_dir()
+    doc = {"freeMb": diskguard.free_mb(root), "keepMb": diskguard.KEEP_MB, "case": None}
+    if q.get("case"):
+        if not os.path.isfile(os.path.join(root, q["case"], "system", "controlDict")):
+            raise ApiError("not-found", "no case " + q["case"] + " in the cases folder")
+        doc["case"] = solve.disk(q["case"])
+    return doc
 
 
 NULL_TEXT = {"type": ["string", "null"]}

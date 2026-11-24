@@ -165,6 +165,11 @@ export const GROUPS: ProblemGroup[] = [
           "wait for it to finish, or cancel it on the **Jobs** screen (a run started outside Mesh Doctor stops in its own window), then start yours again",
         ],
         [
+          "\"Not enough free disk space\"",
+          "before it starts a solve, the engine works out the space that the new case it makes and the solve's results need, and the disk the cases are on has less free (it keeps 1 GB spare). Inside WSL, Linux's own disk is a file on a Windows drive, C: unless it was moved, and that drive can fill first",
+          "delete runs or results you no longer need, such as old runs' processor folders and written times, or free space on the Windows drive, then try again",
+        ],
+        [
           "\"Not enough free memory\"",
           "before it starts a job, the engine works out the memory it needs from the case's size, and the computer has less free",
           "close other programs or stop other OpenFOAM runs, then try again; on Windows, WSL can also be given more memory in `.wslconfig`",

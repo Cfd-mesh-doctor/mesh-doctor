@@ -12,8 +12,8 @@ const DOC = readDoc("troubleshooting.md");
 /** Every code the app explains, once each: one missing or unknown fails the typecheck. */
 const CODES: Record<ErrorCode, true> = {
   "bad-request": true, busy: true, exists: true, finished: true, forbidden: true, internal: true,
-  "method-not-allowed": true, "not-enough-memory": true, "not-found": true, "not-ready": true, "schema-version": true,
-  "too-large": true, unavailable: true, unsupported: true, "unsupported-media-type": true,
+  "method-not-allowed": true, "not-enough-disk": true, "not-enough-memory": true, "not-found": true, "not-ready": true,
+  "schema-version": true, "too-large": true, unavailable: true, unsupported: true, "unsupported-media-type": true,
   unreachable: true, "permission-denied": true, timeout: true, "bad-response": true, incompatible: true, aborted: true,
 };
 
@@ -31,7 +31,7 @@ describe("the Troubleshooting page's problems", () => {
   it("quote the web app's messages as the app words them: the errors whose panel links here, and no others", () => {
     const web = GROUPS.find((g) => g.id === "web-app");
     const quoted = column(web!.table, "You see").flatMap((seen) => /^"(.+)"$/.exec(seen)?.slice(1) ?? []);
-    expect(quoted).toHaveLength(9);
+    expect(quoted).toHaveLength(10);
     const errors = [
       ...Object.keys(CODES).map((code) => new EngineError(code as ErrorCode, "what the engine said")),
       new EngineError("forbidden", "forbidden: missing or wrong pairing key (pair again: meshdoctor pair)", 403),

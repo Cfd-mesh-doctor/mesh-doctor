@@ -14,7 +14,7 @@ export type ErrorCode =
 
 const ENGINE_CODES: ReadonlySet<string> = new Set<ApiErrorCode>([
   "bad-request", "busy", "exists", "finished", "forbidden", "internal", "method-not-allowed",
-  "not-enough-memory", "not-found", "not-ready", "schema-version", "too-large", "unavailable",
+  "not-enough-disk", "not-enough-memory", "not-found", "not-ready", "schema-version", "too-large", "unavailable",
   "unsupported", "unsupported-media-type",
 ]);
 
@@ -71,6 +71,16 @@ export interface Explained {
 function memoryNumbers(message: string): string {
   const m = /needs about ([\d.,]+) GB; ([\d.,]+) GB free/.exec(message);
   return m ? `It needs about ${m[1]} GB, and ${m[2]} GB is free. ` : "";
+}
+
+/** The disk guard's numbers in its refusal ("the copy of wing and its solve need about 2.4 GB, and the disk has 2.9 GB
+ * free (the engine keeps 1.0 GB free)"), as a sentence; empty when the message doesn't have them. */
+function diskNumbers(message: string): string {
+  const m = / about ([\d.,]+ [MG]B), and the disk has ([\d.,]+ [MG]B) free(?: \(the engine keeps ([\d.,]+ [MG]B) free\))?/
+    .exec(message);
+  if (!m) return "";
+  const kept = m[3] ? `; the engine keeps ${m[3]} of that for everything else` : "";
+  return `It needs about ${m[1]} of disk space, and the disk has ${m[2]} free${kept}. `;
 }
 
 const BUSY_KIND: Record<string, string> = {
@@ -140,6 +150,13 @@ export function explain(err: unknown, origin = globalThis.location?.origin ?? ""
         title: "Not enough free memory",
         hint: `${memoryNumbers(e.message)}Close other programs or stop other OpenFOAM runs, then try again. On Windows, `
           + "you can also give WSL more memory in `.wslconfig`.",
+        troubleshooting: true,
+      };
+    case "not-enough-disk":
+      return {
+        title: "Not enough free disk space",
+        hint: `${diskNumbers(e.message)}Delete runs or results you no longer need, then try again. On Windows, WSL's `
+          + "own disk is a file on a Windows drive (C:, unless it was moved): free space there too.",
         troubleshooting: true,
       };
     case "finished":

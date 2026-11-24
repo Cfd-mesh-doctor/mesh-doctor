@@ -150,6 +150,8 @@ Then open `http://localhost:8765` on your own computer.
 
 **Memory:** a repair needs about 1.5 KB per cell, a solve about 1.35 KB per cell and a new case's mesh about 2.2 KB per cell, plus 0.5 GB. Mesh Doctor refuses a job that would not fit in free memory; `meshdoctor check` shows how many cells fit now. Only one big job runs at a time.
 
+**Disk:** a solve first checks that the new case it makes (a copy of your case, a transient run or a template's mesh) and what it writes as it goes fit on the disk, with 1 GB to spare. On several processes a solve of a template's case writes about 3.3 times the size of its mesh: its split, the two written times it keeps and its latest time joined. Inside WSL, the Windows drive that holds Linux's own disk counts too.
+
 ## Configuration
 Settings come from environment variables, else `~/.config/meshdoctor/config.ini`, else defaults. `meshdoctor config` prints the values in use and where each came from.
 

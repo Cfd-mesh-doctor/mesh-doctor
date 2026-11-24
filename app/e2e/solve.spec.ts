@@ -269,6 +269,9 @@ test("a case you made is solved through a copy: the case, the copy's name, then 
   // Yours only, not the copy Mesh Doctor made; the name suggested is free.
   await expect(dialog.getByLabel("Case").getByRole("option")).toHaveText(["wing", "ahmed-25-coarse", "motorBike"]);
   await expect(dialog.getByLabel("Name of the copy")).toHaveValue("wing-run-2");
+  // What the copy and its solve take on the disk, and the free space there.
+  await expect(dialog).toContainText(
+    "The copy and its solve need about 277 MB of disk space; the disk the cases are on has 393 GB free.");
   await dialog.getByLabel("Case").selectOption("motorBike");
   await expect(dialog.getByLabel("Name of the copy")).toHaveValue("motorBike-run");
   await dialog.getByLabel("Name of the copy").fill("wing");

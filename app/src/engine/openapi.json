@@ -14,6 +14,7 @@
                   "forbidden",
                   "internal",
                   "method-not-allowed",
+                  "not-enough-disk",
                   "not-enough-memory",
                   "not-found",
                   "not-ready",
@@ -1754,7 +1755,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.6"
+    "version": "1.7"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -2736,6 +2737,147 @@
           }
         },
         "summary": "Is this computer ready?  `meshdoctor check` as JSON: Python, numpy, the folders, OpenFOAM 14, the programs a repair, an A/B test and a solve run, and the memory, each with what was found and the fix, never this machine's folders (API 1.4)"
+      }
+    },
+    "/disk": {
+      "get": {
+        "operationId": "disk",
+        "parameters": [
+          {
+            "description": "a case in the cases folder (GET /cases)",
+            "in": "query",
+            "name": "case",
+            "required": false,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "case": {
+                      "description": "with `case`: what solving it takes on the disk",
+                      "properties": {
+                        "continueMb": {
+                          "description": "what a continuation of it writes as it goes: on several processes its latest time joined, and its written times when it keeps every one (purgeWrite 0); null when it has no mesh to measure",
+                          "properties": {
+                            "one": {
+                              "description": "on one process",
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "several": {
+                              "description": "on several processes",
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "several",
+                            "one"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "copyMb": {
+                          "description": "a copy of it, as a solve of a case you made makes one: its mesh, settings and initial fields, as the copy walks it (links followed)",
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "name": {
+                          "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+                          "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+                          "type": "string"
+                        },
+                        "solveMb": {
+                          "description": "what a solve of it from the start writes as it goes: its split and its written times (meshdoctor/diskguard.py), as a solve of a copy of it or of a transient run of it does too; null when it has no mesh to measure",
+                          "properties": {
+                            "one": {
+                              "description": "on one process",
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "several": {
+                              "description": "on several processes",
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "several",
+                            "one"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "transientMb": {
+                          "description": "a transient run of it: its copy, with its latest result in place of its initial fields; null when it has no joined result to start from",
+                          "minimum": 0,
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "copyMb",
+                        "transientMb",
+                        "solveMb",
+                        "continueMb"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "freeMb": {
+                      "description": "the free space for a new case in the cases folder: its disk's, and inside WSL 2 at most that of the Windows drive that holds Linux's own disk; null when it can't be read",
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "keepMb": {
+                      "description": "kept free for everything else: the disk guard refuses a solve when the new case it makes, what it writes and this are more than freeMb",
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "freeMb",
+                    "keepMb",
+                    "case"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "The free space for a new case in the cases folder, which the disk guard checks a solve against, and with `case`, what solving that case takes on the disk, in MB (API 1.7)"
       }
     },
     "/jobs": {

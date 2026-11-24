@@ -15,6 +15,7 @@ template makes its case the same way (build()), then solves it (solve.py).
 import json, os, re, shlex, shutil, signal, subprocess, sys, time
 
 import config
+import diskguard
 import jobs
 import md_api
 import prog
@@ -250,6 +251,18 @@ def copy(src, case):
     if not os.path.isdir(zero) and os.path.isdir(orig):
         shutil.copytree(orig, zero)
     return ramguard.mesh_cells(case)
+
+
+def copy_size(src, case=None):
+    """The bytes copy() writes copying case `src` into the new folder `case` (by default one in the same folder that
+    no case can be named, for a copy not yet named): what it copies, links followed as it follows them, and 0.orig
+    once more when there's no 0, which it copies to 0 too."""
+    case = case or os.path.join(os.path.dirname(os.path.abspath(src)), ".meshdoctor-copy")
+    total = diskguard.size(src, _results(src, case))
+    zero, orig = os.path.join(src, "0"), os.path.join(src, "0.orig")
+    if not os.path.isdir(zero) and os.path.isdir(orig):
+        total += diskguard.size(orig)
+    return total
 
 
 def _blocks(case, old, new):

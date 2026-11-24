@@ -53,6 +53,7 @@ export const SAFETY: DocSection[] = [
           "**No shell injection.** Jobs are started with fixed command templates; the only user-supplied parts are plain names and numbers.",
           "**One big job at a time.** A new repair, A/B test, new case or solve is refused while an OpenFOAM solver or mesher is running.",
           "**Memory check.** A job that would not fit in free memory is refused before it starts (`--no-ram-check` overrides it on the command line).",
+          "**Disk check.** A solve that would not fit on the disk is refused before it starts: the new case it makes and what it writes as it goes, worked out from the size of its mesh, must leave 1 GB free. Inside WSL, the Windows drive that holds Linux's own disk counts too.",
           "`serve --container` (all interfaces) refuses to run outside a Docker or Podman container. The image itself publishes the port on 127.0.0.1 only when started as the README shows.",
           "Native Windows Python refuses to run anything. Run it in WSL.",
         ],

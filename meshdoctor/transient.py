@@ -142,6 +142,23 @@ def make(steady, case, co, model, to):
     return cells
 
 
+def make_size(steady, case=None):
+    """The bytes make() writes for a transient run of the steady run in folder `steady` (into the new folder
+    `case`): its copy (templates.copy_size), with its latest result's fields and flux in place of the initial fields
+    they replace; None when it has no joined result to start from."""
+    res = result(steady)
+    if res is None:
+        return None
+    total, src = templates.copy_size(steady, case), res[1]
+    zero = next((z for z in (os.path.join(steady, "0"), os.path.join(steady, "0.orig")) if os.path.isdir(z)), None)
+    fields = {n for n in os.listdir(zero) if os.path.isfile(os.path.join(zero, n))} if zero else set()
+    for n in os.listdir(src):
+        if (n in fields or n == "phi") and os.path.isfile(os.path.join(src, n)):
+            total += os.path.getsize(os.path.join(src, n)) - (os.path.getsize(os.path.join(zero, n)) if n in fields
+                                                              else 0)
+    return total
+
+
 def start_dt(steady, at, co, to):
     """The first time step: the transient plan's at this Courant number when one was made of the same result, else a
     small one (OpenFOAM cuts the first step to the Courant number, then grows it at most 20 % a step)."""

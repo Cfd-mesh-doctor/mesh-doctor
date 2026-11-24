@@ -16,7 +16,8 @@ The LocalRunner starts `jobrun.py`, a small wrapper that runs the command in its
 own process group, writes the log, and records the end state and exit code.
 Admission rules live here so every client gets them: one big job at a time
 (running jobs, solves run in a terminal, whose status files name their processes,
-plus OpenFOAM processes started outside Mesh Doctor), and the RAM guard.
+plus OpenFOAM processes started outside Mesh Doctor), the RAM guard, and for a
+solve the disk guard.
 Progress is read from each tool's own status file when a job is read.
 
     python3 -m meshdoctor jobs [list | show <id> | cancel <id>]
@@ -24,6 +25,7 @@ Progress is read from each tool's own status file when a job is read.
 import calendar, json, os, re, secrets, signal, subprocess, sys, time
 
 import config
+import diskguard
 import prog
 import ramguard
 import schema
@@ -303,12 +305,13 @@ def _spawn(argv):
     return int(out.strip())
 
 
-def submit(kind, params, name, cmd, log, result=None, ram=None, ws=None):
+def submit(kind, params, name, cmd, log, result=None, ram=None, ws=None, disk=None):
     """Admit and start a job; the job dict, or Refused.
 
     cmd: the argument list to run (no shell).  log and result: paths relative
     to the workspace.  ram: (case folder, "repair" | "solve") for the RAM guard, or
-    (cells, "mesh") for a mesh the job makes."""
+    (cells, "mesh") for a mesh the job makes.  disk: (MB, folder, what needs it)
+    for the disk guard: what the job writes into that folder."""
     ws = ws or workspace()
     why = busy(ws)
     if why:
@@ -317,6 +320,10 @@ def submit(kind, params, name, cmd, log, result=None, ram=None, ws=None):
         ok, msg = ramguard.check_cells(*ram) if isinstance(ram[0], int) else ramguard.check(*ram)
         if not ok:
             raise Refused("not-enough-memory", msg)
+    if disk:
+        ok, msg = diskguard.check(*disk)
+        if not ok:
+            raise Refused("not-enough-disk", msg)
     config.ensure_workspace(ws)
     os.makedirs(jobs_dir(ws), mode=0o700, exist_ok=True)
     job_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{kind}-{name}-{secrets.token_hex(2)}"

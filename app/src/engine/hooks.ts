@@ -128,6 +128,18 @@ export function useMachine(enabled = true) {
   });
 }
 
+/** What solving case `name` takes on the disk, and the free space the engine's disk guard checks a solve against (API
+ * 1.7), for the solve dialogs; null: not asked. An engine before API 1.7 has no such route (not-found) and doesn't
+ * check the disk: the dialogs then say nothing of it. */
+export function useDisk(name: string | null) {
+  const { transport } = useEngine();
+  return useQuery({
+    queryKey: [transport?.scope, "disk", name],
+    queryFn: transport && name != null ? ({ signal }) => api.disk(transport, name, signal) : skipToken,
+    staleTime: 30_000,
+  });
+}
+
 /** Is the engine's computer ready to repair, test and solve (API 1.4)? The engine runs its self check for each answer
  * (it loads OpenFOAM's settings in a shell: a second or two), so it isn't asked on a timer: once the page opens, when
  * Check again says so, and when the page is come back to after a while, as after fixing something in a terminal. */

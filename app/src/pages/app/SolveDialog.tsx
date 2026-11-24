@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Solving a case Mesh Doctor made, from the app (API 1.6): the iteration to solve to and, for a first solve, the
-// processes, whether the solve fits in the memory of the engine's computer, then POST /jobs (a `solve` job) and the
+// processes, whether the solve fits in the engine's memory and on its disk, then POST /jobs (a `solve` job) and the
 // run's page. A continuation goes on from the latest iteration written, on the run's own processes. A case you made is
 // solved through a copy (CopyDialog): the case and the copy's name, then the same; the job makes the copy first, as a
 // new case of its own. Verify install (VerifyDialog) makes the coarse Ahmed body from its template and solves it to
@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { DialogActions, DialogClose, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input, Segmented } from "@/components/ui/misc";
 import { useAppPath, useEngine } from "@/engine/context";
-import { useCases, useJobs, useMachine, useRuns, useStartJob } from "@/engine/hooks";
+import { useCases, useDisk, useJobs, useMachine, useRuns, useStartJob } from "@/engine/hooks";
 import { JOB_KIND_LABEL, isActive, type Run, type RunDetail, type TransientPlan } from "@/engine/types";
 import { machineFields } from "@/estimate/machine";
 import { formatInt } from "@/lib/format";
@@ -26,8 +26,9 @@ import { cn } from "@/lib/utils";
 import { FIELD, GB, JobDialog, Note } from "./dialogParts";
 import { stepMemory } from "./repairStart";
 import {
-  FIRST_TO, copyName, copyNameProblem, copyTaken, formatTime, isTransient, procChoices, solveCommand, suggestedProcs,
-  suggestedTime, suggestedTo, timeInput, timeProblem, toProblem, transientCommand, yourCases,
+  FIRST_TO, copyName, copyNameProblem, copyTaken, diskCheck, diskSpace, formatTime, isTransient, procChoices,
+  solveCommand, suggestedProcs, suggestedTime, suggestedTo, timeInput, timeProblem, toProblem, transientCommand,
+  yourCases, type DiskCheck,
 } from "./solveStart";
 import {
   MODELS, coProblem, flowHint, planAtText, suggestedCo, transientName, transientProcs, type Model,
@@ -170,10 +171,16 @@ function ProcsField({ id, np, onPick, s }: { id: string; np: number; onPick: (np
   );
 }
 
+/** An amount of disk space, kept on one line ("2.4 GB", never "2.4" and "GB" on two). */
+function Space({ mb }: { mb: number }) {
+  return <span className="whitespace-nowrap">{diskSpace(mb)}</span>;
+}
+
 /** Whether the solve (or, for a case it makes from a template, its mesh: `step` snappy) fits in the memory of the
- * engine's computer, and the big job it runs now, if any. */
-function Notes({ s, cells, what, step = "solver" }: {
-  s: SolveStart; cells: number | null; what: string; step?: "solver" | "snappy";
+ * engine's computer, and on the disk its cases are on (`disk`, for what `spends` says needs it: the engine's disk
+ * guard, API 1.7; nothing when the engine doesn't say), and the big job it runs now, if any. */
+function Notes({ s, cells, what, step = "solver", disk = null, spends = "The solve needs" }: {
+  s: SolveStart; cells: number | null; what: string; step?: "solver" | "snappy"; disk?: DiskCheck | null; spends?: string;
 }) {
   const memory = stepMemory(step, cells, s.machine.data);
   const { busy, computer, Computer } = s;
@@ -199,6 +206,18 @@ function Notes({ s, cells, what, step = "solver" }: {
           isn&apos;t checked here; the engine checks it when the solve starts.
         </Note>
       )}
+      {disk && (disk.fits ? (
+        <Note tone="ok">
+          {spends} about <Space mb={disk.need} /> of disk space; the disk the cases are on
+          has <Space mb={disk.free} /> free.
+        </Note>
+      ) : (
+        <Note tone="warn">
+          {spends} about <Space mb={disk.need} /> of disk space, more than the disk the cases are on can give: it
+          has <Space mb={disk.free} /> free, and the engine keeps <Space mb={disk.keep} /> of that for everything else.
+          Delete runs or results you no longer need: the engine refuses a solve that won&apos;t fit.
+        </Note>
+      ))}
       {busy && !s.demo && (
         <Note tone="warn">
           {JOB_KIND_LABEL[busy.kind] ?? busy.kind} {busy.name} is {busy.state === "queued" ? "waiting to start" : "running"}.
@@ -258,6 +277,7 @@ function SolveForm({ target, onDone }: { target: SolveTarget; onDone: () => void
   const ready = !s.demo && !problem && !s.busy && !s.start.isPending;
   const procs = run?.nProcs;
   const on = procs && procs > 1 ? `on the run's ${procs} processes` : "unsplit, as the run was";
+  const disk = useDisk(s.demo ? null : name);
 
   const submit = () => {
     if (!ready) return;
@@ -295,7 +315,9 @@ function SolveForm({ target, onDone }: { target: SolveTarget; onDone: () => void
             : transient ? `Past ${formatTime(written)}, the latest time written.`
               : `Past ${formatInt(written)}, the latest iteration written.`} />
         {first && <ProcsField id={id} np={np} onPick={setPicked} s={s} />}
-        <Notes s={s} cells={s.cases.data?.cells?.[name] ?? null} what="solve this case" />
+        <Notes s={s} cells={s.cases.data?.cells?.[name] ?? null} what="solve this case"
+          disk={diskCheck(disk.data, null, first, first ? np : procs ?? 1)}
+          spends={first ? "The solve needs" : "The continuation needs"} />
         {s.demo && !problem && (
           <DemoCommand verb={first ? "Solve" : "Continue"} command={solveCommand(name, Number(typed), first ? np : null)} />
         )}
@@ -388,6 +410,7 @@ function CopyForm({ source: asked, onDone }: { source?: string; onDone: () => vo
   const [picks, setPicks] = useState<number | null>(null);
   const np = picks ?? suggestedProcs(s.cores);
   const cells = source != null ? s.cases.data?.cells?.[source] ?? null : null;
+  const disk = useDisk(s.demo ? null : source);
   const ready = !s.demo && source != null && !nameProblem && !problem && !s.busy && !s.start.isPending;
 
   const submit = () => {
@@ -454,7 +477,8 @@ function CopyForm({ source: asked, onDone }: { source?: string; onDone: () => vo
             <ToField id={id} typed={typed} onChange={setTyped} problem={problem}
               hint="Where the solve ends. Stop ends it sooner, and Continue goes on from where it ended." />
             <ProcsField id={id} np={np} onPick={setPicks} s={s} />
-            <Notes s={s} cells={cells} what="solve the copy" />
+            <Notes s={s} cells={cells} what="solve the copy" disk={diskCheck(disk.data, "copy", true, np)}
+              spends="The copy and its solve need" />
             {s.demo && !problem && !nameProblem && (
               <DemoCommand verb="Solve a copy" command={solveCommand(name, Number(typed), np, source)} />
             )}
@@ -502,6 +526,7 @@ function TransientForm({ target, onDone }: { target: TransientTarget; onDone: ()
   const ready = !s.demo && !nameProblem && !coBad && !toBad && !s.busy && !s.start.isPending;
   const planned = planIteration(plan);
   const flow = flowHint(plan);
+  const disk = useDisk(s.demo ? null : steady);
 
   const submit = () => {
     if (!ready) return;
@@ -567,7 +592,8 @@ function TransientForm({ target, onDone }: { target: TransientTarget; onDone: ()
         <ToField id={id} typed={typedTo} onChange={setTypedTo} problem={toBad} seconds
           hint={flow ?? "The plan doesn't know the body's length: give the time in s, such as 8 lengths of flow over it."} />
         <ProcsField id={id} np={np} onPick={setPicked} s={s} />
-        <Notes s={s} cells={s.cases.data?.cells?.[steady] ?? null} what="start the transient run" />
+        <Notes s={s} cells={s.cases.data?.cells?.[steady] ?? null} what="start the transient run"
+          disk={diskCheck(disk.data, "transient", true, np)} spends="The transient run and its solve need" />
         {planStale(plan, run) && planned != null && (
           <Note tone="info">
             The plan is from iteration {formatInt(planned)}, and {steady} has been solved to iteration{" "}

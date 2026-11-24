@@ -16,6 +16,9 @@ export type Made = NonNullable<CaseList["made"]>[string];
 export type JobList = Json<operations["list_jobs"]["responses"][200]>;
 export type RepairList = Json<operations["repairs"]["responses"][200]>;
 export type MachineInfo = Json<operations["machine"]["responses"][200]>;
+/** The free space for a new case in the cases folder, and with `case`, what solving that case takes on the disk, in MB
+ *  (GET /disk, API 1.7): what the engine's disk guard checks a solve against. */
+export type DiskInfo = Json<operations["disk"]["responses"][200]>;
 export type RepairSummary = RepairList["items"][number];
 export type Job = components["schemas"]["Job"];
 export type JobState = Job["state"];

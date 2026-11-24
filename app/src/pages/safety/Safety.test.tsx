@@ -13,7 +13,7 @@ describe("Safety model", () => {
     expect(screen.getByText(/^Mesh Doctor is built so that it cannot damage a case you care about/)).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(SAFETY.map((s) => s.title));
     expect(within(screen.getByRole("region", { name: "The dashboard answers only you" })).getAllByRole("listitem"))
-      .toHaveLength(11);
+      .toHaveLength(12);
     expect(screen.getByRole("link", { name: "limits" })).toHaveAttribute("href", "/limits");
     expect(screen.getByRole("link", { name: "how it works" })).toHaveAttribute("href", "/how-it-works");
   });

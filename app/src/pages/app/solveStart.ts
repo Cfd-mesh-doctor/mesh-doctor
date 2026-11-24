@@ -3,7 +3,9 @@
 // checks, a copy of a case you made (its name and the cases to pick from), and a run's step and state in plain words.
 // A transient run (`transient`, the steady run it started from) counts time in s where a steady run counts iterations.
 import { isPlainName } from "@/engine/commands";
-import { isActive, type CaseList, type Job, type Made, type Run, type RunLive, type RunShown } from "@/engine/types";
+import {
+  isActive, type CaseList, type DiskInfo, type Job, type Made, type Run, type RunLive, type RunShown,
+} from "@/engine/types";
 import { formatInt } from "@/lib/format";
 import { caseStep } from "./caseStart";
 
@@ -242,6 +244,34 @@ export function suggestedProcs(cores: number | undefined): number {
 export function procChoices(cores: number | undefined): number[] {
   const top = Math.min(MAX_NP, Math.max(cores ?? 8, suggestedProcs(cores)));
   return Array.from({ length: top }, (_, i) => i + 1);
+}
+
+/** What a solve takes on the disk, in MB, and the free space of the disk the cases are on (GET /disk, API 1.7): it
+ * `fits` when that holds it and what the engine keeps free, as the engine's disk guard checks before the job starts. */
+export interface DiskCheck { need: number; free: number; keep: number; fits: boolean }
+
+/** What a solve takes on the disk, from GET /disk's answer for the case it solves, or makes its new case from: that
+ * new case first (`made`: a copy of a case you made, or a transient run of a steady run), then what it writes as it
+ * goes, from the start or continued (`first`), on `procs` processes. Null when the engine doesn't say (an engine
+ * before API 1.7, or a free space or size it can't measure), as its disk guard doesn't check the disk then either. */
+export function diskCheck(
+  disk: DiskInfo | undefined, made: "copy" | "transient" | null, first: boolean, procs: number,
+): DiskCheck | null {
+  const c = disk?.case;
+  if (!disk || !c || disk.freeMb == null) return null;
+  const writes = first ? c.solveMb : c.continueMb;
+  const before = made === "copy" ? c.copyMb : made === "transient" ? c.transientMb : 0;
+  if (!writes || before == null) return null;
+  const need = before + (procs > 1 ? writes.several : writes.one);
+  return { need, free: disk.freeMb, keep: disk.keepMb, fits: need + disk.keepMb <= disk.freeMb };
+}
+
+/** An amount of disk space as the engine words it (meshdoctor/diskguard.py's text): "70 MB" under a GB (1 MB at
+ * least), "2.4 GB" under 100 GB, then "412 GB". */
+export function diskSpace(mb: number): string {
+  if (mb < 1024) return `${formatInt(Math.max(mb, 1))} MB`;
+  const gb = mb / 1024;
+  return gb < 100 ? `${gb.toFixed(1)} GB` : `${formatInt(gb)} GB`;
 }
 
 export type ForceRow = [iteration: number, drag: number, vertical: number];

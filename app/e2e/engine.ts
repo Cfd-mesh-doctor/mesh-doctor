@@ -224,6 +224,8 @@ export async function mockEngine(
     kinds?: string[];
     /** The transient plans tplan jobs made (GET /tplans/{name}, API 1.6), by their case's name. */
     tplans?: Record<string, unknown>;
+    /** The free space GET /disk says (API 1.7), in MB: 393 GB by default. */
+    diskFreeMb?: number;
   } = {},
 ): Promise<MockEngine> {
   const state: MockEngine = {
@@ -299,6 +301,16 @@ export async function mockEngine(
     if (path === "/repairs") return json(200, { items: opts.repairs ?? [] });
     // A 16 GB laptop with no RAM limit (API 1.1).
     if (path === "/machine") return json(200, { cpus: 8, cores: 4, memoryMb: 16_000, ramLimitMb: null });
+    // Its disk (API 1.7), where solving any of its cases takes what the coarse Ahmed body's does: a copy of 65 MB, and
+    // 212 MB written on several processes.
+    if (path === "/disk") {
+      const name = new URL(req.url()).searchParams.get("case");
+      if (name != null && !state.cases.includes(name)) {
+        return json(404, { error: { code: "not-found", message: `no case ${name} in the cases folder` } });
+      }
+      return json(200, { freeMb: opts.diskFreeMb ?? 402_339, keepMb: 1024, case: name == null ? null : {
+        name, copyMb: 65, transientMb: 103, solveMb: { several: 212, one: 78 }, continueMb: { several: 39, one: 0 } } });
+    }
     if (path === "/check" && opts.check !== null) return json(200, opts.check ?? readiness());
     if (path === "/templates" && opts.templates !== null) return json(200, opts.templates ?? TEMPLATES);
     // Its A/B tests (API 1.3): none unless asked, and one solver-setting variant for a test's second run.
