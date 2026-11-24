@@ -474,6 +474,29 @@ def batch_means(x, nb=5):
             "u": max(ci, half), "batchLen": n, "nBatches": nb}
 
 
+def settle(series, batch=5):
+    """When a force history settled: the start of its averaging window, by MSER-5 (White, 1997), the start that
+    makes the mean's marginal standard error least, over means of `batch` steps, within the first half of the
+    history.  None while it hasn't (that least error at the half's end: it still drifts) or for fewer than 20
+    batches.  `series`: [[t, value]] in time order."""
+    z = [statistics.fmean(v for _, v in series[i:i + batch]) for i in range(0, len(series) - batch + 1, batch)]
+    m = len(z)
+    if m < 20:
+        return None
+    ref = statistics.fmean(z)               # sums of deviations: no cancellation on large forces
+    s = s2 = 0.0
+    mse = [0.0] * m
+    for i in range(m - 1, -1, -1):          # each start's error over z[i:], from the end
+        x = z[i] - ref
+        s += x
+        s2 += x * x
+        k = m - i
+        mse[i] = max(0.0, s2 - s * s / k) / (k * k)
+    half = m // 2
+    d = min(range(half + 1), key=mse.__getitem__)
+    return None if d == half else series[d * batch][0]
+
+
 STEP_TOL = 1e-3       # p initial residual at the last outer iteration of a converged time step
 CO_LIMIT = 1.0        # max Courant number that scale-resolving runs (DES/LES) should stay under
 
@@ -542,15 +565,19 @@ def auto_window(n):
     return max(10, min(200, n // 2))
 
 
-def judge(case, window=200, group=None, avg_from=None, logs=None, to=None):
+def judge(case, window=200, group=None, avg_from=None, logs=None, to=None, steps=None):
     """Convergence verdict + averaged forces.  Groups and directions come from
     the case (caseinfo.describe); `group` defaults to the group with the
     largest drag, normally the whole model.  `window` counts iterations, or
     time steps for a transient case, which gets its own verdict (see
     transient_verdict); None picks one from the run's length (auto_window).
+    A transient case's forces are averaged from when its group's drag and
+    vertical force both settled (`settled`, see settle), else over the last
+    two windows, unless `avg_from` says from when.
     `to` judges the run as it was at that iteration (or time): residuals and
     forces after it are left out, so two runs can be judged over the same
-    iterations.  `logs`: solver logs, default log.foamRun*."""
+    iterations.  `logs`: solver logs, default log.foamRun*; `steps`: their
+    caseinfo.step_stats, when the caller has them already."""
     res, frc = parse_residuals(case, logs), parse_forces(case)
     if to is not None:
         res, frc = upto(res, to), {g: upto(F, to) for g, F in frc.items()}
@@ -565,6 +592,11 @@ def judge(case, window=200, group=None, avg_from=None, logs=None, to=None):
                     "up": "xyz"[d["upAxis"]], "vertical": vert, "source": d["source"]}}
     if to is not None:
         out["to"] = to
+    settled = None
+    if unsteady:                           # its averages start when both its forces have settled
+        at = [settle(caseinfo.series(frc, d, group, w)) for w in ("drag", "vertical")]
+        settled = None if None in at else max(at)
+        out["settled"] = settled
     # averaged forces with uncertainty over [avg_from, end] (default: last 2 windows):
     # main group's vertical force and drag, then every other group's vertical force
     avg = {}
@@ -576,6 +608,8 @@ def judge(case, window=200, group=None, avg_from=None, logs=None, to=None):
             continue
         if avg_from is not None:
             t0 = avg_from
+        elif settled is not None:          # from when a transient run's forces settled
+            t0 = settled
         elif unsteady:                     # last 2 windows of time steps (t > t0), in seconds
             t0 = s[max(0, len(s) - 2 * window - 1)][0]
         else:
@@ -609,7 +643,9 @@ def judge(case, window=200, group=None, avg_from=None, logs=None, to=None):
     out["pBlocks"] = [[t[i], statistics.median([x for x in res["p"][i:i + blk] if x is not None])]
                       for i in range(0, len(t) - blk + 1, blk)] if res.get("p") else []
     if unsteady:
-        return transient_verdict(out, caseinfo.step_stats(logs or caseinfo.solver_logs(case)), window)
+        if steps is None:
+            steps = caseinfo.step_stats(logs or caseinfo.solver_logs(case))
+        return transient_verdict(out, steps, window)
     r, f = out.get("residuals", {}), out.get("forces", {})
     pm, ptr = r.get("p", {}).get("median", 1), r.get("p", {}).get("trend", 1)
     drift = max((v["drift"] for v in f.values()), default=1)

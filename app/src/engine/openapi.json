@@ -538,6 +538,13 @@
             "type": "number",
             "description": "added in 1.1: the run was judged as it was at this iteration or time; later residuals and forces were left out"
           },
+          "settled": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "added in 1.2, a transient run only: the time from which its group's drag and vertical force have both settled (MSER-5), where its averages start; null while they haven't, and its averages are then over the last two windows"
+          },
           "run": {
             "type": "string",
             "description": "added in 1.1, API only: the A/B run judged, <test>_ab/base or <test>_ab/fixed (another test's, when its original-mesh run was reused)"
@@ -4552,7 +4559,7 @@
                       "type": "object"
                     },
                     "judge": {
-                      "description": "the live judge on the whole run, whose stretches share their settings (the same limits as abtest.judge); a transient run's is the transient judge, in time steps, as GET /judge?case= answers it over the last half of its time steps (10 to 200), judged again at most every 15 s while it solves",
+                      "description": "the live judge on the whole run, whose stretches share their settings (the same limits as abtest.judge); a transient run's is the transient judge, in time steps, as GET /judge?case= answers it over the last half of its time steps (10 to 200), its forces averaged from when they settled (`settled`), judged again at most every 15 s while it solves",
                       "properties": {
                         "average": {
                           "description": "averaged forces with their uncertainty (batch means)",
@@ -4842,6 +4849,36 @@
                         "type": "object"
                       },
                       "type": "array"
+                    },
+                    "steps": {
+                      "description": "a transient run's time steps from its solver logs, only for a transient run: its time step (deltaT, s) and Courant number (coMean, coMax) at each; at most 1500 rows, past that each row a run of steps: its last time, their mean time step and Courant number and the largest of their largest",
+                      "properties": {
+                        "cols": {
+                          "description": "Time, deltaT, coMean, coMax",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "rows": {
+                          "description": "one row per time step, in the order of cols (null: not in the log)",
+                          "items": {
+                            "items": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "type": "array"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "cols",
+                        "rows"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [

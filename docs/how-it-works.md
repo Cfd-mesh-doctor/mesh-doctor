@@ -88,6 +88,8 @@ Averages come with an uncertainty from batch means, so a slow swing is not hidde
 
 The answer is "converged", "statistically stationary, but check: …" or "still developing", with every failed check named. Logs not called `log.foamRun*` are passed with `--log`, for example `meshdoctor judge <case> 500 --log log.pimple`.
 
+The means start where the forces settled: MSER-5, a standard rule for cutting off the start of a run, finds for the drag and for the vertical force the start that makes the mean's standard error least, looking in the first half of the run only. Once both have settled, the means are from the later of the two (`settled`); until then they are over the last two windows.
+
 Forces are reported as drag (along the flow) and the vertical force, named **downforce** or **lift** by its sign:
 - the flow direction is read from `0/U`, preferring an inlet patch;
 - the up axis comes from, in order: the `up_axis` setting, the `liftDir` of `forceCoeffs`, or the cross-flow axis with the larger force.
@@ -107,7 +109,7 @@ In the web app, a solved run's page has Plan a transient run: the engine makes t
 
 **The transient run itself:** `meshdoctor solve <name> --steady <run>` makes the new case `<name>` a transient run of a solved steady run: its mesh, settings and latest result with its face flux, solved in time from there, so with no `potentialFoam`. By default it is DDES (`kOmegaSSTDES` with F2 shielding, so the boundary layers stay RANS and the wake's eddies are resolved), with second-order time steps (`backward`), `LUST` for the velocity, PIMPLE with 3 outer correctors and a time step OpenFOAM adjusts to a largest Courant number of 1 (`--co`; DDES takes 2 at most). Its first time step is the plan's, when one was made of the same result. `--model URANS` keeps the steady run's own RAS model and can run at a Courant number up to 20, with its outer correctors relaxed above 1. It runs 8 flow times over the body (8 L/U) unless `--to` gives the time in s, and writes four times a stretch; `meshdoctor solve <name> --to S` continues it from its latest written time. The steady run is only read.
 
-In the web app, a solved run's plan has Start a transient run: you give its name, DDES or URANS, the largest Courant number (the dialog shows the plan's time step, steps and hours at it), the time to solve to (8 L/U by default) and the processes. Its page follows it in seconds: its time and time step, its residuals and forces over time, and the transient judge over the last half of its time steps. Stop and Continue work as for a steady run, with the time in s.
+In the web app, a solved run's plan has Start a transient run: you give its name, DDES or URANS, the largest Courant number (the dialog shows the plan's time step, steps and hours at it), the time to solve to (8 L/U by default) and the processes. Its page follows it in seconds: its time and time step, its residuals and forces over time, its time step and Courant number (mean and largest) at each time step, and the transient judge over the last half of its time steps, its means from when the forces settled (shaded on the forces chart). Stop and Continue work as for a steady run, with the time in s.
 
 ## 6. Hotspots and the map
 

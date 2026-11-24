@@ -727,6 +727,8 @@ export interface components {
             run?: string;
             /** @description major.minor; readers accept any 1.x */
             schemaVersion: string;
+            /** @description added in 1.2, a transient run only: the time from which its group's drag and vertical force have both settled (MSER-5), where its averages start; null while they haven't, and its averages are then over the last two windows */
+            settled?: number | null;
             /** @description transient runs only: per-time-step convergence */
             steps?: {
                 aboveCourantLimit?: number | null;
@@ -2390,7 +2392,7 @@ export interface operations {
                         forceInfo: Record<string, unknown>;
                         /** @description each force group's [iteration, drag, vertical] rows */
                         forces: Record<string, unknown>;
-                        /** @description the live judge on the whole run, whose stretches share their settings (the same limits as abtest.judge); a transient run's is the transient judge, in time steps, as GET /judge?case= answers it over the last half of its time steps (10 to 200), judged again at most every 15 s while it solves */
+                        /** @description the live judge on the whole run, whose stretches share their settings (the same limits as abtest.judge); a transient run's is the transient judge, in time steps, as GET /judge?case= answers it over the last half of its time steps (10 to 200), its forces averaged from when they settled (`settled`), judged again at most every 15 s while it solves */
                         judge: {
                             /** @description averaged forces with their uncertainty (batch means) */
                             average?: Record<string, unknown>;
@@ -2486,6 +2488,13 @@ export interface operations {
                             name: string;
                             to: number;
                         }[];
+                        /** @description a transient run's time steps from its solver logs, only for a transient run: its time step (deltaT, s) and Courant number (coMean, coMax) at each; at most 1500 rows, past that each row a run of steps: its last time, their mean time step and Courant number and the largest of their largest */
+                        steps?: {
+                            /** @description Time, deltaT, coMean, coMax */
+                            cols: string[];
+                            /** @description one row per time step, in the order of cols (null: not in the log) */
+                            rows: (number | null)[][];
+                        };
                     };
                 };
             };

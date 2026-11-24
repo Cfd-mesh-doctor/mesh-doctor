@@ -312,7 +312,7 @@ class JudgeTest(unittest.TestCase):
         self.assertEqual(early["average"]["drag"]["to"], 300)
         import schema
         self.assertEqual(schema.validate(early, "judge"), [])
-        self.assertEqual(early["schemaVersion"], "1.1")
+        self.assertEqual(early["schemaVersion"], "1.2")
 
     def test_auto_window(self):
         self.write_run(600, lambda t: 1e-5, lambda t: 50.0)
@@ -369,7 +369,8 @@ class TransientJudgeTest(unittest.TestCase):
         self.assertEqual(j["steps"]["converged"], 1.0)
         self.assertEqual(j["steps"]["outerIterations"], 2)
         self.assertAlmostEqual(j["average"]["drag"]["mean"], 50, delta=0.5)
-        self.assertAlmostEqual(j["average"]["drag"]["from"], 0.2, places=6)  # 2 windows of steps, in seconds
+        # its forces settled from the start (the vertical one is steady): averaged over all of it, in seconds
+        self.assertEqual((j["settled"], j["average"]["drag"]["from"]), (0.001, 0.001))
         import schema
         self.assertEqual(schema.validate(j, "judge"), [])
         self.assertTrue(j["transient"])
@@ -386,7 +387,55 @@ class TransientJudgeTest(unittest.TestCase):
 
     def test_drifting_mean(self):
         self.write_run(600, 1e-5, 0.8, lambda i: 50 + i / 10)
-        self.assertTrue(self.judge()["verdict"].startswith("still developing"))
+        j = self.judge()
+        self.assertTrue(j["verdict"].startswith("still developing"))
+        # its forces haven't settled: the averages are over the last two windows of time steps
+        self.assertIsNone(j["settled"])
+        self.assertAlmostEqual(j["average"]["drag"]["from"], 0.2)
+
+    def test_averages_from_when_the_forces_settled(self):
+        # a start-up that dies away over the first 100 or so steps, then shedding about a steady mean
+        self.write_run(600, 1e-5, 0.8, lambda i: 50 + 30 * math.exp(-i / 25) + 3 * math.sin(i / 7))
+        j = self.judge()
+        import caseinfo
+        drag = caseinfo.series(caseinfo.parse_forces(self.d), caseinfo.describe(self.d), "body", "drag")
+        self.assertEqual(j["settled"], abtest.settle(drag))           # the vertical force is steady from the start
+        self.assertTrue(0.05 <= j["settled"] <= 0.25, j["settled"])
+        self.assertEqual(j["average"]["drag"]["from"], j["settled"])
+        self.assertAlmostEqual(j["average"]["drag"]["mean"], 50, delta=0.5)
+        # from a time given, as before
+        self.assertEqual(abtest.judge(self.d, window=200, avg_from=0.4, logs=caseinfo.solver_logs(
+            self.d, ("log.pimple",)))["average"]["drag"]["from"], 0.4)
+        import schema
+        self.assertEqual(schema.validate(j, "judge"), [])
+
+    def test_settle_finds_where_a_history_stops_drifting(self):
+        at = lambda f, n=600: [[i * 1e-3, f(i)] for i in range(1, n + 1)]          # noqa: E731
+        # settled from the start; once a start-up dies away; never, while it drifts; too short to tell
+        self.assertLessEqual(abtest.settle(at(lambda i: 50 + 3 * math.sin(i / 7))), 0.06)
+        t = abtest.settle(at(lambda i: 50 + 30 * math.exp(-i / 25) + 3 * math.sin(i / 7)))
+        self.assertTrue(0.05 <= t <= 0.25, t)
+        self.assertIsNone(abtest.settle(at(lambda i: 50 + i / 10)))
+        self.assertIsNone(abtest.settle(at(lambda i: 50.0, 99)))
+        self.assertEqual(abtest.settle(at(lambda i: 50.0, 100)), 1e-3)
+        # large forces with small swings: no cancellation
+        self.assertLessEqual(abtest.settle(at(lambda i: 1e6 + 1e-3 * math.sin(i / 7))), 0.06)
+
+    def test_step_stats_give_each_time_step(self):
+        import caseinfo
+        with open(os.path.join(self.d, "log.adjust"), "w") as f:     # an adjustable time step prints it first
+            for i, (dt, t) in enumerate(((2e-5, 2e-5), (3e-5, 5e-5), (2.5e-5, 7.5e-5))):
+                f.write(f"Courant Number mean: 0.1 max: {0.9 + i / 100}\ndeltaT = {dt:g}\nTime = {t:g}s\n\n"
+                        "PIMPLE: Iteration 1\nGAMG:  Solving for p, Initial residual = 0.01, Final residual = 1e-7, "
+                        "No Iterations 5\n")
+        steps = caseinfo.step_stats([os.path.join(self.d, "log.adjust")])
+        self.assertEqual([s["deltaT"] for s in steps], [2e-5, 3e-5, 2.5e-5])
+        self.assertEqual([s["coMax"] for s in steps], [0.91, 0.92, None])     # printed after the step it measures
+        self.write_run(5, 1e-5, 0.8, lambda i: 50.0)                     # a fixed one: the time since the step before
+        steps = caseinfo.step_stats(caseinfo.solver_logs(self.d, ("log.pimple",)))
+        self.assertIsNone(steps[0]["deltaT"])
+        for s in steps[1:]:
+            self.assertAlmostEqual(s["deltaT"], 1e-3)
 
 
 def write_field(path, values, ncomp=1, binary=True, gz=False):
@@ -2401,8 +2450,22 @@ class TransientSolveTest(unittest.TestCase):
         later = server._transient_judge("ahmedT", case, False)
         self.assertEqual((later["window"], later["steps"]["maxCourant"]), (20, 1.5))
         self.assertIn("max Courant 1.5", later["verdict"])
-        # a steady run's page keeps the live judge of its iterations
+        # its time steps: the time step and the Courant number, mean and largest, at each
+        server._solve_cache.clear()
+        steps = server.solve_live("ahmedT")["steps"]
+        self.assertEqual((steps["cols"], len(steps["rows"])), (["Time", "deltaT", "coMean", "coMax"], 40))
+        self.assertEqual(steps["rows"][1][2:], [0.05, 1.5])
+        self.assertAlmostEqual(steps["rows"][1][1], 1e-3)
+        # past 1500 rows, each row a run of steps: their mean time step and Courant number, the largest of their largest
+        many = [{"t": i * 1e-3, "deltaT": 1e-3, "coMean": 0.05, "coMax": 3.0 if i == 2001 else 0.8} for i in range(4000)]
+        rows = server._step_rows(many)["rows"]
+        self.assertLessEqual(len(rows), 1500)
+        self.assertEqual(rows[-1][0], 3.999)
+        self.assertEqual(max(r[3] for r in rows), 3.0)
+        self.assertAlmostEqual(rows[0][1], 1e-3)
+        # a steady run's page keeps the live judge of its iterations, and has no time steps
         self.assertNotIn("transient", server.solve_live("steady")["judge"])
+        self.assertNotIn("steps", server.solve_live("steady"))
 
     def test_the_command_starts_a_transient_run_of_a_steady_one_and_continues_it_by_time(self):
         self.steady()

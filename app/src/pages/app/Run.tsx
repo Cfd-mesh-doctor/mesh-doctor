@@ -25,7 +25,7 @@ import { ACTIVE_POLL_MS, IDLE_POLL_MS, useCaseJudge, useCases, useJobs, useRun, 
 import { isActive, type Job, type RunDetail, type RunLive, type RunShown } from "@/engine/types";
 import { formatDateTime, formatDuration, formatInt, formatPercent, formatRelative } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
-import { JudgeCard } from "@/pages/report/AbCards";
+import { JudgeCard, LegendLine } from "@/pages/report/AbCards";
 import { Section } from "@/pages/report/Section";
 import { tableRun } from "@/report/abtest";
 import { judgeOf } from "@/report/summary";
@@ -198,7 +198,12 @@ function ResidualsCard({ residuals, transient }: { residuals: RunLive["residuals
 
 /** The total force group's drag or vertical force per iteration (a transient run's: over time), one at a time: they
  * differ too much to share an axis. */
-function ForcesCard({ live, transient }: { live: RunLive; transient: boolean }) {
+function ForcesCard({ live, transient, averagedFrom }: {
+  live: RunLive;
+  transient: boolean;
+  /** a transient run's: when its forces settled, where the judge's means start */
+  averagedFrom?: number | null;
+}) {
   const { group, rows, vertical } = useMemo(() => totalForces(live), [live]);
   const [which, setWhich] = useState<"vertical" | "drag">("vertical");
   const name = which === "drag" ? "Drag" : vertical.charAt(0).toUpperCase() + vertical.slice(1);
@@ -217,6 +222,7 @@ function ForcesCard({ live, transient }: { live: RunLive; transient: boolean }) 
             {transient
               ? "a transient run's forces swing with the flow; their means settling is the sign of a run that is "
                 + "statistically stationary, which the judge checks."
+                + (averagedFrom != null ? " The shaded part, from when they settled, is what it averages." : "")
               : "a force that settles to a steady value is a sign of a converged run."}
           </CardDescription>
         </div>
@@ -226,7 +232,55 @@ function ForcesCard({ live, transient }: { live: RunLive; transient: boolean }) 
       <CardContent>
         <LineChart series={series} xLabel={transient ? "time (s)" : "iteration"} empty="No forces written yet"
           xFormat={transient ? timeNumber : undefined}
+          band={transient && averagedFrom != null ? { from: averagedFrom, label: "averaged" } : undefined}
           label={`${name}${group ? ` from ${group}` : ""} ${transient ? "over time" : "per iteration"}`} />
+      </CardContent>
+    </Card>
+  );
+}
+
+/** A transient run's time step and Courant number at each time step (its page's `steps`), one at a time: OpenFOAM
+ * sets each time step so that the largest Courant number stays at the run's setting. */
+function StepsCard({ steps, maxCo }: { steps: NonNullable<RunLive["steps"]>; maxCo: number | null | undefined }) {
+  const [which, setWhich] = useState<"step" | "courant">("step");
+  const series = useMemo((): LineSeries[] => {
+    const at = (name: string) => steps.cols.indexOf(name);
+    const t = steps.rows.map((r) => r[at("Time")] ?? Number.NaN);
+    const col = (name: string, scale = 1) => steps.rows.map((r) => {
+      const v = r[at(name)];
+      return v == null ? null : v * scale;
+    });
+    return which === "step"
+      ? [{ name: "time step (µs)", stroke: "stroke-primary", swatch: "bg-primary", x: t, y: col("deltaT", 1e6) }]
+      : [{ name: "largest", stroke: "stroke-primary", swatch: "bg-primary", x: t, y: col("coMax") },
+        { name: "mean", stroke: "stroke-foreground", swatch: "bg-foreground", dashed: true, x: t, y: col("coMean") }];
+  }, [steps, which]);
+  const setting = maxCo != null ? `${maxCo}, the run's setting` : "the run's setting";
+  return (
+    <Card>
+      <CardHeader className="flex-wrap">
+        <div>
+          <CardTitle>Time step</CardTitle>
+          <CardDescription>
+            {which === "step"
+              ? `In µs. OpenFOAM sets each time step so that the largest Courant number stays at ${setting}: it `
+                + "shrinks when the flow through the smallest cells speeds up."
+              : `The largest Courant number, which the time step holds at about ${setting}, and the mean over all `
+                + "the cells: a few small, fast cells set the pace of the whole run."}
+          </CardDescription>
+        </div>
+        <Segmented label="Show" value={which} onChange={setWhich}
+          options={[{ value: "step", label: "Time step" }, { value: "courant", label: "Courant number" }]} />
+      </CardHeader>
+      <CardContent>
+        {which === "courant" && (
+          <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <LegendLine className="stroke-primary">largest</LegendLine>
+            <LegendLine dashed className="stroke-foreground">mean</LegendLine>
+          </div>
+        )}
+        <LineChart series={series} xLabel="time (s)" xFormat={timeNumber} empty="No time steps in its log yet"
+          label={which === "step" ? "Time step over time, in µs" : "Largest and mean Courant number over time"} />
       </CardContent>
     </Card>
   );
@@ -388,7 +442,13 @@ export function RunPage() {
 
       {doc && hasForces && (
         <Section title="Forces">
-          <div className="mt-4"><ForcesCard live={doc} transient={transient} /></div>
+          <div className="mt-4"><ForcesCard live={doc} transient={transient} averagedFrom={shownJudge?.settled} /></div>
+        </Section>
+      )}
+
+      {doc?.steps && transient && (
+        <Section title="Time step">
+          <div className="mt-4"><StepsCard steps={doc.steps} maxCo={run?.transient?.maxCo} /></div>
         </Section>
       )}
 

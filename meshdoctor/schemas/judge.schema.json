@@ -26,6 +26,10 @@
    "type": "number",
    "description": "added in 1.1: the run was judged as it was at this iteration or time; later residuals and forces were left out"
   },
+  "settled": {
+   "type": ["number", "null"],
+   "description": "added in 1.2, a transient run only: the time from which its group's drag and vertical force have both settled (MSER-5), where its averages start; null while they haven't, and its averages are then over the last two windows"
+  },
   "run": {
    "type": "string",
    "description": "added in 1.1, API only: the A/B run judged, <test>_ab/base or <test>_ab/fixed (another test's, when its original-mesh run was reused)"

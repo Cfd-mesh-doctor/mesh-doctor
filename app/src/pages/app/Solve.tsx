@@ -390,9 +390,10 @@ function ComingNext() {
       <CardContent>
         <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
           <li>
-            A transient run&apos;s time step and Courant number over time, and the window its forces are averaged
-            over. A solved run&apos;s page plans one and starts it already, and the transient run&apos;s page follows
-            it in seconds, with the transient judge.
+            The cells that set a transient run&apos;s time step, shown with its plan, and its averaged flow (its mean
+            and how much it swings) for pictures and results. A solved run&apos;s page plans and starts one already,
+            and its page follows it in seconds: its time step and Courant number, and its forces averaged from when
+            they settled.
           </li>
         </ul>
       </CardContent>

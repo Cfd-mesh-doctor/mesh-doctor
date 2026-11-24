@@ -206,6 +206,7 @@ RES_LINE = re.compile(r"Solving for (\w+), Initial residual = (" + NUM + r")")
 PIMPLE_LINE = re.compile(r"^PIMPLE: Iteration (\d+)")
 COURANT_LINE = re.compile(r"^Courant Number mean: (" + NUM + r") max: (" + NUM + r")")
 BOUNDING_LINE = re.compile(r"^bounding (\w+)")
+DELTAT_LINE = re.compile(r"^deltaT = (" + NUM + r")\s*$")
 
 
 def transient(case):
@@ -217,11 +218,13 @@ def transient(case):
 
 
 def step_stats(paths, field="p"):
-    """Per time step of a transient log: [{t, first, last, outer, coMean, coMax,
-    bounded}].  `first` is the initial residual of the first `field` solve in the
-    step, `last` that of the first solve in the last PIMPLE outer iteration (how
-    far the outer loop converged the step), `bounded` the names of fields
-    bounded in the step.  Values are None where the log does not say."""
+    """Per time step of a transient log: [{t, first, last, outer, deltaT, coMean,
+    coMax, bounded}].  `first` is the initial residual of the first `field` solve
+    in the step, `last` that of the first solve in the last PIMPLE outer iteration
+    (how far the outer loop converged the step), `deltaT` the step's time step (the
+    log's deltaT line before it, which an adjustable time step prints, else the time
+    since the step before), `bounded` the names of fields bounded in the step.
+    Values are None where the log does not say."""
     steps, byt = [], {}
     for path in paths:
         try:
@@ -229,13 +232,18 @@ def step_stats(paths, field="p"):
         except OSError:
             continue
         with fh:
-            cur = None
+            cur, dt = None, None
             for line in fh:
                 m = TIME_LINE.match(line)
                 if m:
                     t = float(m.group(1))
-                    cur = byt[t] = {"t": t, "first": None, "last": None, "outer": 0,
+                    cur = byt[t] = {"t": t, "first": None, "last": None, "outer": 0, "deltaT": dt,
                                     "coMean": None, "coMax": None, "bounded": [], "_new": True}
+                    dt = None
+                    continue
+                m = DELTAT_LINE.match(line)
+                if m:                       # printed before the Time line of the step it is for
+                    dt = float(m.group(1))
                     continue
                 if cur is None:
                     continue
@@ -257,9 +265,13 @@ def step_stats(paths, field="p"):
                 m = BOUNDING_LINE.match(line)
                 if m and m.group(1) not in cur["bounded"]:
                     cur["bounded"].append(m.group(1))
+    prev = None
     for t in sorted(byt):
         s = byt[t]
         s.pop("_new")
+        if s["deltaT"] is None and prev is not None:
+            s["deltaT"] = t - prev          # a fixed time step: the time since the step before
+        prev = t
         if s["first"] is not None:
             steps.append(s)
     return steps

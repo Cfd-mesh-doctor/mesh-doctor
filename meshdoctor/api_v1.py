@@ -620,6 +620,16 @@ def run_validation(p, q, b):
 
 
 _SOLVER = LIVE["properties"]["solver"]
+_STEPS = {"type": "object", "required": ["cols", "rows"],
+          "description": "a transient run's time steps from its solver logs, only for a transient run: its time "
+                         "step (deltaT, s) and Courant number (coMean, coMax) at each; at most 1500 rows, past that "
+                         "each row a run of steps: its last time, their mean time step and Courant number and the "
+                         "largest of their largest",
+          "properties": {"cols": {"type": "array", "items": {"type": "string"},
+                                  "description": "Time, deltaT, coMean, coMax"},
+                         "rows": {"type": "array", "items": {"type": "array", "items": _NUMBER},
+                                  "description": "one row per time step, in the order of cols (null: not in the "
+                                                 "log)"}}}
 RUN_LIVE = {"type": "object", "required": ["name", "run", "stages", "current", "solver", "residuals", "forces",
                                            "forceInfo", "judge", "now"], "properties": {
     "name": {"type": "string", "description": "the case it solves"},
@@ -634,12 +644,14 @@ RUN_LIVE = {"type": "object", "required": ["name", "run", "stages", "current", "
     "residuals": dict(_TABLE, description="its initial residuals over all its stretches, at most 1500 rows; {} "
                                           "before it has any"),
     "forces": LIVE["properties"]["forces"], "forceInfo": LIVE["properties"]["forceInfo"],
+    "steps": _STEPS,
     "judge": dict(LIVE["properties"]["judge"], description="the live judge on the whole run, whose stretches share "
                                                            "their settings (the same limits as abtest.judge); a "
                                                            "transient run's is the transient judge, in time steps, as "
                                                            "GET /judge?case= answers it over the last half of its time "
-                                                           "steps (10 to 200), judged again at most every 15 s while it "
-                                                           "solves"),
+                                                           "steps (10 to 200), its forces averaged from when they "
+                                                           "settled (`settled`), judged again at most every 15 s while "
+                                                           "it solves"),
     "now": LIVE["properties"]["now"]}}
 
 

@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // A light SVG line chart for residual histories: log or linear y axis, round-number ticks, and a read-out
 // on hover or touch. The x axis's numbers are formatNumber's unless `xFormat` says otherwise (a transient run's
-// times in s), and the label at its right end is moved left as far as it needs to fit. Long histories are thinned to two points per pixel column (each column's lowest and
-// highest), so a run of 100k iterations draws as fast as a short one and keeps its spikes.
+// times in s), and the label at its right end is moved left as far as it needs to fit. A `band` shades the part
+// from an x on, such as the stretch a judge averages, with its name above it, clear of the lines. Long histories
+// are thinned to two points per pixel column (each column's lowest and highest), so a run of 100k iterations draws
+// as fast as a short one and keeps its spikes.
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -36,7 +38,7 @@ function points(s: LineSeries, log: boolean): Pt[] {
 }
 
 export function LineChart({
-  series, log = false, height = 260, xLabel = "x", xFormat = formatNumber, label, empty = "Nothing to draw",
+  series, log = false, height = 260, xLabel = "x", xFormat = formatNumber, band, label, empty = "Nothing to draw",
 }: {
   series: LineSeries[];
   log?: boolean;
@@ -44,6 +46,8 @@ export function LineChart({
   xLabel?: string;
   /** how the x axis and the read-out write an x (formatNumber by default) */
   xFormat?: (x: number) => string;
+  /** a shaded part, from this x to the end, with its name above it (the plot is 14 px shorter for it) */
+  band?: { from: number; label: string };
   /** what the chart shows, for screen readers */
   label: string;
   empty?: string;
@@ -64,7 +68,9 @@ export function LineChart({
   }, []);
 
   const w = width ?? 640;
-  const plotW = w - M.left - M.right, plotH = height - M.top - M.bottom;
+  // A band's name sits above the plot, where no line can cross it.
+  const top = band ? M.top + 14 : M.top;
+  const plotW = w - M.left - M.right, plotH = height - top - M.bottom;
   const data = useMemo(() => series.map((s) => ({ s, pts: points(s, log) })), [series, log]);
   const geo = useMemo(() => {
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
@@ -86,12 +92,12 @@ export function LineChart({
       const step = Math.max(1, Math.ceil((k1 - k0) / 6));
       yTicks = [];
       for (let k = k0; k <= k1; k += step) yTicks.push({ v: 10 ** k, text: decade(k) });
-      Y = (y) => M.top + (1 - (Math.log10(y) - k0) / (k1 - k0)) * plotH;
+      Y = (y) => top + (1 - (Math.log10(y) - k0) / (k1 - k0)) * plotH;
     } else {
       const t = niceTicks(y0 === y1 ? y0 - 1 : y0, y0 === y1 ? y1 + 1 : y1, 5);
       const lo = Math.min(y0, t[0] ?? y0), hi = Math.max(y1, t[t.length - 1] ?? y1, lo + 1e-12);
       yTicks = t.map((v) => ({ v, text: formatNumber(v) }));
-      Y = (y) => M.top + (1 - (y - lo) / (hi - lo)) * plotH;
+      Y = (y) => top + (1 - (y - lo) / (hi - lo)) * plotH;
     }
     const X = (x: number) => M.left + ((x - x0) / (x1 - x0)) * plotW;
     const columns = Math.max(50, Math.round(plotW));
@@ -101,7 +107,7 @@ export function LineChart({
     }));
     const xTicks = niceTicks(x0, x1, Math.max(2, Math.floor(plotW / 90)));
     return { x0, x1, X, Y, yTicks, xTicks, paths };
-  }, [data, log, plotW, plotH]);
+  }, [data, log, plotW, plotH, top]);
 
   const hover = useMemo(() => {
     if (!geo || hoverX == null) return null;
@@ -143,6 +149,16 @@ export function LineChart({
             <text x={M.left + plotW / 2} y={height - 3} textAnchor="middle" className="fill-muted-foreground">{xLabel}</text>
           </g>
           <line x1={M.left} x2={w - M.right} y1={height - M.bottom} y2={height - M.bottom} className="stroke-border-strong" />
+          {band && band.from < geo.x1 && (() => {
+            const x = geo.X(Math.max(band.from, geo.x0));
+            return (
+              <g>
+                <rect x={x} y={top} width={Math.max(0, w - M.right - x)} height={height - M.bottom - top}
+                  className="fill-primary/10" />
+                <text x={x + 4} y={top - 4} className="fill-muted-foreground text-[11px]">{band.label}</text>
+              </g>
+            );
+          })()}
           {/* Dashed lines on top: where two runs are the same, both stay visible. */}
           {[...geo.paths].sort((a, b) => Number(Boolean(a.s.dashed)) - Number(Boolean(b.s.dashed))).map(({ s, d }) => (
             <path key={s.name} d={d} fill="none" className={s.stroke} strokeWidth={1.75} strokeLinejoin="round"
@@ -150,13 +166,13 @@ export function LineChart({
           ))}
           {hover && (
             <g aria-hidden>
-              <line x1={geo.X(hover.x)} x2={geo.X(hover.x)} y1={M.top} y2={height - M.bottom} className="stroke-border-strong" />
+              <line x1={geo.X(hover.x)} x2={geo.X(hover.x)} y1={top} y2={height - M.bottom} className="stroke-border-strong" />
               {hover.at.map(({ s, p }) => p && (
                 <circle key={s.name} cx={geo.X(p[0])} cy={geo.Y(p[1])} r={3.5} className={cn(s.stroke, "fill-surface")} strokeWidth={2} />
               ))}
             </g>
           )}
-          <rect x={M.left} y={M.top} width={Math.max(0, plotW)} height={Math.max(0, plotH)} fill="transparent"
+          <rect x={M.left} y={top} width={Math.max(0, plotW)} height={Math.max(0, plotH)} fill="transparent"
             className="touch-pan-y" onPointerMove={onPointer} onPointerDown={onPointer} onPointerLeave={() => setHoverX(null)} />
         </svg>
       )}

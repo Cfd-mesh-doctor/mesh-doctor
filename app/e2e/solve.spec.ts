@@ -227,12 +227,19 @@ test("a transient run's page follows it in seconds with the transient judge, sto
   await expect(page.getByRole("img", { name: "Downforce from body over time" })).toBeVisible();
   await expect(page.getByText("Judged over the last 12 time steps, flow along +x, z up")).toBeVisible();
   await expect(page.getByText("still developing (force means still drifting; average later)")).toBeVisible();
+  await expect(page.getByText("Its forces haven't settled yet: the means are over the last two windows.")).toBeVisible();
+  // Its time step and Courant number at each time step
+  await expect(page.getByRole("img", { name: "Time step over time, in µs" })).toBeVisible();
+  await page.getByRole("radiogroup", { name: "Show" }).getByRole("radio", { name: "Courant number" }).click();
+  await expect(page.getByRole("img", { name: "Largest and mean Courant number over time" })).toBeVisible();
 
   await page.getByRole("button", { name: "Stop" }).click();
   await expect(page.getByRole("heading", { name: "Stopped at 0.0005 s" })).toBeVisible();
   // Once it has ended, still the transient judge, in time steps: not GET /judge's, over 200 iterations.
   await expect(page.getByText("The judge on the whole run")).toBeVisible();
   await expect(page.getByText("converged (statistically stationary, every time step converged)")).toBeVisible();
+  await expect(page.getByText("The means are from 0.0001 s on, when its forces settled.")).toBeVisible();
+  await expect(page.getByRole("img", { name: "Downforce from body over time" }).getByText("averaged")).toBeVisible();
   expect(engine.requests.some((r) => r.url().includes("/judge?case=ahmed-coarse-ddes"))).toBe(false);
   await expect(page.getByRole("heading", { name: "Plan a transient run" })).toHaveCount(0);
 

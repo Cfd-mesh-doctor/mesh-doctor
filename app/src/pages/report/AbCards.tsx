@@ -35,6 +35,7 @@ function RatioBar({ ratio }: { ratio: number }) {
 
 /** The table's cells: closer together on a phone, so its four columns fit without scrolling sideways. */
 const CELL = "px-3 sm:px-4";
+const seconds = new Intl.NumberFormat("en-US", { maximumSignificantDigits: 4 });
 
 /** Did the repair, or the other settings, help the solver: each field's mean residual in both runs and their ratio. */
 export function AbCard({ ab }: { ab: AbSummary }) {
@@ -92,7 +93,8 @@ export function AbCard({ ab }: { ab: AbSummary }) {
   );
 }
 
-function LegendLine({ dashed, className, children }: { dashed?: boolean; className: string; children: ReactNode }) {
+/** A chart's legend entry: its line, solid or dashed, and its name. */
+export function LegendLine({ dashed, className, children }: { dashed?: boolean; className: string; children: ReactNode }) {
   return (
     <span className="inline-flex items-center gap-1.5">
       <svg width="18" height="4" aria-hidden>
@@ -147,7 +149,8 @@ export function ResidualCard({ history, settings, className = "mt-4" }: {
   );
 }
 
-/** The judge's verdict on one run, its averaged forces and its notes. `title` names the run it judged. */
+/** The judge's verdict on one run, its averaged forces and its notes. `title` names the run it judged. A transient
+ * run's says from when its means are: when its forces settled, or else the last two windows. */
 export function JudgeCard({ judge, title = "Is the repaired-mesh run converged?", className = "mt-4" }: {
   judge: JudgeSummary;
   title?: ReactNode;
@@ -163,6 +166,13 @@ export function JudgeCard({ judge, title = "Is the repaired-mesh run converged?"
             {[over && `Judged over the last ${over}`, judge.flow && `flow along ${judge.flow}`, judge.up && `${judge.up} up`]
               .filter(Boolean).join(", ")}
           </CardDescription>
+          {judge.settled !== undefined && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {judge.settled === null
+                ? "Its forces haven't settled yet: the means are over the last two windows."
+                : `The means are from ${seconds.format(judge.settled)} s on, when its forces settled.`}
+            </p>
+          )}
         </div>
         <Badge tone={judgeTone(judge.verdict)} className="whitespace-normal">{judge.verdict}</Badge>
       </CardHeader>

@@ -58,6 +58,21 @@ describe("line chart", () => {
     expect(last + 3.3 * "0.0005".length).toBeLessThanOrEqual(639);
   });
 
+  it("shades the part from a band's x on, with its name above it, and draws none past the end", () => {
+    const view = render(<LineChart label="drag" series={[line("a", [1, 2, 3, 2, 1])]} band={{ from: 3, label: "averaged" }} />);
+    // 640 px wide (no layout in tests), x from 1 to 5 over 576 px from 50: 3 is at 338, and the band ends at 626
+    const name = screen.getByText("averaged");
+    const rect = name.previousElementSibling!;
+    expect([rect.tagName, rect.getAttribute("x"), rect.getAttribute("width")]).toEqual(["rect", "338", "288"]);
+    // its name above the plot, which starts 14 px lower for it (at 24), so that no line crosses it: the top point
+    // (3, at 338) is drawn at the plot's top, below the name's baseline
+    expect([rect.getAttribute("y"), name.getAttribute("y")]).toEqual(["24", "20"]);
+    expect(view.container.querySelector("path")!.getAttribute("d")).toContain("L338.0 24.0");
+    view.unmount();
+    render(<LineChart label="drag" series={[line("a", [1, 2, 3, 2, 1])]} band={{ from: 6, label: "averaged" }} />);
+    expect(screen.queryByText("averaged")).toBeNull();
+  });
+
   it("says when there is nothing to draw", () => {
     render(<LineChart log label="residuals" empty="No residuals" series={[line("a", [0, null])]} />);
     expect(screen.getByText("No residuals")).toBeInTheDocument();

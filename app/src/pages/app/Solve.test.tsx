@@ -166,7 +166,7 @@ describe("the Solve screen's other parts", () => {
     renderScreen(<Solve />, { path, transport: engine(withChecks({})) });
     const next = within(screen.getByRole("heading", { name: "Coming next on this screen" }).closest("section")!);
     expect(next.getAllByRole("listitem").map((li) => li.textContent)).toEqual([
-      expect.stringMatching(/^A transient run's time step and Courant number over time, .* A solved run's page plans one and starts it already/),
+      expect.stringMatching(/^The cells that set a transient run's time step, .* A solved run's page plans and starts one already/),
     ]);
     expect(next.getByRole("link", { name: "Try it on the Ahmed body" })).toHaveAttribute("href", "/app/first-run");
     expect(next.getByRole("link", { name: /^the Ahmed body/ })).toHaveAttribute("href", expect.stringContaining("examples/ahmed-body"));

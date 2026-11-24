@@ -504,14 +504,33 @@ def _live_judge(res, frc, stage_from, now_it, avg_from=None):
 
 
 JUDGE_S = 15        # a transient run's judge reads its whole logs: while it solves, at most this often
-_tjudged = {}       # run name -> (when it was judged, its logs' sizes and times then, the judge)
+_tjudged = {}       # run name -> (when it was judged, its logs' sizes and times then, the judge, its time steps)
+STEP_COLS = ["Time", "deltaT", "coMean", "coMax"]
 
 
-def _transient_judge(name, case, running):
-    """A transient run's judge on its page, as GET /judge?case= answers it (abtest.judge): the transient verdict over
-    the last half of its time steps (10 to 200), with its forces' means, how well its time steps converged and its
-    Courant number.  It reads the run's whole logs, so while the run solves it is judged again at most every JUDGE_S
-    seconds; once the run has ended, when its logs change."""
+def _step_rows(steps, n=1500):
+    """A transient run's time steps for its page (caseinfo.step_stats): {cols, rows} of [t, deltaT, coMean, coMax],
+    at most n rows; past that, each row stands for a run of steps: its last time, their mean time step and mean
+    Courant number, and the largest of their largest, so a spike stays in."""
+    rows = [[s["t"], s["deltaT"], s["coMean"], s["coMax"]] for s in steps]
+    if len(rows) > n:
+        k = -(-len(rows) // n)
+
+        def mean(v):
+            v = [x for x in v if x is not None]
+            return sum(v) / len(v) if v else None
+        rows = [[g[-1][0], mean(r[1] for r in g), mean(r[2] for r in g),
+                 max((r[3] for r in g if r[3] is not None), default=None)]
+                for g in (rows[i:i + k] for i in range(0, len(rows), k))]
+    return {"cols": STEP_COLS, "rows": rows}
+
+
+def _transient_page(name, case, running):
+    """A transient run's judge and time steps on its page.  The judge is as GET /judge?case= answers it
+    (abtest.judge): the transient verdict over the last half of its time steps (10 to 200), with its forces' means
+    from when they settled, how well its time steps converged and its Courant number.  It reads the run's whole
+    logs, so while the run solves it is read again at most every JUDGE_S seconds; once the run has ended, when its
+    logs change."""
     logs = caseinfo.solver_logs(case)
     try:
         key = tuple((f, os.path.getsize(f), os.path.getmtime(f)) for f in logs)
@@ -519,12 +538,18 @@ def _transient_judge(name, case, running):
         key = None                              # a log went away meanwhile: judge it afresh
     c = _tjudged.get(name)
     if c and key is not None and (c[1] == key or (running and time.time() - c[0] < JUDGE_S)):
-        return c[2]
-    out = abtest.judge(case, None, logs=logs)
+        return c[2], c[3]
+    steps = caseinfo.step_stats(logs)
+    out = abtest.judge(case, None, logs=logs, steps=steps)
     if len(_tjudged) >= 16:                     # one per run whose page is open: keep only recent ones
         _tjudged.clear()
-    _tjudged[name] = (time.time(), key, out)
-    return out
+    _tjudged[name] = (time.time(), key, out, _step_rows(steps))
+    return out, _tjudged[name][3]
+
+
+def _transient_judge(name, case, running):
+    """A transient run's judge on its page (_transient_page)."""
+    return _transient_page(name, case, running)[0]
 
 
 def _settings(case):
@@ -593,7 +618,7 @@ _solve_cache = {}
 def solve_live(name):
     """GET /runs/{name}/live: a solve's page data (solve.py's runs), as run_status is an A/B test's; None for no run.
     Its stretches are its stages, and the live judge takes the whole run, whose stretches share their settings; a
-    transient run's is the transient judge, in time steps (_transient_judge)."""
+    transient run's is the transient judge, in time steps, and it has its time steps too (_transient_page)."""
     c = _solve_cache.get(name)
     if c and time.time() - c[0] < 3:
         return c[1]
@@ -627,10 +652,12 @@ def solve_live(name):
         solver["eta"] = max(0, left) * solver["wall_per_it"]
     res = md_api._residuals(case, maxpts=1500) or {}
     frc = force_payload(case)
-    judge = (_transient_judge(name, case, run["state"] == "running") if run.get("transient")
-             else _live_judge(res, frc, 0, it, 0))
+    judge, steps = (_transient_page(name, case, run["state"] == "running") if run.get("transient")
+                    else (_live_judge(res, frc, 0, it, 0), None))
     data = {"name": name, "run": run, "stages": stages, "current": stages[-1], "solver": solver, "residuals": res,
             "forces": frc["series"], "forceInfo": frc["info"], "judge": judge, "now": time.time()}
+    if steps is not None:
+        data["steps"] = steps
     _solve_cache[name] = (time.time(), data)
     return data
 

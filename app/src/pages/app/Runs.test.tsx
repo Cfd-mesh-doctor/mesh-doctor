@@ -58,9 +58,11 @@ function transientLive(r: Run) {
       : { state: "stopped", iteration: r.iteration, end: r.end, deltaT: 1.67e-5 },
     residuals: { cols: ["Time", "p", "Ux"], rows: ts.map((t) => [t, 0.01, 0.002]) },
     forces: { body: ts.map((t) => [t, 40 + Math.sin(t * 1e5), 150]) },
+    steps: { cols: ["Time", "deltaT", "coMean", "coMax"], rows: ts.map((t, i) => [t, 1.67e-5, 0.05, 0.9 + 0.01 * (i % 3)]) },
     judge: {
       transient: true, window: 15, group: "body", verdict: "statistically stationary, but check: k bounded in 90% of steps",
       flags: ["k bounded in 90% of steps"], average: { drag: { mean: 40.2, u: 0.3 } }, axes: { flow: "+x", up: "z" },
+      settled: r.state === "running" ? null : 0.0001,
     },
   };
 }
@@ -370,6 +372,7 @@ describe("a run's page", () => {
   });
 
   it("follows a transient run in seconds: its time and time step, what it started from, its charts over time", async () => {
+    const user = userEvent.setup();
     runPage("t", { made: { t: { transientOf: "s" } }, runs: [T()], jobs: [job("t", "running")], live: transientLive });
     expect(await screen.findByText("Solve · a transient run of s · to 0.001 s")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Solving (foamRun)" })).toBeInTheDocument();
@@ -388,6 +391,18 @@ describe("a run's page", () => {
     expect(screen.getByText("The live judge, so far")).toBeInTheDocument();
     expect(screen.getByText("Judged over the last 15 time steps, flow along +x, z up")).toBeInTheDocument();
     expect(screen.getByText("statistically stationary, but check: k bounded in 90% of steps")).toBeInTheDocument();
+    // Its forces haven't settled yet: nothing shaded, and the judge says so
+    expect(screen.getByText("Its forces haven't settled yet: the means are over the last two windows.")).toBeInTheDocument();
+    expect(screen.queryByText("averaged")).toBeNull();
+    // Its time step and Courant number at each time step
+    expect(screen.getByRole("heading", { name: "Time step", level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Time step over time, in µs" })).toBeInTheDocument();
+    expect(screen.getByText(/^In µs\. OpenFOAM sets each time step so that the largest Courant number stays at 1, the run's setting:/))
+      .toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Courant number" }));
+    expect(screen.getByRole("img", { name: "Largest and mean Courant number over time" })).toBeInTheDocument();
+    expect(screen.getByText(/^The largest Courant number, which the time step holds at about 1, the run's setting, and the mean/))
+      .toBeInTheDocument();
   });
 
   it("judges a transient run that has ended in time steps, plans none of it, and continues it by time", async () => {
@@ -400,6 +415,10 @@ describe("a run's page", () => {
     expect(screen.getByText("Stopped by request at 0.00025 s, which it wrote: Continue solves on from there.")).toBeInTheDocument();
     expect(await screen.findByText("The judge on the whole run")).toBeInTheDocument();
     expect(screen.getByText("statistically stationary, but check: k bounded in 90% of steps")).toBeInTheDocument();
+    // its means from when its forces settled, shaded on the forces chart
+    expect(screen.getByText("The means are from 0.0001 s on, when its forces settled.")).toBeInTheDocument();
+    expect(screen.getByText(/The shaded part, from when they settled, is what it averages\.$/)).toBeInTheDocument();
+    expect(screen.getByText("averaged")).toBeInTheDocument();
     expect(judged).toEqual([]);                                  // not GET /judge's 200 iterations
     expect(screen.queryByRole("heading", { name: "Plan a transient run" })).toBeNull();
 

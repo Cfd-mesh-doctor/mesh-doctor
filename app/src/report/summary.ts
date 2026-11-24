@@ -63,6 +63,9 @@ export interface JudgeSummary {
   transient: boolean;
   flow: string | null;
   up: string | null;
+  /** a transient run's: the time its forces settled, where its means start; null while they haven't; not there
+   * for a steady run, or from an engine before judge 1.2 */
+  settled?: number | null;
 }
 
 export interface DocumentRow {
@@ -232,6 +235,7 @@ export function judgeOf(doc: unknown): JudgeSummary | null {
     transient: j.transient === true,
     flow: str(axes.flow),
     up: str(axes.up),
+    ...("settled" in j && { settled: num(j.settled) }),
   };
 }
 

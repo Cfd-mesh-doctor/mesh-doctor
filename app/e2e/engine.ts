@@ -70,9 +70,10 @@ type RunDoc = ReturnType<typeof run> & {
 /** A transient run's time step, 20 µs. */
 const DT = 2e-5;
 
-/** A transient run's page data: its time steps up to the time it is at, its residuals and forces swinging with the
- *  flow, and the transient judge in time steps, over the last half of them (10 to 200) as GET /judge's: still
- *  developing while it solves, converged once it has ended. */
+/** A transient run's page data: its time steps up to the time it is at (the time step, and the Courant number about
+ *  0.95 at its largest), its residuals and forces swinging with the flow, and the transient judge in time steps,
+ *  over the last half of them (10 to 200) as GET /judge's: still developing and not settled while it solves,
+ *  converged and its means from 0.0001 s once it has ended. */
 function transientLive(r: RunDoc) {
   const at = Number(r.iteration ?? r.written);
   const n = Math.max(0, Math.round(at / DT));
@@ -90,11 +91,14 @@ function transientLive(r: RunDoc) {
       rows: ts.map((t, i) => [t, 0.012 + 0.004 * Math.sin(i / 3), 0.003 + 0.001 * Math.sin(i / 4)]) },
     forces: { body: ts.map((t, i) => [t, 40 + 1.5 * Math.sin(i / 2), 150 + 6 * Math.sin(i / 3)]) },
     forceInfo: { total: "body", groups: ["body"], vertical: "downforce", flow: "+x", up: "z", source: {} },
+    steps: { cols: ["Time", "deltaT", "coMean", "coMax"],
+      rows: ts.map((t, i) => [t, DT, 0.05 + 0.01 * Math.sin(i / 4), 0.95 + 0.04 * Math.sin(i / 3)]) },
     judge: {
       transient: true, window: Math.max(10, Math.min(200, Math.floor(n / 2))), group: "body", flags: [] as string[],
       verdict: solving ? "still developing (force means still drifting; average later)"
         : "converged (statistically stationary, every time step converged)",
       average: { drag: { mean: 40.1, u: 0.3 }, downforce: { mean: 150.4, u: 1.2 } }, axes: { flow: "+x", up: "z" },
+      settled: solving ? null : 0.0001,
     },
     now: Date.now() / 1000,
   };
