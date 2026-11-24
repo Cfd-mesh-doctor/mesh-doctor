@@ -130,7 +130,7 @@ test("on the smallest phones your own app's screens don't scroll sideways", asyn
   }
 });
 
-test("on the smallest phones Verify install's answer fits, its chart within the card", async ({ page }) => {
+test("on the smallest phones Verify install's answer fits, on the Solve screen and its run's page, its chart within the card", async ({ page }) => {
   const solved = run("verify-install", { state: "done", step: "done", iteration: 2000, written: 2000, nProcs: 6,
     stretches: [{ from: 0, to: 2000 }], finished: new Date().toISOString() });
   await mockEngine(page, { made: { "verify-install": { template: "ahmed-body" } }, runs: [solved], noJobs: true,
@@ -140,14 +140,16 @@ test("on the smallest phones Verify install's answer fits, its chart within the 
   await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
   for (const width of [360, 320]) {
     await page.setViewportSize({ width, height: 800 });
-    await page.goto("/app/solve");
-    const card = page.locator("section").filter({ has: page.getByRole("heading", { name: "Verify install", exact: true }) });
-    const chart = card.getByRole("img", { name: /^Drag coefficient of each case/ });
-    await expect(chart).toBeVisible();
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-    expect(overflow, `the Solve screen is wider than a ${width} px screen`).toBeLessThanOrEqual(1);
-    const [c, k] = [await card.boundingBox(), await chart.boundingBox()];
-    expect(k!.x + k!.width, `the chart is wider than its card at ${width} px`).toBeLessThanOrEqual(c!.x + c!.width + 1);
+    for (const [path, title] of [["/app/solve", "Verify install"], ["/app/solve/verify-install", "Against the accuracy check"]] as const) {
+      await page.goto(path);
+      const card = page.locator("section").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
+      const chart = card.getByRole("img", { name: /^Drag coefficient of each case/ });
+      await expect(chart).toBeVisible();
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow, `${path} is wider than a ${width} px screen`).toBeLessThanOrEqual(1);
+      const [c, k] = [await card.boundingBox(), await chart.boundingBox()];
+      expect(k!.x + k!.width, `${title}'s chart is wider than its card at ${width} px`).toBeLessThanOrEqual(c!.x + c!.width + 1);
+    }
   }
 });
 

@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The solves of the cases Mesh Doctor made (API 1.6): the Solve screen's Runs card and its Solve dialog, and a run's
-// page with its charts, judge, Stop and Continue; a transient run's, in seconds.
+// page with its charts, judge, Stop and Continue, and a run of the Ahmed body template's comparison with the accuracy
+// check; a transient run's, in seconds.
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import type { Transport } from "@/engine/client";
 import { EngineError } from "@/engine/errors";
-import type { Job, MachineInfo, Made, Run } from "@/engine/types";
+import type { Job, MachineInfo, Made, Run, RunValidation } from "@/engine/types";
 import { renderScreen } from "@/test/render";
 import { RunPage } from "./Run";
 import { Solve } from "./Solve";
 import { OLD_ENGINE_RUNS } from "./solveStart";
+import { OLD_ENGINE_VERIFY } from "./VerifyInstall";
 
 const MACHINE: MachineInfo = { cpus: 8, cores: 4, memoryMb: 16_000, ramLimitMb: null };
 const HOUR_AGO = new Date(Date.now() - 3_600_000).toISOString();
@@ -67,15 +69,38 @@ function transientLive(r: Run) {
   };
 }
 
+/** A coarse Ahmed body run of the template solved to `to` in one stretch, on 6 processes, in 15 minutes. */
+const solved = (name: string, to: number) => run(name, {
+  state: "done", step: "done", iteration: to, end: to, written: to, nProcs: 6, stretches: [{ from: 0, to }],
+  started: new Date(Date.now() - 960_000).toISOString(), finished: new Date(Date.now() - 60_000).toISOString(),
+});
+
+/** GET /runs/{name}/validation of a coarse Ahmed body run solved to 2,000, as a real one with OpenFOAM 14 answered
+ * it; and of one solved to 1,000, as Try it on the Ahmed body solves its case, short of the accuracy check's 2,000. */
+const MATCHING: RunValidation = {
+  name: "verify-install", state: "done", template: "ahmed-body", size: "coarse", slant: 25, cells: 478_901,
+  iterations: 2000, window: 500, cd: 0.2986, cl: 0.2978, drift: -0.11,
+  tunnel: { cd: 0.285, difference: 4.76 },
+  published: { cd: 0.299, cl: 0.298, iterations: 2000, difference: -0.15 },
+  comparable: true, matches: true,
+};
+const SHORT: RunValidation = {
+  ...MATCHING, name: "ahmed", iterations: 1000, window: 250, cd: 0.3049, cl: 0.2902, drift: 0.62,
+  tunnel: { cd: 0.285, difference: 6.98 }, published: { ...MATCHING.published, difference: 1.97 },
+  comparable: false, matches: false,
+};
+
 /** Your own engine (or the demo, by `kind`) with these made cases, runs and jobs, and the free space of its disk in MB
  * (`freeMb`, 393 GB by default; `noDisk`: it doesn't say, as an engine before API 1.7), where solving any case takes
- * what the coarse Ahmed body's does. */
+ * what the coarse Ahmed body's does; its comparison of a run with the accuracy check by the run's name (an error it
+ * throws), else unsupported, as for a run not made from the Ahmed body template. */
 function engine(o: {
   made?: Record<string, Made>; runs?: Run[]; jobs?: Job[]; live?: (r: Run) => unknown; noRuns?: boolean;
-  kind?: "engine" | "demo"; freeMb?: number; noDisk?: boolean;
+  kind?: "engine" | "demo"; freeMb?: number; noDisk?: boolean; validations?: Record<string, RunValidation | EngineError>;
 } = {}) {
   const posted: { path: string; body?: unknown }[] = [];
   const judged: string[] = [];
+  const validated: string[] = [];
   const runs = new Map((o.runs ?? []).map((r) => [r.name, structuredClone(r)]));
   const transport: Transport = {
     kind: o.kind ?? "engine",
@@ -109,6 +134,15 @@ function engine(o: {
         judged.push(path);
         return { verdict: "converged", window: 200, group: "body", average: { drag: { mean: 41.8, u: 0.2 } } } as T;
       }
+      const val = /^\/runs\/([^/]+)\/validation$/.exec(route);
+      if (val) {
+        const name = decodeURIComponent(val[1]!);
+        validated.push(name);
+        const v = o.validations?.[name];
+        if (v instanceof EngineError) throw v;
+        if (v) return structuredClone(v) as T;
+        throw new EngineError("unsupported", `${name} isn't made from the Ahmed body template`, 422);
+      }
       const m = /^\/runs\/([^/]+)(\/live)?$/.exec(route);
       const r = m && runs.get(decodeURIComponent(m[1]!));
       if (m && r && m[2]) {
@@ -120,7 +154,7 @@ function engine(o: {
       throw new EngineError("not-found", `no such API route ${route}`, 404);
     },
   };
-  return { transport, posted, judged };
+  return { transport, posted, judged, validated };
 }
 
 const solvePage = (o: Parameters<typeof engine>[0]) => {
@@ -131,10 +165,13 @@ const runPage = (name: string, o: Parameters<typeof engine>[0]) => {
   const e = engine(o);
   return {
     ...renderScreen(<RunPage />, { path: "/app/solve/:name", at: `/app/solve/${name}`, transport: e.transport }),
-    posted: e.posted, judged: e.judged,
+    posted: e.posted, judged: e.judged, validated: e.validated,
   };
 };
 const dialog = () => within(screen.getByRole("dialog"));
+/** A run's page's card that compares it with the accuracy check. */
+const COMPARED = "Against the accuracy check";
+const compared = () => within(screen.getByRole("heading", { name: COMPARED }).closest("section")!);
 
 describe("the Solve screen's runs", () => {
   it("lists each case Mesh Doctor made with its solve: those solving first, a link to each run's page", async () => {
@@ -483,6 +520,88 @@ describe("a run's page", () => {
     await user.click(dialog().getByRole("button", { name: "Continue" }));
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0]).toEqual({ path: "/jobs", body: { kind: "solve", params: { name: "t", to: 0.002 } } });
+  });
+
+  it("says how a run of the Ahmed body template compares with the accuracy check once it has ended", async () => {
+    // Verify install's run, solved to 2,000: the same answer, beside the accuracy check's run as Your install
+    const first = runPage("verify-install", {
+      made: { "verify-install": { template: "ahmed-body" } }, runs: [solved("verify-install", 2000)],
+      validations: { "verify-install": MATCHING },
+    });
+    expect(await screen.findByRole("heading", { name: COMPARED })).toBeInTheDocument();
+    expect(compared().getByText(/^Verify install's answer: its drag against the accuracy check's run of the same mesh, solved to iteration 2,000, and against the wind tunnel's\.$/))
+      .toBeInTheDocument();
+    expect(await compared().findByText("Same answer")).toBeInTheDocument();
+    expect(compared().getByText(/^Its drag is within 2 % of the accuracy check's run of the same mesh \(Cd 0\.299\): your install gives/))
+      .toBeInTheDocument();
+    expect(compared().getByRole("img", { name: /^Drag coefficient of each case/ })).toHaveAccessibleName(
+      "Drag coefficient of each case, the Mesh Doctor run against the wind tunnel: Accuracy check, coarse mesh, 0.299 "
+      + "against 0.285 (+4.8 %); Your install, coarse mesh, 0.299 against 0.285 (+4.8 %).");
+    expect(compared().getByText(/^Cd 0\.2986 and Cl 0\.2978 over the last 500 of its 2,000 iterations, −0\.15 % from/))
+      .toBeInTheDocument();
+    expect(compared().getByRole("link", { name: "The whole accuracy check" })).toHaveAttribute("href", "/accuracy");
+    expect(first.validated).toEqual(["verify-install"]);
+    first.unmount();
+
+    // Another run of the template, solved to 1,000 as the first run's: not comparable yet, beside it as This run
+    runPage("ahmed", { made: { ahmed: { template: "ahmed-body" } }, runs: [solved("ahmed", 1000)],
+      validations: { ahmed: SHORT } });
+    expect(await screen.findByText("Not comparable yet")).toBeInTheDocument();
+    expect(compared().getByText(/^Made from the Ahmed body template, it compares as Verify install does: its drag/))
+      .toBeInTheDocument();
+    expect(compared().getByText("Solved to iteration 1,000, and the accuracy check's run of the same mesh (Cd 0.299) "
+      + "went to 2,000: continue it there to compare.")).toBeInTheDocument();
+    expect(compared().getByRole("img", { name: /^Drag coefficient of each case/ })).toHaveAccessibleName(
+      /; This run, coarse mesh, 0\.305 against 0\.285 \(\+7\.0 %\)\.$/);
+    expect(compared().getByText(/^Cd 0\.3049 and Cl 0\.2902 over the last 250 of its 1,000 iterations, \+1\.97 % from/))
+      .toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue…" })).toBeInTheDocument();     // to 2,000, to compare
+  });
+
+  it("compares no run that solves, isn't of the template or can't be compared; an older engine is told to update", async () => {
+    const made: Record<string, Made> = { "verify-install": { template: "ahmed-body" } };
+    // While it solves: the live judge says how it goes, and the comparison waits for its end
+    const solving = runPage("verify-install", { made, runs: [run("verify-install")], jobs: [job("verify-install", "running")],
+      validations: { "verify-install": MATCHING } });
+    expect(await screen.findByRole("heading", { name: "Solving (foamRun)" })).toBeInTheDocument();
+    expect(await screen.findByText("The live judge, so far")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: COMPARED })).toBeNull();
+    expect(solving.validated).toEqual([]);
+    solving.unmount();
+
+    // A copy of a case you made: not asked
+    const copy = runPage("c", { made: { c: { copyOf: "mine" } }, runs: [solved("c", 2000)] });
+    expect(await screen.findByText("The judge on the whole run")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: COMPARED })).toBeNull();
+    expect(copy.validated).toEqual([]);
+    copy.unmount();
+
+    // A Verify install's name on a run the engine can't compare (made otherwise in a terminal): nothing shows
+    const other = runPage("verify-install-3", { made: { "verify-install-3": { copyOf: "mine" } }, runs: [solved("verify-install-3", 2000)] });
+    expect(await screen.findByText("The judge on the whole run")).toBeInTheDocument();
+    await waitFor(() => expect(other.validated).toEqual(["verify-install-3"]));
+    await waitFor(() => expect(screen.queryByRole("heading", { name: COMPARED })).toBeNull());
+    other.unmount();
+
+    // An engine from before the comparison: on a Verify install's run, update; on another run of the template, nothing
+    const old = new EngineError("not-found", "no such API route /runs/verify-install/validation", 404);
+    const older = runPage("verify-install", { made, runs: [solved("verify-install", 2000)], validations: { "verify-install": old } });
+    expect(await screen.findByRole("heading", { name: COMPARED })).toBeInTheDocument();
+    expect(await compared().findByText(/^Your engine is older than this page and can't verify the install/)).toBeInTheDocument();
+    expect(OLD_ENGINE_VERIFY).toContain("`git pull`");
+    older.unmount();
+    const ahmed = runPage("ahmed", { made: { ahmed: { template: "ahmed-body" } }, runs: [solved("ahmed", 2000)],
+      validations: { ahmed: new EngineError("not-found", "no such API route /runs/ahmed/validation", 404) } });
+    expect(await screen.findByText("The judge on the whole run")).toBeInTheDocument();
+    await waitFor(() => expect(ahmed.validated).toEqual(["ahmed"]));
+    await waitFor(() => expect(screen.queryByRole("heading", { name: COMPARED })).toBeNull());
+    ahmed.unmount();
+
+    // It failed: what went wrong, and Try again
+    runPage("verify-install", { made, runs: [solved("verify-install", 2000)],
+      validations: { "verify-install": new EngineError("internal", "the engine failed to read the forces", 500) } });
+    expect(await screen.findByRole("heading", { name: COMPARED })).toBeInTheDocument();
+    expect(await compared().findByRole("button", { name: "Try again" })).toBeInTheDocument();
   });
 
   it("says when the engine's server has no live monitor, and still says how the run stands", async () => {

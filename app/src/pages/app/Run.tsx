@@ -6,10 +6,12 @@
 // (SolveDialog.tsx). A solve run in a terminal (meshdoctor solve) has no job: the page says so, and Stop works on it
 // as on a job's. A solve just started shows as starting until its job writes the run's status, and a copy of a
 // case you made as copying while its job makes it. While it solves the screen asks again every 3 s, so the charts
-// grow. Once it has ended, Plan a transient run (TransientPlan.tsx) says what a transient run of it would take, and
-// starts one. A transient run (`transient`) counts time in s: its progress, stretches, charts and Continue are in
-// seconds, it names the steady run it started from, and its judge is the transient judge, in time steps, which the
-// live page answers while it solves and once it has ended.
+// grow. Once it has ended, a run of the Ahmed body template, Verify install's among them, says how it compares with
+// the accuracy check (VerifyInstall.tsx's RunComparison, GET /runs/{name}/validation), and Plan a transient run
+// (TransientPlan.tsx) says what a transient run of it would take, and starts one. A transient run (`transient`)
+// counts time in s: its progress, stretches, charts and Continue are in seconds, it names the steady run it started
+// from, and its judge is the transient judge, in time steps, which the live page answers while it solves and once it
+// has ended.
 import { ArrowLeft, CircleStop, FastForward, ListChecks, Play } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
@@ -33,11 +35,13 @@ import { tableRun } from "@/report/abtest";
 import { judgeOf } from "@/report/summary";
 import { SolveDialog } from "./SolveDialog";
 import { TransientPlanCard } from "./TransientPlan";
+import { RunComparison } from "./VerifyInstall";
 import {
   atText, current, formatTime, isTransient, madeFrom, madeOfJob, ofText, runShown, solveJobOf, solveStep,
   stretchFraction, stretchesText, timeNumber, totalForces, transientText,
 } from "./solveStart";
 import { formatStep } from "./tplan";
+import { VERIFY, isVerifyName } from "./verify";
 
 const LINK = "font-medium text-primary underline-offset-4 hover:underline";
 
@@ -321,7 +325,10 @@ export function RunPage() {
   const [stoppedAt, setStoppedAt] = useState<string | null>(null);
   const [goingOn, setGoingOn] = useState(false);
 
-  const from = madeFrom(cases.data?.made?.[name] ?? madeOfJob(job));
+  const made = cases.data?.made?.[name] ?? madeOfJob(job);
+  const from = madeFrom(made);
+  // A run of the Ahmed body template compares with the accuracy check once it has ended, as Verify install's does.
+  const ahmed = made?.template === VERIFY.template || isVerifyName(name);
   const stopping = shown === "running" && run != null && stoppedAt === (run.started ?? "");
   // A solve run in a terminal has no job; the engine says it runs, and Stop works on it as on a job's.
   const outside = shown === "running" && run?.state === "running" && !working && jobs.data != null;
@@ -472,6 +479,12 @@ export function RunPage() {
       )}
       {!liveJudge && judge.isError && (
         <ErrorPanel className="mt-4" compact error={judge.error} onRetry={() => void judge.refetch()} retrying={judge.isFetching} />
+      )}
+
+      {ended && !transient && ahmed && (
+        <Section title="Against the accuracy check">
+          <RunComparison className="mt-4" run={run} />
+        </Section>
       )}
 
       {ended && !transient && (

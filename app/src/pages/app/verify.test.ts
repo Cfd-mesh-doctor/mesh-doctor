@@ -112,5 +112,8 @@ describe("Verify install's comparison", () => {
     expect(ours).toEqual({ name: "Your install, coarse mesh", cells: "0.48 M", cd: 0.2986, tunnel: 0.285,
       difference: "+4.8 %", drift: "−0.11 %", cl: 0.2978, time: "14 min with its mesh", miss: false, window: 500 });
     expect(verifyCases({ ...MATCHING, cells: null }, "")[1]).toMatchObject({ cells: "", time: "" });
+    // A run's page names another run of the template This run, solved in its time alone: its case was made before.
+    expect(verifyCases(MATCHING, "12 min", { label: "This run", meshed: false })[1])
+      .toMatchObject({ name: "This run, coarse mesh", time: "12 min", cd: 0.2986 });
   });
 });

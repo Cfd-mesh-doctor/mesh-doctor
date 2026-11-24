@@ -56,8 +56,9 @@ meshdoctor solve verify-install --template ahmed-body --size coarse --to 2000 --
 It makes the coarse case from the template and solves it to iteration 2000, as the run in the table did. Its drag over
 the last 500 iterations should be within 2 % of the table's 0.299; a run with OpenFOAM 14 gave 0.2986. The web app's
 Verify install, on its Solve screen, starts the same and shows the answer beside this page's chart, from the engine's
-`GET /api/v1/runs/{name}/validation`. Further off than that, something in your setup differs from the one tested here:
-the OpenFOAM version, a changed template, or a solve stopped short.
+`GET /api/v1/runs/{name}/validation`; so does the page of any run of the Ahmed body template, once it has ended.
+Further off than that, something in your setup differs from the one tested here: the OpenFOAM version, a changed
+template, or a solve stopped short.
 
 ## Using this on your own work
 

@@ -148,7 +148,8 @@ export function Accuracy() {
               <p className="text-[13px] text-muted-foreground">
                 Or from the web app:{" "}
                 <Link to="/app/solve" className={link}>Verify install</Link>, on the Solve screen, starts the same and
-                shows the answer beside this page&apos;s chart.
+                shows the answer beside this page&apos;s chart, as the page of any run of the Ahmed body template does
+                once it has ended.
               </p>
             </div>
           </CardContent>

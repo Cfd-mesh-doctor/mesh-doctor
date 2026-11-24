@@ -3,7 +3,9 @@
 // 2,000 in one solve job, as the accuracy check's run of that mesh was, then its drag against that run's and the wind
 // tunnel's (GET /runs/{name}/validation), drawn as the accuracy check draws its cases (CdChart). Before it: what it
 // does, and Verify install…; while it runs: its step and how far it has come; after: the comparison, Continue… when
-// it ended short of 2,000, or Verify install again… when it failed or stopped before it solved.
+// it ended short of 2,000, or Verify install again… when it failed or stopped before it solved. A run's page
+// (Run.tsx) shows the same comparison of a run of the Ahmed body template once it has ended (RunComparison), so
+// following the card's link to the run doesn't lose it.
 import { CircleAlert, CircleCheck, FastForward, ShieldCheck, TriangleAlert } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
@@ -17,13 +19,14 @@ import { Progress, Skeleton } from "@/components/ui/misc";
 import { useAppPath } from "@/engine/context";
 import { asEngineError } from "@/engine/errors";
 import { useCases, useJobs, useRunValidation, useRuns } from "@/engine/hooks";
-import { isActive, type RunValidation } from "@/engine/types";
+import { isActive, type RunDetail, type RunValidation } from "@/engine/types";
 import { formatInt } from "@/lib/format";
 import { CdChart } from "@/pages/accuracy/CdChart";
 import { SolveDialog, VerifyDialog } from "./SolveDialog";
 import { current, runRows, solveStep, stretchFraction, type RunRow } from "./solveStart";
 import {
-  VERIFY, VERIFY_NAME, signedPercent, verifyCases, verifyCommand, verifyRow, verifyStage, verifyTime, verifyVerdict,
+  VERIFY, VERIFY_NAME, isVerifyName, signedPercent, verifyCases, verifyCommand, verifyRow, verifyStage, verifyTime,
+  verifyVerdict, type VerifyVerdict,
 } from "./verify";
 
 const LINK = "font-medium text-primary underline-offset-4 hover:underline";
@@ -53,7 +56,8 @@ function Working({ row }: { row: RunRow }) {
       <Progress className="max-w-sm" value={meshing ? undefined : stretchFraction(now)}
         label={`Progress of ${row.name}`} />
       <p className="text-[13px] text-muted-foreground">
-        It makes the mesh first, in about a minute, then solves. Its page draws the residuals and forces as it goes.
+        It makes the mesh first, in about a minute, then solves. Its page draws the residuals and forces as it goes,
+        and the comparison once it has solved.
       </p>
     </div>
   );
@@ -61,11 +65,18 @@ function Working({ row }: { row: RunRow }) {
 
 const TONE = { success: CircleCheck, warning: TriangleAlert, neutral: CircleAlert } as const;
 
-/** The comparison: whether your install gives the accuracy check's answer, and the two runs on its chart. */
-function Comparison({ v, time }: { v: RunValidation; time: string }) {
+/** The comparison's verdict in a word or two, beside its card's title. */
+function VerdictBadge({ verdict }: { verdict: VerifyVerdict }) {
+  const Icon = TONE[verdict.tone];
+  return <Badge tone={verdict.tone}><Icon aria-hidden /> {verdict.badge}</Badge>;
+}
+
+/** The comparison: whether your install gives the accuracy check's answer, and the two runs on its chart, the run's
+ * named `label` there and solved in `time`, with its mesh (`meshed`) for a Verify install's (verifyCases). */
+function Comparison({ v, time, label, meshed }: { v: RunValidation; time: string; label?: string; meshed?: boolean }) {
   const verdict = verifyVerdict(v);
   const Icon = TONE[verdict.tone];
-  const all = useMemo(() => verifyCases(v, time), [v, time]);
+  const all = useMemo(() => verifyCases(v, time, { label, meshed }), [v, time, label, meshed]);
   return (
     <div className="space-y-4">
       <p className="flex gap-2 text-sm">
@@ -86,6 +97,16 @@ function Comparison({ v, time }: { v: RunValidation; time: string }) {
   );
 }
 
+/** Asking the engine for the comparison. */
+function Comparing({ name }: { name: string }) {
+  return (
+    <div className="space-y-3" aria-busy>
+      <p role="status" className="text-sm text-muted-foreground">Comparing {name} with the accuracy check…</p>
+      <Skeleton className="h-24 w-full" />
+    </div>
+  );
+}
+
 /** Once it has solved to iteration 2,000: the engine's comparison. */
 function Ended({ row }: { row: RunRow }) {
   const v = useRunValidation(row.name, true, row.run?.written ?? null);
@@ -95,11 +116,47 @@ function Ended({ row }: { row: RunRow }) {
     if (e.code === "not-found") return <p className="text-sm text-muted-foreground"><TextWithCode text={OLD_ENGINE_VERIFY} /></p>;
     return <ErrorPanel compact error={v.error} onRetry={() => void v.refetch()} retrying={v.isFetching} />;
   }
+  return <Comparing name={row.name} />;
+}
+
+/**
+ * A run's page (Run.tsx): how a run of the Ahmed body template that has ended compares with the accuracy check, as
+ * Verify install's card says it. The engine compares any run of the template, so the first run's and a new case's
+ * too: its row on the chart is Your install's for a Verify install's run, This run's for another. Nothing for a run
+ * the engine can't compare (made otherwise, or with no drag yet); an engine from before the comparison is told to
+ * update on a Verify install's run only, as the card tells it.
+ */
+export function RunComparison({ run, className }: { run: RunDetail; className?: string }) {
+  const verify = isVerifyName(run.name);
+  const v = useRunValidation(run.name, true, run.written);
+  const code = v.isError ? asEngineError(v.error).code : null;
+  if (code === "unsupported" || code === "not-ready" || (code === "not-found" && !verify)) return null;
+  const verdict = v.data ? verifyVerdict(v.data) : null;
   return (
-    <div className="space-y-3" aria-busy>
-      <p role="status" className="text-sm text-muted-foreground">Comparing {row.name} with the accuracy check…</p>
-      <Skeleton className="h-24 w-full" />
-    </div>
+    <Card className={className}>
+      <CardHeader className="block">
+        <CardTitleRow>
+          <CardTitle>Against the accuracy check</CardTitle>
+          {verdict && <VerdictBadge verdict={verdict} />}
+        </CardTitleRow>
+        <CardDescription>
+          {verify ? "Verify install's answer" : "Made from the Ahmed body template, it compares as Verify install does"}:
+          its drag against the accuracy check&apos;s run of the same mesh, solved to iteration {formatInt(VERIFY.to)},
+          and against the wind tunnel&apos;s.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {v.data ? (
+          <Comparison v={v.data} time={verifyTime(run)} label={verify ? "Your install" : "This run"} meshed={verify} />
+        ) : code === "not-found" ? (
+          <p className="text-sm text-muted-foreground"><TextWithCode text={OLD_ENGINE_VERIFY} /></p>
+        ) : v.isError ? (
+          <ErrorPanel compact error={v.error} onRetry={() => void v.refetch()} retrying={v.isFetching} />
+        ) : (
+          <Comparing name={run.name} />
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -154,7 +211,7 @@ export function VerifyInstall() {
         <CardTitleRow>
           <CardTitle>Verify install</CardTitle>
           {verdict && stage === "ended" ? (
-            <Badge tone={verdict.tone}>{verdict.tone === "success" ? <CircleCheck aria-hidden /> : <TriangleAlert aria-hidden />} {verdict.badge}</Badge>
+            <VerdictBadge verdict={verdict} />
           ) : row && stage !== "ended" ? (
             <RunStateBadge state={row.shown} />
           ) : null}

@@ -77,7 +77,17 @@ test("a Verify install solved to 2,000 gives the accuracy check's answer, drawn 
   await card.locator('[data-row="1"]').hover();
   await expect(card.getByText(/Cd 0\.299 against 0\.285 in the wind tunnel, \+4\.8 %\. Lift Cl 0\.298; drift over the last 500 iterations −0\.11 %; solved in 15 min with its mesh\./))
     .toBeVisible();
-  await card.getByRole("link", { name: "The whole accuracy check" }).click();
+  // Its run's page, from the Runs card, says the same once it has ended.
+  await page.getByRole("list", { name: "Runs" }).getByRole("link", { name: "verify-install", exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/solve\/verify-install$/);
+  const there = page.locator("section").filter({ has: page.getByRole("heading", { name: "Against the accuracy check", exact: true }) });
+  await expect(there.getByText("Same answer", { exact: true })).toBeVisible();
+  await expect(there.getByText(/^Verify install's answer: its drag against the accuracy check's run of the same mesh/)).toBeVisible();
+  await expect(there.getByRole("img", { name: /^Drag coefficient of each case/ })).toHaveAttribute("aria-label",
+    /Accuracy check, coarse mesh, 0\.299 against 0\.285 \(\+4\.8 %\); Your install, coarse mesh, 0\.299 against 0\.285/);
+  await there.locator('[data-row="1"]').hover();
+  await expect(there.getByText(/drift over the last 500 iterations −0\.11 %; solved in 15 min with its mesh\./)).toBeVisible();
+  await there.getByRole("link", { name: "The whole accuracy check" }).click();
   await expect(page).toHaveURL(/\/accuracy$/);
   await expect(page.getByRole("heading", { name: "Verify your install" })).toBeVisible();
 });

@@ -124,8 +124,11 @@ export function verifyTime(run: Pick<Run, "started" | "finished" | "stretches"> 
 }
 
 /** The accuracy check's run of the same mesh and yours, as the accuracy check's chart draws its cases: the doc's
- * numbers for its run (results.ts), the engine's for yours. */
-export function verifyCases(v: RunValidation, time: string): Case[] {
+ * numbers for its run (results.ts), the engine's for yours, named `label` (a run's page names one that isn't a Verify
+ * install's This run) and solved in `time`, its mesh made in it too for a Verify install's (`meshed`), whose solve job
+ * makes the case first. */
+export function verifyCases(v: RunValidation, time: string, o: { label?: string; meshed?: boolean } = {}): Case[] {
+  const { label = "Your install", meshed = true } = o;
   const mesh = `${v.size} mesh`;
   const doc = accuracyCases().find((c) => c.name.toLowerCase().startsWith(mesh));
   const theirs: Case = doc ? { ...doc, name: `Accuracy check, ${mesh}` } : {
@@ -133,8 +136,8 @@ export function verifyCases(v: RunValidation, time: string): Case[] {
     difference: signedPercent((v.published.cd - v.tunnel.cd) / v.tunnel.cd * 100), time: "", miss: false,
   };
   return [theirs, {
-    name: `Your install, ${mesh}`, cells: v.cells != null ? `${(v.cells / 1e6).toFixed(2)} M` : "",
+    name: `${label}, ${mesh}`, cells: v.cells != null ? `${(v.cells / 1e6).toFixed(2)} M` : "",
     cd: v.cd, tunnel: v.tunnel.cd, difference: signedPercent(v.tunnel.difference), drift: signedPercent(v.drift, 2),
-    cl: v.cl, time: time && `${time} with its mesh`, miss: false, window: v.window,
+    cl: v.cl, time: time && (meshed ? `${time} with its mesh` : time), miss: false, window: v.window,
   }];
 }
