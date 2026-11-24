@@ -16,6 +16,10 @@ Case, ranks and iterations from `$ARGUMENTS` (defaults: physical cores minus 2, 
    per iteration and the expected finish time.
 5. Run `/cfd-toolkit:dashboard <case>` so the user can watch it in the side panel.
 
+A case Mesh Doctor made (`meshdoctor new`) is solved with `meshdoctor solve <case> --to N --np P` instead: it checks the
+memory, does step 3 itself and lists the run on the web app's Solve screen. A copy of a case the user made can be
+solved that way too (`skills/mesh-doctor/SKILL.md`, Making and solving a case).
+
 ## Where things are
 
 - The toolkit folder is `${CLAUDE_PLUGIN_ROOT}` (the plugin install), or the current folder if it holds `meshdoctor/`

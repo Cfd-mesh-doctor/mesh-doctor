@@ -1,13 +1,14 @@
 # Instructions for AI coding agents
 
-This repository is **Mesh Doctor** (OpenFOAM 14 mesh repair, solver A/B tests, a convergence judge and a local
-dashboard) plus a set of **CFD skills**: Markdown guides with tested helper scripts. Any agent can use them.
+This repository is **Mesh Doctor** (OpenFOAM 14 mesh repair, solver A/B tests, a convergence judge, ready-made test
+cases and their solves, and a local dashboard) plus a set of **CFD skills**: Markdown guides with tested helper
+scripts. Any agent can use them.
 
 ## Read the matching skill before you start
 
 | The user wants to... | Read first |
 |---|---|
-| check or repair an OpenFOAM mesh, lower max non-orthogonality, run an A/B solver test, judge convergence | `skills/mesh-doctor/SKILL.md` |
+| check or repair an OpenFOAM mesh, lower max non-orthogonality, run an A/B solver test, judge convergence, make a test case from a template, solve a case Mesh Doctor made, verify an install, plan a transient run | `skills/mesh-doctor/SKILL.md` |
 | set up, mesh, run or restart an OpenFOAM case (WSL or Linux), size a run to the machine | `skills/openfoam-wsl/SKILL.md` |
 | work in SimScale (geometry, meshing, cloning a setup across variants, its API, downloads) | `skills/simscale/SKILL.md`, then `skills/simscale/references/` |
 | make ParaView pictures (cuts, vortices, pressure spots) or convergence charts | `skills/paraview-post/SKILL.md` (scripts in `skills/paraview-post/scripts/`) |
