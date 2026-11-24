@@ -16,6 +16,26 @@ describe("line chart", () => {
     expect(niceTicks(5, 5, 4)).toEqual([5]);
   });
 
+  it("gives two ticks or more when asked for two, as a phone's narrow axis asks: the next finer round step", () => {
+    // a transient run's time steps of 20 µs to 0.0005 s: a step of 0.0005 left only 0.0005 inside
+    expect(niceTicks(2e-5, 5e-4, 2)).toEqual([2e-4, 4e-4]);
+    // a steady run of 300 iterations: a step of 200 left only 200
+    expect(niceTicks(1, 300, 2)).toEqual([100, 200, 300]);
+    expect(niceTicks(1, 9, 2)).toEqual([2, 4, 6, 8]);
+    expect(niceTicks(0.6, 1.4, 2)).toEqual([0.6, 0.8, 1, 1.2, 1.4]);
+    expect(niceTicks(0.95, 1.05, 2)).toEqual([0.95, 1, 1.05]);
+    // where the round step leaves two already, or one is asked for, as before
+    expect(niceTicks(0, 0.2088, 2)).toEqual([0, 0.2]);
+    expect(niceTicks(0, 2000, 2)).toEqual([0, 1000, 2000]);
+    expect(niceTicks(2e-5, 5e-4, 1)).toEqual([5e-4]);
+    // at the far end of a number's precision it still ends, with a thousand at most
+    for (const [lo, hi] of [[1, 1 + 2 ** -52], [1e300, 1.0000000000000002e300], [0, 1e-300]] as const) {
+      const t = niceTicks(lo, hi, 2);
+      expect(t.length).toBeGreaterThan(0);
+      expect(t.length).toBeLessThanOrEqual(1000);
+    }
+  });
+
   it("thins long histories but keeps each column's spikes", () => {
     const pts: [number, number][] = Array.from({ length: 1000 }, (_, i) => [i, i === 503 ? 99 : 1]);
     const out = thin(pts, 100);

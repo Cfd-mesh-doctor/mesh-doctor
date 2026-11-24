@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { expect, test } from "@playwright/test";
 import { testReport } from "../src/report/testReport";
-import { ENGINE, MATCHING, mockEngine, pairingLink, PLAN, run } from "./engine";
+import { ENGINE, MATCHING, mockEngine, pairingLink, PLAN, run, transientRun } from "./engine";
 import { lineBreaks } from "./text";
 
 test.describe("in a browser that hasn't seen the tour", () => {
@@ -149,6 +149,29 @@ test("on the smallest phones Verify install's answer fits, on the Solve screen a
       expect(overflow, `${path} is wider than a ${width} px screen`).toBeLessThanOrEqual(1);
       const [c, k] = [await card.boundingBox(), await chart.boundingBox()];
       expect(k!.x + k!.width, `${title}'s chart is wider than its card at ${width} px`).toBeLessThanOrEqual(c!.x + c!.width + 1);
+    }
+  }
+});
+
+test("on the smallest phones a transient run's charts write two times or more on their time axis", async ({ page }) => {
+  // its time steps of 20 µs to 0.0005 s, where a step of 0.0005 s left one number on the axis
+  const stopped = transientRun("ahmed-coarse-ddes", { state: "stopped", step: "done", iteration: 0.0005, written: 0.0005,
+    end: 0.0005, stretches: [{ from: 0, to: 0.0005 }], finished: new Date().toISOString() });
+  await mockEngine(page, { made: { "ahmed-coarse": { template: "ahmed-body" }, "ahmed-coarse-ddes": { transientOf: "ahmed-coarse" } },
+    runs: [stopped], noJobs: true, kinds: ["repair", "abtest", "abextend", "case", "solve", "tplan"] });
+  await page.goto(pairingLink());
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 5000 });
+  for (const width of [360, 320]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/app/solve/ahmed-coarse-ddes");
+    for (const name of ["Initial residual of p per time step, log scale", "Downforce from body over time"]) {
+      const chart = page.getByRole("img", { name });
+      await expect(chart).toBeVisible();
+      // the axis's numbers, centred under their ticks (its name, centred too, is words)
+      const centred = await chart.locator('text[text-anchor="middle"]').allTextContents();
+      const times = centred.filter((t) => /^[0-9.]+$/.test(t));
+      expect(times.length, `${name} at ${width} px: ${centred.join(" | ")}`).toBeGreaterThanOrEqual(2);
     }
   }
 });
