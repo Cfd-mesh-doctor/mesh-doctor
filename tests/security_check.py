@@ -142,6 +142,8 @@ CHECKS = [
     ("v1 refuses non-finite numbers", "GET", "/api/v1/abtests/x/judge?side=base&to=nan", {}, 400, "finite"),
     ("v1 A/B judge of a missing test", "GET", "/api/v1/abtests/nope/judge?side=base", {}, 404, '"code": "not-found"'),
     ("v1 live judge window has a floor", "GET", "/api/v1/live/judge?window=5", {}, 400, "window"),
+    ("v1 judge window is iterations or auto", "GET", "/api/v1/judge?case=x&window=automatic", {}, 400,
+     "window must be a whole number from 10 to 100000 or auto"),
     ("v1 live judge refuses non-finite times", "GET", "/api/v1/live/judge?avgFrom=nan", {}, 400, "finite"),
     ("v1 wrong method", "GET", "/api/v1/jobs/20260101-000000-repair-x-abcd/cancel", {}, 405, '"code": "method-not-allowed"'),
     ("v1 job without token refused", "POST", "/api/v1/jobs", {"Content-Type": JSON}, 403, "token", V1JOB),

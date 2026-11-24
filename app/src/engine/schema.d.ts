@@ -1796,8 +1796,8 @@ export interface operations {
                 case: string;
                 /** @description solver log file name or pattern in the case folder, such as log.pimple (default log.foamRun*) */
                 log?: string;
-                /** @description iterations (steady) or time steps (transient) to judge */
-                window?: number;
+                /** @description iterations (steady) or time steps (transient) to judge, or auto: half the run's, 10 to 200, as meshdoctor judge <case> auto and a transient run's page judge it (API 1.11) */
+                window?: number | "auto";
             };
             header?: never;
             path?: never;
@@ -2455,7 +2455,7 @@ export interface operations {
                         iteration: number | null;
                         /** @description those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10) */
                         joined?: number[];
-                        /** @description itself, Stop, and its convergence judge (GET /judge?case=) */
+                        /** @description itself, Stop, and its convergence judge (GET /judge?case=; a transient run's with window=auto, over the last half of its time steps as its page judges it, API 1.11) */
                         links?: Record<string, unknown>;
                         /** @description the case it solves: a case in the cases folder that Mesh Doctor made */
                         name: string;
@@ -2535,7 +2535,7 @@ export interface operations {
                         forceInfo: Record<string, unknown>;
                         /** @description each force group's [iteration, drag, vertical] rows */
                         forces: Record<string, unknown>;
-                        /** @description the live judge on the whole run, whose stretches share their settings (the same limits as abtest.judge); a transient run's is the transient judge, in time steps, as GET /judge?case= answers it over the last half of its time steps (10 to 200), its forces averaged from when they settled (`settled`), judged again at most every 15 s while it solves */
+                        /** @description the live judge on the whole run, whose stretches share their settings (the same limits as abtest.judge); a transient run's is the transient judge, in time steps, as GET /judge?case=&window=auto answers it: over the last half of its time steps (10 to 200), its forces averaged from when they settled (`settled`), judged again at most every 15 s while it solves */
                         judge: {
                             /** @description averaged forces with their uncertainty (batch means) */
                             average?: Record<string, unknown>;
@@ -2704,7 +2704,7 @@ export interface operations {
                         iteration: number | null;
                         /** @description those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10) */
                         joined?: number[];
-                        /** @description itself, Stop, and its convergence judge (GET /judge?case=) */
+                        /** @description itself, Stop, and its convergence judge (GET /judge?case=; a transient run's with window=auto, over the last half of its time steps as its page judges it, API 1.11) */
                         links?: Record<string, unknown>;
                         /** @description the case it solves: a case in the cases folder that Mesh Doctor made */
                         name: string;

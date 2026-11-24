@@ -526,8 +526,8 @@ def _step_rows(steps, n=1500):
 
 
 def _transient_page(name, case, running):
-    """A transient run's judge and time steps on its page.  The judge is as GET /judge?case= answers it
-    (abtest.judge): the transient verdict over the last half of its time steps (10 to 200), with its forces' means
+    """A transient run's judge and time steps on its page.  The judge is as GET /judge?case=&window=auto answers
+    it (abtest.judge): the transient verdict over the last half of its time steps (10 to 200), with its forces' means
     from when they settled, how well its time steps converged and its Courant number.  It reads the run's whole
     logs, so while the run solves it is read again at most every JUDGE_S seconds; once the run has ended, when its
     logs change."""

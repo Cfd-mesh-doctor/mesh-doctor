@@ -1159,8 +1159,10 @@ class ApiV1Test(unittest.TestCase):
         self.assertError(self.get("/repairs/r1/clusters/x"), 400, "bad-request")
         self.assertError(self.get("/repairs/r1/clusters/1", tag="bogus"), 400, "bad-request", "tag")
         self.assertError(self.get("/judge"), 400, "bad-request", "missing query parameter case")
-        self.assertError(self.get("/judge", case="c1", window="abc"), 400, "bad-request", "integer")
-        self.assertError(self.get("/judge", case="c1", window=5), 400, "bad-request", "5 < 10")
+        # a window is a number of iterations (or time steps), or auto (API 1.11)
+        for bad in ("abc", 5, 100001, 2.5, "Auto", "auto1", ""):
+            self.assertError(self.get("/judge", case="c1", window=bad), 400, "bad-request",
+                             "window must be a whole number from 10 to 100000 or auto")
         self.assertError(self.get("/judge", case="c9"), 404, "not-found")
         self.assertError(self.get("/judge", case="work"), 404, "not-found")            # not a case folder
         self.assertError(self.get("/judge", case="c1", log="../x"), 400, "bad-request")  # log names only
@@ -2978,6 +2980,17 @@ class TransientSolveTest(unittest.TestCase):
         self.assertEqual(j["verdict"], "converged (statistically stationary, every time step converged)")
         st, whole, _ = self.api.handle("GET", "/api/v1/judge", {"case": "ahmedT", "window": "30"})
         self.assertEqual((st, whole["verdict"], whole["steps"]), (200, j["verdict"], j["steps"]))
+        # as its run's judge link asks for it, over the last half of its time steps (API 1.11), where the route's
+        # 200 by default finds its 60 too short
+        st, run, _ = self.api.handle("GET", "/api/v1/runs/ahmedT", {})
+        self.assertEqual(run["links"]["judge"], "/api/v1/judge?case=ahmedT&window=auto")
+        st, auto, _ = self.api.handle("GET", "/api/v1/judge", {"case": "ahmedT", "window": "auto"})
+        self.assertEqual((st, auto["window"], auto["verdict"], auto["steps"]), (200, 30, j["verdict"], j["steps"]))
+        st, short, _ = self.api.handle("GET", "/api/v1/judge", {"case": "ahmedT"})
+        self.assertEqual((st, short["window"], short["verdict"]), (200, 200, "too short"))
+        op = self.api.openapi()["paths"]["/judge"]["get"]
+        window = next(p for p in op["parameters"] if p["name"] == "window")
+        self.assertEqual(window["schema"]["anyOf"][1], {"enum": ["auto"]})
         # It reads the run's whole logs: while it solves, it is judged again at most every JUDGE_S; once it has
         # ended, as soon as they change
         write_transient_run(case, 40, 5e-4, 1.5, lambda i: 40.0, log="log.foamRun")

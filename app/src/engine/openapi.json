@@ -1755,7 +1755,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.10"
+    "version": "1.11"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -3437,15 +3437,24 @@
             }
           },
           {
-            "description": "iterations (steady) or time steps (transient) to judge",
+            "description": "iterations (steady) or time steps (transient) to judge, or auto: half the run's, 10 to 200, as meshdoctor judge <case> auto and a transient run's page judge it (API 1.11)",
             "in": "query",
             "name": "window",
             "required": false,
             "schema": {
-              "default": 200,
-              "maximum": 100000,
-              "minimum": 10,
-              "type": "integer"
+              "anyOf": [
+                {
+                  "maximum": 100000,
+                  "minimum": 10,
+                  "type": "integer"
+                },
+                {
+                  "enum": [
+                    "auto"
+                  ]
+                }
+              ],
+              "default": 200
             }
           },
           {
@@ -4733,7 +4742,7 @@
                       "type": "array"
                     },
                     "links": {
-                      "description": "itself, Stop, and its convergence judge (GET /judge?case=)",
+                      "description": "itself, Stop, and its convergence judge (GET /judge?case=; a transient run's with window=auto, over the last half of its time steps as its page judges it, API 1.11)",
                       "type": "object"
                     },
                     "nProcs": {
@@ -4936,7 +4945,7 @@
                       "type": "object"
                     },
                     "judge": {
-                      "description": "the live judge on the whole run, whose stretches share their settings (the same limits as abtest.judge); a transient run's is the transient judge, in time steps, as GET /judge?case= answers it over the last half of its time steps (10 to 200), its forces averaged from when they settled (`settled`), judged again at most every 15 s while it solves",
+                      "description": "the live judge on the whole run, whose stretches share their settings (the same limits as abtest.judge); a transient run's is the transient judge, in time steps, as GET /judge?case=&window=auto answers it: over the last half of its time steps (10 to 200), its forces averaged from when they settled (`settled`), judged again at most every 15 s while it solves",
                       "properties": {
                         "average": {
                           "description": "averaged forces with their uncertainty (batch means)",
@@ -5437,7 +5446,7 @@
                       "type": "array"
                     },
                     "links": {
-                      "description": "itself, Stop, and its convergence judge (GET /judge?case=)",
+                      "description": "itself, Stop, and its convergence judge (GET /judge?case=; a transient run's with window=auto, over the last half of its time steps as its page judges it, API 1.11)",
                       "type": "object"
                     },
                     "nProcs": {

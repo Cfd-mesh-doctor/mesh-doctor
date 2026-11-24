@@ -27,7 +27,7 @@ import tplan
 import validate
 import version
 
-API_VERSION = "1.10"
+API_VERSION = "1.11"
 PREFIX = "/api/v1"
 WRITES_MAX = solve.transient.MAX_WRITES   # the most times a stretch of a transient run writes
 MAX_BODY = 64 * 1024
@@ -486,8 +486,11 @@ def repair_map(p, q, b):
        query={"case": {"schema": NAME, "required": True,
                        "description": "a case in the cases folder: a source case (GET /cases), or a folder "
                                       "with just system/ and the solver logs"},
-              "window": {"schema": {"type": "integer", "minimum": 10, "maximum": 100000, "default": 200},
-                         "description": "iterations (steady) or time steps (transient) to judge"},
+              "window": {"schema": {"anyOf": [{"type": "integer", "minimum": 10, "maximum": 100000},
+                                              {"enum": ["auto"]}], "default": 200},
+                         "description": "iterations (steady) or time steps (transient) to judge, or auto: half the "
+                                        "run's, 10 to 200, as meshdoctor judge <case> auto and a transient run's page "
+                                        "judge it (API 1.11)"},
               "avgFrom": {"schema": {"type": "number", "minimum": 0},
                           "description": "average forces from this time on (default: the window)"},
               "log": {"schema": {"type": "string", "pattern": r"^log\.[A-Za-z0-9_.*-]{1,60}$"},
@@ -506,7 +509,8 @@ def judge(p, q, b):
         logs = caseinfo.solver_logs(case, (q["log"],))
         if not logs:
             raise ApiError("not-found", f"no log matches {q['log']} in case {q['case']}")
-    return ab.judge(case, q["window"], avg_from=q.get("avgFrom"), logs=logs)
+    window = None if q["window"] == "auto" else q["window"]       # auto: abtest.auto_window, from the run's length
+    return ab.judge(case, window, avg_from=q.get("avgFrom"), logs=logs)
 
 
 @route("GET", "/live", "The live (transient) case: forces, averaging window, time step, processes, memory",
@@ -589,12 +593,15 @@ RUN = {"type": "object", "required": ["name", "state", "step", "iteration", "sta
                "description": "those of its times that are joined, the whole mesh's, in the case's own folder: every "
                               "one when it isn't split, else the latest of each stretch (API 1.10)"}}}
 RUN_ONE = dict(RUN, properties=dict(RUN["properties"], links={
-    "type": "object", "description": "itself, Stop, and its convergence judge (GET /judge?case=)"}))
+    "type": "object", "description": "itself, Stop, and its convergence judge (GET /judge?case=; a transient run's "
+                                     "with window=auto, over the last half of its time steps as its page judges it, "
+                                     "API 1.11)"}))
 
 
 def _run_out(run):
     me = f"{PREFIX}/runs/{run['name']}"
-    return dict(run, links={"self": me, "stop": me + "/stop", "judge": f"{PREFIX}/judge?case={run['name']}"})
+    judge = f"{PREFIX}/judge?case={run['name']}" + ("&window=auto" if run.get("transient") else "")
+    return dict(run, links={"self": me, "stop": me + "/stop", "judge": judge})
 
 
 @route("GET", "/runs", "Solves of cases Mesh Doctor made (`solve` jobs), the newest first (API 1.6)", ok=_items(RUN))
@@ -686,8 +693,8 @@ RUN_LIVE = {"type": "object", "required": ["name", "run", "stages", "current", "
     "judge": dict(LIVE["properties"]["judge"], description="the live judge on the whole run, whose stretches share "
                                                            "their settings (the same limits as abtest.judge); a "
                                                            "transient run's is the transient judge, in time steps, as "
-                                                           "GET /judge?case= answers it over the last half of its time "
-                                                           "steps (10 to 200), its forces averaged from when they "
+                                                           "GET /judge?case=&window=auto answers it: over the last half "
+                                                           "of its time steps (10 to 200), its forces averaged from when they "
                                                            "settled (`settled`), judged again at most every 15 s while "
                                                            "it solves"),
     "now": LIVE["properties"]["now"]}}
@@ -1026,18 +1033,40 @@ def _query_args(spec, query):
             if "default" in sch:
                 out[k] = sch["default"]
             continue
-        v = query[k]
-        try:
-            v = int(v) if sch.get("type") == "integer" else float(v) if sch.get("type") == "number" else v
-        except ValueError:
-            raise ApiError("bad-request", f"{k} must be a {sch['type']}")
-        if isinstance(v, float) and not math.isfinite(v):           # nan, inf: never valid, never in JSON
-            raise ApiError("bad-request", f"{k} must be a finite number")
-        problems = schema.check(v, sch)
-        if problems:
-            raise ApiError("bad-request", f"{k}: " + problems[0].split(": ", 1)[-1])
-        out[k] = v
+        out[k] = _query_value(k, query[k], sch)
     return out
+
+
+def _query_value(k, v, sch):
+    """Query parameter k's text v as its schema takes it, or ApiError: an integer or a number when its type says so,
+    checked against the schema. With anyOf, the first alternative it fits, such as a number in a range or a word of
+    an enum (GET /judge's window: iterations, or auto)."""
+    if "anyOf" in sch:
+        for alt in sch["anyOf"]:
+            try:
+                return _query_value(k, v, alt)
+            except ApiError:
+                pass
+        raise ApiError("bad-request", f"{k} must be " + " or ".join(map(_said, sch["anyOf"])))
+    try:
+        v = int(v) if sch.get("type") == "integer" else float(v) if sch.get("type") == "number" else v
+    except ValueError:
+        raise ApiError("bad-request", f"{k} must be a {sch['type']}")
+    if isinstance(v, float) and not math.isfinite(v):           # nan, inf: never valid, never in JSON
+        raise ApiError("bad-request", f"{k} must be a finite number")
+    problems = schema.check(v, sch)
+    if problems:
+        raise ApiError("bad-request", f"{k}: " + problems[0].split(": ", 1)[-1])
+    return v
+
+
+def _said(sch):
+    """An anyOf alternative of a query parameter's schema in words, for the answer that refuses its value."""
+    if "enum" in sch:
+        return " or ".join(map(str, sch["enum"]))
+    what = "a whole number" if sch.get("type") == "integer" else "a number"
+    lo, hi = sch.get("minimum"), sch.get("maximum")
+    return what + (f" from {lo} to {hi}" if lo is not None and hi is not None else "")
 
 
 def _no_number(word):

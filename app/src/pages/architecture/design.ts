@@ -315,7 +315,7 @@ export const DESIGN: DocSection[] = [
             [
               "`GET /judge?case=&window=&avgFrom=&log=`",
               "(CLI only)",
-              "convergence verdict for a case in the cases folder (judge schema); `log` picks the solver log, such as `log.pimple`"
+              "convergence verdict for a case in the cases folder (judge schema); `log` picks the solver log, such as `log.pimple`; `window` is the iterations (a transient run's time steps) it judges, 200 by default, or `auto`: half the run's, 10 to 200, as `meshdoctor judge` takes it (API 1.11)"
             ],
             [
               "`GET /live`",
@@ -365,12 +365,12 @@ export const DESIGN: DocSection[] = [
             [
               "`GET /runs`, `GET /runs/{name}`",
               "(new)",
-              "solves of cases Mesh Doctor made (`solve` jobs, and `meshdoctor solve` in a terminal), newest first: each run's state (`running`, `done`, `stopped` at a written iteration, `failed`, `cancelled`, or `interrupted` when nothing solves it any more: no job, and no solve in a terminal), the iteration it is at, the latest one written and the stretches solved so far (a transient run's in seconds, with `transient`: the steady run it started from, the time of the result it took, its largest Courant number and its model); a transient run's `averaging` says from when it averages its flow, which its solve switches on once its forces have settled, when they settled and the latest time written with the average (API 1.9); `times` lists the written times it keeps and `joined` those of them joined in the case's own folder, and a transient run's `transient.writes` says how many times each of its stretches writes, evenly to its end: it keeps every one (API 1.10); one run adds its links, its judge (`GET /judge?case=`) among them (API 1.6)"
+              "solves of cases Mesh Doctor made (`solve` jobs, and `meshdoctor solve` in a terminal), newest first: each run's state (`running`, `done`, `stopped` at a written iteration, `failed`, `cancelled`, or `interrupted` when nothing solves it any more: no job, and no solve in a terminal), the iteration it is at, the latest one written and the stretches solved so far (a transient run's in seconds, with `transient`: the steady run it started from, the time of the result it took, its largest Courant number and its model); a transient run's `averaging` says from when it averages its flow, which its solve switches on once its forces have settled, when they settled and the latest time written with the average (API 1.9); `times` lists the written times it keeps and `joined` those of them joined in the case's own folder, and a transient run's `transient.writes` says how many times each of its stretches writes, evenly to its end: it keeps every one (API 1.10); one run adds its links, its judge (`GET /judge?case=`; a transient run's with `window=auto`, API 1.11) among them (API 1.6)"
             ],
             [
               "`GET /runs/{name}/live`",
               "(new)",
-              "a run's page: its stretches, the solver's iteration, pace and time left (a transient run's: its time steps left, at its latest time step), its residuals and forces over all its stretches, and the live judge (a transient run's: the transient judge, in time steps, as `GET /judge?case=` answers it, its means from when its forces settled, judged again at most every 15 s while it solves; and its time steps, `steps`: the time step and the Courant number, mean and largest, at each) (API 1.6)"
+              "a run's page: its stretches, the solver's iteration, pace and time left (a transient run's: its time steps left, at its latest time step), its residuals and forces over all its stretches, and the live judge (a transient run's: the transient judge, in time steps, as `GET /judge?case=&window=auto` answers it, its means from when its forces settled, judged again at most every 15 s while it solves; and its time steps, `steps`: the time step and the Courant number, mean and largest, at each) (API 1.6)"
             ],
             [
               "`GET /runs/{name}/validation`",
