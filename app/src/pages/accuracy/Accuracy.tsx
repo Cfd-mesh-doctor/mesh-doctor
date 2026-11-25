@@ -10,6 +10,7 @@ import { DocTableView } from "@/components/shared/DocTable";
 import { PageHeader, StatTile } from "@/components/shared/page";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { InlineCode } from "@/components/shared/InlineCode";
 import { DOCS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
 import { aboutPage } from "@/pages/docs/entries";
@@ -172,7 +173,7 @@ export function Accuracy() {
                 <CardTitle>Run it yourself</CardTitle>
                 <CardDescription>
                   About 2 hours on 6 cores and 4.5&nbsp;GB of memory at the peak. It writes the table above to{" "}
-                  <code>../ahmed_validation/results.md</code>.
+                  <InlineCode text="../ahmed_validation/results.md" trail="." />
                 </CardDescription>
               </div>
             </CardHeader>

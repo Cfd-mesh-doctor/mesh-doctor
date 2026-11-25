@@ -200,17 +200,29 @@ test("on the smallest phones a run's transient plan fits, its table scrolling in
   }
 });
 
-/** The code in running text on the page (InlineCode's boxes in its main part) that one line could hold but is on two,
- * sticks out of its line, or has what's written against it ("(" before it, ")," after it) on another line: what's
- * wrong, and how many it checked. A command split at a line's end ("meshdoctor", then "serve" on the next line) doesn't
- * read as one. */
+/** The code on the page (each code element in its main part, but in a block of code) that is plain code in running
+ * text, not InlineCode's box, or that one line could hold but is on two, sticks out of its line, or has what's written
+ * against it ("(" before it, ")," after it) on another line: what's wrong, and how many it checked. A command split at a
+ * line's end ("meshdoctor", then "serve" on the next line) doesn't read as one. */
 async function codeOffItsLine(page: Page): Promise<readonly [string[], number]> {
   return page.evaluate(() => {
     const out: string[] = [];
     const range = document.createRange();
-    // Code in running text as InlineCode shows it: a box, with what's written against the code in it.
-    for (const box of document.querySelectorAll("main .code-box")) {
-      const code = box.matches("code") ? box : box.querySelector("code")!;
+    let seen = 0;
+    for (const code of document.querySelectorAll("main code")) {
+      if (code.closest("pre")) continue; // a block of code
+      seen++;
+      // Code in running text as InlineCode shows it: a box, with what's written against the code in it. Only code in
+      // a part that scrolls sideways on purpose (a table, a command to copy) may be plain.
+      const box = code.closest(".code-box");
+      if (!box) {
+        let scrolls = false;
+        for (let up: Element | null = code; up && up !== document.body && !scrolls; up = up.parentElement) {
+          scrolls = /auto|scroll/.test(getComputedStyle(up).overflowX);
+        }
+        if (!scrolls && code.getClientRects().length) out.push(`${code.textContent}: plain code, not InlineCode`);
+        continue;
+      }
       const parent = box.parentElement!;
       const text = code.firstChild;
       if (!(text instanceof Text) || code.childNodes.length !== 1 || !box.getClientRects().length) continue; // hidden
@@ -256,7 +268,7 @@ async function codeOffItsLine(page: Page): Promise<readonly [string[], number]> 
         out.push(`${name}: the ${next.data[0]} after it is on another line`);
       }
     }
-    return [out, document.querySelectorAll("main .code-box").length] as const;
+    return [out, seen] as const;
   });
 }
 

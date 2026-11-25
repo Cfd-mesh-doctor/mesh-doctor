@@ -158,8 +158,8 @@ export function Connect() {
       <>
         <h1 className="text-xl font-semibold tracking-tight">Replace this browser's pairing?</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          This browser is paired with <code>{pairing.engine}</code> (key {maskKey(pairing.key)}). The link you opened
-          pairs it with <code>{incoming.engine}</code> (key {maskKey(incoming.key)}) instead.
+          This browser is paired with <InlineCode text={pairing.engine} /> (key {maskKey(pairing.key)}). The link you opened
+          pairs it with <InlineCode text={incoming.engine} /> (key {maskKey(incoming.key)}) instead.
         </p>
         <div className="mt-6 flex flex-wrap gap-2">
           <Button onClick={() => use(incoming)}><PlugZap /> Use the new link</Button>

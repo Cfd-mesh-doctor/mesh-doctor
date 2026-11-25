@@ -8,6 +8,7 @@ import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
 import { PageHeader } from "@/components/shared/page";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { InlineCode } from "@/components/shared/InlineCode";
 import { DOCS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
 import { aboutPage } from "@/pages/docs/entries";
@@ -35,7 +36,7 @@ export function Gallery() {
             <section key={s.id} id={s.id} aria-labelledby={`${s.id}-title`} className="scroll-mt-20">
               <h2 id={`${s.id}-title`} className="text-xl font-semibold tracking-tight">{s.title}</h2>
               <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-                Made by <code className="text-foreground">{s.tool}</code>. {s.text}
+                Made by <InlineCode text={s.tool} trail="." className="text-foreground" /> {s.text}
                 {s.see && <> See the <Link to={s.see.page} className={link}>{s.see.label}</Link>.</>}
               </p>
               <div className={cn("mt-4 grid grid-cols-1 gap-4", s.pictures.length > 1 && "md:grid-cols-2")}>

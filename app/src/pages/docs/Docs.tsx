@@ -7,6 +7,7 @@ import { Link } from "react-router";
 import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
 import { PageHeader } from "@/components/shared/page";
 import { Card } from "@/components/ui/card";
+import { InlineCode } from "@/components/shared/InlineCode";
 import { DOCS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
 import { DocSearch } from "./DocSearch";
@@ -55,7 +56,7 @@ export function Docs() {
           <h2 id="on-github" className="text-lg font-semibold tracking-tight">On GitHub</h2>
           {ON_GITHUB.length === 0 && (
             <p className="mt-1 text-sm text-muted-foreground">
-              Each page above follows a doc in the repository's <code className="font-mono text-[13px]">docs</code>{" "}
+              Each page above follows a doc in the repository's <InlineCode text="docs" className="font-mono text-[13px]" />{" "}
               folder. The <a href={DOCS.readme} target="_blank" rel="noreferrer" className={link}>README</a> opens on
               GitHub.
             </p>
@@ -63,7 +64,7 @@ export function Docs() {
           {ON_GITHUB.length > 0 && (
           <>
           <p className="mt-1 text-sm text-muted-foreground">
-            These open on GitHub, in the repository's <code className="font-mono text-[13px]">docs</code> folder, as
+            These open on GitHub, in the repository's <InlineCode text="docs" className="font-mono text-[13px]" /> folder, as
             does the <a href={DOCS.readme} target="_blank" rel="noreferrer" className={link}>README</a>.
           </p>
           <Card className="mt-4 divide-y divide-border">

@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Segmented } from "@/components/ui/misc";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
+import { InlineCode } from "@/components/shared/InlineCode";
 import { formatDateTime, formatInt, formatNumber } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
 import { aboutPage } from "@/pages/docs/entries";
@@ -150,8 +151,8 @@ export function Report() {
               </div>
               <h2 className="mt-4 text-base font-semibold">Open a report</h2>
               <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-                A <code>.mdreport.json</code>, <code>.json.gz</code> or exported <code>.html</code> file from{" "}
-                <code>meshdoctor report</code>. Drop it anywhere on this page, or pick it:
+                A <InlineCode text=".mdreport.json" trail="," /> <InlineCode text=".json.gz" /> or exported <InlineCode text=".html" /> file from{" "}
+                <InlineCode text="meshdoctor report" trail="." /> Drop it anywhere on this page, or pick it:
               </p>
               <div className="mt-5">
                 <Button asChild>
@@ -209,7 +210,7 @@ export function Report() {
                 <p className="mt-1 text-[13.5px] text-muted-foreground">On the PC that ran the repair:</p>
                 <CopyCommand command="meshdoctor report <name>" className="mt-2" />
                 <p className="mt-2 text-xs text-muted-foreground">
-                  Add <code>--gzip</code> for a smaller file, or <code>--html</code> for one page to email.
+                  Add <InlineCode text="--gzip" /> for a smaller file, or <InlineCode text="--html" /> for one page to email.
                 </p>
               </Card>
               <Card className="p-5">

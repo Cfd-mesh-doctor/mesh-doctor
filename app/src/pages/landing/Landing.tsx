@@ -9,6 +9,7 @@ import { Link } from "react-router";
 import { PublicFooter, PublicHeader } from "@/components/layout/PublicChrome";
 import { CopyCommand } from "@/components/shared/CopyCommand";
 import { Button } from "@/components/ui/button";
+import { InlineCode } from "@/components/shared/InlineCode";
 import { usePairing } from "@/engine/context";
 import { BROWSERS } from "@/lib/site";
 import { useTitle } from "@/lib/useTitle";
@@ -228,8 +229,8 @@ export function Landing() {
                 text: (
                   <>
                     Repair a copy of your case, then test it with an A/B solver run, putting a case's name in place of{" "}
-                    <code className="font-mono text-[12px]">&lt;case&gt;</code> and a name for the repaired copy in place
-                    of <code className="font-mono text-[12px]">&lt;name&gt;</code>, the same in both. The results show up
+                    <InlineCode text={"<case>"} className="font-mono text-[12px]" /> and a name for the repaired copy in place
+                    of <InlineCode text={"<name>"} trail="," className="font-mono text-[12px]" /> the same in both. The results show up
                     in the app.
                   </>
                 ) },
