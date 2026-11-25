@@ -3,7 +3,8 @@
 // kind, each fetched with the engine's key once it comes near the screen (GET /pictures/{case}/{set}/{kind}/{file})
 // and shown through a blob: URL. A picture opens large, with its title, the ones before and after it, and Download.
 // A cut over time (API 1.20) shows one written time at a time, with a slider over them and Play; a mean flow's set puts
-// each cut's swing beside its mean speed and the speed at the same written time, from that time's own set.
+// each cut's swing beside its mean speed and the speed at the same written time, from that time's own set. While a
+// job makes the set, or makes it again, its step and how far it is show with a bar, on an engine that says them.
 // Delete… deletes the set (POST /pictures/{case}/{set}/delete) after a confirmation. A set being made shows its job;
 // one being made again keeps the pictures made before until its job has finished. While a job makes it the screen
 // asks again every 3 s.
@@ -16,18 +17,18 @@ import { EmptyState, PageHeader } from "@/components/shared/page";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogActions, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/misc";
+import { Progress, Skeleton } from "@/components/ui/misc";
 import { useAppPath, useEngine } from "@/engine/context";
 import { asEngineError } from "@/engine/errors";
 import { useDeletePictures, useJobs, usePicture, usePictureSet } from "@/engine/hooks";
 import { isActive, type Job, type Picture, type PictureSet } from "@/engine/types";
 import { useBlobSrc, useSeen } from "@/lib/blobImage";
-import { formatCount, formatRelative, toMillis } from "@/lib/format";
+import { formatCount, formatPercent, formatRelative, toMillis } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
 import { Section } from "@/pages/report/Section";
 import { saveFile } from "@/report/save";
-import { jobOfSet, kindInfo, parseSet, pictureFileName, setTitle, swings } from "./pictureSets";
+import { jobOfSet, kindInfo, parseSet, pictureFileName, pictureStep, setTitle, swings } from "./pictureSets";
 
 const LINK = "font-medium text-primary underline-offset-4 hover:underline";
 
@@ -289,6 +290,22 @@ function DeleteDialog({ s, open, onOpenChange }: { s: PictureSet; open: boolean;
   );
 }
 
+/** How far the job making a set is: its step and a bar, as its status file says (none from an engine that doesn't). */
+function JobProgress({ job, className }: { job: Job; className?: string }) {
+  const f = job.progress?.fraction;
+  const step = pictureStep(job.progress?.step);
+  if (job.state !== "running" || (f == null && !step)) return null;
+  return (
+    <div className={cn("max-w-xl", className)}>
+      <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
+        <span className="text-muted-foreground">{step}</span>
+        <span className="shrink-0 font-medium whitespace-nowrap tabular-nums">{f == null ? "" : formatPercent(f)}</span>
+      </div>
+      <Progress value={f} label="How far its job is" />
+    </div>
+  );
+}
+
 export function PictureSetPage() {
   const { name = "", set = "" } = useParams();
   useTitle(`Pictures of ${name}`);
@@ -351,12 +368,12 @@ export function PictureSetPage() {
                 <CardTitle>Being made</CardTitle>
                 <CardDescription>
                   {job ? `Its job ${job.state === "queued" ? "is waiting to start" : "is running"}` : "A job is making it"}
-                  {job?.progress?.step ? `: ${job.progress.step}` : ""}
                 </CardDescription>
               </div>
               {job && <JobStateBadge state={job.state} />}
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
+              {job && <JobProgress job={job} className="mb-4" />}
               ParaView is drawing the set on the engine&apos;s computer: its pictures show here as soon as the job has
               made them. This screen asks again every 3 s.
               {job && <> <Link to={to(jobPath(job))} className={LINK}>Follow its job</Link>.</>}
@@ -444,6 +461,7 @@ export function PictureSetPage() {
               : "is running"}. These are the pictures made before, until it has finished.{" "}
             <Link to={to(jobPath(job))} className={LINK}>Follow its job</Link>.
           </p>
+          <JobProgress job={job} className="mt-3" />
         </Card>
       )}
       {again && (

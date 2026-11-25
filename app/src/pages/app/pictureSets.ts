@@ -2,7 +2,7 @@
 // The Pictures screen's words and checks: the kinds a set has, a set's name, address and title, the set a picture job
 // makes, the written times of a run that can be pictured (the split ones too, on an engine that joins one first) and
 // those a cut over time reads, a mean flow's swings beside the same time's instant, the cells that set the time step,
-// and whether a picture job fits in the memory of the engine's computer.
+// whether a picture job fits in the memory of the engine's computer, and the step a picture job is at.
 import {
   isActive, type Job, type MachineInfo, type PictureKind, type PictureSet, type PictureSetBrief, type Run,
 } from "@/engine/types";
@@ -144,6 +144,11 @@ export const makesOverTime = (apiVersion: string | null | undefined) => apiFrom(
 /** Does the engine draw the cells that set the time step (API 1.21): the cells with the highest Courant number at the
  * time pictured, with the walls? Not of a mean flow: they are found from a written time's own flow. */
 export const drawsFastest = (apiVersion: string | null | undefined) => apiFrom(apiVersion, 21);
+
+/** A picture job's step as its status file says it ("drawing the cuts"), for a line of its own: with a capital. */
+export function pictureStep(step: string | null | undefined): string | null {
+  return step ? step.charAt(0).toUpperCase() + step.slice(1) : null;
+}
 
 /** The most written times a cut over time pictures, evenly picked from the first to the latest (the engine's
  * MAX_TIMES). */

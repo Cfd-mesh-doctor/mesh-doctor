@@ -444,11 +444,16 @@ describe("a set of pictures", () => {
     expect(router.state.location.pathname).toBe("/app/pictures/ahmed/2000");
   });
 
-  it("says it is being made while its job runs, with its step and a link to its job", async () => {
-    const job = pictureJob("wing", "300", "running", { progress: { step: "drawing the cuts" } } as Partial<Job>);
+  it("says it is being made while its job runs, with its step, how far it is and a link to its job", async () => {
+    const job = pictureJob("wing", "300", "running", {
+      progress: { step: "drawing the cuts", fraction: 0.254, updated: null },
+    } as Partial<Job>);
     setPage("wing", "300", { jobs: [job] });
     expect(await screen.findByRole("heading", { name: "Being made" })).toBeInTheDocument();
-    expect(screen.getByText("Its job is running: drawing the cuts")).toBeInTheDocument();
+    expect(screen.getByText("Its job is running")).toBeInTheDocument();
+    expect(screen.getByText("Drawing the cuts")).toBeInTheDocument();
+    expect(screen.getByText("25 %")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "How far its job is" })).toHaveAttribute("aria-valuenow", "25");
     expect(screen.getByRole("link", { name: "Follow its job" }))
       .toHaveAttribute("href", `/app/jobs?job=${encodeURIComponent(job.id)}`);
     expect(screen.queryByRole("button", { name: "Delete…" })).toBeNull();
@@ -463,8 +468,16 @@ describe("a set of pictures", () => {
   });
 
   it("keeps the pictures made before while a job makes it again, without Delete meanwhile, and says if that failed", async () => {
-    const view = setPage("ahmed", "2000", { sets: [SET], jobs: [pictureJob("ahmed", "2000", "running")] });
+    let view = setPage("ahmed", "2000", { sets: [SET], jobs: [pictureJob("ahmed", "2000", "running")] });
     expect(await screen.findByText(/^Being made again:/)).toBeInTheDocument();
+    expect(screen.queryByRole("progressbar")).toBeNull();               // an engine that doesn't say how far
+    view.unmount();
+    view = setPage("ahmed", "2000", { sets: [SET], jobs: [pictureJob("ahmed", "2000", "running", {
+      progress: { step: "ParaView's self test: a test vortex that must come out red", fraction: 0.6, updated: null },
+    } as Partial<Job>)] });
+    expect(await screen.findByText(/^Being made again:/)).toBeInTheDocument();
+    expect(screen.getByText("ParaView's self test: a test vortex that must come out red")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "How far its job is" })).toHaveAttribute("aria-valuenow", "60");
     expect(screen.getByRole("button", { name: TITLES[0] })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Delete…" })).toBeNull();
     expect(screen.getByRole("link", { name: "Job details" })).toHaveAttribute("href", expect.stringMatching(/^\/app\/jobs\?job=/));

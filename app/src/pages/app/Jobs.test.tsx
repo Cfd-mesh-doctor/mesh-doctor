@@ -265,6 +265,19 @@ describe("the Jobs screen", () => {
     expect(within(details).queryByRole("link", { name: "Open report" })).toBeNull();
   });
 
+  it("shows a picture job's step in plain words and how far it is, as its status file says", async () => {
+    const answers = structuredClone(DEMO_ANSWERS);
+    const items = (answers["/jobs"] as JobList).items;
+    const done = items.find((j) => j.state === "done")!;
+    items.unshift({ ...done, id: "20261125-110000-pictures-ahmed-coarse-0005", kind: "pictures", name: "ahmed-coarse",
+                    state: "running", finished: null, exitCode: null,
+                    params: { name: "ahmed-coarse", time: "300", kinds: ["cuts", "vortices", "spots"], mean: false },
+                    progress: { step: "drawing the vortices", fraction: 0.43, updated: null } });
+    renderScreen(<Jobs />, { path, at: path, transport: demoTransport(answers, 0) });
+    expect((await screen.findAllByText("Drawing the vortices")).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("progressbar", { name: "ahmed-coarse progress" })[0]).toHaveAttribute("aria-valuenow", "43");
+  });
+
   it("shows every job when the address names a filter it doesn't know", async () => {
     open(`${path}?show=nonsense`);
     expect(await screen.findAllByRole("button", { name: "ahmed25-medium-fix" })).toHaveLength(2);

@@ -24,8 +24,10 @@ up.  The scripts' cameras need the flow toward -x and z up.  With --mean
 they picture a transient run's mean flow (UMean and pMean, written once its averaging is on) in place of the flow at
 that time, into .pictures/<case>/<time>_mean/, and each cut shows how much the speed swings about it too (from
 UPrime2Mean).  A computer's first set starts with the vortex script's self test (a test vortex that
-must come out red), in .pictures/.selftest/, which is kept once it has passed.  The API serves the sets (sets(),
-one(), picture(), delete()): only a picture a set's list names is read, in the set's own folders, never through a link.
+must come out red), in .pictures/.selftest/, which is kept once it has passed.  As it goes, a set being made says its
+step and how far it is in a status file beside it (<set>.status.json), from how long each step took on the coarse
+Ahmed body, which its job's progress reads (jobs.progress).  The API serves the sets (sets(), one(), picture(),
+delete()): only a picture a set's list names is read, in the set's own folders, never through a link.
 """
 import argparse, json, math, os, re, shlex, shutil, stat, subprocess, sys, time
 
@@ -75,6 +77,16 @@ FAST_FILE = re.compile(r"fastest_(?:(" + "|".join(FAST_VIEWS) + r")|place([0-9]{
 FAST_DOC = "fastest.json"       # in a set: the count of the cells that set the time step and each place's words
 FAST_MEAN = ("bad-request", "the cells that set the time step are found from a written time's own flow, not from its "
                             "mean flow: picture them without the mean flow")
+STATUS = ".status.json"         # beside a set being made (<set>.status.json): its step and how far it is, for its job
+# How long a picture job's steps took, in seconds, in a real job on the coarse Ahmed body's 0.48M cells (20.4 s from
+# joining its time to done), for how far a job is: joining a time split onto a run's processes (with OpenFOAM's
+# environment), the self test, finding the cells that set the time step and looking for spots, each as a whole; each
+# picture of the other kinds (a cut over time's, each a time's cut, as a cut's)
+COST = {"join": 1.4, "selftest": 2.0, "find": 2.6, "spots": 1.0}
+PER_PICTURE = {"cuts": 1.0, "times": 1.0, "vortices": 0.5, "fastest": 0.35}
+DRAWING = {"cuts": "drawing the cuts", "vortices": "drawing the vortices",
+           "spots": "looking for spots of unphysical pressure on the walls", "times": "drawing a cut over time",
+           "fastest": "drawing the cells that set the time step"}     # each kind's step, as its job says it
 
 
 def _num(text):
@@ -503,6 +515,61 @@ def _passed(record):
         return False
 
 
+def _say(path, step, fraction):
+    """Write a set's status file (STATUS): the step its job is at and how far it is (0 to 1), whole: a new file put in
+    its place, so never written through a link.  It only shows how far a job is, so a failure to write it is let be."""
+    tmp = f"{path}.{os.getpid()}.tmp"
+    try:
+        if os.path.lexists(tmp):
+            os.unlink(tmp)
+        with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as f:
+            json.dump({"step": step, "fraction": round(min(max(fraction, 0.0), 1.0), 3), "time": jobs.now()}, f)
+        os.replace(tmp, path)
+    except OSError:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+
+
+class _Steps:
+    """A picture job's steps as it goes, said in its set's status file: each step's words and how far the job is as it
+    starts, from what the steps before it cost of the whole ({step: s}, as _costs() has them).  A step that costs
+    nothing isn't said, and one left out (drop()) no longer counts."""
+
+    def __init__(self, path, costs):
+        self.path, self.costs, self.done = path, {k: c for k, c in costs.items() if c > 0}, 0.0
+
+    def at(self, key, words):
+        if key in self.costs:
+            total = self.done + sum(self.costs.values())
+            _say(self.path, words, self.done / total)
+            self.done += self.costs.pop(key)
+
+    def drop(self, keys):
+        for key in keys:
+            self.costs.pop(key, None)
+
+    def end(self):
+        _say(self.path, "done", 1.0)
+
+
+def _costs(case, at, kinds, mean=False, joins=False, selftest_dir=None):
+    """What each step of making a set costs, in seconds at the coarse Ahmed body's size (COST, PER_PICTURE): joining
+    its time first (`joins`), the self test while it hasn't passed in `selftest_dir`, finding the cells that set the
+    time step, and each kind's pictures (how_many()): {step: s}."""
+    tests = bool(selftest_dir) and not os.path.islink(selftest_dir) \
+        and not _passed(os.path.join(selftest_dir, "selftest.json"))
+    costs = {"join": COST["join"] * bool(joins), "selftest": COST["selftest"] * tests,
+             "find": COST["find"] * ("fastest" in kinds and not mean)}
+    for kind in kinds:
+        if kind == "spots":
+            costs[kind] = COST["spots"]
+        elif kind != "fastest" or not mean:
+            costs[kind] = PER_PICTURE[kind] * how_many(case, [kind], at, mean)
+    return costs
+
+
 def selftest(folder, pvbatch, env):
     """The vortex script's self test, in `folder` (the workspace's .pictures/.selftest): a test vortex that must come
     out red, which catches an offscreen renderer that draws nothing, or colours the wrong way round.  None once it has
@@ -677,7 +744,8 @@ def make(case, out, at, kinds, mean=False, selftest_dir=None, join=False):
     its constant and only that time.  The cells that set the time step are found first (fastest()), not for a mean
     flow.  A set made there before is replaced once the new one is whole; any other folder in
     the way is refused and left as it is.  With `selftest_dir`, the vortex script's self test runs first, unless it
-    has passed there (selftest()).  The document; RuntimeError when no picture was made."""
+    has passed there (selftest()).  As it goes, each step and how far it is are said in out + STATUS (_Steps).  The
+    document; RuntimeError when no picture was made."""
     pvbatch = selfcheck.paraview()[0]
     if not pvbatch:
         raise RuntimeError("ParaView's pvbatch isn't found")
@@ -687,7 +755,10 @@ def make(case, out, at, kinds, mean=False, selftest_dir=None, join=False):
             raise RuntimeError(f"{folder} is in the way: it isn't a set of pictures Mesh Doctor made, so it is left "
                                "as it is")
     procs, said = processors(case), []
-    if join and at not in times(case) and ours(case):
+    joins = join and at not in times(case) and ours(case)
+    steps = _Steps(out + STATUS, _costs(case, at, kinds, mean, joins, selftest_dir))
+    if joins:
+        steps.at("join", f"joining written time {at} from its {len(procs)} processes (reconstructPar)")
         join_time(case, at)
         said.append(f"written time {at} was split onto its {len(procs)} processes, so it was joined first, in the "
                     "run's own folder")
@@ -714,6 +785,7 @@ def make(case, out, at, kinds, mean=False, selftest_dir=None, join=False):
     view, links, cmds, notes, ran = os.path.join(new, "view"), [], {}, [], []
     tview = os.path.join(new, "view_times")         # a cut over time's: its times, as they are kept
     env = dict(os.environ, PYTHONPATH=selfcheck.PV_PYTHONPATH)
+    steps.at("selftest", "ParaView's self test: a test vortex that must come out red")
     why = selftest(selftest_dir, pvbatch, env) if selftest_dir else None
     first = [f"ParaView's self test didn't pass ({why}), so these pictures may be blank or wrongly coloured; it runs "
              "again with the next set"] if why else []
@@ -742,12 +814,15 @@ def make(case, out, at, kinds, mean=False, selftest_dir=None, join=False):
             open(os.path.join(tview, "case.foam"), "w").close()
         fast, fast_said = None, []
         if "fastest" in kinds and not mean:
+            steps.at("find", "finding the cells that set the time step (foamCourantCells, foamToVTK)")
             vtk, doc, fast_said = fastest(case, at, new, links)
             fast = (vtk, doc) if vtk else None
         cmds, notes = plan(case, view, new, kinds, pvbatch, mean, since, split=not whole,
                            over_time=(tview, ts_split) if ts else None, fastest=fast)
         notes = first + said + fast_said + notes
+        steps.drop([k for k in kinds if k not in cmds])
         for kind, cmd in cmds.items():
+            steps.at(kind, DRAWING[kind] + (f" at {len(ts)} written times" if kind == "times" else ""))
             print(f"pictures: {kind}", flush=True)
             os.makedirs(os.path.join(new, kind))
             rc, said = _run(cmd, env, new)
@@ -777,6 +852,7 @@ def make(case, out, at, kinds, mean=False, selftest_dir=None, join=False):
         json.dump(doc, f, indent=1)
     shutil.rmtree(out, ignore_errors=True)
     os.replace(new, out)
+    steps.end()
     return doc
 
 
@@ -952,8 +1028,9 @@ def picture(name, at, kind, file):
 
 
 def delete(name, at):
-    """POST /pictures/{case}/{set}/delete: delete a set Mesh Doctor made, with its job's log and any copy of it cut
-    short, but not while a job makes it: ({case, set, deleted: its pictures}, None), or (None, (code, message))."""
+    """POST /pictures/{case}/{set}/delete: delete a set Mesh Doctor made, with its job's log and status file and any
+    copy of it cut short, but not while a job makes it: ({case, set, deleted: its pictures}, None), or (None, (code,
+    message))."""
     why = _bad_set(name, at)
     if why:
         return None, why
@@ -969,11 +1046,12 @@ def delete(name, at):
                                      "Doctor made, so it is left as it is")
     doc = _made(folder)
     shutil.rmtree(folder)
-    new, log = _plain(name, at + ".new"), _plain(name, at + ".log")
+    new, log, status = _plain(name, at + ".new"), _plain(name, at + ".log"), _plain(name, at + STATUS)
     if new and _replaceable(new):
         shutil.rmtree(new, ignore_errors=True)
-    if log and os.path.isfile(log):
-        os.unlink(log)
+    for f in (log, status):
+        if f and os.path.isfile(f):
+            os.unlink(f)
     try:
         os.rmdir(_plain(name))              # the case's folder, once it has no set left
     except OSError:

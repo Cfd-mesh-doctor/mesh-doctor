@@ -23,7 +23,7 @@ Progress is read from each tool's own status file when a job is read.
 
     python3 -m meshdoctor jobs [list | show <id> | cancel <id>]
 """
-import calendar, json, os, re, secrets, signal, subprocess, sys, time
+import calendar, json, os, re, secrets, signal, stat, subprocess, sys, time
 
 import config
 import diskguard
@@ -43,6 +43,7 @@ SOLVE_STATUS = ".meshdoctor-solve.json"
 # join cut short isn't taken for one that is whole (pictures.times, solve.times).
 JOINING = ".meshdoctor-joining"
 ID = re.compile(r"^[0-9]{8}-[0-9]{6}-[a-z]+-[A-Za-z0-9_.-]{1,80}-[0-9a-f]{4}$")
+PICTURE_SET = re.compile(r"^[0-9][0-9.eE+-]{0,39}(_mean)?$")     # pictures.SET: a set's folder, the time it pictures
 SAFE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$")      # md_api.SAFE: a case's folder name
 START_GRACE = 60          # seconds a queued job may wait for its wrapper before it counts as lost
 SPAWN_TIMEOUT = 30        # seconds the wrapper has to say its pid (jobrun.detach)
@@ -181,7 +182,8 @@ def solving_outside():
 # --------------------------------------------------------------------------
 # reading jobs
 
-# kind -> (status file relative to the workspace, or in the cases folder, [(step prefix, fraction)])
+# kind -> (status file relative to the workspace, or in the cases folder, [(step prefix, fraction)]); {set} is a
+# picture job's set: its time, with _mean for a mean flow's
 PROGRESS = {
     "repair": ("{name}/meshDoctor/status.json", [
         ("fingerprinting", 0.03), ("checkMesh (before)", 0.08), ("inspect", 0.15),
@@ -201,22 +203,40 @@ PROGRESS = {
     "solve": ("{cases}/{name}/" + SOLVE_STATUS, [
         ("copying", 0.0), ("meshing", 0.0), ("decomposing", 0.01), ("potentialFoam", 0.03), ("solving", 0.05),
         ("reconstructing", 0.97), ("done", 1.0)]),
+    # pictures.py's status file beside the set it makes (pictures.STATUS): its own fraction, from how long each of its
+    # steps took on the coarse Ahmed body (pictures.COST), so only "done" is a step here
+    "pictures": (".pictures/{name}/{set}.status.json", [("done", 1.0)]),
 }
 
 
 def progress(job, ws):
-    """{"step", "fraction", "updated"} from the tool's own status file, or None.  A queued job has none yet: a status
-    file then is an earlier job's (a solve's last stretch, say)."""
+    """{"step", "fraction", "updated"} from the tool's own status file, a plain file never read through a link, or
+    None.  A queued job has none yet: a status file then is an earlier job's (a solve's last stretch, say)."""
     rel, steps = PROGRESS.get(job.get("kind"), (None, []))
     if not rel or job.get("state") == "queued":
         return None
+    params = job.get("params") if isinstance(job.get("params"), dict) else {}
+    at = str(params.get("time", "")) + ("_mean" if params.get("mean") is True else "")     # a picture job's set
+    if "{set}" in rel and not PICTURE_SET.match(at):
+        return None
     try:
-        with open(os.path.join(ws, rel.format(name=job["name"], cases=config.settings()["cases"])),
-                  encoding="utf-8") as f:
+        fd = os.open(os.path.join(ws, rel.format(name=job["name"], cases=config.settings()["cases"], set=at)),
+                     os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    except (OSError, KeyError):
+        return None
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_mtime < _epoch(job.get("created")) - 1:
+            return None        # not a plain file, or an older run's status file
+        with os.fdopen(fd, encoding="utf-8") as f:
+            fd = -1            # f closes it
             st = json.load(f)
-        if os.path.getmtime(f.name) < _epoch(job.get("created")) - 1:
-            return None        # an older run's status file
-    except (OSError, ValueError, KeyError):
+    except (OSError, ValueError):
+        return None
+    finally:
+        if fd >= 0:
+            os.close(fd)
+    if not isinstance(st, dict):
         return None
     step = str(st.get("step", ""))
     frac = st.get("fraction")               # a tool that knows its own fraction (a solve: its iterations)

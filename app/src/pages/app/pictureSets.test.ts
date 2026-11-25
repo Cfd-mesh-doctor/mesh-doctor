@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { Job, MachineInfo, Run } from "@/engine/types";
 import {
   MAX_TIMES, drawsFastest, hasMeanFlow, jobOfSet, joinsTimes, kindInfo, kindsText, makesOverTime, makingPictures,
-  overTimes, parseSet,
+  overTimes, parseSet, pictureStep,
   pictureFileName, pictureTimes, picturesMemory, setHeading, setName, setOfJob, setPath, setShown, setTitle, splitTimes,
   swings, timeName,
 } from "./pictureSets";
@@ -33,6 +33,8 @@ describe("a set of pictures", () => {
     expect(kindsText(["cuts", "spots"])).toBe("cuts and spots");
     expect(kindsText(["cuts", "times", "fastest"])).toBe("cuts, a cut over time and the cells that set the time step");
     expect(kindInfo("fastest")?.label).toBe("The cells that set the time step");
+    expect([pictureStep("drawing the cuts"), pictureStep("done"), pictureStep(""), pictureStep(null)])
+      .toEqual(["Drawing the cuts", "Done", null, null]);
     expect(["1.21", "1.30", "2.0"].map(drawsFastest)).toEqual([true, true, true]);      // API 1.21
     expect(["1.20", "1.2", "", null].map(drawsFastest)).toEqual([false, false, false, false]);
     expect(kindsText(["cuts", "vortices", "spots"])).toBe("cuts, vortices and spots");

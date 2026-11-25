@@ -4813,6 +4813,90 @@ os.execvp("foamToVTK", a[a.index("foamToVTK"):])
         self.assertNotEqual(schema.check({"name": "ahmed", "kinds": "fastest2"}, params), [])
         self.assertEqual(api_v1.API_VERSION, "1.21")
 
+    def test_a_set_being_made_says_each_step_and_how_far_it_is(self):
+        """item 262: as it goes, a set being made says its step and how far it is beside it (<set>.status.json), from
+        how long each step took on the coarse Ahmed body; a step that isn't taken doesn't count."""
+        case = self.case(times=("100",))
+        self.split(case, ("100", "150"))
+        self.ours(case)                                                 # its time 150 is joined first
+        sets = os.path.join(self.tmp, "sets")
+        out = os.path.join(sets, "ahmedP", "150")
+        os.makedirs(os.path.dirname(out))
+        said, say = [], self.p._say
+        with mock.patch.object(self.p, "_say", lambda path, step, f: said.append((path, step, f)) or say(path, step, f)):
+            self.p.make(case, out, "150", self.p.KINDS + ("times",), selftest_dir=os.path.join(sets, ".selftest"),
+                        join=True)
+        self.assertEqual({path for path, _, _ in said}, {out + ".status.json"})          # beside the set
+        self.assertEqual([step for _, step, _ in said], [
+            "joining written time 150 from its 2 processes (reconstructPar)",
+            "ParaView's self test: a test vortex that must come out red", "drawing the cuts", "drawing the vortices",
+            "looking for spots of unphysical pressure on the walls", "drawing a cut over time at 2 written times",
+            "done"])
+        fractions = [f for _, _, f in said]
+        self.assertEqual((fractions[0], fractions[-1]), (0.0, 1.0))
+        self.assertEqual(fractions, sorted(set(fractions)))             # on and on, never back
+        c, per, cuts = self.p.COST, self.p.PER_PICTURE, self.p.how_many(case, ["cuts"], "150")
+        before = c["join"] + c["selftest"] + per["cuts"] * cuts                 # the vortices start after the cuts
+        self.assertAlmostEqual(fractions[3], before / (before + per["vortices"] * 9 + c["spots"] + per["times"] * 2))
+        with open(out + ".status.json") as f:
+            doc = json.load(f)
+        self.assertEqual((doc["step"], doc["fraction"]), ("done", 1.0))
+        self.assertRegex(doc["time"], r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
+        said.clear()                    # again: its time joined and the self test passed, so neither is a step
+        with mock.patch.object(self.p, "_say", lambda path, step, f: said.append((step, round(f, 6)))):
+            doc = self.p.make(case, out, "150", ("vortices", "fastest"), selftest_dir=os.path.join(sets, ".selftest"),
+                              join=True)
+        self.assertIn("no cells that set the time step: written time 150 has no face flux (phi) to find them from",
+                      doc["notes"])
+        self.assertEqual(said, [("finding the cells that set the time step (foamCourantCells, foamToVTK)", 0.0),
+                                ("drawing the vortices", round(c["find"] / (c["find"] + per["vortices"] * 9), 6)),
+                                ("done", 1.0)])         # the cells that set the time step weren't found: not drawn
+
+    def test_a_picture_jobs_progress_is_read_beside_its_set_never_through_a_link(self):
+        import jobs
+        case = self.case(times=("100", "200"))
+        ws, _, _, post = self.jobs_here(case)
+        st, job, _ = post({"name": "ahmedP", "kinds": "cuts"})
+        self.assertEqual(st, 202, job)
+        self.assertIsNone(jobs.progress(job, ws))                       # queued: none yet
+        run = dict(job, state="running")
+        self.assertIsNone(jobs.progress(run, ws))                       # none said yet
+        top = os.path.join(ws, ".pictures", "ahmedP")
+        status = os.path.join(top, "200.status.json")
+        self.p._say(status, "drawing the cuts", 0.4567)
+        self.assertEqual({k: v for k, v in jobs.progress(run, ws).items() if k != "updated"},
+                         {"step": "drawing the cuts", "fraction": 0.457})
+        mean = dict(run, params=dict(run["params"], mean=True))         # a mean flow's set: 200_mean
+        self.assertIsNone(jobs.progress(mean, ws))
+        self.p._say(os.path.join(top, "200_mean.status.json"), "drawing the vortices", 0.5)
+        self.assertEqual(jobs.progress(mean, ws)["step"], "drawing the vortices")
+        self.assertIsNone(jobs.progress(dict(run, params=dict(run["params"], time="../200")), ws))   # not a set
+        os.utime(status, (0, 0))                                        # an earlier job's
+        self.assertIsNone(jobs.progress(run, ws))
+        elsewhere = os.path.join(self.tmp, "elsewhere.json")            # a link isn't read, nor written through
+        with open(elsewhere, "w") as f:
+            json.dump({"step": "not ours", "fraction": 0.5}, f)
+        os.remove(status)
+        os.symlink(elsewhere, status)
+        self.assertIsNone(jobs.progress(run, ws))
+        self.p._say(status, "drawing the cuts", 0.6)
+        self.assertFalse(os.path.islink(status))
+        with open(elsewhere) as f:
+            self.assertEqual(json.load(f)["step"], "not ours")
+        self.assertEqual(jobs.progress(run, ws)["fraction"], 0.6)
+        with open(status, "w") as f:                                    # not an object
+            json.dump(["drawing the cuts", 0.6], f)
+        self.assertIsNone(jobs.progress(run, ws))
+        os.remove(status)
+        os.mkdir(status)                                                # not a file: let be, and nothing left over
+        self.p._say(status, "drawing the cuts", 0.7)
+        self.p._say(os.path.join(ws, "nowhere", "200.status.json"), "drawing the cuts", 0.7)
+        self.assertIsNone(jobs.progress(run, ws))
+        self.assertEqual([n for n in os.listdir(top) if n.endswith(".tmp")], [])
+        self.assertEqual(jobs.PROGRESS["pictures"][0],
+                         self.p.PICTURES + "/{name}/{set}" + self.p.STATUS)   # where pictures.py says it
+        self.assertEqual(jobs.PICTURE_SET.pattern, self.p.SET.pattern)
+
     def jobs_here(self, case):
         """POST /jobs of picture jobs of `case`, launched nowhere: (the workspace, the commands launched, the memory
         checks, post)."""
@@ -5005,7 +5089,7 @@ os.execvp("foamToVTK", a[a.index("foamToVTK"):])
         self.assertEqual(list(op["responses"]["200"]["content"]), ["image/png"])
         self.assertEqual([p["schema"].get("enum") for p in op["parameters"]], [None, None, list(self.p.ALL_KINDS), None])
 
-    def test_a_set_made_is_deleted_with_its_log_but_not_while_a_job_makes_it(self):
+    def test_a_set_made_is_deleted_with_its_log_and_status_but_not_while_a_job_makes_it(self):
         import api_v1, jobs
         case = self.case(times=("100", "200"))
         ws, _, _, post = self.jobs_here(case)
@@ -5015,9 +5099,10 @@ os.execvp("foamToVTK", a[a.index("foamToVTK"):])
             open(os.path.join(top, at + ".log"), "w").close()
         os.makedirs(os.path.join(top, "200.new"))                                 # a remake cut short
         open(os.path.join(top, "200.new", self.p.MARK), "w").close()
+        self.p._say(os.path.join(top, "200" + self.p.STATUS), "drawing the vortices", 0.5)    # what its job said
         delete = lambda at: api_v1.handle("POST", f"/api/v1/pictures/ahmedP/{at}/delete")
         self.assertEqual(delete("200")[:2], (200, {"case": "ahmedP", "set": "200", "deleted": 3}))
-        self.assertEqual(sorted(os.listdir(top)), ["100", "100.log"])
+        self.assertEqual(sorted(os.listdir(top)), ["100", "100.log", "100.status.json"])   # 200's status file too
         os.makedirs(os.path.join(top, "300"))                                     # not a set Mesh Doctor made
         os.symlink(os.path.join(top, "100"), os.path.join(top, "400"))            # a link to one
         st, job, _ = post({"name": "ahmedP", "time": "100"})
@@ -5033,7 +5118,7 @@ os.execvp("foamToVTK", a[a.index("foamToVTK"):])
             st, err, _ = delete(at)
             self.assertEqual((st, err["error"]["code"]), (status, code), at)
             self.assertIn(text, err["error"]["message"], at)
-        self.assertEqual(sorted(os.listdir(top)), ["100", "100.log", "300", "400"])     # each left as it was
+        self.assertEqual(sorted(os.listdir(top)), ["100", "100.log", "100.status.json", "300", "400"])  # as it was
         self.assertEqual(len(os.listdir(os.path.join(top, "100", "vortices"))), 3)
         jobs.update(jobs.path_of(job["id"]), state="done")                        # once its job has ended
         os.rmdir(os.path.join(top, "300"))

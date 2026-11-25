@@ -24,7 +24,7 @@ import { elapsed, formatDateTime, formatDuration, formatPercent, formatRelative 
 import { useTitle } from "@/lib/useTitle";
 import { settingsOf, stepText } from "@/report/abtest";
 import { caseStep } from "./caseStart";
-import { setOfJob, setPath } from "./pictureSets";
+import { pictureStep, setOfJob, setPath } from "./pictureSets";
 
 const FILTERS = ["all", "active", "done", "failed", "cancelled"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -95,7 +95,8 @@ function ProgressCell({ job, jobs }: { job: Job; jobs?: readonly Job[] }) {
     // takes a second line: on one, it widened the column and took the room a job's name needs for its line.
     const settings = isAbJob(job) ? settingsOf(job.name, { jobs: jobs ?? [job] }) : null;
     const step = isAbJob(job) ? stepText(job.progress?.step, settings)
-      : job.kind === "case" ? caseStep(job.progress?.step) : job.progress?.step;
+      : job.kind === "case" ? caseStep(job.progress?.step)
+      : job.kind === "pictures" ? pictureStep(job.progress?.step) : job.progress?.step;
     return (
       <div className="min-w-40">
         <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
