@@ -1439,6 +1439,332 @@
           }
         }
       },
+      "Results_force": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "required": [
+          "mean",
+          "sd",
+          "drift",
+          "u",
+          "n"
+        ],
+        "description": "a force over the window, in N; null with fewer than 2 values",
+        "properties": {
+          "mean": {
+            "type": "number"
+          },
+          "sd": {
+            "type": "number",
+            "description": "its standard deviation over the window"
+          },
+          "drift": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "the change between the means of the window's two halves, over the mean (0.01 = 1 %); null for a mean of 0"
+          },
+          "u": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "the uncertainty of the mean: the larger of the 95 % interval of 5 batch means and half their spread; null with fewer than 25 values"
+          },
+          "n": {
+            "type": "integer",
+            "description": "its values in the window"
+          }
+        }
+      },
+      "Results_group": {
+        "type": "object",
+        "required": [
+          "name",
+          "total",
+          "patches",
+          "drag",
+          "vertical",
+          "CdA",
+          "ClA",
+          "LD",
+          "Aref",
+          "Cd",
+          "Cl"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "its function object's name (its postProcessing folder)"
+          },
+          "total": {
+            "type": "boolean",
+            "description": "the total group: the one with the most drag"
+          },
+          "patches": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "its function object's patches; null where it isn't found in system/"
+          },
+          "drag": {
+            "$ref": "#/components/schemas/Results_force"
+          },
+          "vertical": {
+            "$ref": "#/components/schemas/Results_force"
+          },
+          "CdA": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "drag over q, in m2"
+          },
+          "ClA": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "the vertical force over q, in m2, in its own direction (axes.vertical)"
+          },
+          "LD": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "the vertical force over the drag"
+          },
+          "Aref": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "the reference area of the forceCoeffs function object that covers its patches; null where none does"
+          },
+          "Cd": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "drag over that forceCoeffs's own 1/2 rhoInf magUInf^2 Aref"
+          },
+          "Cl": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "the vertical force over the same, in its own direction (axes.vertical)"
+          }
+        }
+      },
+      "Results": {
+        "title": "Mesh Doctor results of a solved case",
+        "description": "output of meshdoctor results and GET /api/v1/results: each force group's drag and vertical force over an averaging window, how sure they are, its coefficients, how far its residuals fell, and plain warnings",
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "case",
+          "transient",
+          "axes",
+          "Uinf",
+          "rho",
+          "q",
+          "cells",
+          "start",
+          "end",
+          "window",
+          "groups",
+          "residuals",
+          "verdict",
+          "symmetry",
+          "warnings"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "pattern": "^1\\.\\d+$",
+            "description": "major.minor; readers accept any 1.x"
+          },
+          "case": {
+            "type": "string",
+            "description": "the case's name"
+          },
+          "transient": {
+            "type": "boolean",
+            "description": "a transient run: its times are seconds of flow; else iterations"
+          },
+          "axes": {
+            "type": "object",
+            "required": [
+              "flow",
+              "up",
+              "vertical"
+            ],
+            "description": "how its forces are read, as the judge reads them (caseinfo.describe)",
+            "properties": {
+              "flow": {
+                "type": "string",
+                "pattern": "^[+-][xyz]$"
+              },
+              "up": {
+                "enum": [
+                  "x",
+                  "y",
+                  "z"
+                ]
+              },
+              "vertical": {
+                "enum": [
+                  "downforce",
+                  "lift"
+                ],
+                "description": "what its vertical force is: downforce when the total group's points down"
+              },
+              "source": {
+                "type": "object",
+                "description": "where the flow and up axes came from"
+              }
+            }
+          },
+          "Uinf": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "the freestream speed in m/s, from its 0/U; null where it isn't found"
+          },
+          "rho": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "rhoInf in kg/m3, from its system folder; null where it isn't found"
+          },
+          "q": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "the dynamic pressure 1/2 rho Uinf^2 in Pa, which CdA and ClA divide by; null without rho or Uinf"
+          },
+          "cells": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "its mesh's cells, from the owner header (summed over its processors when it is split); null where it doesn't say"
+          },
+          "start": {
+            "type": "number",
+            "description": "the first iteration or time of the total group's force history"
+          },
+          "end": {
+            "type": "number",
+            "description": "its last, up to the window's to"
+          },
+          "window": {
+            "type": "object",
+            "required": [
+              "from",
+              "to",
+              "how",
+              "n"
+            ],
+            "description": "the averaging window: the forces after from, up to and with to",
+            "properties": {
+              "from": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "null when there is no force to average"
+              },
+              "to": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "how": {
+                "enum": [
+                  "given",
+                  "settled",
+                  "judge"
+                ],
+                "description": "given: asked for (from); settled: a transient run's, from when its forces settled; judge: the judge's (a steady run's last two judge windows of iterations, a transient run's last two windows of time steps)"
+              },
+              "n": {
+                "type": "integer",
+                "description": "the first group's force values in it"
+              }
+            }
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Results_group"
+            },
+            "description": "each force group with forces in the window: the total group first, then by drag"
+          },
+          "residuals": {
+            "type": "object",
+            "description": "by field: how far each residual fell up to the window's end",
+            "additionalProperties": {
+              "type": "object",
+              "required": [
+                "first",
+                "final",
+                "orders"
+              ],
+              "properties": {
+                "first": {
+                  "type": "number",
+                  "description": "the largest of its first 10 values"
+                },
+                "final": {
+                  "type": "number",
+                  "description": "the median of its last 20 values"
+                },
+                "orders": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "orders of ten it fell from first to final (log10 first/final); null where one is 0"
+                }
+              }
+            }
+          },
+          "verdict": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "the judge's verdict on the run up to the window's to (its window: auto)"
+          },
+          "symmetry": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "its mesh's symmetry patches (symmetryPlane or symmetry); a single one may be the plane of half a model"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "plain words: a drift over 1 %, a symmetry plane, no q"
+          }
+        }
+      },
       "Tplan": {
         "title": "Mesh Doctor transient plan",
         "description": "output of meshdoctor transient-plan: the time step a transient run of a steady case would need, what limits it, and what it would cost",
@@ -1760,7 +2086,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.21"
+    "version": "1.22"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -5501,6 +5827,67 @@
         "summary": "Portable report: the repair, its map and its A/B test in one file, worker paths replaced (open it in /report)"
       }
     },
+    "/results": {
+      "get": {
+        "operationId": "results_of",
+        "parameters": [
+          {
+            "description": "a case in the cases folder with a force history: a run (GET /runs), or a case you solved yourself (GET /cases)",
+            "in": "query",
+            "name": "case",
+            "required": true,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "average the forces after this iteration (a transient run's: this second of flow) (default: the judge's window)",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "description": "up to and with this iteration or second: the run as it was then (default: its end)",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Results"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "A solved case's results: each force group's drag and vertical force over an averaging window (the judge's by default), how sure they are, its coefficients, how far its residuals fell, and plain warnings (API 1.22)"
+      }
+    },
     "/runs": {
       "get": {
         "operationId": "list_runs",
@@ -6872,6 +7259,7 @@
                 "map",
                 "repair",
                 "report",
+                "results",
                 "tplan"
               ]
             }

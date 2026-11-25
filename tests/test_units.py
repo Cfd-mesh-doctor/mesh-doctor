@@ -4,12 +4,12 @@
 
     python3 -m unittest discover -s tests
 """
-import contextlib, gc, io, json, math, os, re, shutil, subprocess, sys, tempfile, time, unittest
+import contextlib, gc, io, json, math, os, re, shutil, statistics, subprocess, sys, tempfile, time, unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "meshdoctor"))
 os.environ["MESHDOCTOR_CONFIG"] = os.devnull
-import abtest, md_api, repair  # noqa: E402
+import abtest, caseinfo, md_api, repair  # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))    # leakcheck.py, beside this file
 from leakcheck import setUpModule, tearDownModule  # noqa: E402,F401 (fails the module on a file left open)
 import leakcheck  # noqa: E402
@@ -376,6 +376,259 @@ def write_transient_run(d, n, p_last, co_max, drag_of, bounding=False, log="log.
     with open(os.path.join(d, "postProcessing", "body", "0", "forces.dat"), "w") as f:
         for i in range(1, n + 1):
             f.write(f"{i * dt:g} (({drag_of(i)} 0 -30) (0 0 0))\n")
+
+
+RESULTS_CONTROL = """application foamRun;
+functions
+{
+    body
+    {
+        type        forces;
+        libs        ("libforces.so");
+        patches     (car wheels);
+        rho         rhoInf;
+        rhoInf      1.2;
+        CofR        (0 0 0);
+    }
+    coeffs                  // over the body's patches: its Aref, magUInf and rhoInf give the body its Cd and Cl
+    {
+        type        forceCoeffs;
+        libs        ("libforces.so");
+        patches     (wheels car);
+        rho         rhoInf;
+        rhoInf      1.2;
+        magUInf     20;
+        Aref        2;
+        dragDir     (1 0 0);
+        liftDir     (0 0 1);
+        writeControl timeStep;
+    }
+    wing
+    {
+        type        forces;
+        patches     (wing);
+        rho         rhoInf;
+        rhoInf      1.2;
+    }
+}
+"""
+
+
+class ResultsTest(unittest.TestCase):
+    """results.py on synthetic runs in a cases folder: each force group over the judge's window or one asked for, its
+    coefficients, its residuals and plain warnings; GET /results and meshdoctor results."""
+
+    def setUp(self):
+        import results, schema
+        self.r, self.schema = results, schema
+        self.d = tempfile.mkdtemp(prefix="results_test_")
+        self.env = {k: os.environ.get(k) for k in ("MESHDOCTOR_CASES", "MESHDOCTOR_WORKSPACE")}
+        os.environ["MESHDOCTOR_CASES"] = os.path.join(self.d, "cases")
+        os.environ["MESHDOCTOR_WORKSPACE"] = os.path.join(self.d, "work")
+        self.case = os.path.join(self.d, "cases", "car")
+        os.makedirs(os.path.join(self.case, "system"))
+        with open(os.path.join(self.case, "system", "controlDict"), "w") as f:
+            f.write(RESULTS_CONTROL)
+
+    def tearDown(self):
+        for k, v in self.env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def run_with_wing(self, n, drag_of, p_of=lambda t: 1e-3 * math.exp(-t / 40) + 1e-6):
+        write_steady_run(self.case, n, p_of, drag_of)              # body: drag_of(t), 30 N of downforce
+        os.makedirs(os.path.join(self.case, "postProcessing", "wing", "0"))
+        with open(os.path.join(self.case, "postProcessing", "wing", "0", "forces.dat"), "w") as f:
+            f.write("".join(f"{t} ((2 0 -12) (0 0 0))\n" for t in range(1, n + 1)))
+
+    def boundary(self, *patches):
+        os.makedirs(os.path.join(self.case, "constant", "polyMesh"), exist_ok=True)
+        with open(os.path.join(self.case, "constant", "polyMesh", "boundary"), "w") as f:
+            f.write(f"FoamFile\n{{\n    class polyBoundaryMesh;\n}}\n{len(patches)}\n(\n" + "".join(
+                f"    {p}\n    {{\n        type {kind};\n    }}\n" for p, kind in patches) + ")\n")
+
+    def test_each_group_over_the_judges_window_with_its_coefficients_and_residuals(self):
+        drag = lambda t: 50 + 0.5 * math.sin(t / 7)                                   # noqa: E731
+        self.run_with_wing(600, drag)
+        doc = self.r.of_case(self.case)
+        self.assertEqual(self.schema.validate(doc, "results"), [])
+        self.assertEqual((doc["case"], doc["transient"], doc["start"], doc["end"], doc["cells"]),
+                         ("car", False, 1, 600, None))
+        self.assertEqual(doc["axes"]["vertical"], "downforce")
+        # the judge's window: the last two of its windows (half the run's iterations each, 200 at most), as it averages
+        self.assertEqual(doc["window"], {"from": 200, "to": 600, "how": "judge", "n": 400})
+        self.assertEqual((abtest.judge(self.case, None)["average"]["drag"]["from"], doc["window"]["from"]), (200, 200))
+        self.assertAlmostEqual(doc["q"], 0.5 * 1.2 * 20 ** 2)
+        body, wing = doc["groups"]
+        x = [drag(t) for t in range(201, 601)]
+        mean = statistics.fmean(x)
+        self.assertEqual((body["name"], body["total"], body["patches"], wing["name"], wing["total"]),
+                         ("body", True, ["car", "wheels"], "wing", False))
+        self.assertAlmostEqual(body["drag"]["mean"], mean)
+        self.assertAlmostEqual(body["drag"]["sd"], statistics.pstdev(x))
+        self.assertAlmostEqual(body["drag"]["drift"],
+                               abs(statistics.fmean(x[200:]) - statistics.fmean(x[:200])) / mean)
+        self.assertAlmostEqual(body["drag"]["u"], abtest.batch_means(x)["u"])
+        self.assertEqual((body["drag"]["n"], body["vertical"]["mean"], body["vertical"]["sd"],
+                          body["vertical"]["drift"], body["vertical"]["u"]), (400, 30.0, 0.0, 0.0, 0.0))
+        self.assertAlmostEqual(body["CdA"], mean / 240)
+        self.assertAlmostEqual(body["ClA"], 30 / 240)                      # downforce, positive
+        self.assertAlmostEqual(body["LD"], 30 / mean)
+        # Cd and Cl from the forceCoeffs over the same patches (in another order): its own Aref, magUInf and rhoInf
+        self.assertEqual(body["Aref"], 2.0)
+        self.assertAlmostEqual(body["Cd"], mean / 480)
+        self.assertAlmostEqual(body["Cl"], 30 / 480)
+        # the wing has no forceCoeffs of its own: no Cd or Cl, its CdA and ClA as the body's
+        self.assertEqual((wing["patches"], wing["Aref"], wing["Cd"], wing["Cl"]), (["wing"], None, None, None))
+        self.assertAlmostEqual(wing["CdA"], 2 / 240)
+        self.assertAlmostEqual(wing["ClA"], 12 / 240)
+        self.assertAlmostEqual(wing["LD"], 6.0)
+        p = doc["residuals"]["p"]
+        self.assertAlmostEqual(p["first"], 1e-3 * math.exp(-1 / 40) + 1e-6)
+        self.assertAlmostEqual(p["final"], statistics.median(1e-3 * math.exp(-t / 40) + 1e-6 for t in range(581, 601)))
+        self.assertEqual(p["orders"], round(math.log10(p["first"] / p["final"]), 2))
+        self.assertEqual(doc["verdict"], abtest.judge(self.case, None)["verdict"])
+        self.assertEqual((doc["symmetry"], doc["warnings"]), ([], []))
+
+    def test_a_window_asked_for_and_the_run_as_it_was_then(self):
+        self.run_with_wing(600, lambda t: 50.0)
+        doc = self.r.of_case(self.case, 100, 300)
+        self.assertEqual(doc["window"], {"from": 100, "to": 300, "how": "given", "n": 200})
+        self.assertEqual((doc["end"], doc["verdict"]), (300, abtest.judge(self.case, None, to=300)["verdict"]))
+        # --to alone: the judge's window of the run as it was then (150 iterations: windows of 75)
+        doc = self.r.of_case(self.case, None, 150)
+        self.assertEqual(doc["window"], {"from": 0, "to": 150, "how": "judge", "n": 150})
+        with self.assertRaises(ValueError) as e:
+            self.r.of_case(self.case, 300, 300)
+        self.assertEqual(e.exception.args, ("bad-request", "the window's from (300) must come before its to (300)"))
+        with self.assertRaises(ValueError) as e:
+            self.r.of_case(self.case, 700)
+        self.assertEqual(e.exception.args, ("not-ready", "car's forces end at 600, before the window's from (700): "
+                                                         "pick an earlier from, or let it solve longer"))
+
+    def test_a_drift_over_one_percent_and_a_symmetry_plane_are_said_plainly(self):
+        self.run_with_wing(600, lambda t: 50 + 0.01 * t)                   # still growing
+        doc = self.r.of_case(self.case)
+        self.assertAlmostEqual(doc["groups"][0]["drag"]["drift"], 2.0 / 54.005)
+        self.assertEqual(doc["warnings"], ["Still drifting over the window (over 1 % between its two halves): body "
+                                           "drag 3.7 %. Run longer before comparing these with another run."])
+        self.boundary(("inlet", "patch"), ("symmetry", "symmetryPlane"), ("car", "wall"))
+        doc = self.r.of_case(self.case)
+        self.assertEqual(doc["symmetry"], ["symmetry"])
+        self.assertEqual(doc["warnings"][1], "Its mesh has a symmetry plane (symmetry): if it is half a model, its "
+                                             "forces, CdA and ClA are for the half, so double them for the whole; Cd "
+                                             "and Cl are as its forceCoeffs takes them.")
+        # Symmetry planes on both sides of a box are the tunnel's, not half a model's: listed, nothing said
+        self.boundary(("left", "symmetryPlane"), ("right", "symmetryPlane"), ("car", "wall"))
+        doc = self.r.of_case(self.case)
+        self.assertEqual((doc["symmetry"], len(doc["warnings"])), (["left", "right"], 1))
+        # A force too small to judge as a share of itself: a group of 0.1 N, drifting, isn't named
+        os.makedirs(os.path.join(self.case, "postProcessing", "mirror", "0"))
+        with open(os.path.join(self.case, "postProcessing", "mirror", "0", "forces.dat"), "w") as f:
+            f.write("".join(f"{t} (({0.1 + 0.001 * t} 0 0) (0 0 0))\n" for t in range(1, 601)))
+        doc = self.r.of_case(self.case)
+        self.assertEqual([g["name"] for g in doc["groups"]], ["body", "wing", "mirror"])
+        self.assertNotIn("mirror", doc["warnings"][0])
+
+    def test_a_transient_run_is_averaged_from_when_its_forces_settled(self):
+        with open(os.path.join(self.case, "system", "fvSchemes"), "w") as f:
+            f.write("ddtSchemes\n{\n    default backward;\n}\n")
+        os.makedirs(os.path.join(self.case, "0"))
+        with open(os.path.join(self.case, "0", "U"), "w") as f:
+            f.write("internalField uniform (20 0 0);\nboundaryField\n{\n}\n")
+        write_transient_run(self.case, 300, 5e-4, 0.8, lambda i: 40 + 10 * math.exp(-i / 20) + 0.3 * math.sin(i / 3),
+                            log="log.foamRun")
+        doc = self.r.of_case(self.case)
+        self.assertEqual(self.schema.validate(doc, "results"), [])
+        frc = caseinfo.parse_forces(self.case)
+        settled = abtest.settled_at(frc, caseinfo.describe(self.case, frc), "body")
+        self.assertIsNotNone(settled)
+        self.assertEqual((doc["transient"], doc["window"]["how"], doc["window"]["from"], doc["window"]["to"]),
+                         (True, "settled", settled, 0.3))
+        self.assertEqual(doc["verdict"], abtest.judge(self.case, None)["verdict"])
+
+    def test_cd_and_cl_from_a_force_coefficients_file_set_up_outside_the_system_folder(self):
+        with open(os.path.join(self.case, "system", "controlDict"), "w") as f:
+            f.write("application foamRun;\nrhoInf 1.2;\n")                    # its function objects elsewhere
+        os.makedirs(os.path.join(self.case, "0"))
+        with open(os.path.join(self.case, "0", "U"), "w") as f:
+            f.write("internalField uniform (20 0 0);\nboundaryField\n{\n}\n")
+        os.makedirs(os.path.join(self.case, "postProcessing", "fc", "0"))
+        with open(os.path.join(self.case, "postProcessing", "fc", "0", "forceCoeffs.dat"), "w") as f:
+            f.write("# Force coefficients\n# dragDir : (1 0 0)\n# liftDir : (0 0 1)\n# magUInf : 20\n"
+                    "# Aref    : 2\n# Time    Cm  Cd  Cl  Cl(f)   Cl(r)\n"
+                    + "".join(f"{t}\t0\t0.3\t-0.8\t0\t0\n" for t in range(1, 101)))
+        doc = self.r.of_case(self.case)
+        g = doc["groups"][0]
+        self.assertEqual((g["name"], g["patches"], g["Aref"]), ("fc", None, 2.0))
+        self.assertAlmostEqual(g["drag"]["mean"], 0.3 * 480)
+        self.assertAlmostEqual(g["Cd"], 0.3)
+        self.assertAlmostEqual(g["Cl"], 0.8)                               # downforce: OpenFOAM's Cl is -0.8
+        self.assertEqual(doc["warnings"], [])
+        # Without rhoInf or a freestream, it says why it has no CdA or ClA
+        os.remove(os.path.join(self.case, "0", "U"))
+        doc = self.r.of_case(self.case)
+        self.assertEqual((doc["Uinf"], doc["q"], doc["groups"][0]["CdA"]), (None, None, None))
+        self.assertEqual(doc["warnings"], ["No CdA or ClA: its freestream speed isn't found in its 0/U."])
+
+    def test_its_function_objects_wherever_their_names_stand(self):
+        # A name after other entries on its line (as a generated case may write one), a parent (functions) and a
+        # sub-dictionary that never pass for one, one commented out, and system/functions (the first of a name counts)
+        with open(os.path.join(self.case, "system", "controlDict"), "w") as f:
+            f.write('application foamRun;\nfunctions\n{\n    #includeFunc residuals ( "p, U" )    #includeFunc time    '
+                    'total\n    {\n        type forces;\n        patches ( "car.*" floor );\n        rhoInf 1.2;\n'
+                    '        binData { nBin 20; direction (1 0 0); }\n    }\n'
+                    '    c1 { type forceCoeffs; patches (car); magUInf 20; Aref 2; }\n'
+                    '    // old { type forces; patches (old); }\n}\n')
+        with open(os.path.join(self.case, "system", "functions"), "w") as f:
+            f.write("wing\n{\n    type    forces;\n    patches (wing);\n}\ntotal\n{\n    type forces;\n    patches (x);\n}\n")
+        self.assertEqual(self.r.function_objects(self.case), {
+            "total": {"type": "forces", "patches": ["car.*", "floor"], "Aref": None, "magUInf": None, "rhoInf": 1.2},
+            "c1": {"type": "forceCoeffs", "patches": ["car"], "Aref": 2.0, "magUInf": 20.0, "rhoInf": None},
+            "wing": {"type": "forces", "patches": ["wing"], "Aref": None, "magUInf": None, "rhoInf": None}})
+
+    def test_the_api_and_the_command_answer_the_same(self):
+        import api_v1
+        self.run_with_wing(300, lambda t: 50.0)
+        st, doc, _ = api_v1.handle("GET", "/api/v1/results", {"case": "car"})
+        self.assertEqual(st, 200, doc)
+        self.assertEqual(doc, self.r.of_case(self.case))
+        self.assertEqual(self.schema.validate(doc, "results"), [])
+        st, doc, _ = api_v1.handle("GET", "/api/v1/results", {"case": "car", "from": "100", "to": "200"})
+        self.assertEqual((st, doc["window"]["how"], doc["window"]["n"]), (200, "given", 100))
+        st, doc, _ = api_v1.handle("GET", "/api/v1/results", {"case": "nope"})
+        self.assertEqual((st, doc["error"]["code"], doc["error"]["message"]),
+                         (404, "not-found", "no case nope in the cases folder"))
+        self.assertEqual(api_v1.handle("GET", "/api/v1/results", {"case": "../car"})[0], 400)
+        self.assertEqual(api_v1.handle("GET", "/api/v1/results", {"case": "car", "from": "300", "to": "200"})[0], 400)
+        os.makedirs(os.path.join(self.d, "cases", "empty", "system"))
+        open(os.path.join(self.d, "cases", "empty", "system", "controlDict"), "w").close()
+        st, doc, _ = api_v1.handle("GET", "/api/v1/results", {"case": "empty"})
+        self.assertEqual((st, doc["error"]["code"]), (409, "not-ready"))
+        self.assertEqual(doc["error"]["message"], "empty has no force history yet: its forces or forceCoeffs "
+                                                  "function objects write one, in postProcessing, as it solves")
+        op = api_v1.openapi()["paths"]["/results"]["get"]
+        self.assertEqual(sorted(p["name"] for p in op["parameters"]), ["case", "from", "to"])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.r.main(["car"])
+        text = out.getvalue()
+        self.assertTrue(text.startswith("car: steady, ? cells, forces 1 to 300; averaged from 0 to 300 (the "
+                                        "judge's window, 300 values)\n"), text)
+        self.assertIn("\nbody *", text)
+        self.assertIn("\nresiduals: p ", text)
+        self.assertNotIn("warning:", text)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.r.main([self.case, "--json", "--to", "200"])
+        self.assertEqual(json.loads(out.getvalue()), self.r.of_case(self.case, None, 200))
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as e:
+            self.r.main(["empty"])
+        self.assertEqual(e.exception.code, "results: empty has no force history yet: its forces or forceCoeffs "
+                                           "function objects write one, in postProcessing, as it solves")
 
 
 class TransientJudgeTest(unittest.TestCase):
@@ -4848,7 +5101,7 @@ os.execvp("foamToVTK", a[a.index("foamToVTK"):])
         params = api_v1.JOBS["pictures"]["params"]
         self.assertEqual(schema.check({"name": "ahmed", "kinds": "times,fastest"}, params), [])
         self.assertNotEqual(schema.check({"name": "ahmed", "kinds": "fastest2"}, params), [])
-        self.assertEqual(api_v1.API_VERSION, "1.21")
+        self.assertGreaterEqual(tuple(int(x) for x in api_v1.API_VERSION.split(".")), (1, 21))   # since API 1.21
 
     def test_a_set_being_made_says_each_step_and_how_far_it_is(self):
         """item 262: as it goes, a set being made says its step and how far it is beside it (<set>.status.json), from

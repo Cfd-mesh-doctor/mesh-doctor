@@ -64,6 +64,11 @@ export const DESIGN: DocSection[] = [
               "pictures of a solved case's flow: `make()` runs the paraview-post scripts with ParaView's `pvbatch`, offscreen, on a folder of links to the case in the workspace (its `constant`, `system` and the time pictured), so the case is only read; a time still split onto its processes is read as it is, through links in each `processor*` folder, or, for a run Mesh Doctor made, first joined into the run's own folder with `reconstructPar` (API 1.19); the pictures and `pictures.json`, their list, go in the workspace's `.pictures/<case>/<time>/` (`<time>_mean/` for a transient run's mean flow); a computer's first set starts with the vortex script's self test, in `.pictures/.selftest/`, kept once it has passed; the model's walls are the patches its force function objects name, found in the boundary of the mesh the time is read on (`processor0`'s for a time read split, the whole mesh's otherwise, each falling back to the other; a half model's symmetry plane, which the automatic cuts start from, is found the same way), so a case split onto its processes without a whole mesh has its model and its symmetry plane. A `pictures` job runs it (API 1.15; the mean flow and the self test, API 1.16), and `GET /pictures` lists the sets, whose lists and pictures the API serves (API 1.17); asked for, a cut over time (`times`): the first cut's speed at each written time up to the one pictured, at most 50 evenly picked, read as they are kept (split ones as they are: none is joined for it), each picture with its time; and a mean flow's cuts show how much the speed swings about it, from `UPrime2Mean` (API 1.20); asked for, the cells that set the time step (`fastest`): the 100 with the highest Courant number at the time pictured, found as a transient plan finds them (`tplan.plan`, foamCourantCells), their cell set written in the set's folder and `foamToVTK -cellSet` writing them alone through links there (on the whole mesh, or each processor's own set in parallel), then drawn with the walls from three sides and the three fastest places close up, not for a mean flow (API 1.21)"
             ],
             [
+              "`results.py`",
+              "core + CLI",
+              "a solved case's results: `of_case()` returns a `results` document: each force group's drag and vertical force over an averaging window (the judge's by default: a steady run's last two judge windows, a transient run's from when its forces settled), with the mean, sd, drift between the window's two halves and the uncertainty of the mean (batch means), in N; CdA and ClA over q = ½ρU² from the case's rhoInf and freestream, L/D, and Cd and Cl only for a group that a forceCoeffs function object covers with its own Aref; each residual's first and final level and the orders it fell, the judge's verdict, and plain warnings (a drift over 1 %, a single symmetry plane: maybe half a model). `meshdoctor results` prints it; it only reads the case (API 1.22)"
+            ],
+            [
               "`repair.py`, `abtest.py`",
               "core + CLI",
               "the library functions (`full`, `fix`, `judge`, `run_one`, ...) are core; their `main()` is CLI"
@@ -421,6 +426,11 @@ export const DESIGN: DocSection[] = [
               "`POST /pictures/{case}/{set}/delete`",
               "",
               "delete a set Mesh Doctor made, with its job's log; `409 busy` while a job makes it, and `422 unsupported` for a folder Mesh Doctor didn't make, which is left as it is (API 1.17)"
+            ],
+            [
+              "`GET /results?case=&from=&to=`",
+              "(new)",
+              "a solved case's results (`results` schema): each force group's drag and vertical force (mean, sd, drift and the uncertainty of the mean, in N), CdA, ClA and L/D, Cd and Cl where a forceCoeffs gives its area, each residual's levels and the orders it fell, the judge's verdict and plain warnings. `from` and `to` set the averaging window (iterations, or a transient run's seconds), the judge's by default; `to` alone takes the run as it was then; `409 not-ready` without a force history (API 1.22)"
             ]
           ]
         }

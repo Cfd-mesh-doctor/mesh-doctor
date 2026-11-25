@@ -563,6 +563,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A solved case's results: each force group's drag and vertical force over an averaging window (the judge's by default), how sure they are, its coefficients, how far its residuals fell, and plain warnings (API 1.22) */
+        get: operations["results_of"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/runs": {
         parameters: {
             query?: never;
@@ -1099,6 +1116,109 @@ export interface components {
             };
             /** @description major.minor; readers accept any 1.x */
             schemaVersion: string;
+        };
+        /**
+         * Mesh Doctor results of a solved case
+         * @description output of meshdoctor results and GET /api/v1/results: each force group's drag and vertical force over an averaging window, how sure they are, its coefficients, how far its residuals fell, and plain warnings
+         */
+        Results: {
+            /** @description how its forces are read, as the judge reads them (caseinfo.describe) */
+            axes: {
+                flow: string;
+                /** @description where the flow and up axes came from */
+                source?: Record<string, unknown>;
+                /** @enum {unknown} */
+                up: "x" | "y" | "z";
+                /**
+                 * @description what its vertical force is: downforce when the total group's points down
+                 * @enum {unknown}
+                 */
+                vertical: "downforce" | "lift";
+            };
+            /** @description the case's name */
+            case: string;
+            /** @description its mesh's cells, from the owner header (summed over its processors when it is split); null where it doesn't say */
+            cells: number | null;
+            /** @description its last, up to the window's to */
+            end: number;
+            /** @description each force group with forces in the window: the total group first, then by drag */
+            groups: components["schemas"]["Results_group"][];
+            /** @description the dynamic pressure 1/2 rho Uinf^2 in Pa, which CdA and ClA divide by; null without rho or Uinf */
+            q: number | null;
+            /** @description by field: how far each residual fell up to the window's end */
+            residuals: {
+                [key: string]: {
+                    /** @description the median of its last 20 values */
+                    final: number;
+                    /** @description the largest of its first 10 values */
+                    first: number;
+                    /** @description orders of ten it fell from first to final (log10 first/final); null where one is 0 */
+                    orders: number | null;
+                };
+            };
+            /** @description rhoInf in kg/m3, from its system folder; null where it isn't found */
+            rho: number | null;
+            /** @description major.minor; readers accept any 1.x */
+            schemaVersion: string;
+            /** @description the first iteration or time of the total group's force history */
+            start: number;
+            /** @description its mesh's symmetry patches (symmetryPlane or symmetry); a single one may be the plane of half a model */
+            symmetry: string[];
+            /** @description a transient run: its times are seconds of flow; else iterations */
+            transient: boolean;
+            /** @description the freestream speed in m/s, from its 0/U; null where it isn't found */
+            Uinf: number | null;
+            /** @description the judge's verdict on the run up to the window's to (its window: auto) */
+            verdict: string | null;
+            /** @description plain words: a drift over 1 %, a symmetry plane, no q */
+            warnings: string[];
+            /** @description the averaging window: the forces after from, up to and with to */
+            window: {
+                /** @description null when there is no force to average */
+                from: number | null;
+                /**
+                 * @description given: asked for (from); settled: a transient run's, from when its forces settled; judge: the judge's (a steady run's last two judge windows of iterations, a transient run's last two windows of time steps)
+                 * @enum {unknown}
+                 */
+                how: "given" | "settled" | "judge";
+                /** @description the first group's force values in it */
+                n: number;
+                to: number | null;
+            };
+        };
+        /** @description a force over the window, in N; null with fewer than 2 values */
+        Results_force: {
+            /** @description the change between the means of the window's two halves, over the mean (0.01 = 1 %); null for a mean of 0 */
+            drift: number | null;
+            mean: number;
+            /** @description its values in the window */
+            n: number;
+            /** @description its standard deviation over the window */
+            sd: number;
+            /** @description the uncertainty of the mean: the larger of the 95 % interval of 5 batch means and half their spread; null with fewer than 25 values */
+            u: number | null;
+        } | null;
+        Results_group: {
+            /** @description the reference area of the forceCoeffs function object that covers its patches; null where none does */
+            Aref: number | null;
+            /** @description drag over that forceCoeffs's own 1/2 rhoInf magUInf^2 Aref */
+            Cd: number | null;
+            /** @description drag over q, in m2 */
+            CdA: number | null;
+            /** @description the vertical force over the same, in its own direction (axes.vertical) */
+            Cl: number | null;
+            /** @description the vertical force over q, in m2, in its own direction (axes.vertical) */
+            ClA: number | null;
+            drag: components["schemas"]["Results_force"];
+            /** @description the vertical force over the drag */
+            LD: number | null;
+            /** @description its function object's name (its postProcessing folder) */
+            name: string;
+            /** @description its function object's patches; null where it isn't found in system/ */
+            patches: string[] | null;
+            /** @description the total group: the one with the most drag */
+            total: boolean;
+            vertical: components["schemas"]["Results_force"];
         };
         /**
          * Mesh Doctor transient plan
@@ -2966,6 +3086,42 @@ export interface operations {
             };
         };
     };
+    results_of: {
+        parameters: {
+            query: {
+                /** @description a case in the cases folder with a force history: a run (GET /runs), or a case you solved yourself (GET /cases) */
+                case: string;
+                /** @description average the forces after this iteration (a transient run's: this second of flow) (default: the judge's window) */
+                from?: number;
+                /** @description up to and with this iteration or second: the run as it was then (default: its end) */
+                to?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Results"];
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     list_runs: {
         parameters: {
             query?: never;
@@ -3473,7 +3629,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                kind: "abtest" | "job" | "judge" | "map" | "repair" | "report" | "tplan";
+                kind: "abtest" | "job" | "judge" | "map" | "repair" | "report" | "results" | "tplan";
             };
             cookie?: never;
         };

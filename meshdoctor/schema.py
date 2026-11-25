@@ -12,6 +12,8 @@ Every file Mesh Doctor writes for another program carries
   map      <run>/meshDoctor/map.json          schemas/map.schema.json
   job      .jobs/<id>.json                    schemas/job.schema.json
   report   meshdoctor report <name>           schemas/report.schema.json
+  tplan    meshdoctor transient-plan <case>   schemas/tplan.schema.json
+  results  meshdoctor results <case>          schemas/results.schema.json
 
 A minor version only adds fields; a major version changes or removes them.
 Readers accept every minor version of the major they know, files written
@@ -23,7 +25,7 @@ import json, os, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 VERSIONS = {"repair": "1.0", "abtest": "1.0", "judge": "1.2", "map": "1.0", "job": "1.4", "report": "1.0",
-            "tplan": "1.2"}
+            "tplan": "1.2", "results": "1.0"}
 _cache = {}
 
 

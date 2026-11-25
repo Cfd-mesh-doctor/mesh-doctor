@@ -29,7 +29,7 @@ import tplan
 import validate
 import version
 
-API_VERSION = "1.21"
+API_VERSION = "1.22"
 PREFIX = "/api/v1"
 WRITES_MAX = solve.transient.MAX_WRITES   # the most times a stretch of a transient run writes
 MAX_BODY = 64 * 1024
@@ -522,6 +522,24 @@ def judge(p, q, b):
             raise ApiError("not-found", f"no log matches {q['log']} in case {q['case']}")
     window = None if q["window"] == "auto" else q["window"]       # auto: abtest.auto_window, from the run's length
     return ab.judge(case, window, avg_from=q.get("avgFrom"), logs=logs)
+
+
+@route("GET", "/results", "A solved case's results: each force group's drag and vertical force over an averaging "
+       "window (the judge's by default), how sure they are, its coefficients, how far its residuals fell, and plain "
+       "warnings (API 1.22)",
+       query={"case": {"schema": NAME, "required": True,
+                       "description": "a case in the cases folder with a force history: a run (GET /runs), or a case "
+                                      "you solved yourself (GET /cases)"},
+              "from": {"schema": {"type": "number", "minimum": 0},
+                       "description": "average the forces after this iteration (a transient run's: this second of "
+                                      "flow) (default: the judge's window)"},
+              "to": {"schema": {"type": "number", "minimum": 0},
+                     "description": "up to and with this iteration or second: the run as it was then (default: its "
+                                    "end)"}},
+       ok=_ref("results"))
+def results_of(p, q, b):
+    import results                         # only reads the case's force files and logs
+    return _answer(results.of(q["case"], q.get("from"), q.get("to")))
 
 
 @route("GET", "/live", "The live (transient) case: forces, averaging window, time step, processes, memory",

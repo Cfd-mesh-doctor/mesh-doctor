@@ -94,6 +94,10 @@ Forces are reported as drag (along the flow) and the vertical force, named **dow
 - the flow direction is read from `0/U`, preferring an inlet patch;
 - the up axis comes from, in order: the `up_axis` setting, the `liftDir` of `forceCoeffs`, or the cross-flow axis with the larger force.
 
+### A solved case's results
+
+`meshdoctor results <case> [--from T] [--to T] [--json]` (`GET /api/v1/results?case=&from=&to=`) gives each force group's drag and vertical force over an averaging window: the judge's by default (a steady run's last two judge windows, a transient run's from when its forces settled), or the one `--from` and `--to` give, in iterations or a transient run's seconds. For each it gives the mean, the standard deviation, the drift between the window's two halves and the uncertainty of the mean from batch means, in N. With them come CdA and ClA (the forces over q = ½ρU², ρ the case's `rhoInf` and U its freestream speed), L/D, and Cd and Cl for a group that a `forceCoeffs` function object covers, with that object's own `Aref`, `magUInf` and `rhoInf`. Each residual's first and final level and how many orders it fell are listed, with the judge's verdict. It warns in plain words when a force still drifts by more than 1 % over the window (run longer before comparing it with another run), and when the mesh has a single symmetry plane, since then the forces may be for half a model. It only reads the case.
+
 ### When a steady run cannot converge: the transient plan
 
 A steady run that plateaus on a physically unsteady flow (a wing-tip vortex, a tyre wake) will not converge however long it runs. The way on is a transient run with time-averaged forces, which costs far more. `meshdoctor transient-plan <case>` says how much before you start one:
