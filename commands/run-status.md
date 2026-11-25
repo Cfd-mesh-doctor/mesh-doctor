@@ -11,9 +11,11 @@ Report on the OpenFOAM case in `$ARGUMENTS` without changing anything.
    `system/controlDict`, and whether a solver is running (`pgrep -x foamRun`, `ps -C foamRun -o rss=`).
 2. From the log: last iteration (or time), seconds per iteration over the last ~50 steps (`ExecutionTime`), time left
    to `endTime`, and the latest initial residuals.
-3. Forces: run `skills/paraview-post/scripts/plot_convergence.py <case> <case>/charts status "<case name>"` with the
-   right `--total`, `--drag/--down`, `--uinf`, `--rho` (read them from the case's force function objects). Show the
-   means over the last window, the drift between the last two windows, and the residual drop.
+3. Forces: run `skills/paraview-post/scripts/plot_convergence.py <case> ~/cfd-pictures/<case name> status "<case name>"`
+   with the right `--total`, `--drag/--down`, `--uinf`, `--rho` (read them from the case's force function objects),
+   so the charts go outside the case. Show the means over the last window, the drift between the last two windows,
+   and the residual drop. `meshdoctor results <case>` gives the means with the uncertainty of each, CdA, ClA and L/D,
+   and the judge's verdict.
 4. Verdict in one line: still settling / settled (drift under ~1 %) / diverging, and how many more iterations look
    needed. Follow the cfd-results skill.
 5. Offer `/cfd-toolkit:dashboard <case>` to watch it live in the side panel.

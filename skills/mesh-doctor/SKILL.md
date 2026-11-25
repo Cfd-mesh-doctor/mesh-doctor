@@ -1,6 +1,6 @@
 ---
 name: mesh-doctor
-description: Check, repair and prove OpenFOAM 14 meshes with Mesh Doctor (this repository), and make and solve test cases with it. Use when the user wants to fix a bad OpenFOAM mesh (non-orthogonality, skewness, bad tets, concave or inverted cells, checkMesh failures), lower max non-orthogonality, compare a repaired mesh against the original in the solver (A/B test), judge whether a run has converged, make a ready-made case from a template (Ahmed body, wheel and front wing), solve a case or a copy of one, check that an install gives the right answer (verify install), plan or start a transient run, or open the Mesh Doctor dashboard.
+description: Check, repair and prove OpenFOAM 14 meshes with Mesh Doctor (this repository), make and solve test cases with it, and read what a solved case gives. Use when the user wants to fix a bad OpenFOAM mesh (non-orthogonality, skewness, bad tets, concave or inverted cells, checkMesh failures), lower max non-orthogonality, compare a repaired mesh against the original in the solver (A/B test), judge whether a run has converged, make a ready-made case from a template (Ahmed body, wheel and front wing), solve a case or a copy of one, check that an install gives the right answer (verify install), plan or start a transient run, read a solved case's forces and coefficients averaged with how sure each is, compare two runs (is a difference real or inside the noise, a mesh study), make pictures of a solved case's flow with ParaView (cuts, vortices, pressure spots, a transient run's mean flow), or open the Mesh Doctor dashboard.
 ---
 
 # Mesh Doctor
@@ -9,6 +9,8 @@ Mesh Doctor moves mesh points (and collapses a few faces) to fix bad cells **ins
 proves the result with checkMesh and, optionally, a solver A/B test. It never edits the source case: every job works
 on a copy in the workspace. It also makes ready-made cases from templates and solves the cases it made, or a copy of
 one of yours: a known case to try a repair on, a check that an install gives the right answer, a transient run.
+And it reads what a solved case gives: its forces averaged and judged, two runs compared, and pictures of its flow
+drawn by ParaView.
 
 ## Before anything
 
@@ -33,16 +35,20 @@ meshdoctor solve  <srcCase> <name> [--to N] [--np P] solve a copy of a case you 
 meshdoctor solve  <name> --template T [--size S]     make a case from a template, then solve it (verify install)
 meshdoctor solve  <name> --steady <run> [--to S]     a transient run (DDES) of a solved steady run, to S seconds
 meshdoctor transient-plan <case> [--co 1,5,20]       a transient run's time step, hours, and the cells that set it
-meshdoctor pictures <case> [--time T] [--kinds ...] [--mean]  pictures of its flow (or a transient run's mean flow) with ParaView: cuts, vortices, spots of unphysical pressure
+meshdoctor results <case> [--from T] [--to T]        its forces averaged, how sure each mean is, still drifting?
+meshdoctor compare <a> <b> [--mesh]                  b's forces against a's: is each difference real or noise?
+meshdoctor compare --abtest <name>                   an A/B test's two runs, compared the same way
+meshdoctor pictures <case> [--time T] [--mean]       ParaView pictures of its flow: cuts, vortices, pressure spots
 meshdoctor serve  [--port 8765] [--case <live>]      local dashboard at http://localhost:8765
 meshdoctor experimental ratchet <src> <name>         push max non-ortho below the 65 deg target, pass by pass
 meshdoctor experimental polish  <src> <name> [--tets] [--tet-cap 1]   gradient polish of the worst clusters
 ```
 
 Every command has `--help`. A `<srcCase>` is a case folder, or the name of a case in the cases folder
-(`meshdoctor config` shows it). Results land in the workspace copy's `meshDoctor/` folder as JSON (verdict, checkMesh
-before/after, regressions, rollback flag). `new` and `solve` work in the cases folder: a new case always goes in a new
-folder there, marked as made by Mesh Doctor.
+(`meshdoctor config` shows it). A repair's results land in the workspace copy's `meshDoctor/` folder as JSON (verdict,
+checkMesh before/after, regressions, rollback flag). `new` and `solve` work in the cases folder: a new case always goes in a new
+folder there, marked as made by Mesh Doctor. `results`, `compare` and `pictures` take a case's name or folder too; none
+of them changes a case you made.
 
 ## How to run a repair well
 
@@ -107,6 +113,44 @@ their spread, not just "it improved".
   iterations (or time steps) with the 200 before, so it needs 400 of them. For a shorter run, such as a transient run
   of a few hundred time steps, `meshdoctor judge <case> auto` makes each window half the run (10 to 200). The
   dashboard (`meshdoctor serve`) and the web app's Solve screen draw its residuals and forces.
+
+## Results, comparisons and pictures
+
+- **What did a solved case give? `results`.** `meshdoctor results <case>` averages each force group's drag and
+  vertical force over the judge's window (a steady run's last two judge windows, a transient run's from when its
+  forces settled), or from `--from` to `--to` (iterations, or a transient run's seconds). Each comes with its
+  standard deviation, its drift between the window's two halves and the uncertainty of its mean (batch means), in N;
+  then CdA and ClA (the forces over q = ½ρU², with the case's own speed and density), L/D, Cd and Cl only where the
+  case's own `forceCoeffs` gives a reference area, and how many orders each residual fell, with the judge's verdict.
+  It warns when a force still drifts by more than 1 % (run longer before comparing it) and when the mesh has a single
+  symmetry plane (the forces may be for half a model). Report the means with their uncertainty and drift, never a
+  last value; `--json` gives the whole document.
+- **Is a difference real? `compare`.** `meshdoctor compare <a> <b>` averages both over the same window (up to the
+  shorter run's end, from the later of their judges' starts) and gives, for each force group in both, b's difference
+  from a in N and in %, and whether it is real: larger than its noise (each side's uncertainty of the mean or its
+  drift, whichever is larger, added in quadrature). If not, it is inside the noise: report that as no difference
+  found, not as a small one. Two cases made from one template at two mesh sizes are a mesh study (any two are with
+  `--mesh`), which also says whether each force moves less between the meshes than it swings. It warns when a design
+  comparison's meshes differ by more than 2 % in cells, when only one is a half model, when their vertical forces
+  point opposite ways, and when one still drifts. `meshdoctor compare --abtest <name>` compares an A/B test's two
+  runs: its original mesh's (a) against its repaired mesh's (b), or its settings' against the variant's.
+- **Pictures of the flow: `pictures`.** It needs ParaView: `meshdoctor check` says whether `pvbatch` is found and
+  starts. `meshdoctor pictures <case>` draws its latest written time offscreen with the paraview-post skill's
+  scripts: cuts coloured by speed, Cp and Cp,t (from the case's own `cuts.json`, or three made from the model's
+  size), vortices (Q-criterion surfaces at three levels scaled by the free-stream speed) and spots of unphysical
+  pressure on the walls (Cp below -5, a numerical error). `--time T` pictures another written time, `--mean` a
+  transient run's mean flow (each cut also showing how much the speed swings), and `--kinds` picks what to make, of
+  `cuts,vortices,spots` (the default), `times` (the first cut's speed at each written time, at most 50) and
+  `fastest` (the cells that set a transient run's time step). ParaView reads the case through a folder of links; the
+  set goes in the workspace's `.pictures/<case>/<time>/`, with `pictures.json` saying what each picture shows. The
+  one thing it writes in a case: an earlier time of a split run Mesh Doctor made is joined into that run first
+  (`reconstructPar -time`), as its solve would; a case you made is read as it is. It needs the flow toward -x with z
+  up, the walls named by the case's force function object, and memory: about 0.6 GB a million cells, 0.9 GB for a
+  time read split, 1.4 to 1.9 GB for a cut over time; run it as one big job at a time. A computer's first set starts
+  with a self test (a test vortex that must come out red); if a set's notes say it didn't pass, or a picture is
+  blank, see the ParaView rows of `docs/troubleshooting.md`. Show the pictures and say in a line what each shows (the
+  web app's Pictures screen has them too). For a view it doesn't make, use the paraview-post scripts by hand,
+  writing outside the case.
 
 ## What it cannot do
 

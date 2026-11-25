@@ -23,7 +23,7 @@ own skills.
 
 | Skill | Use it for |
 |---|---|
-| `mesh-doctor` | repairing an OpenFOAM mesh, lowering max non-orthogonality, A/B solver tests, convergence verdicts |
+| `mesh-doctor` | repairing an OpenFOAM mesh, lowering max non-orthogonality, A/B solver tests, convergence verdicts, test cases and their solves, a solved case's results, comparisons and pictures |
 | `openfoam-wsl` | OpenFOAM 14 on WSL/Linux: snappyHexMesh for cars and wheels, RANS and DDES, restarts, memory, speed traps |
 | `simscale` | SimScale Community plan: geometry prep, snappy sizing, cloning a setup across variants, the API, downloads |
 | `paraview-post` | offscreen ParaView pictures (cuts, vortices, pressure spots) and convergence charts |
@@ -42,7 +42,7 @@ other plugin has a command with the same name, so `/testrun` works as well as `/
 | `/cfd-toolkit:run-status <case>` | iteration, speed, time left, force means and drift of a running or finished case, with a verdict |
 | `/cfd-toolkit:solve <case> [ranks] [iterations]` | sizes the run, starts it in the background and opens the dashboard |
 | `/cfd-toolkit:mesh-check <case> [name]` | checkMesh, Mesh Doctor repair on a copy, before/after table |
-| `/cfd-toolkit:pictures <case> [patches]` | charts, cut planes, vortices, pressure spots and a contact sheet |
+| `/cfd-toolkit:pictures <case> [patches]` | cut planes, vortices and pressure spots (by `meshdoctor pictures` where it can), charts and contact sheets, none of them in the case |
 | `/cfd-toolkit:size <Mcells>` | fits in memory or not, local time, cloud cost, SimScale core hours |
 | `/cfd-toolkit:toolkit-check` | what is installed and what is missing for each skill |
 | `/cfd-toolkit:ahmed-demo [ranks] [iterations]` | the worked example from mesh to wind-tunnel comparison (about an hour on 6 cores) |

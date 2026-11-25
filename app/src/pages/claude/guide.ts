@@ -38,7 +38,7 @@ export const GUIDE: DocSection[] = [
           "rows": [
             [
               "`mesh-doctor`",
-              "repairing an OpenFOAM mesh, lowering max non-orthogonality, A/B solver tests, convergence verdicts"
+              "repairing an OpenFOAM mesh, lowering max non-orthogonality, A/B solver tests, convergence verdicts, test cases and their solves, a solved case's results, comparisons and pictures"
             ],
             [
               "`openfoam-wsl`",
@@ -101,7 +101,7 @@ export const GUIDE: DocSection[] = [
             ],
             [
               "`/cfd-toolkit:pictures <case> [patches]`",
-              "charts, cut planes, vortices, pressure spots and a contact sheet"
+              "cut planes, vortices and pressure spots (by `meshdoctor pictures` where it can), charts and contact sheets, none of them in the case"
             ],
             [
               "`/cfd-toolkit:size <Mcells>`",

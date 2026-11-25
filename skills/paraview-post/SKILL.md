@@ -9,6 +9,12 @@ Scripts are in `scripts/` next to this file. All are read-only on the case. Axes
 toward -x), z up, model on a ground at z = 0. A case in other axes is turned into these axes on a copy (below)
 rather than by editing the scripts' cameras.
 
+For a solved case, `meshdoctor pictures <case>` (the mesh-doctor skill) runs these scripts for you as one job: the
+cuts, vortices and pressure spots of a written time, or of a transient run's mean flow, read through a folder of
+links so a case you made is never written to, with the memory checked first and a list of what each picture shows.
+Use the scripts by hand for what it doesn't make: other cuts and views, a case in other axes, charts, contact
+sheets.
+
 ## Cases in other axes
 
 Rotate a copy holding only `constant/`, `system/` and the time to render (tested on OpenFOAM 14):

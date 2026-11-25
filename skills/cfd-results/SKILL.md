@@ -21,6 +21,9 @@ time and cost, and SimScale core hours, from measured runs (+-30 %). Run it befo
   and second halves of the averaging window.
 - Residuals: report the final levels and the orders of magnitude they dropped. A plateau (e.g. p ~5e-2) that does not
   move with a finer mesh points at the mesh quality or unsteady flow, not at too few iterations.
+- For an OpenFOAM case, `meshdoctor results <case>` (the mesh-doctor skill) does this: each force group's mean, sd,
+  drift and the uncertainty of the mean over the judge's window, CdA, ClA and L/D, and how far each residual fell,
+  with a plain warning when a force still drifts by more than 1 %.
 
 ## Comparing variants and meshes
 
@@ -32,6 +35,9 @@ time and cost, and SimScale core hours, from measured runs (+-30 %). Run it befo
   Say which parts are trustworthy.
 - Small parts with near-zero forces (small patches, micro faces) can be checked by summing p * Sf per patch from the
   fields; this matched a solver's integrated pressure force exactly.
+- For two OpenFOAM runs, `meshdoctor compare <a> <b>` averages both over the same window and says, for each force
+  group, whether the difference is real or inside the noise; `--mesh` reads them as a mesh study. It warns when a
+  design comparison's meshes differ by more than 2 % in cells.
 
 ## Signs and coefficients
 
