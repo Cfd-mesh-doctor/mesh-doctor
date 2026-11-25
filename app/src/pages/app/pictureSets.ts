@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The Pictures screen's words and checks: the kinds a set has, a set's name, address and title, the set a picture job
 // makes, the written times of a run that can be pictured (the split ones too, on an engine that joins one first) and
-// those a cut over time reads, a mean flow's swings beside the same time's instant, and whether a picture job fits in
-// the memory of the engine's computer.
+// those a cut over time reads, a mean flow's swings beside the same time's instant, the cells that set the time step,
+// and whether a picture job fits in the memory of the engine's computer.
 import {
   isActive, type Job, type MachineInfo, type PictureKind, type PictureSet, type PictureSetBrief, type Run,
 } from "@/engine/types";
@@ -39,13 +39,24 @@ const OVER_TIME = {
   about: "The first cut's speed at each written time up to the one pictured, oldest first: the flow as it changes.",
 } as const;
 
-/** What a kind of picture is, as a set's page heads it: those the dialog offers, and a cut over time. */
+/** The cells that set the time step (API 1.21): a set made with them draws them from three sides, then the fastest
+ * places close up. */
+export const FASTEST = {
+  value: "fastest",
+  label: "The cells that set the time step",
+  about: "The cells with the highest Courant number at that written time, which set a transient run's time step, as "
+    + "a transient plan finds them: in red with the walls from three sides, each with a dot at its centre, then the "
+    + "fastest places close up, with the walls' surface mesh.",
+} as const;
+
+/** What a kind of picture is, as a set's page heads it: those the dialog offers, a cut over time and the cells that
+ * set the time step. */
 export function kindInfo(kind: PictureKind | undefined): { value: PictureKind; label: string; about: string } | undefined {
-  return [...KINDS, OVER_TIME].find((k) => k.value === kind);
+  return [...KINDS, OVER_TIME, FASTEST].find((k) => k.value === kind);
 }
 
 const KIND_WORD: Record<PictureKind, string> = {
-  cuts: "cuts", vortices: "vortices", spots: "spots", times: "a cut over time",
+  cuts: "cuts", vortices: "vortices", spots: "spots", times: "a cut over time", fastest: "the cells that set the time step",
 };
 
 /** The kinds in words: "cuts, vortices and spots". */
@@ -129,6 +140,10 @@ export const joinsTimes = (apiVersion: string | null | undefined) => apiFrom(api
 /** Does the engine make a cut over time (API 1.20): the first cut's speed at each written time up to the one
  * pictured? */
 export const makesOverTime = (apiVersion: string | null | undefined) => apiFrom(apiVersion, 20);
+
+/** Does the engine draw the cells that set the time step (API 1.21): the cells with the highest Courant number at the
+ * time pictured, with the walls? Not of a mean flow: they are found from a written time's own flow. */
+export const drawsFastest = (apiVersion: string | null | undefined) => apiFrom(apiVersion, 21);
 
 /** The most written times a cut over time pictures, evenly picked from the first to the latest (the engine's
  * MAX_TIMES). */

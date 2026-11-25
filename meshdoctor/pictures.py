@@ -2,7 +2,7 @@
 # Copyright (C) 2026 The Mesh Doctor authors
 """Pictures of a solved case's flow: ParaView's pvbatch runs the paraview-post scripts offscreen.
 
-    python3 -m meshdoctor pictures <case> [--time T] [--kinds cuts,vortices,spots,times] [--mean]
+    python3 -m meshdoctor pictures <case> [--time T] [--kinds cuts,vortices,spots,times,fastest] [--mean]
 
 The case (a run Mesh Doctor made, or a case you made, in the cases folder) is only read: ParaView reads it through
 a folder of links in the workspace (its constant, system and the time pictured, and an empty case.foam), and the
@@ -15,7 +15,12 @@ case's cut list (cuts.json at its root, as a case made from the Ahmed body templ
 from its model's size; vortices and spots of unphysical pressure on the walls (Cp below -5: a numerical error) need
 only the case.  A cut over time (the kind times, not made unless asked) pictures the first cut's speed at each written
 time up to the one pictured, at most MAX_TIMES evenly picked, each read as it is kept: joined, or split onto the
-processes, as they are (none is joined for it).  The scripts' cameras need the flow toward -x and z up.  With --mean
+processes, as they are (none is joined for it).  The cells that set the time step (the kind fastest, not made
+unless asked) are those with the highest Courant number at the time pictured, found as a transient plan finds them
+(tplan.py, Mesh Doctor's foamCourantCells, from that time's face flux) and written alone by foamToVTK -cellSet, through
+links of their own in the set's folder (on a split case without the whole mesh it was split from, each processor's own
+set, in parallel), then drawn with the walls: the whole model from three sides, and each of the fastest places close
+up.  The scripts' cameras need the flow toward -x and z up.  With --mean
 they picture a transient run's mean flow (UMean and pMean, written once its averaging is on) in place of the flow at
 that time, into .pictures/<case>/<time>_mean/, and each cut shows how much the speed swings about it too (from
 UPrime2Mean).  A computer's first set starts with the vortex script's self test (a test vortex that
@@ -38,8 +43,10 @@ PKG = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = os.path.join(os.path.dirname(PKG), "skills", "paraview-post", "scripts")
 PICTURES = ".pictures"          # in the workspace: <case>/<time>/ (<time>_mean/: a mean flow's), a set, and its .log
 KINDS = ("cuts", "vortices", "spots")   # what a set has unless asked otherwise
-ALL_KINDS = KINDS + ("times",)          # and a cut over time: the first cut's speed at each written time (API 1.20)
-SCRIPT = {"cuts": "cut_views.py", "vortices": "vortex_views.py", "spots": "pressure_spots.py", "times": "cut_views.py"}
+ALL_KINDS = KINDS + ("times", "fastest")    # a cut over time: the first cut's speed at each written time (API
+                                            # 1.20); the cells that set the time step (API 1.21)
+SCRIPT = {"cuts": "cut_views.py", "vortices": "vortex_views.py", "spots": "pressure_spots.py", "times": "cut_views.py",
+          "fastest": "fastest_cells.py"}
 MAX_TIMES = 50                          # the most written times a cut over time pictures, evenly picked
 CUTS = "cuts.json"
 MARK = ".meshdoctor-pictures"  # in a set (and one being made): make() replaces only a folder that has it
@@ -62,6 +69,12 @@ MAX_PNG = 32 << 20              # the largest picture served: ParaView's 1920 x 
 AUTO_CUTS = 7                   # the pictures of the cuts cut_views.py makes from the model's size: 3, 2 and 2 colours
 FLOW = ("U", "p")               # the flow a picture reads (MEAN in their place for a mean flow's)
 PROC = re.compile(r"^processor[0-9]+$")     # a processor folder of a case split onto its processes
+FAST_VIEWS = {"side": "from the side", "top": "from above", "front34": "from the front"}   # fastest_cells.py's views
+PLACES = 3                      # the fastest places that the cells that set the time step show close up, one each
+FAST_FILE = re.compile(r"fastest_(?:(" + "|".join(FAST_VIEWS) + r")|place([0-9]{1,3}))")   # their pictures' names
+FAST_DOC = "fastest.json"       # in a set: the count of the cells that set the time step and each place's words
+FAST_MEAN = ("bad-request", "the cells that set the time step are found from a written time's own flow, not from its "
+                            "mean flow: picture them without the mean flow")
 
 
 def _num(text):
@@ -265,7 +278,8 @@ def refusal(name, at=None, mean=False):
 def how_many(case, kinds, at=None, mean=False):
     """About how many pictures a set of these kinds makes of `case` at time `at`: one per colour of each cut in its cut
     list (else AUTO_CUTS, of 3 cuts), with `mean` one more a cut (how much the speed swings), one per vortex level and
-    view, the worst spot's three views, and one per time of a cut over time (strip())."""
+    view, the worst spot's three views, one per time of a cut over time (strip()), and the cells that set the
+    time step from three sides and their PLACES fastest places close up."""
     n = 0
     for kind in kinds:
         if kind == "cuts":
@@ -276,6 +290,8 @@ def how_many(case, kinds, at=None, mean=False):
                 n += AUTO_CUTS + 3 * bool(mean)
         elif kind == "times":
             n += len(strip(case, at, mean)[0]) if at else 0
+        elif kind == "fastest":
+            n += len(FAST_VIEWS) + PLACES
         else:
             n += len(Q_AT_15) * len(VIEWS) if kind == "vortices" else len(SPOT_VIEWS)
     return n
@@ -310,7 +326,7 @@ def disk_of(name, at=None, kinds=KINDS, mean=False):
     """GET /disk/pictures: what a pictures job writes, as start's disk guard counts it: ({"set": (MB, the workspace's
     folder of sets), "join": _join_of()'s, "time": the time pictured}, None), or (None, the refusal start would
     give)."""
-    why = refusal(name, at, mean)
+    why = FAST_MEAN if mean and "fastest" in kinds else refusal(name, at, mean)
     if why:
         return None, md_api._refuse(*why)
     case = tplan._case(name)
@@ -319,11 +335,13 @@ def disk_of(name, at=None, kinds=KINDS, mean=False):
     return {"set": (diskguard.pictures_mb(n), root()), "join": _join_of(case, at), "time": at}, None
 
 
-def plan(case, view, out, kinds, pvbatch, mean=False, since=None, split=False, over_time=None):
+def plan(case, view, out, kinds, pvbatch, mean=False, since=None, split=False, over_time=None, fastest=None):
     """({kind: the pvbatch command that makes its pictures, reading the links folder `view`, into out/<kind>},
     notes on what is left out).  With `mean`, of the mean flow, averaged from time `since` (s; None: not known);
     with `split`, of a time read split onto the case's processes (each script's Decomposed Case); `over_time`: (the links
-    folder of a cut over time's times, whether they are read split), without which it has none."""
+    folder of a cut over time's times, whether they are read split), without which it has none; `fastest`: (the folder
+    of the VTK files of the cells that set the time step, the FAST_DOC that says their places), without which they
+    have none."""
     read = "decomposed" if split else "reconstructed"
     d = caseinfo.describe(case)
     name, w, uinf = os.path.basename(os.path.normpath(case)), ",".join(walls(case, d["total"])), d["Uinf"]
@@ -333,7 +351,11 @@ def plan(case, view, out, kinds, pvbatch, mean=False, since=None, split=False, o
         note = f"{name}, the mean flow " + ("" if since is None else f"from {since:.4g} s ") + "to {it} s"
     for kind in kinds:
         script, into = os.path.join(SCRIPTS, SCRIPT[kind]), os.path.join(out, kind)
-        if kind == "times" and over_time is None:
+        if (kind == "times" and over_time is None) or (kind == "fastest" and (fastest is None or mean)):
+            continue
+        if kind == "fastest":
+            cmds[kind] = run + [script, foam, read, into, fastest[0], "--walls", w, "--places", fastest[1],
+                                "--note", note]
             continue
         if kind in ("cuts", "times"):
             spec = os.path.join(case, CUTS)
@@ -369,6 +391,25 @@ def _cut_titles(case, folder):
     return {}
 
 
+def _fast_order(f):
+    """A picture of the cells that set the time step's place in its set: its views as FAST_VIEWS has them, then its
+    places, the fastest first."""
+    m = FAST_FILE.fullmatch(f[:-4])
+    if m and m.group(1):
+        return (0, list(FAST_VIEWS).index(m.group(1)), f)
+    return (1, int(m.group(2)), f) if m else (2, 0, f)
+
+
+def _fast_doc(folder):
+    """A set's FAST_DOC: {"cells": their count, "places": [{"title", ...}, ...]}, or {} when it has none."""
+    try:
+        with open(os.path.join(folder, FAST_DOC), encoding="utf-8") as f:
+            doc = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return doc if isinstance(doc, dict) else {}
+
+
 def _time_order(f):
     """A picture of a cut over time's place in its set: by its time."""
     m = AT_TIME.fullmatch(f[:-4])
@@ -377,13 +418,16 @@ def _time_order(f):
 
 def listing(case, folder, mean=False):
     """The pictures in a set's folder, each {file, kind, title} (and a cut over time's, its time): each kind's PNGs,
-    titled from the cut list, the Q level and the view, the spot, or the time (and the mean flow, with `mean`)."""
-    cuts = _cut_titles(case, folder)
+    titled from the cut list, the Q level and the view, the spot, the time (and the mean flow, with `mean`), or the
+    view and the place of the cells that set the time step (its FAST_DOC)."""
+    cuts, fast = _cut_titles(case, folder), _fast_doc(folder)
+    places = fast.get("places") if isinstance(fast.get("places"), list) else []
+    count = fast.get("cells")
     out = []
     for kind in ALL_KINDS:
         d = os.path.join(folder, kind)
         files = sorted(f for f in (os.listdir(d) if os.path.isdir(d) else []) if f.endswith(".png"))
-        order = {"vortices": _vortex_order, "times": _time_order}.get(kind)
+        order = {"vortices": _vortex_order, "times": _time_order, "fastest": _fast_order}.get(kind)
         for f in sorted(files, key=order) if order else files:
             stem, title, more = f[:-4], f[:-4], {}
             if kind == "cuts":
@@ -396,6 +440,17 @@ def listing(case, folder, mean=False):
                     title = f"{cuts.get(m.group(1), m.group(1))}: speed" + (
                         f" of the mean flow to {m.group(2)} s" if mean else f", written time {m.group(2)}")
                     more = {"time": m.group(2)}
+            elif kind == "fastest":
+                m = FAST_FILE.fullmatch(stem)
+                if m and m.group(1):
+                    title = ("The cells that set the time step: the "
+                             + (f"{count} " if isinstance(count, int) else "") + "with the highest Courant number, "
+                             + FAST_VIEWS[m.group(1)])
+                elif m:
+                    i = int(m.group(2))
+                    p = places[i - 1] if 0 < i <= len(places) and isinstance(places[i - 1], dict) else {}
+                    title = p["title"] if isinstance(p.get("title"), str) else (
+                        f"The cells that set the time step, place {i}, close up")
             elif kind == "vortices":
                 m = re.fullmatch(r"Q([0-9.e+]+)_(\w+)", stem)
                 if m:
@@ -510,11 +565,117 @@ def join_time(case, at):
                        + ": the job's log says why")
 
 
+def size_words(m):
+    """A length in m in the unit that reads best, to two significant figures, as the app's plan card says it: "2.6
+    mm", "4.5 cm", "1.2 m"."""
+    mm = float(f"{m * 1000:.2g}")
+    if mm < 10:
+        return f"{mm:g} mm"
+    cm = float(f"{m * 100:.2g}")
+    return f"{cm:g} cm" if cm < 100 else f"{float(f'{m:.2g}'):g} m"
+
+
+def place_title(i, g):
+    """The title of the close-up of place `i` (from 1) of the cells that set the time step, from a transient plan's
+    region `g`, as its plan card says one: "Place 1 of the cells that set the time step, close up: 38 cells near
+    (-0.0635, 0.18, 0.322) m, about 2.6 mm across and 2.4 mm from the wall ahmed, where the flow is up to 55 m/s"."""
+    n = g["nCells"]
+    s = (f"Place {i} of the cells that set the time step, close up: {n} cell{'' if n == 1 else 's'} near "
+         f"({', '.join(f'{x:.3g}' for x in g['centre'])}) m, about {size_words(g['h'])} across")
+    if g.get("wall"):
+        s += (f" and {size_words(g['wallDist'])} from the wall {g['wall']}" if g.get("wallDist") is not None
+              else f", by the wall {g['wall']}")
+    if g.get("speed") is not None:
+        speed = float(f"{g['speed']:.2g}")
+        s += f", where the flow is up to {speed:g} m/s"
+    return s
+
+
+def _mirror(src, into, set_file, links):
+    """Make `into` a folder that OpenFOAM reads as `src` (a case, or one of its processor folders) with the cell set
+    `set_file` as its constant/polyMesh/sets/fastestCells: each entry of src's constant and of its polyMesh a link (not
+    its own sets), and the set a link too, so that nothing is written in the case.  Each link goes in `links`."""
+    poly = os.path.join(into, "constant", "polyMesh")
+    os.makedirs(os.path.join(poly, "sets"), mode=0o700)
+    for d, dest, skip in ((os.path.join(src, "constant"), os.path.dirname(poly), "polyMesh"),
+                          (os.path.join(src, "constant", "polyMesh"), poly, "sets")):
+        for e in sorted(os.listdir(d)):
+            if e != skip:
+                links.append(os.path.join(dest, e))
+                os.symlink(os.path.join(d, e), links[-1])
+    links.append(os.path.join(poly, "sets", tplan.SET))
+    os.symlink(set_file, links[-1])
+
+
+def fastest(case, at, folder, links):
+    """The cells that set the time step at written time `at` of `case`, ready to picture: the transient plan's (tplan,
+    Mesh Doctor's foamCourantCells: the cells with the highest Courant number, from that time's face flux), its cell
+    set written in `folder`, and foamToVTK -cellSet writing those cells alone as VTK files, reading the case through
+    links in folder/view_fastest (each link in `links`): on the whole mesh, or, on a split case without the whole mesh
+    it was split from, each processor's own set, in parallel.  Its FAST_DOC goes in `folder`.  (the folder of the VTK
+    files, the FAST_DOC, notes); the first two None, with a note why, when they aren't found."""
+    name, case = os.path.basename(os.path.normpath(case)), os.path.abspath(case)
+    if not any(tplan._field(os.path.join(r, at), "phi") for r in [os.path.join(case, q) for q in processors(case)[:1]]
+               + [case]):              # as the plan reads it: split where processor0 has it, else joined
+        return None, None, [f"no cells that set the time step: written time {at} has no face flux (phi) to find them "
+                            "from"]
+    print(f"pictures: the cells that set the time step, as a transient plan finds them ({tplan.TOOL})", flush=True)
+    try:
+        p = tplan.plan(case, at)
+    except (ValueError, RuntimeError, MemoryError) as e:
+        print(f"pictures: {e}", flush=True)
+        return None, None, [f"no cells that set the time step: {str(e).replace(case, name)}"
+                            if isinstance(e, MemoryError) else "no cells that set the time step: the transient plan "
+                            "that finds them stopped; the job's log says why"]
+    if p.get("fastestCells") is None:
+        return None, None, [f"no cells that set the time step: Mesh Doctor's {tplan.TOOL} isn't built (./Allwmake in "
+                            "its folder), and OpenFOAM's CourantNo finds only their places, not the cells"]
+    n, d, said = len(p["fastestCells"]), p["courantPerSecond"], []
+    sets = os.path.join(folder, "fastest_sets")
+    why = tplan.write_sets(sets, p, case)
+    whole = not p["decomposed"] or why is None
+    gain = d["max"] / d["withoutTop"] if d["withoutTop"] > 0 else 1.0
+    said.append(f"the cells that set the time step are the {n} with the highest Courant number at written time {at}"
+                + (f": without them it could be {float(f'{gain:.2g}'):g} times as long" if gain >= 1.1 else
+                   ": leaving them out would hardly change it"))
+    if not whole:
+        said.append(f"the cells that set the time step were written on each of its {p['processors']} processes: "
+                    f"{why}")
+    view = os.path.join(folder, "view_fastest")
+    os.mkdir(view, 0o700)
+    links.append(os.path.join(view, "system"))
+    os.symlink(os.path.join(case, "system"), links[-1])
+    for sub in [""] if whole else [f"processor{k}" for k in range(p["processors"])]:
+        os.makedirs(os.path.join(view, sub), mode=0o700, exist_ok=True)
+        _mirror(os.path.join(case, sub), os.path.join(view, sub),
+                os.path.join(sets, sub, "constant", "polyMesh", "sets", tplan.SET), links)
+    par = "" if whole else f"mpirun --oversubscribe -np {p['processors']} "
+    cmd = (f"{par}foamToVTK {'' if whole else '-parallel '}-cellSet {tplan.SET} -fields '()' -excludePatches "
+           "'(\".*\")' -polyhedra polyhedra -noPointValues -noFaceZones -noFunctionObjects")
+    print(f"pictures: foamToVTK writes the {n} cells alone" + ("" if whole else f", on its {p['processors']} "
+                                                                                "processes"), flush=True)
+    bashrc = shlex.quote(config.settings()["bashrc"])
+    rc, _ = _run(["bash", "-c", f"source {bashrc} >/dev/null 2>&1; [ -n \"$WM_PROJECT_DIR\" ] || exit 2; exec {cmd}"],
+                 None, view)
+    vtk = os.path.join(view, "VTK")
+    if rc or not any(f.endswith(".vtk") for f in (os.listdir(vtk) if os.path.isdir(vtk) else [])):
+        return None, None, said + ["no pictures of the cells that set the time step: " + (
+            "OpenFOAM's environment didn't load (the bashrc setting)" if rc == 2 else
+            f"foamToVTK didn't write them (exit {rc}); the job's log says why")]
+    doc = os.path.join(folder, FAST_DOC)
+    with open(doc, "w") as f:
+        json.dump({"cells": n, "time": at, "places": [
+            {"centre": g["centre"], "bbox": g["bbox"], "h": g["h"], "title": place_title(i, g)}
+            for i, g in enumerate(p["regions"][:PLACES], 1)]}, f, indent=1)
+    return vtk, doc, said
+
+
 def make(case, out, at, kinds, mean=False, selftest_dir=None, join=False):
     """Make a set of pictures of `case` at time `at` (its mean flow, with `mean`) in folder `out`; pictures.json
     lists them.  A time still split onto the case's processes is joined first with `join`, when Mesh Doctor made the
     run (join_time(), how()'s "join"), else read as it is, split, each processor folder through links of its own with
-    its constant and only that time.  A set made there before is replaced once the new one is whole; any other folder in
+    its constant and only that time.  The cells that set the time step are found first (fastest()), not for a mean
+    flow.  A set made there before is replaced once the new one is whole; any other folder in
     the way is refused and left as it is.  With `selftest_dir`, the vortex script's self test runs first, unless it
     has passed there (selftest()).  The document; RuntimeError when no picture was made."""
     pvbatch = selfcheck.paraview()[0]
@@ -579,9 +740,13 @@ def make(case, out, at, kinds, mean=False, selftest_dir=None, join=False):
                     links.append(os.path.join(tview, proc, d))
                     os.symlink(os.path.join(os.path.abspath(case), proc, d), links[-1])
             open(os.path.join(tview, "case.foam"), "w").close()
+        fast, fast_said = None, []
+        if "fastest" in kinds and not mean:
+            vtk, doc, fast_said = fastest(case, at, new, links)
+            fast = (vtk, doc) if vtk else None
         cmds, notes = plan(case, view, new, kinds, pvbatch, mean, since, split=not whole,
-                           over_time=(tview, ts_split) if ts else None)
-        notes = first + said + notes
+                           over_time=(tview, ts_split) if ts else None, fastest=fast)
+        notes = first + said + fast_said + notes
         for kind, cmd in cmds.items():
             print(f"pictures: {kind}", flush=True)
             os.makedirs(os.path.join(new, kind))
@@ -600,6 +765,8 @@ def make(case, out, at, kinds, mean=False, selftest_dir=None, join=False):
                 os.unlink(link)
         shutil.rmtree(view, ignore_errors=True)     # (it never follows a link)
         shutil.rmtree(tview, ignore_errors=True)
+        shutil.rmtree(os.path.join(new, "view_fastest"), ignore_errors=True)
+        shutil.rmtree(os.path.join(new, "fastest_sets"), ignore_errors=True)
     doc = {"case": os.path.basename(os.path.normpath(case)), "time": at, "mean": bool(mean), "kinds": list(kinds),
            "made": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "notes": notes,
            "pictures": listing(case, new, mean)}
@@ -615,7 +782,7 @@ def make(case, out, at, kinds, mean=False, selftest_dir=None, join=False):
 
 def start(name, at=None, kinds=KINDS, mean=False):
     """Start a pictures job (POST /jobs, kind "pictures"): the job, or a refusal, as md_api's other starts answer."""
-    why = refusal(name, at, mean)
+    why = FAST_MEAN if mean and "fastest" in kinds else refusal(name, at, mean)
     if why:
         return md_api._refuse(*why)
     ws = config.settings()["workspace"]
@@ -821,8 +988,9 @@ def main(argv=None):
     ap.add_argument("--time", help="the written time to picture (default: the latest; with --mean, the latest with a "
                                    "mean flow); one still split onto its processes is joined first, in its folder, "
                                    "when Mesh Doctor made the run, else read as it is, split")
-    ap.add_argument("--kinds", default=",".join(KINDS), help="what to make, of %(default)s (the default) and times: "
-                    "the first cut's speed at each written time up to the one pictured, at most " + str(MAX_TIMES))
+    ap.add_argument("--kinds", default=",".join(KINDS), help="what to make, of %(default)s (the default), times (the "
+                    "first cut's speed at each written time up to the one pictured, at most " + str(MAX_TIMES) + ") and "
+                    "fastest (the cells that set the time step, with the walls)")
     ap.add_argument("--mean", action="store_true", help="a transient run's mean flow (UMean and pMean), at a time "
                                                         "written once its averaging is on")
     ap.add_argument("--out", help="the set's folder (default: the workspace's .pictures/<case>/<time>, or "
@@ -831,6 +999,8 @@ def main(argv=None):
     kinds = [k for k in a.kinds.split(",") if k]
     if not kinds or any(k not in ALL_KINDS for k in kinds):
         sys.exit(f"pictures: --kinds takes {', '.join(ALL_KINDS)}")
+    if a.mean and "fastest" in kinds:
+        sys.exit(f"pictures: {FAST_MEAN[1]}")
     case = a.case if os.path.isdir(a.case) else tplan._case(a.case)
     if not case:
         sys.exit(f"pictures: no case {a.case} in the cases folder")

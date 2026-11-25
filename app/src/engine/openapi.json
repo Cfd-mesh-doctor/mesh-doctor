@@ -1760,7 +1760,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.20"
+    "version": "1.21"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -3333,14 +3333,14 @@
             }
           },
           {
-            "description": "what to make, comma-separated: cuts, vortices, spots, and times (a cut over time: the first cut's speed at each written time up to the one pictured, at most 50 evenly picked, each read as it is kept, joined or split, none joined for it: API 1.20)",
+            "description": "what to make, comma-separated: cuts, vortices, spots, times (a cut over time: the first cut's speed at each written time up to the one pictured, at most 50 evenly picked, each read as it is kept, joined or split, none joined for it: API 1.20) and fastest (the cells that set the time step, with the walls; not with mean: API 1.21)",
             "in": "query",
             "name": "kinds",
             "required": false,
             "schema": {
               "default": "cuts,vortices,spots",
-              "description": "what to make, comma-separated: cuts, vortices, spots, and times (a cut over time: the first cut's speed at each written time up to the one pictured, at most 50 evenly picked, each read as it is kept, joined or split, none joined for it: API 1.20)",
-              "pattern": "^(cuts|vortices|spots|times)(,(cuts|vortices|spots|times))*$",
+              "description": "what to make, comma-separated: cuts, vortices, spots, times (a cut over time: the first cut's speed at each written time up to the one pictured, at most 50 evenly picked, each read as it is kept, joined or split, none joined for it: API 1.20) and fastest (the cells that set the time step, with the walls; not with mean: API 1.21)",
+              "pattern": "^(cuts|vortices|spots|times|fastest)(,(cuts|vortices|spots|times|fastest))*$",
               "type": "string"
             }
           },
@@ -3922,7 +3922,7 @@
                   },
                   {
                     "additionalProperties": false,
-                    "description": "make pictures of a solved case's flow with ParaView, offscreen, at a written time, or of a transient run's mean flow: cuts from its cut list (cuts.json) or made from its model's size, its vortices, and any spot of unphysical pressure on its walls (Cp below -5: a numerical error). The case is only read: ParaView reads it through a folder of links, and the pictures go in the workspace, with a list of them; a computer's first set starts with ParaView's self test (API 1.15; the mean flow and the self test, API 1.16). The one exception: a time of a run Mesh Doctor made that is still split onto its processes is joined first, into the run's own folder, as its solve joins the latest of each stretch (API 1.19). Asked for, a cut over time: the first cut's speed at each written time up to the one pictured, read as they are kept; and a mean flow's cuts show how much the speed swings about it (API 1.20)",
+                    "description": "make pictures of a solved case's flow with ParaView, offscreen, at a written time, or of a transient run's mean flow: cuts from its cut list (cuts.json) or made from its model's size, its vortices, and any spot of unphysical pressure on its walls (Cp below -5: a numerical error). The case is only read: ParaView reads it through a folder of links, and the pictures go in the workspace, with a list of them; a computer's first set starts with ParaView's self test (API 1.15; the mean flow and the self test, API 1.16). The one exception: a time of a run Mesh Doctor made that is still split onto its processes is joined first, into the run's own folder, as its solve joins the latest of each stretch (API 1.19). Asked for, a cut over time: the first cut's speed at each written time up to the one pictured, read as they are kept; and a mean flow's cuts show how much the speed swings about it (API 1.20). Asked for, the cells that set the time step: the 100 with the highest Courant number at that time, as a transient plan finds them, written alone by foamToVTK through links in the set's folder and drawn with the walls, from three sides and each of the three fastest places close up; not of a mean flow (API 1.21)",
                     "properties": {
                       "kind": {
                         "enum": [
@@ -3934,8 +3934,8 @@
                         "properties": {
                           "kinds": {
                             "default": "cuts,vortices,spots",
-                            "description": "what to make, comma-separated: cuts, vortices, spots, and times (a cut over time: the first cut's speed at each written time up to the one pictured, at most 50 evenly picked, each read as it is kept, joined or split, none joined for it: API 1.20)",
-                            "pattern": "^(cuts|vortices|spots|times)(,(cuts|vortices|spots|times))*$",
+                            "description": "what to make, comma-separated: cuts, vortices, spots, times (a cut over time: the first cut's speed at each written time up to the one pictured, at most 50 evenly picked, each read as it is kept, joined or split, none joined for it: API 1.20) and fastest (the cells that set the time step, with the walls; not with mean: API 1.21)",
+                            "pattern": "^(cuts|vortices|spots|times|fastest)(,(cuts|vortices|spots|times|fastest))*$",
                             "type": "string"
                           },
                           "mean": {
@@ -4758,13 +4758,14 @@
                             ]
                           },
                           "kinds": {
-                            "description": "what it has, in order (times, a cut over time: API 1.20)",
+                            "description": "what it has, in order (times, a cut over time: API 1.20; fastest, the cells that set the time step: API 1.21)",
                             "items": {
                               "enum": [
                                 "cuts",
                                 "vortices",
                                 "spots",
-                                "times"
+                                "times",
+                                "fastest"
                               ]
                             },
                             "type": "array"
@@ -4865,13 +4866,14 @@
                       "type": "string"
                     },
                     "kinds": {
-                      "description": "what it has, in order (times, a cut over time: API 1.20)",
+                      "description": "what it has, in order (times, a cut over time: API 1.20; fastest, the cells that set the time step: API 1.21)",
                       "items": {
                         "enum": [
                           "cuts",
                           "vortices",
                           "spots",
-                          "times"
+                          "times",
+                          "fastest"
                         ]
                       },
                       "type": "array"
@@ -4899,7 +4901,7 @@
                         "properties": {
                           "file": {
                             "description": "<kind>/<file>, which GET /pictures/{case}/{set}/{kind}/{file} serves",
-                            "pattern": "^(cuts|vortices|spots|times)/[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}\\.png$",
+                            "pattern": "^(cuts|vortices|spots|times|fastest)/[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}\\.png$",
                             "type": "string"
                           },
                           "kind": {
@@ -4907,7 +4909,8 @@
                               "cuts",
                               "vortices",
                               "spots",
-                              "times"
+                              "times",
+                              "fastest"
                             ]
                           },
                           "time": {
@@ -5074,7 +5077,8 @@
                 "cuts",
                 "vortices",
                 "spots",
-                "times"
+                "times",
+                "fastest"
               ]
             }
           },

@@ -458,7 +458,7 @@ export function PictureSetPage() {
         <Card className="mb-4">
           <CardHeader className="block">
             <CardTitle>Notes</CardTitle>
-            <CardDescription>What the set leaves out, and why.</CardDescription>
+            <CardDescription>How the engine made the set, what it found and what it left out.</CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="list-disc space-y-1 pl-5 text-sm text-pretty">

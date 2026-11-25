@@ -253,6 +253,7 @@ describe("the Pictures screen", () => {
     const dialog = await screen.findByRole("dialog", { name: "Make pictures" });
     const over = await within(dialog).findByRole("checkbox", { name: /^A cut over time/ });
     expect(over).not.toBeChecked();                                     // made only when asked
+    expect(within(dialog).queryByRole("checkbox", { name: /^The cells that set the time step/ })).toBeNull();  // 1.21
     expect(dialog).toHaveTextContent("The first cut's speed at each of its 4 written times from 0.0002 to 0.0008, "
       + "oldest first: the flow as it changes. Those split onto its processes are read as they are: none is joined for it.");
     await waitFor(() => expect(dialog).toHaveTextContent(/Needs about 0\.8\sGB of memory;/));
@@ -271,6 +272,34 @@ describe("the Pictures screen", () => {
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0]?.body).toEqual({
       kind: "pictures", params: { name: "t", time: "0.0004", kinds: "cuts,vortices,spots,times", mean: false },
+    });
+  });
+
+  it("offers the cells that set the time step on an engine at 1.21, made only when asked, and not of a mean flow", async () => {
+    const user = userEvent.setup();
+    const t = run("t", {
+      times: [0.0002, 0.0004, 0.0006], joined: [0.0002, 0.0004, 0.0006],
+      averaging: { from: 0.0003, settled: 0.0002, written: 0.0006 },
+    });
+    const { posted, asked } = listPage({ runs: [t], apiVersion: "1.21" });
+    await user.click((await screen.findAllByRole("button", { name: "Make pictures…" }))[0]!);
+    const dialog = await screen.findByRole("dialog", { name: "Make pictures" });
+    const fast = await within(dialog).findByRole("checkbox", { name: /^The cells that set the time step/ });
+    expect(fast).not.toBeChecked();                                     // made only when asked
+    expect(dialog).toHaveTextContent("The 100 cells with the highest Courant number at that written time, as a "
+      + "transient plan finds them: in red with the walls from three sides, then the three fastest places close up.");
+    await user.click(fast);
+    await waitFor(() => expect(asked.some((q) => q.includes("kinds=cuts%2Cvortices%2Cspots%2Cfastest&mean=false")))
+      .toBe(true));
+    const mean = within(dialog).getByRole("checkbox", { name: /^Its mean flow/ });
+    await user.click(mean);                                             // found from a time's own flow: not of its mean
+    expect(within(dialog).queryByRole("checkbox", { name: /^The cells that set the time step/ })).toBeNull();
+    await user.click(mean);
+    expect(within(dialog).getByRole("checkbox", { name: /^The cells that set the time step/ })).toBeChecked();
+    await user.click(within(dialog).getByRole("button", { name: "Make pictures" }));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]?.body).toEqual({
+      kind: "pictures", params: { name: "t", time: "", kinds: "cuts,vortices,spots,fastest", mean: false },
     });
   });
 
@@ -444,6 +473,28 @@ describe("a set of pictures", () => {
     expect(await screen.findByText(/^Its newest job to make it again failed: these are the pictures made before\./))
       .toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete…" })).toBeInTheDocument();
+  });
+
+  it("shows the cells that set the time step in a section of their own: from three sides, then each place", async () => {
+    const view = (v: string, words: string) => ({
+      file: `fastest/fastest_${v}.png`, kind: "fastest" as const,
+      title: `The cells that set the time step: the 100 with the highest Courant number, ${words}`,
+    });
+    const place = {
+      file: "fastest/fastest_place1.png", kind: "fastest" as const,
+      title: "Place 1 of the cells that set the time step, close up: 38 cells near (-0.0635, 0.18, 0.322) m, about "
+        + "2.6 mm across and 2.4 mm from the wall ahmed, where the flow is up to 55 m/s",
+    };
+    const note = "the cells that set the time step are the 100 with the highest Courant number at written time 2000: "
+      + "without them it could be 2.2 times as long";
+    const pictures = [view("side", "from the side"), view("top", "from above"), view("front34", "from the front"), place];
+    setPage("ahmed", "2000", { sets: [{ ...SET, kinds: ["cuts", "fastest"], notes: [note], pictures: [SET.pictures[0]!, ...pictures] }] });
+    const card = within((await screen.findByRole("heading", { name: "The cells that set the time step" })).closest("section")!);
+    expect(card.getByText(/^The cells with the highest Courant number at that written time, which set a transient/))
+      .toBeInTheDocument();
+    expect(card.getAllByRole("button").map((b) => b.textContent)).toEqual(pictures.map((p) => p.title));
+    expect(screen.getByText(note)).toBeInTheDocument();
+    expect(screen.getByText("How the engine made the set, what it found and what it left out.")).toBeInTheDocument();
   });
 
   it("shows a cut over time one written time at a time: a slider, the times before and after, and Play", async () => {

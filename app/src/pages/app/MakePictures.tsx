@@ -4,7 +4,8 @@
 // workspace; then POST /jobs (a `pictures` job) and the new job on the Jobs screen, which links its set. A time still
 // split onto a run's processes is joined first, into the run's own folder (API 1.19), and the disk this takes is said
 // first. A run with two or more written times up to the one pictured can have a cut over time too (API 1.20): the
-// first cut at each of them. The demo can't start jobs: it says so and gives the command that does the same in a
+// first cut at each of them, and, on an engine at API 1.21, the cells that set the time step, from a written time's own
+// flow (not a mean flow). The demo can't start jobs: it says so and gives the command that does the same in a
 // terminal.
 import { ImagePlus } from "lucide-react";
 import { useId, useState } from "react";
@@ -22,7 +23,8 @@ import { JOB_KIND_LABEL, isActive, type DiskPictures, type PictureKind, type Run
 import { formatInt } from "@/lib/format";
 import { DiskNote, FIELD, GB, JobDialog, Note } from "./dialogParts";
 import {
-  KINDS, MAX_TIMES, hasMeanFlow, joinsTimes, makesOverTime, overTimes, pictureTimes, picturesMemory, splitTimes,
+  FASTEST, KINDS, MAX_TIMES, drawsFastest, hasMeanFlow, joinsTimes, makesOverTime, overTimes, pictureTimes,
+  picturesMemory, splitTimes,
 } from "./pictureSets";
 import { formatTime } from "./solveStart";
 
@@ -42,8 +44,9 @@ export function MakePicturesDialog({ open, onOpenChange, name = null }: {
   );
 }
 
-/** Every kind a picture job makes, in the engine's order: those of KINDS, and a cut over time (API 1.20). */
-const ALL_KINDS: readonly PictureKind[] = [...KINDS.map((k) => k.value), "times"];
+/** Every kind a picture job makes, in the engine's order: those of KINDS, a cut over time (API 1.20) and the cells
+ * that set the time step (API 1.21). */
+const ALL_KINDS: readonly PictureKind[] = [...KINDS.map((k) => k.value), "times", "fastest"];
 
 /** What a cut over time of a run pictures: the first cut at each written time up to the one pictured, at most
  * MAX_TIMES, and how those split onto its processes are read. */
@@ -124,8 +127,11 @@ function MakePicturesForm({ name, onDone }: { name: string | null; onDone: () =>
   // a cut over time (API 1.20): the first cut at each written time up to the one pictured, of a run with two or more
   const overTime = run && makesOverTime(info.data?.apiVersion) ? overTimes(run, at || times[0] || "", withMean) : null;
   const canOverTime = overTime != null && overTime.times.length > 1;
-  // what the job is asked for: the kinds ticked, a cut over time while the run has the times for it
-  const asked = kinds.filter((k) => k !== "times" || canOverTime);
+  // the cells that set the time step (API 1.21): from a written time's own flow, so not of a mean flow
+  const canFastest = drawsFastest(info.data?.apiVersion) && !withMean;
+  // what the job is asked for: the kinds ticked, a cut over time while the run has the times for it, and the cells
+  // that set the time step while they can be drawn
+  const asked = kinds.filter((k) => (k !== "times" || canOverTime) && (k !== "fastest" || canFastest));
   const readOverTime = asked.includes("times") && overTime ? (overTime.split ? "split" : "joined") : null;
 
   const plain = chosen !== null && isPlainName(chosen);
@@ -280,6 +286,21 @@ function MakePicturesForm({ name, onDone }: { name: string | null; onDone: () =>
                   <span>
                     <span className="font-medium">A cut over time</span>
                     <span className="block text-xs text-muted-foreground">{overTimeAbout(overTime, withMean)}</span>
+                  </span>
+                </label>
+              )}
+              {canFastest && (
+                <label className="flex items-start gap-2 text-[13px]">
+                  <input type="checkbox" checked={kinds.includes("fastest")} onChange={(e) => toggle("fastest", e.target.checked)}
+                    className="mt-0.5 size-4 shrink-0 accent-primary" />
+                  <span>
+                    <span className="font-medium">{FASTEST.label}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      The 100 cells with the highest Courant number at that written time, as a transient plan finds
+                      them: in red with the walls from three sides, then the three fastest places close up. They need
+                      the time&apos;s face flux (phi) and Mesh Doctor&apos;s foamCourantCells; the set says if
+                      they aren&apos;t found.
+                    </span>
                   </span>
                 </label>
               )}

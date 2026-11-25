@@ -29,7 +29,7 @@ import tplan
 import validate
 import version
 
-API_VERSION = "1.20"
+API_VERSION = "1.21"
 PREFIX = "/api/v1"
 WRITES_MAX = solve.transient.MAX_WRITES   # the most times a stretch of a transient run writes
 MAX_BODY = 64 * 1024
@@ -749,7 +749,8 @@ _SET = {"case": dict(NAME, description="the case pictured, in the cases folder")
         "mean": {"type": "boolean",
                  "description": "of a transient run's mean flow (UMean and pMean), not of the flow at that time"},
         "kinds": {"type": "array", "items": {"enum": list(pictures.ALL_KINDS)},
-                  "description": "what it has, in order (times, a cut over time: API 1.20)"},
+                  "description": "what it has, in order (times, a cut over time: API 1.20; fastest, the cells "
+                                 "that set the time step: API 1.21)"},
         "made": {"type": ["string", "null"],
                  "description": "when it was made (UTC, ISO 8601); null while a job makes it for the first time"}}
 PICTURE_SETS = {"type": "object", "required": list(_SET) + ["count", "job"], "properties": dict(_SET, **{
@@ -956,7 +957,10 @@ JOBS = {
                    "made that is still split onto its processes is joined first, into the run's own folder, as its "
                    "solve joins the latest of each stretch (API 1.19). Asked for, a cut over time: the first cut's "
                    "speed at each written time up to the one pictured, read as they are kept; and a mean flow's cuts "
-                   "show how much the speed swings about it (API 1.20)",
+                   "show how much the speed swings about it (API 1.20). Asked for, the cells that set the time step: "
+                   "the 100 with the highest Courant number at that time, as a transient plan finds them, written "
+                   "alone by foamToVTK through links in the set's folder and drawn with the walls, from three sides "
+                   "and each of the three fastest places close up; not of a mean flow (API 1.21)",
         "params": _params({"name": dict(NAME, description="a case in the cases folder with a written result: a run "
                                                           "(GET /runs), or a case you made (GET /cases)"),
                            "time": {"type": "string", "default": "", "pattern": r"^([0-9][0-9.eE+-]*)?$",
@@ -967,11 +971,13 @@ JOBS = {
                                                    "made the run; a case you made is read as it is, split (API "
                                                    "1.19)"},
                            "kinds": {"type": "string", "default": ",".join(pictures.KINDS),
-                                     "pattern": r"^(cuts|vortices|spots|times)(,(cuts|vortices|spots|times))*$",
-                                     "description": "what to make, comma-separated: cuts, vortices, spots, and times "
-                                                    "(a cut over time: the first cut's speed at each written time up "
-                                                    "to the one pictured, at most 50 evenly picked, each read as it is "
-                                                    "kept, joined or split, none joined for it: API 1.20)"},
+                                     "pattern": "^({0})(,({0}))*$".format("|".join(pictures.ALL_KINDS)),
+                                     "description": "what to make, comma-separated: cuts, vortices, spots, times (a "
+                                                    "cut over time: the first cut's speed at each written time up to "
+                                                    "the one pictured, at most 50 evenly picked, each read as it is "
+                                                    "kept, joined or split, none joined for it: API 1.20) and fastest "
+                                                    "(the cells that set the time step, with the walls; not with "
+                                                    "mean: API 1.21)"},
                            "mean": {"type": "boolean", "default": False,
                                     "description": "a transient run's mean flow (UMean and pMean) in place of the "
                                                    "flow at that time: a time written once its averaging is on (GET "

@@ -40,6 +40,7 @@ rotated: chart those from the original case with `plot_convergence.py --drag/--d
 | `cut_views.py CASE.foam decomposed\|reconstructed OUTDIR CUTS.json "note {it}" --walls a,b [--uinf 15] [--mean]` | plane cuts from a JSON list (`cuts_example.json`), or `auto` for three made from the walls' bounds (written to OUTDIR/cuts.json), coloured by U, Cp, Cp,t; the model cut away on the camera side |
 | `vortex_views.py CASE.foam OUTDIR "3000,10000,30000" --walls a,b [--zoom PATCH] [--note ...] [--mean]` | Q-criterion iso-surfaces coloured by x-vorticity; `--selftest OUTDIR` checks the pipeline: the test vortex must come out red, its verdict in OUTDIR/selftest.json (exit 3 when it didn't pass) |
 | `pressure_spots.py CASE.foam kind OUTDIR PREFIX --walls a,b [--uinf] [--rho] [--note ...] [--mean]` | finds wall faces with Cp < -5, clusters them, prints each spot's extra force, renders the worst |
+| `fastest_cells.py CASE.foam decomposed\|reconstructed OUTDIR CELLS_DIR --walls a,b [--places places.json] [--note ...]` | the cells that set the time step (the cell set `fastestCells` that a transient plan writes, as `foamToVTK -cellSet fastestCells` writes it alone: the `*.vtk` files in CELLS_DIR) drawn red with the walls from the side, above and the front, each with a dot at its centre that keeps its size on the screen; and each place in places.json close up, with the walls' surface mesh |
 | `plot_convergence.py CASE OUTDIR PREFIX "subtitle" [--total FO] [--parts FO:Label,...] [--drag -x --down -z] [--uinf] [--rho]` | residual, total-force and per-part force charts + summary CSV and Markdown tables (python3 + matplotlib, no ParaView) |
 | `make_contact.py OUTDIR PREFIX sheet.png` | one contact sheet of many renders, for a quick look |
 
@@ -64,7 +65,12 @@ white holes (then 1).
 - Probe planes (`ResampleWithDataset`): clip on `vtkValidPointMask > 0.5`, or points inside solids show 0 m/s.
 - The reader's `MeshRegions` list is empty until `UpdatePipelineInformation()`; regions are `internalMesh` and
   `patch/<name>`.
-- 5.10 can't draw a background behind text or colour bars; keep bands of the frame clear instead (cut_views does).
+- 5.10 draws a background behind text only with the text's `ShowBorder = 'Always'` and an RGBA `BackgroundColor`
+  (fastest_cells does); none behind colour bars: keep bands of the frame clear instead (cut_views does).
+- ParaView's own OpenFOAM reader can't read a cell set. `foamToVTK -cellSet NAME -fields '()' -excludePatches
+  '(".*")' -polyhedra polyhedra -noPointValues` writes the set's cells alone (with `-parallel` on a split case, one
+  file per processor; with its patches, OpenFOAM 14 stops on a floating-point error there), which the legacy VTK
+  reader reads, polyhedra and all. Run it from a folder without a space in its path (OpenFOAM refuses the cwd).
 - Surface LIC: load the plugin by path (`LoadPlugin('/usr/lib/x86_64-linux-gnu/paraview-5.10/plugins/SurfaceLIC/SurfaceLIC.so', remote=False, ns=globals())`).
 - Case `0/` files using `#includeEtc` read as empty fields in 5.10; solver-written times are fine.
 - A background job piped through `| cut` block-buffers its log: watch `ps -C pvbatch` (RSS, %CPU) instead.

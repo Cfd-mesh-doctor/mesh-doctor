@@ -1866,7 +1866,7 @@ export interface operations {
     disk_pictures: {
         parameters: {
             query: {
-                /** @description what to make, comma-separated: cuts, vortices, spots, and times (a cut over time: the first cut's speed at each written time up to the one pictured, at most 50 evenly picked, each read as it is kept, joined or split, none joined for it: API 1.20) */
+                /** @description what to make, comma-separated: cuts, vortices, spots, times (a cut over time: the first cut's speed at each written time up to the one pictured, at most 50 evenly picked, each read as it is kept, joined or split, none joined for it: API 1.20) and fastest (the cells that set the time step, with the walls; not with mean: API 1.21) */
                 kinds?: string;
                 /** @description a transient run's mean flow (UMean and pMean) in place of the flow at that time: a time written once its averaging is on (GET /runs' averaging); its set is <time>_mean (API 1.16) */
                 mean?: boolean;
@@ -2133,7 +2133,7 @@ export interface operations {
                     kind: "pictures";
                     params: {
                         /**
-                         * @description what to make, comma-separated: cuts, vortices, spots, and times (a cut over time: the first cut's speed at each written time up to the one pictured, at most 50 evenly picked, each read as it is kept, joined or split, none joined for it: API 1.20)
+                         * @description what to make, comma-separated: cuts, vortices, spots, times (a cut over time: the first cut's speed at each written time up to the one pictured, at most 50 evenly picked, each read as it is kept, joined or split, none joined for it: API 1.20) and fastest (the cells that set the time step, with the walls; not with mean: API 1.21)
                          * @default cuts,vortices,spots
                          */
                         kinds?: string;
@@ -2610,8 +2610,8 @@ export interface operations {
                                 /** @enum {unknown} */
                                 state: "queued" | "running" | "done" | "failed" | "cancelled";
                             } | null;
-                            /** @description what it has, in order (times, a cut over time: API 1.20) */
-                            kinds: ("cuts" | "vortices" | "spots" | "times")[];
+                            /** @description what it has, in order (times, a cut over time: API 1.20; fastest, the cells that set the time step: API 1.21) */
+                            kinds: ("cuts" | "vortices" | "spots" | "times" | "fastest")[];
                             /** @description when it was made (UTC, ISO 8601); null while a job makes it for the first time */
                             made: string | null;
                             /** @description of a transient run's mean flow (UMean and pMean), not of the flow at that time */
@@ -2656,8 +2656,8 @@ export interface operations {
                     "application/json": {
                         /** @description the case pictured, in the cases folder */
                         case: string;
-                        /** @description what it has, in order (times, a cut over time: API 1.20) */
-                        kinds: ("cuts" | "vortices" | "spots" | "times")[];
+                        /** @description what it has, in order (times, a cut over time: API 1.20; fastest, the cells that set the time step: API 1.21) */
+                        kinds: ("cuts" | "vortices" | "spots" | "times" | "fastest")[];
                         /** @description when it was made (UTC, ISO 8601); null while a job makes it for the first time */
                         made: string | null;
                         /** @description of a transient run's mean flow (UMean and pMean), not of the flow at that time */
@@ -2668,7 +2668,7 @@ export interface operations {
                             /** @description <kind>/<file>, which GET /pictures/{case}/{set}/{kind}/{file} serves */
                             file: string;
                             /** @enum {unknown} */
-                            kind: "cuts" | "vortices" | "spots" | "times";
+                            kind: "cuts" | "vortices" | "spots" | "times" | "fastest";
                             /** @description the written time a picture of a cut over time (times) shows, as its folder names it; its set lists them oldest first (API 1.20) */
                             time?: string;
                             /** @description what it shows */
@@ -2699,7 +2699,7 @@ export interface operations {
             path: {
                 case: string;
                 file: string;
-                kind: "cuts" | "vortices" | "spots" | "times";
+                kind: "cuts" | "vortices" | "spots" | "times" | "fastest";
                 set: string;
             };
             cookie?: never;

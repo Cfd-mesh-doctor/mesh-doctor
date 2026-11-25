@@ -4162,7 +4162,15 @@ if script == "pressure_spots.py" and os.environ.get("MD_TEST_NO_SPOTS"):
     sys.exit(0)
 names = {"cut_views.py": ["c1_side_centre_U", "c1_side_centre_Cpt"], "vortex_views.py": ["Q210000_rear34",
          "Q21000_rear34", "Q21000_top"], "pressure_spots.py": ["spots_Cp_spot_closeup", "spots_Cp_spot_normal",
-         "spots_Cp_spot_side"]}[script]
+         "spots_Cp_spot_side"]}.get(script, [])
+if script == "fastest_cells.py":                                # the cells that set the time step: views, places
+    import json
+    with open(a[a.index("--places") + 1]) as f:
+        places = json.load(f)["places"]
+    with open(os.path.join(os.path.dirname(view), "seen"), "a") as f:
+        f.write("cells: " + " ".join(sorted(os.listdir(a[5]))) + "\\n")
+    names = ["fastest_side", "fastest_top", "fastest_front34"]
+    names += ["fastest_place%d" % (i + 1) for i in range(len(places))]
 if script == "cut_views.py" and a[5] == "auto":
     import json
     with open(os.path.join(out, "cuts.json"), "w") as f:
@@ -4617,6 +4625,193 @@ for n in names:
         os.makedirs(out + ".new")                                         # one cut short: its mark goes in first
         open(os.path.join(out + ".new", self.p.MARK), "w").close()
         self.assertEqual(len(self.p.make(case, out, "200", ("vortices",))["pictures"]), 3)
+
+    FOAM_TO_VTK = """#!/usr/bin/env python3
+import os, sys
+a = sys.argv[1:]
+log = os.environ["MD_TEST_VTK_LOG"]
+with open(log, "a") as f:
+    f.write("foamToVTK " + " ".join(a) + "\\n")
+if os.environ.get("MD_TEST_VTK") == "fail":
+    sys.exit(1)
+roots = sorted(d for d in os.listdir(".") if d.startswith("processor")) if "-parallel" in a else ["."]
+for r in roots:
+    poly = os.path.join(r, "constant", "polyMesh")
+    s = os.path.join(poly, "sets", "fastestCells")
+    with open(s) as f:
+        n = f.read().split("\\n\\n", 1)[1].split()[0]
+    with open(log, "a") as f:
+        f.write("%s: %s cells, %s; %s; %s\\n" % (r, n, "a link" if os.path.islink(s) else "not a link",
+                                                 " ".join(sorted(os.listdir(poly))),
+                                                 " ".join(sorted(os.listdir(os.path.join(poly, "sets"))))))
+    os.makedirs(os.path.join(r, "VTK"), exist_ok=True)
+    open(os.path.join(r, "VTK", "fastestCells_0.vtk"), "w").close()
+    if r != ".":
+        os.makedirs("VTK", exist_ok=True)
+        os.symlink("../%s/VTK/fastestCells_0.vtk" % r, os.path.join("VTK", "%s_fastestCells_0.vtk" % r))
+"""
+    MPIRUN = """#!/usr/bin/env python3
+import os, sys
+a = sys.argv[1:]
+with open(os.environ["MD_TEST_VTK_LOG"], "a") as f:
+    f.write("mpirun " + " ".join(a[:a.index("foamToVTK")]) + "\\n")
+os.execvp("foamToVTK", a[a.index("foamToVTK"):])
+"""
+    REGIONS = [{"nCells": 2, "centre": [-0.0635, 0.18, 0.322], "bbox": [[-0.11, 0.15, 0.28], [-0.01, 0.2, 0.35]],
+                "h": 0.00264, "maxRate": 54000.0, "wall": "ahmed", "wallDist": 0.00238, "speed": 54.9},
+               {"nCells": 1, "centre": [-0.93, 0.19, 0.3], "bbox": [[-0.99, 0.17, 0.27], [-0.83, 0.21, 0.35]],
+                "h": 0.0022, "maxRate": 44000.0, "wall": None, "wallDist": None, "speed": None}]
+
+    def foam_vtk(self):
+        """OpenFOAM's environment: stand-ins for foamToVTK, which writes an empty VTK file of the cell set
+        fastestCells it reads, for the whole mesh or, with -parallel, for each processor folder (with a link to it in
+        VTK/, as the real one makes), or with MD_TEST_VTK=fail stops; and for mpirun, which runs the command once.
+        Each writes what it was given, and what it read, in the file this returns."""
+        foam, log = os.path.join(self.tmp, "foamvtk"), os.path.join(self.tmp, "vtk.log")
+        os.makedirs(foam)
+        for name, text in (("foamToVTK", self.FOAM_TO_VTK), ("mpirun", self.MPIRUN)):
+            with open(os.path.join(foam, name), "w") as f:
+                f.write(text)
+            os.chmod(os.path.join(foam, name), 0o755)
+        bashrc = os.path.join(self.tmp, "bashrc_vtk")
+        with open(bashrc, "w") as f:
+            f.write(f"export WM_PROJECT_DIR=/nowhere\nexport MD_TEST_VTK_LOG={log}\nexport PATH={foam}:$PATH\n")
+        patch = mock.patch.dict(os.environ, {"MESHDOCTOR_FOAM_BASHRC": bashrc})
+        patch.start()
+        self.addCleanup(patch.stop)
+        return log
+
+    def fastest_plan(self, cells=((0, 3), (0, 9)), procs=1, gain=1.6):
+        """tplan.plan stood in: the transient plan of the case at the time asked, its fastest `cells` ([processor,
+        cell]) on `procs` processes, without which the time step could be `gain` times as long.  Each (case, time)
+        asked goes in self.planned."""
+        self.planned = []
+
+        def plan(case, t):
+            self.planned.append((case, t))
+            return {"case": "ahmedP", "time": t, "processors": procs, "decomposed": procs > 1,
+                    "tool": "foamCourantCells", "courantPerSecond": {"max": 54000.0 * gain, "withoutTop": 54000.0},
+                    "regions": [dict(g) for g in self.REGIONS], "fastestCells": [list(c) for c in cells]}
+        patch = mock.patch.object(self.p.tplan, "plan", side_effect=plan)
+        self.plan = patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_the_cells_that_set_the_time_step_are_drawn_with_the_walls(self):
+        case = self.case(times=("100", "200"))
+        open(os.path.join(case, "200", "phi"), "w").close()
+        os.makedirs(os.path.join(case, "constant", "polyMesh", "sets"))
+        open(os.path.join(case, "constant", "polyMesh", "sets", "mine"), "w").close()      # a set of the case's own
+        log, before, out = self.foam_vtk(), self.files(case), os.path.join(self.tmp, "set")
+        self.fastest_plan()
+        self.assertEqual(self.p.how_many(case, ("fastest",), "200"), 3 + self.p.PLACES)
+        doc = self.p.make(case, out, "200", ("cuts", "fastest"))
+        self.assertEqual(self.planned, [(os.path.abspath(case), "200")])                 # at the time pictured
+        fast = "The cells that set the time step: the 2 with the highest Courant number, "
+        self.assertEqual([(p["file"], p["title"]) for p in doc["pictures"] if p["kind"] == "fastest"], [
+            ("fastest/fastest_side.png", fast + "from the side"), ("fastest/fastest_top.png", fast + "from above"),
+            ("fastest/fastest_front34.png", fast + "from the front"),
+            ("fastest/fastest_place1.png", "Place 1 of the cells that set the time step, close up: 2 cells near "
+                                           "(-0.0635, 0.18, 0.322) m, about 2.6 mm across and 2.4 mm from the wall "
+                                           "ahmed, where the flow is up to 55 m/s"),
+            ("fastest/fastest_place2.png", "Place 2 of the cells that set the time step, close up: 1 cell near "
+                                           "(-0.93, 0.19, 0.3) m, about 2.2 mm across")])        # views, then places
+        self.assertEqual(doc["notes"], ["the cells that set the time step are the 2 with the highest Courant number "
+                                        "at written time 200: without them it could be 1.6 times as long"])
+        with open(log) as f:                                # the cells alone, on the whole mesh, read through links
+            self.assertEqual(f.read().splitlines(), [
+                "foamToVTK -cellSet fastestCells -fields () -excludePatches (\".*\") -polyhedra polyhedra "
+                "-noPointValues -noFaceZones -noFunctionObjects", ".: 2 cells, a link; boundary sets; fastestCells"])
+        with open(os.path.join(out, "seen")) as f:          # drawn with the walls, which ParaView reads as for a cut
+            self.assertEqual(f.read().splitlines()[-2:], [
+                "fastest_cells.py /usr/lib/python3/dist-packages 200 case.foam constant system",
+                "cells: fastestCells_0.vtk"])
+        self.assertEqual(sorted(os.listdir(out)),             # and nothing of it left but its pictures and their words
+                         sorted([self.p.MARK, "cuts", "fastest", self.p.FAST_DOC, "pictures.json", "seen"]))
+        self.assertEqual(self.files(case), before)            # nothing written in the case
+        self.assertEqual((self.p.listing(case, out), self.p._shown(doc)), (doc["pictures"], doc["pictures"]))
+        cmds, _ = self.p.plan(case, "/view", "/set", ("fastest",), "pvbatch", fastest=("/vtk", "/set/fastest.json"))
+        self.assertEqual(cmds["fastest"][2:], [os.path.join(self.p.SCRIPTS, "fastest_cells.py"), "/view/case.foam",
+                                               "reconstructed", "/set/fastest", "/vtk", "--walls", "ahmed", "--places",
+                                               "/set/fastest.json", "--note", "ahmedP, written time {it}"])
+        self.assertEqual(self.p.plan(case, "/view", "/set", ("fastest",), "pvbatch")[0], {})    # none found: none
+        self.assertEqual(self.p.plan(case, "/view", "/set", ("fastest",), "pvbatch", mean=True,
+                                     fastest=("/vtk", "/doc"))[0], {})                       # nor of a mean flow
+
+    def test_the_cells_that_set_the_time_step_of_a_split_case_are_written_on_each_process(self):
+        case = self.case(times=())
+        self.split(case, ("0.0006",))
+        for n in range(2):
+            open(os.path.join(case, f"processor{n}", "0.0006", "phi"), "w").close()
+        log, before, out = self.foam_vtk(), self.files(case), os.path.join(self.tmp, "set")
+        self.fastest_plan(cells=((1, 4), (0, 1), (1, 2)), procs=2, gain=1.04)
+        doc = self.p.make(case, out, "0.0006", ("fastest",))
+        self.assertEqual(doc["notes"], [
+            "written time 0.0006 is split onto its 2 processes, so ParaView read it as it is, split: a case you made "
+            "is only read",
+            "the cells that set the time step are the 3 with the highest Courant number at written time 0.0006: "
+            "leaving them out would hardly change it",
+            "the cells that set the time step were written on each of its 2 processes: the case has no whole mesh "
+            "(constant/polyMesh)"])
+        with open(log) as f:                                # each processor's own set, in parallel
+            self.assertEqual(f.read().splitlines(), [
+                "mpirun --oversubscribe -np 2",
+                "foamToVTK -parallel -cellSet fastestCells -fields () -excludePatches (\".*\") -polyhedra polyhedra "
+                "-noPointValues -noFaceZones -noFunctionObjects",
+                "processor0: 1 cells, a link; sets; fastestCells", "processor1: 2 cells, a link; sets; fastestCells"])
+        with open(os.path.join(out, "seen")) as f:
+            self.assertEqual(f.read().splitlines(), [
+                "fastest_cells.py /usr/lib/python3/dist-packages case.foam constant processor0 processor1 system "
+                "processor0:0.0006,constant processor1:0.0006,constant split",
+                "cells: processor0_fastestCells_0.vtk processor1_fastestCells_0.vtk"])
+        self.assertEqual(len(doc["pictures"]), 5)
+        self.assertEqual(self.files(case), before)            # nothing written in the case
+
+    def test_the_cells_that_set_the_time_step_say_why_they_arent_drawn(self):
+        case, out = self.case(times=("200",)), os.path.join(self.tmp, "set")
+        self.foam_vtk()
+        self.fastest_plan()
+        doc = self.p.make(case, out, "200", ("spots", "fastest"))
+        self.assertEqual((doc["notes"], self.planned), (["no cells that set the time step: written time 200 has no "
+                                                         "face flux (phi) to find them from"], []))
+        self.assertEqual([p["kind"] for p in doc["pictures"]], ["spots"] * 3)     # the rest of the set all the same
+        open(os.path.join(case, "200", "phi"), "w").close()
+        with mock.patch.dict(os.environ, {"MD_TEST_VTK": "fail"}):
+            doc = self.p.make(case, out, "200", ("spots", "fastest"))
+        self.assertEqual(doc["notes"][1:], ["no pictures of the cells that set the time step: foamToVTK didn't write "
+                                            "them (exit 1); the job's log says why"])
+        self.assertEqual(sorted(os.listdir(out)), sorted([self.p.MARK, "pictures.json", "seen", "spots"]))
+        for said, why in ((RuntimeError("foamCourantCells failed (exit 1): no face flux"),
+                           "the transient plan that finds them stopped; the job's log says why"),
+                          (MemoryError("a transient plan of 1,000 cells needs about 0.5 GB; 0.2 GB free"),
+                           "a transient plan of 1,000 cells needs about 0.5 GB; 0.2 GB free"),
+                          (lambda case, t: {"fastestCells": None},
+                           "Mesh Doctor's foamCourantCells isn't built (./Allwmake in its folder), and OpenFOAM's "
+                           "CourantNo finds only their places, not the cells")):
+            self.plan.side_effect = said
+            doc = self.p.make(case, out, "200", ("spots", "fastest"))
+            self.assertEqual(doc["notes"], ["no cells that set the time step: " + why])
+        self.assertIn("pictures: foamCourantCells failed (exit 1): no face flux\n", sys.stdout.getvalue())  # its log
+        self.assertEqual(self.p.size_words(0.0999), "10 cm")
+        self.assertEqual([self.p.size_words(m) for m in (0.00085, 0.045, 1.234)], ["0.85 mm", "4.5 cm", "1.2 m"])
+
+    def test_the_cells_that_set_the_time_step_are_a_kind_of_their_own(self):
+        import api_v1, schema
+        case = self.case(times=("0.0003", "0.0006"), mean={"0.0006": "0.0003"})
+        ws, launched, ram, post = self.jobs_here(case)
+        st, job, _ = post({"name": "ahmedP", "kinds": "fastest,cuts"})
+        self.assertEqual((st, job["params"]["kinds"], ram), (202, ["fastest", "cuts"], [(case, "pictures")]))
+        self.assertEqual(launched[0][launched[0].index("--kinds") + 1], "fastest,cuts")
+        st, err, _ = post({"name": "ahmedP", "kinds": "cuts,fastest", "mean": True})
+        self.assertEqual((st, err["error"]["message"], len(launched)),
+                         (400, "the cells that set the time step are found from a written time's own flow, not from "
+                               "its mean flow: picture them without the mean flow", 1))
+        st, err, _ = api_v1.handle("GET", "/api/v1/disk/pictures", {"name": "ahmedP", "kinds": "fastest",
+                                                                     "mean": "true"})
+        self.assertEqual((st, err["error"]["code"]), (400, "bad-request"))
+        params = api_v1.JOBS["pictures"]["params"]
+        self.assertEqual(schema.check({"name": "ahmed", "kinds": "times,fastest"}, params), [])
+        self.assertNotEqual(schema.check({"name": "ahmed", "kinds": "fastest2"}, params), [])
+        self.assertEqual(api_v1.API_VERSION, "1.21")
 
     def jobs_here(self, case):
         """POST /jobs of picture jobs of `case`, launched nowhere: (the workspace, the commands launched, the memory
