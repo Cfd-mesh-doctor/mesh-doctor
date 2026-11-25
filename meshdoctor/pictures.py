@@ -188,14 +188,18 @@ def set_name(at, mean=False):
     return at + ("_mean" if mean else "")
 
 
-def boundary(case):
-    """{patch: (its type, its groups)} from constant/polyMesh/boundary."""
-    text = transient.blank(transient.read(os.path.join(case, "constant", "polyMesh", "boundary")) or "")
+def boundary(case, proc=None):
+    """{patch: (its type, its groups)} from the whole mesh's constant/polyMesh/boundary, or with `proc`, that processor
+    folder's (a case split onto its processes: it lists every patch of the whole mesh), less its processor patches."""
+    where = (case,) if proc is None else (case, proc)
+    text = transient.blank(transient.read(os.path.join(*where, "constant", "polyMesh", "boundary")) or "")
     out = {}
     for name, body in re.findall(r"([^\s{}();]+)\s*\{([^{}]*)\}", text):
         if name != "FoamFile":
             kind = re.search(r"\btype\s+(\w+)\s*;", body)
             groups = re.search(r"\binGroups\s+(?:List<word>\s*)?\d*\s*\(([^)]*)\)", body)
+            if kind and kind.group(1).startswith("processor"):     # processor, processorCyclic: between processes
+                continue
             out[name] = (kind.group(1) if kind else "", groups.group(1).split() if groups else [])
     return out
 
@@ -220,22 +224,32 @@ def _patches(texts, names):
     return out
 
 
-def walls(case, total=None):
-    """The model's wall patches: the `patches` of its total force group's function object (caseinfo.describe's
-    `total`: of its force history, the group with the most drag), else of every forces or forceCoeffs function
-    object (a case without its force history, as a copy may be), in system/controlDict or system/functions; groups
-    and patterns turned into the boundary's patches; [] when there are none."""
+def named(case, total=None):
+    """The patches, groups or patterns that name the model: the `patches` of its total force group's function object
+    (caseinfo.describe's `total`: of its force history, the group with the most drag), else of every forces or
+    forceCoeffs function object (a case without its force history, as a copy may be), in system/controlDict or
+    system/functions."""
     total = total or caseinfo.describe(case)["total"]
     texts = [transient.blank(transient.read(os.path.join(case, "system", f)) or "")
              for f in ("controlDict", "functions")]
-    named = _patches(texts, [total]) if total else []
-    if not named:
-        named = _patches(texts, [m.group(1) for t in texts for m in FORCE_OBJECT.finditer(t)])
-    b, out = boundary(case), []
-    for w in named:
-        hit = [p for p, (_, g) in b.items() if p == w or w in g] or [p for p in b if _fits(w, p)]
-        out += [p for p in hit if p not in out]
-    return out
+    out = _patches(texts, [total]) if total else []
+    return out or _patches(texts, [m.group(1) for t in texts for m in FORCE_OBJECT.finditer(t)])
+
+
+def walls(case, total=None, split=False):
+    """The model's wall patches: what names it (named()), groups and patterns turned into the patches of the boundary
+    of the mesh its time is read on: with `split`, each processor folder's (as processor0's lists them), else the whole
+    mesh's; else of the other one when that has none of them (a case split onto its processes may have no whole mesh,
+    or only the background mesh it was meshed from in parallel); [] when there are none."""
+    names, procs = named(case, total), processors(case)
+    for proc in ([procs[0]] if procs and split else []) + [None] + ([procs[0]] if procs and not split else []):
+        b, out = boundary(case, proc), []
+        for w in names:
+            hit = [p for p, (_, g) in b.items() if p == w or w in g] or [p for p in b if _fits(w, p)]
+            out += [p for p in hit if p not in out]
+        if out:
+            return out
+    return []
 
 
 def q_levels(uinf):
@@ -251,7 +265,8 @@ def q_levels(uinf):
 def why_not(case, at=None, mean=False):
     """Why this case (its mean flow, with `mean`) can't be pictured, as (code, message) naming no folders, or None."""
     name = os.path.basename(os.path.normpath(case))
-    have = list(kept(case))
+    how_kept = kept(case)
+    have = list(how_kept)
     if not have:
         return "not-ready", (f"{name} has no written result to picture (a time with U and p, on its whole mesh or "
                              "split onto its processes): solve it first")
@@ -272,7 +287,12 @@ def why_not(case, at=None, mean=False):
                              "cameras need it toward -x, with z up")
     if not d["Uinf"]:
         return "not-ready", f"{name}'s free-stream speed isn't found (its 0/U), which the pictures' colours need"
-    if not walls(case, d["total"]):
+    if not walls(case, d["total"], how_kept.get(at or latest(case, mean)) == "split"):
+        names = named(case, d["total"])
+        if names:
+            return "not-ready", (f"{name}'s model isn't found: its force function objects name "
+                                 f"{', '.join(names[:4])}, and its mesh has no such patch (in its "
+                                 "constant/polyMesh/boundary, or processor0's when it is split onto its processes)")
         return "not-ready", (f"{name}'s model isn't found: the pictures take its walls from the patches of its "
                              "force function objects (forces or forceCoeffs), and it has none")
     if not selfcheck.paraview()[1]:
@@ -356,7 +376,7 @@ def plan(case, view, out, kinds, pvbatch, mean=False, since=None, split=False, o
     have none."""
     read = "decomposed" if split else "reconstructed"
     d = caseinfo.describe(case)
-    name, w, uinf = os.path.basename(os.path.normpath(case)), ",".join(walls(case, d["total"])), d["Uinf"]
+    name, w, uinf = os.path.basename(os.path.normpath(case)), ",".join(walls(case, d["total"], split)), d["Uinf"]
     foam, run, cmds, notes = os.path.join(view, "case.foam"), [pvbatch, "--force-offscreen-rendering"], {}, []
     note = f"{name}, written time {{it}}"
     if mean:

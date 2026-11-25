@@ -223,16 +223,29 @@ def frame(b, d, up, pad=1.03):
     V.CameraPosition = [fc[k] + 20.0 * d[k] for k in range(3)]
 
 
+def symmetry_patches():
+    """The symmetry patches of the mesh the time is read on: processor0's boundary for a case read split (it lists
+    every patch of the whole mesh), the whole mesh's otherwise, each falling back to the other when it has none (a
+    case split onto its processes may have no whole mesh, or only the background mesh it was meshed from)."""
+    base = os.path.dirname(os.path.abspath(CASE))
+    places = [os.path.join(base, 'processor0'), base]
+    for where in places if KIND == 'decomposed' else places[::-1]:
+        try:
+            with open(os.path.join(where, 'constant', 'polyMesh', 'boundary')) as f:
+                text = f.read()
+        except OSError:
+            continue
+        names = re.findall(r'([^\s{}();]+)\s*\{[^{}]*\btype\s+(?:symmetryPlane|symmetry)\s*;', text)
+        if names:
+            return names
+    return []
+
+
 def symmetry_at(b):
-    """A half model's symmetry plane: the y of a symmetry patch of the case lying flat on one side of the model's
-    bounds b; None for a whole model."""
-    try:
-        with open(os.path.join(os.path.dirname(CASE), 'constant', 'polyMesh', 'boundary')) as f:
-            text = f.read()
-    except OSError:
-        return None
+    """A half model's symmetry plane: the y of a symmetry patch of the case (symmetry_patches) lying flat on one side
+    of the model's bounds b; None for a whole model."""
     span = b[3] - b[2]
-    for name in re.findall(r'([^\s{}();]+)\s*\{[^{}]*\btype\s+(?:symmetryPlane|symmetry)\s*;', text):
+    for name in symmetry_patches():
         s = reader(['patch/' + name], [])
         s.UpdatePipeline(TIME)
         sb = s.GetDataInformation().GetBounds()

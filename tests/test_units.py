@@ -4296,6 +4296,43 @@ for n in names:
         os.remove(os.path.join(case, "150", jobs.JOINING))
         self.assertEqual((self.p.times(case), solve.times(case)[1]), (["100", "150"], [100, 150]))
 
+    def test_the_walls_of_a_split_case_come_from_the_mesh_its_time_is_read_on(self):
+        """item 263: a case split onto its processes may have no whole mesh, or only the background mesh it was meshed
+        from in parallel: its walls are then in its processor folders' boundary (processor0's lists them all)."""
+        case = self.case(times=("100",))
+        self.split(case, ("100", "150"))
+        poly = os.path.join(case, "constant", "polyMesh", "boundary")
+        with open(poly) as f:
+            whole = f.read()
+        with open(os.path.join(case, "processor0", "constant", "polyMesh", "boundary"), "w") as f:
+            f.write(whole.replace("3\n(\n", "4\n(\n").replace(")\n", "    procBoundary0to1\n    {\n        type "
+                                                                 "processor;\n        inGroups 1(processor);\n"
+                                                                 "    }\n)\n"))
+        os.remove(poly)                                                 # no whole mesh
+        self.assertEqual(self.p.boundary(case), {})
+        self.assertEqual(self.p.walls(case), ["ahmed"])                 # from processor0's
+        self.assertEqual(self.p.walls(case, split=True), ["ahmed"])
+        self.assertIsNone(self.p.why_not(case))
+        cmds, _ = self.p.plan(case, "/view", os.path.join(self.tmp, "set"), ("spots",), "pvbatch", split=True)
+        self.assertEqual(cmds["spots"][cmds["spots"].index("--walls") + 1], "ahmed")
+        with open(poly, "w") as f:                                      # only the background mesh, with no model
+            f.write("FoamFile\n{\n    class polyBoundaryMesh;\n}\n2\n(\n    inlet\n    {\n        type patch;\n"
+                    "    }\n    walls\n    {\n        type wall;\n        inGroups 1(wall);\n    }\n)\n")
+        self.assertEqual((self.p.walls(case), self.p.walls(case, split=True)), (["ahmed"], ["ahmed"]))
+        control = os.path.join(case, "system", "controlDict")
+        with open(control) as f:
+            text = f.read()
+        with open(control, "w") as f:                                   # a pattern: never a processor patch
+            f.write(text.replace("patches (ahmedGroup);", 'patches (".*");'))
+        self.assertEqual(self.p.walls(case, split=True), ["inlet", "ahmed", "ground"])
+        self.assertEqual(self.p.walls(case), ["inlet", "walls"])        # the whole mesh's first, for a time read whole
+        with open(control, "w") as f:                                   # named, but no such patch anywhere
+            f.write(text.replace("patches (ahmedGroup);", "patches (wingGroup body);"))
+        self.assertEqual(self.p.why_not(case), ("not-ready", "ahmedP's model isn't found: its force function objects "
+                                                "name wingGroup, body, and its mesh has no such patch (in its "
+                                                "constant/polyMesh/boundary, or processor0's when it is split onto its "
+                                                "processes)"))
+
     def test_a_case_you_made_is_read_split_through_links_of_its_own(self):
         case = self.case(times=("100",))
         self.split(case, ("100", "150"), procs=3)
