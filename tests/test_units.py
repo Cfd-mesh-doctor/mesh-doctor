@@ -801,6 +801,67 @@ class ResultsTest(unittest.TestCase):
                                                 "are in different units (iterations and seconds of flow): leave from "
                                                 "and to out, and each is averaged over its own judge's window")))
 
+    def test_each_run_of_an_ab_test_has_its_force_history_and_a_reused_run_is_found(self):
+        import api_v1, compare
+        drag = lambda t: 50 + 0.5 * math.sin(t / 7)                                   # noqa: E731
+        work = os.path.join(self.d, "work")
+
+        def run(folder, extra):
+            os.makedirs(os.path.join(folder, "system"))
+            with open(os.path.join(folder, "system", "controlDict"), "w") as f:
+                f.write(RESULTS_CONTROL)
+            write_steady_run(folder, 300, lambda t: 1e-4, lambda t: drag(t) + extra)
+
+        def get(side, name="wing-fix"):
+            return api_v1.handle("GET", f"/api/v1/abtests/{name}/forces", {"side": side} if side else {})
+        top = os.path.join(work, "wing-fix_ab")
+        run(os.path.join(top, "base"), 0.0)
+        run(os.path.join(top, "fixed"), 0.1)
+        # each run's, as a case's force history is, named as its comparison names the run
+        st, base, _ = get("base")
+        self.assertEqual(st, 200, base)
+        st, fixed, _ = get("fixed")
+        self.assertEqual((st, base["case"], fixed["case"], fixed["transient"], fixed["vertical"]),
+                         (200, "wing-fix (original mesh)", "wing-fix (repaired mesh)", False, "downforce"))
+        self.assertEqual(base, json.loads(json.dumps(self.r.history(os.path.join(top, "base"),
+                                                                    "wing-fix (original mesh)"))))
+        g = fixed["groups"][0]
+        self.assertEqual((g["name"], g["total"], g["n"], g["t"][0], g["t"][-1]), ("body", True, 300, 1, 300))
+        self.assertAlmostEqual(g["drag"][0], drag(1) + 0.1)
+        self.assertEqual(api_v1.openapi()["paths"]["/abtests/{name}/forces"]["get"]["operationId"], "abtest_forces")
+        # a test of solver settings on one mesh: its settings' run and the variant's
+        with open(os.path.join(top, "ab_result.json"), "w") as f:
+            json.dump({"fixedName": None, "variant": "relax"}, f)
+        self.assertEqual(get("fixed")[1]["case"], "wing-fix (relax)")
+        # refusals, naming no folders: no side, another side, a bad name, no such test, a run with no forces yet
+        shutil.rmtree(os.path.join(top, "fixed", "postProcessing"))
+        for (st, err, _), code in [(get(None), 400), (get("both"), 400), (get("base", ".x"), 400),
+                                   (get("base", "nope"), 404), (get("fixed"), 409)]:
+            self.assertEqual(st, code, err)
+            self.assertNotIn(self.d, err["error"]["message"])
+        self.assertEqual(get("fixed")[1]["error"]["message"], "wing-fix (relax) has no force history yet: its forces "
+                         "or forceCoeffs function objects write one, in postProcessing, as it solves")
+        self.assertEqual(compare.ab_forces("wing-fix", "both")[1][0], "bad-request")
+        self.assertEqual(compare.ab_forces("../x", "base")[1], ("bad-request", "bad A/B test name"))
+        # a test made with --base-from keeps only the forces of the earlier test's original-mesh run it reused: that run
+        # is its base, for its force history, its judge and its comparison
+        top2 = os.path.join(work, "wing-fix2_ab")
+        os.makedirs(os.path.join(top2, "base", "postProcessing"))
+        run(os.path.join(top2, "fixed"), 0.2)
+        self.assertIsNone(compare.ab_run("wing-fix2", "base"))
+        self.assertEqual(compare.of(abtest="wing-fix2")[1], ("not-found", "no A/B test wing-fix2 with both its runs"))
+        self.schema.write(os.path.join(top2, "ab_result.json"), {"baseReusedFrom": top}, "abtest")
+        self.assertEqual(compare.ab_run("wing-fix2", "base"), os.path.join(top, "base"))
+        st, base2, _ = get("base", "wing-fix2")
+        self.assertEqual((st, base2["case"], base2["groups"]), (200, "wing-fix2 (original mesh)", base["groups"]))
+        doc, why = compare.of(abtest="wing-fix2")
+        self.assertIsNone(why)
+        self.assertEqual((doc["a"]["case"], doc["b"]["case"]), ("wing-fix2 (original mesh)", "wing-fix2 (repaired mesh)"))
+        self.assertAlmostEqual(doc["groups"][0]["drag"]["diff"], 0.2)
+        st, judged, _ = api_v1.handle("GET", "/api/v1/abtests/wing-fix2/judge", {"side": "base"})
+        self.assertEqual((st, judged["run"]), (200, "wing-fix_ab/base"))
+        self.assertIsNone(compare.ab_run("wing-fix2", "nope"))                  # only base is ever reused
+
     def test_groups_go_together_by_name_whichever_is_each_ones_total(self):
         import compare
         self.run_with_wing(600, lambda t: 50.0)

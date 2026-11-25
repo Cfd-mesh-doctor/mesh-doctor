@@ -339,6 +339,19 @@ export function useForceHistory(name: string) {
   });
 }
 
+/** One run of an A/B test's force history for its charts (GET /abtests/{name}/forces, API 1.26): its original mesh's
+ * (base) or its repaired mesh's (fixed). Every 15 s while it answers, as a case's is; a refusal (an engine before API
+ * 1.26, no such run, no forces yet) isn't asked again. */
+export function useAbtestForces(name: string, side: "base" | "fixed") {
+  const { transport } = useEngine();
+  return useQuery<ForceHistory>({
+    queryKey: [transport?.scope, "abtest-forces", name, side],
+    queryFn: transport ? ({ signal }) => api.abtestForces(transport, name, side, signal) : skipToken,
+    retry: false,
+    refetchInterval: (q) => (q.state.status === "error" ? false : IDLE_POLL_MS),
+  });
+}
+
 /** Two runs' results compared over the same window (GET /compare, API 1.25), every 15 s while it answers, as their
  * results are; nothing is asked until two cases, or an A/B test, are named. While another window of the same two is
  * asked for, the last answer shows (isPlaceholderData), never another pair's. A refusal (no such case, two it won't

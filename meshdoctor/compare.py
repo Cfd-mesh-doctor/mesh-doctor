@@ -7,7 +7,8 @@
 
 <a> and <b> are cases in the cases folder with a force history (runs Mesh Doctor solved, or cases you solved
 yourself), or their folders; --abtest compares an A/B test's two runs: its original mesh's as a, its repaired mesh's
-as b (of a test of solver settings on one mesh: its settings' run as a, the variant's as b).  They are only read.
+as b (of a test of solver settings on one mesh: its settings' run as a, the variant's as b; of a test that reused an
+earlier test's original-mesh run, with --base-from, that run as a).  They are only read.
 
 The window is the same for both: up to the shorter run's end (or --to), from the later of their judges' starts (or
 --from), each as results.py averages it.  Two runs that aren't both steady or both transient can't share one (its
@@ -23,13 +24,15 @@ also says whether it moves less between the two meshes than it swings (the large
 test of mesh independence.  Plain warnings: a design comparison's meshes more than CELLS_SAME apart in cells, a half
 model against a whole one, vertical forces that point opposite ways, a run still drifting, too few values to judge,
 and groups only one of them has.
-GET /api/v1/compare?a=&b= (or ?abtest=) answers the same.
+GET /api/v1/compare?a=&b= (or ?abtest=) answers the same, and GET /api/v1/abtests/{name}/forces?side=base|fixed
+gives each run of an A/B test its force history for charts, as GET /api/v1/results/{case}/forces gives a case's.
 """
 import argparse, json, math, os, sys
 
 import caseinfo
 import prog
 import results
+import schema
 import tplan
 
 CELLS_SAME = 0.02    # a design comparison's meshes: cells within 2 % of each other (the cfd-results skill's 1 to 2 %)
@@ -192,6 +195,51 @@ def ab_names(abtest, result):
     return f"{abtest} (original mesh)", f"{abtest} (repaired mesh{f', {variant}' if variant else ''})"
 
 
+def reused_base(test):
+    """The A/B test folder (its name in the workspace) whose original-mesh run the test in folder `test` reused
+    (--base-from), if any.  Only its folder name is taken from the file, so the answer stays in the workspace."""
+    import md_api
+    try:
+        prev = schema.read(os.path.join(md_api.md_dir(), test, "ab_result.json"), "abtest").get("baseReusedFrom")
+    except (OSError, ValueError):
+        return None
+    prev = os.path.basename(str(prev or "").rstrip("/"))
+    return prev if prev.endswith("_ab") and md_api.SAFE.match(prev[:-3]) and prev != test else None
+
+
+def ab_run(abtest, side):
+    """The folder of A/B test `abtest`'s run on `side`, or None while it has none: base, its original mesh's (of a
+    test of solver settings on one mesh, its settings'); fixed, its repaired mesh's (or the variant's).  A test made
+    with --base-from keeps only the forces of the earlier test's original-mesh run it reused: that run is its base."""
+    import md_api
+
+    def is_run(test):
+        return os.path.isfile(os.path.join(md_api.md_dir(), test, side, "system", "controlDict"))
+    test = abtest + "_ab"
+    if side == "base" and not is_run(test):
+        test = reused_base(test) or test
+    return os.path.join(md_api.md_dir(), test, side) if is_run(test) else None
+
+
+def ab_forces(abtest, side):
+    """GET /abtests/{name}/forces: (the force history of A/B test `abtest`'s run on `side` (base or fixed), as
+    results.history gives a case's, named as its comparison names that run, None), or (None, (code, message)) naming
+    no folders."""
+    import md_api
+    if not md_api.SAFE.match(abtest):
+        return None, ("bad-request", "bad A/B test name")
+    if side not in ("base", "fixed"):
+        return None, ("bad-request", "side is base (the original mesh's run) or fixed (the repaired mesh's)")
+    case = ab_run(abtest, side)
+    if not case:
+        return None, ("not-found", f"no {side} run in A/B test {abtest}")
+    names = ab_names(abtest, md_api._read_json(os.path.join(md_api.md_dir(), abtest + "_ab", "ab_result.json")))
+    try:
+        return results.history(case, names[side == "fixed"]), None
+    except ValueError as e:
+        return None, (e.args[0], e.args[1])
+
+
 def of(a=None, b=None, abtest=None, t_from=None, t_to=None, mesh=None):
     """GET /compare: (the comparison of cases a and b in the cases folder, a mesh study if `mesh`, or of A/B test
     `abtest`'s two runs, None), or (None, (code, message)) naming no folders."""
@@ -203,11 +251,10 @@ def of(a=None, b=None, abtest=None, t_from=None, t_to=None, mesh=None):
             return None, ("bad-request", "mesh is for two cases, a and b, not an A/B test")
         if not md_api.SAFE.match(abtest):
             return None, ("bad-request", "bad A/B test name")
-        top = os.path.join(md_api.md_dir(), abtest + "_ab")
-        cases = [os.path.join(top, t) for t in ("base", "fixed")]
-        if not all(os.path.isfile(os.path.join(c, "system", "controlDict")) for c in cases):
+        cases = [ab_run(abtest, t) for t in ("base", "fixed")]      # a test made with --base-from: the run it reused
+        if not all(cases):
             return None, ("not-found", f"no A/B test {abtest} with both its runs")
-        names = ab_names(abtest, md_api._read_json(os.path.join(top, "ab_result.json")))
+        names = ab_names(abtest, md_api._read_json(os.path.join(md_api.md_dir(), abtest + "_ab", "ab_result.json")))
     else:
         if a is None or b is None:
             return None, ("bad-request", "give a and b (two cases to compare), or abtest (an A/B test's two runs)")

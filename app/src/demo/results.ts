@@ -4,9 +4,10 @@
 // results-medium.json, loaded when first asked for: the public Ahmed-body example solved to 2,000 iterations on two
 // meshes, with no folder paths), with their forces every 4th iteration (forces.json and forces-medium.json, to 4
 // figures); and their comparison (GET /compare, compare.json: as a mesh study and as two designs, over their judges'
-// window), with that of the finished A/B test's two runs. Their forces were written a few hours before the demo is
-// asked, as the demo moves its other times to look recent. Another window, or another case's results or comparison,
-// need your own engine.
+// window), with that of the finished A/B test's two runs and their force histories (GET /abtests/{name}/forces,
+// forces-ab.json: each iteration's, to 4 figures). Their forces were written a few hours before the demo is asked, as
+// the demo moves its other times to look recent. Another window, or another case's results or comparison, need your
+// own engine.
 import { EngineError } from "@/engine/errors";
 import type { CaseResults, Comparison, ForceHistory, ResultsList } from "@/engine/types";
 
@@ -32,6 +33,9 @@ export const DEMO_COMPARE_NOTE = `The demo recorded only ${RECORDED[0]} against 
   + `${RECORDED_COMPARE_AB}'s two runs, over their judges' window: connect your own engine to compare others, or over `
   + "another window.";
 
+export const DEMO_AB_FORCES_NOTE = `The demo recorded the forces of its finished A/B test ${RECORDED_COMPARE_AB}'s `
+  + "two runs only: connect your own engine to chart another's.";
+
 const notRecorded = (name: string) =>
   `The demo recorded the results of ${RECORDED.join(" and ")} only: connect your own engine to see ${name}'s.`;
 
@@ -46,6 +50,21 @@ export async function demoResults(name: string = RECORDED_RESULTS, now = Date.no
 /** A recorded case's force history for its charts: every 4th iteration's forces, so none thinned. */
 export async function demoForces(name: string = RECORDED_RESULTS): Promise<ForceHistory> {
   return structuredClone((await RECORDINGS[recorded(name) ? name : RECORDED_RESULTS].forces()).default) as ForceHistory;
+}
+
+/** The demo's answer to GET /abtests/{name}/forces?side=: its finished A/B test's run, as recorded; refusals as the
+ *  engine words them (`side` as the address gives it: null when it gives none), and another of its A/B tests (named
+ *  in `abtests`) isn't in the demo. */
+export async function demoAbtestForces(name: string, side: string | null,
+                                       abtests: readonly string[] = [RECORDED_COMPARE_AB]): Promise<ForceHistory> {
+  if (side == null) throw new EngineError("bad-request", "missing query parameter side", 400);
+  if (side !== "base" && side !== "fixed") {
+    throw new EngineError("bad-request", `side: '${side}' not one of ['base', 'fixed']`, 400);
+  }
+  if (!abtests.includes(name)) throw new EngineError("not-found", `no ${side} run in A/B test ${name}`, 404);
+  if (name !== RECORDED_COMPARE_AB) throw new EngineError("unavailable", DEMO_AB_FORCES_NOTE, 503);
+  const rec = (await import("./forces-ab.json")).default as unknown as Record<"base" | "fixed", ForceHistory>;
+  return structuredClone(rec[side]);
 }
 
 type Recorded = { mesh: Comparison; design: Comparison; abtest: Comparison };

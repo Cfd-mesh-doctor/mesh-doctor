@@ -2093,7 +2093,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.25"
+    "version": "1.26"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -2480,6 +2480,131 @@
           }
         },
         "summary": "An A/B test: its step, result (abtest schema), each run's residuals as they are now, and oscillation maps"
+      }
+    },
+    "/abtests/{name}/forces": {
+      "get": {
+        "operationId": "abtest_forces",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "base: the original mesh's run (or its settings'); fixed: the repaired mesh's (or the variant's)",
+            "in": "query",
+            "name": "side",
+            "required": true,
+            "schema": {
+              "enum": [
+                "base",
+                "fixed"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "case": {
+                      "type": "string"
+                    },
+                    "groups": {
+                      "description": "each force group: the total group first, then by drag",
+                      "items": {
+                        "properties": {
+                          "drag": {
+                            "description": "its drag then, in N",
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          "n": {
+                            "description": "its values before thinning",
+                            "type": "integer"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "t": {
+                            "description": "each iteration or time kept",
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          "total": {
+                            "type": "boolean"
+                          },
+                          "vertical": {
+                            "description": "its downforce or lift then, in N; null where it has none",
+                            "items": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "total",
+                          "n",
+                          "t",
+                          "drag",
+                          "vertical"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "transient": {
+                      "description": "its times are seconds of flow; else iterations",
+                      "type": "boolean"
+                    },
+                    "vertical": {
+                      "description": "what its vertical force is, as its results say",
+                      "enum": [
+                        "downforce",
+                        "lift"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "case",
+                    "transient",
+                    "vertical",
+                    "groups"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "One run of an A/B test's force history for charts, as GET /results/{case}/forces gives a case's: its original mesh's run (base) or its repaired mesh's (fixed), or of a test of solver settings on one mesh its settings' and the variant's, named as GET /compare names that run. A test that reused another's original-mesh run (--base-from) gives that run's (API 1.26)"
       }
     },
     "/abtests/{name}/judge": {

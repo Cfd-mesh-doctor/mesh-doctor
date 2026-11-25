@@ -14,7 +14,7 @@ import { DEMO_JUDGE_NOTE, DEMO_LIVE_NOTE, RECORDED_ABTESTS, briefOf, demoAbtest,
 import { DEMO_CLUSTERS_NOTE, recordedCluster } from "./clusters";
 import recorded from "./fixtures.json";
 import { briefOfSet, demoPictureSet, demoPictureSrc } from "./pictures";
-import { demoCompare, demoResultsAnswer } from "./results";
+import { demoAbtestForces, demoCompare, demoResultsAnswer } from "./results";
 import templates from "./templates.json";
 
 type Answers = Record<string, unknown>;
@@ -285,9 +285,13 @@ export function demoTransport(answers: Answers = DEMO_ANSWERS, delayMs = DELAY_M
         const items = [...tests.keys()].sort();
         return { items, tests: Object.fromEntries(items.map((n) => [n, briefOf(tests.get(n)!)])) } as T;
       }
-      const ab = /^\/abtests\/([^/]+)(\/live|\/judge)?$/.exec(route);
+      const ab = /^\/abtests\/([^/]+)(\/live|\/judge|\/forces)?$/.exec(route);
       if (ab) {
         const name = decodeURIComponent(ab[1] ?? "");
+        if (ab[2] === "/forces") {
+          const side = new URLSearchParams(path.split("?")[1] ?? "").get("side");
+          return (await demoAbtestForces(name, side, [...(await abtests()).keys()])) as T;
+        }
         const test = (await abtests()).get(name);
         if (!test) throw new EngineError("not-found", `no A/B test ${name}`, 404);
         if (ab[2] === "/live") throw new EngineError("unavailable", DEMO_LIVE_NOTE, 503);

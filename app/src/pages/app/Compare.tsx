@@ -4,9 +4,11 @@
 // end, from the later of their judges' starts, unless the address asks for another (?from=&to=). For each force group
 // in both, b's difference from a in N and in %, and whether it is real or inside the noise (both means' uncertainty and
 // drift); a mesh study also says whether each force moves less between the meshes than it swings. Plain warnings come
-// first. Two cases' forces are drawn over their runs on one chart for each force, the window shaded: dragging its edges
-// asks for another, as From and To do; then the same picture of each, side by side (ComparePictures.tsx). A case's
-// results page opens it with that case as a (Compare…), to pick b.
+// first. Both runs' forces are drawn on one chart for each force (two cases' from GET /results/{case}/forces, an A/B
+// test's two runs' from GET /abtests/{name}/forces, API 1.26), the window shaded: dragging its edges asks for another,
+// as From and To do; then two cases' same picture of each, side by side (ComparePictures.tsx). A case's results page
+// opens it with that case as a (Compare…), to pick b.
+import type { UseQueryResult } from "@tanstack/react-query";
 import { ArrowLeft, ArrowLeftRight, Hourglass, RotateCcw, TriangleAlert } from "lucide-react";
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
@@ -20,8 +22,8 @@ import { Input } from "@/components/ui/misc";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
 import { useAppPath, useEngine } from "@/engine/context";
 import { asEngineError } from "@/engine/errors";
-import { useComparison, useForceHistory, useResultsList } from "@/engine/hooks";
-import type { CompareAsk, ComparedGroup, ComparedSide, Comparison } from "@/engine/types";
+import { useAbtestForces, useComparison, useForceHistory, useResultsList } from "@/engine/hooks";
+import type { CompareAsk, ComparedGroup, ComparedSide, Comparison, ForceHistory } from "@/engine/types";
 import { formatInt, formatNumber } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
@@ -296,12 +298,14 @@ function DifferencesCard({ doc }: { doc: Comparison }) {
   );
 }
 
-/** Both cases' forces over their runs (GET /results/{case}/forces of each): one chart for each force, a's line solid
- *  and b's dashed, the window shaded; its edges ask for another. The total group's first; a picker gives the others. */
-function CompareCharts({ doc, onWindow }: { doc: Comparison; onWindow: (from: number, to: number | null) => void }) {
+type ChartsProps = { doc: Comparison; onWindow: (from: number, to: number | null) => void };
+
+/** Both runs' forces over their runs (`ha` a's force history, `hb` b's): one chart for each force, a's line solid and
+ *  b's dashed, the window shaded; its edges ask for another. The total group's first; a picker gives the others. */
+function CompareCharts({ doc, onWindow, ha, hb }: ChartsProps & {
+  ha: UseQueryResult<ForceHistory>; hb: UseQueryResult<ForceHistory>;
+}) {
   const id = useId();
-  const ha = useForceHistory(doc.a.case);
-  const hb = useForceHistory(doc.b.case);
   const [picked, setPicked] = useState(0);
   const g = doc.groups[picked] ?? doc.groups[0];
   if (!g) return null;
@@ -371,6 +375,36 @@ function CompareCharts({ doc, onWindow }: { doc: Comparison; onWindow: (from: nu
       </CardContent>
     </Card>
   );
+}
+
+/** Two cases' charts: each one's force history (GET /results/{case}/forces). */
+function CaseCharts(props: ChartsProps) {
+  const ha = useForceHistory(props.doc.a.case);
+  const hb = useForceHistory(props.doc.b.case);
+  return <CompareCharts {...props} ha={ha} hb={hb} />;
+}
+
+/** An A/B test's charts: its two runs' force histories (GET /abtests/{name}/forces?side=base|fixed, API 1.26), its
+ *  original mesh's as a and its repaired mesh's as b. An engine before API 1.26 has none: it is told so. */
+function AbtestCharts({ abtest, ...props }: ChartsProps & { abtest: string }) {
+  const ha = useAbtestForces(abtest, "base");
+  const hb = useAbtestForces(abtest, "fixed");
+  const old = [ha, hb].some((h) => {
+    const e = h.isError ? asEngineError(h.error) : null;
+    return e?.code === "not-found" && e.message.startsWith("no such API route");
+  });
+  if (old) {
+    return (
+      <Card className="mb-4 p-5">
+        <p className="text-sm font-semibold">Your engine can&apos;t chart an A/B test&apos;s runs yet</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          It is older than these charts (it speaks API 1.25). Update Mesh Doctor on your computer to see both runs&apos;
+          forces here, and move the window by dragging its edges; the table above compares them already.
+        </p>
+      </Card>
+    );
+  }
+  return <CompareCharts {...props} ha={ha} hb={hb} />;
 }
 
 /** The last comparison's numbers, dimmed while another window is averaged. */
@@ -477,6 +511,11 @@ export function ComparePage() {
     );
   }
 
+  // The charts' window, asked for in the address: an end let go at the shorter run's end, where the window ends anyway,
+  // isn't kept there.
+  const onWindow = (from: number, upTo: number | null) => void navigate(to(comparePagePath({
+    ...ask, from, to: upTo != null && upTo < Math.min(doc.a.end, doc.b.end) ? upTo : null,
+  })));
   return (
     <>
       {header}
@@ -487,15 +526,12 @@ export function ComparePage() {
       <SidesCard doc={doc} links={ask.abtest == null} />
       {doc.window && windowCard}
       <Dim busy={q.isPlaceholderData}><DifferencesCard doc={doc} /></Dim>
-      {ask.abtest == null && (
+      {ask.abtest == null ? (
         <>
-          {/* an end let go at the shorter run's end, where the window ends anyway, isn't kept in the address */}
-          <CompareCharts doc={doc} onWindow={(from, upTo) => void navigate(to(comparePagePath({
-            ...ask, from, to: upTo != null && upTo < Math.min(doc.a.end, doc.b.end) ? upTo : null,
-          })))} />
+          <CaseCharts doc={doc} onWindow={onWindow} />
           <ComparePicturesCard a={doc.a.case} b={doc.b.case} />
         </>
-      )}
+      ) : <AbtestCharts abtest={ask.abtest} doc={doc} onWindow={onWindow} />}
       {pick}
     </>
   );

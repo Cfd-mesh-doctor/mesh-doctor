@@ -245,6 +245,10 @@ export const api = {
   /** One case's force history for charts (API 1.24); an older engine answers not-found. */
   forceHistory: (t: Transport, name: string, signal?: AbortSignal) =>
     t.request<ForceHistory>("GET", `/results/${encodeURIComponent(name)}/forces`, undefined, signal),
+  /** One run of an A/B test's force history for charts (API 1.26): its original mesh's (base) or its repaired mesh's
+   *  (fixed), named as its comparison names the run; an older engine answers not-found. */
+  abtestForces: (t: Transport, name: string, side: "base" | "fixed", signal?: AbortSignal) =>
+    t.request<ForceHistory>("GET", `/abtests/${encodeURIComponent(name)}/forces?side=${side}`, undefined, signal),
   /** Two runs' results compared over the same window (API 1.25); an older engine answers not-found. */
   compare: (t: Transport, ask: CompareAsk, signal?: AbortSignal) =>
     t.request<Comparison>("GET", comparePath(ask), undefined, signal),

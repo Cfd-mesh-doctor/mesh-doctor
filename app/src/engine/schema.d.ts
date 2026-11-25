@@ -52,6 +52,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/abtests/{name}/forces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One run of an A/B test's force history for charts, as GET /results/{case}/forces gives a case's: its original mesh's run (base) or its repaired mesh's (fixed), or of a test of solver settings on one mesh its settings' and the variant's, named as GET /compare names that run. A test that reused another's original-mesh run (--base-from) gives that run's (API 1.26) */
+        get: operations["abtest_forces"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/abtests/{name}/judge": {
         parameters: {
             query?: never;
@@ -1519,6 +1536,62 @@ export interface operations {
                             step?: string;
                             time?: string;
                         } | null;
+                    };
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    abtest_forces: {
+        parameters: {
+            query: {
+                /** @description base: the original mesh's run (or its settings'); fixed: the repaired mesh's (or the variant's) */
+                side: "base" | "fixed";
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        case: string;
+                        /** @description each force group: the total group first, then by drag */
+                        groups: {
+                            /** @description its drag then, in N */
+                            drag: number[];
+                            /** @description its values before thinning */
+                            n: number;
+                            name: string;
+                            /** @description each iteration or time kept */
+                            t: number[];
+                            total: boolean;
+                            /** @description its downforce or lift then, in N; null where it has none */
+                            vertical: (number | null)[];
+                        }[];
+                        /** @description its times are seconds of flow; else iterations */
+                        transient: boolean;
+                        /**
+                         * @description what its vertical force is, as its results say
+                         * @enum {unknown}
+                         */
+                        vertical: "downforce" | "lift";
                     };
                 };
             };

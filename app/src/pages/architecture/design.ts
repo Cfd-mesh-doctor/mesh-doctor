@@ -71,7 +71,7 @@ export const DESIGN: DocSection[] = [
             [
               "`compare.py`",
               "core + CLI",
-              "two runs' results over the same window (up to the shorter run's end, from the later of their judges' starts): each force group's difference in N and %, real or inside the noise (both means' uncertainty and drift, added in quadrature); a mesh study (one template at two sizes, found back through copies and transient runs, or any two with `--mesh`) also says whether each force moves less between the meshes than it swings; plain warnings (meshes over 2 % apart in cells, a half model against a whole one, a run still drifting). `meshdoctor compare` prints it; it only reads the two runs (API 1.25)"
+              "two runs' results over the same window (up to the shorter run's end, from the later of their judges' starts): each force group's difference in N and %, real or inside the noise (both means' uncertainty and drift, added in quadrature); a mesh study (one template at two sizes, found back through copies and transient runs, or any two with `--mesh`) also says whether each force moves less between the meshes than it swings; plain warnings (meshes over 2 % apart in cells, a half model against a whole one, a run still drifting). `meshdoctor compare` prints it; it only reads the two runs (API 1.25). It also gives each run of an A/B test its force history for charts, a test made with `--base-from` taking the run it reused (API 1.26)"
             ],
             [
               "`repair.py`, `abtest.py`",
@@ -461,6 +461,11 @@ export const DESIGN: DocSection[] = [
               "`GET /compare?a=&b=&from=&to=&mesh=`",
               "(new)",
               "two runs' results over the same window (`?abtest=`: an A/B test's original and repaired runs): each force group's drag and vertical force in both, b's difference in N and %, its noise and whether it is real; a mesh study's mesh check; each side's cells, window, verdict and what it was made from; a mesh study with `mesh=true`; plain warnings; `400` for a bad pair or window, `404` for a missing case, `409 not-ready` without forces to average (API 1.25)"
+            ],
+            [
+              "`GET /abtests/{name}/forces?side=base|fixed`",
+              "(new)",
+              "one run of an A/B test's force history for charts, as `GET /results/{case}/forces` gives a case's, named as `GET /compare` names the run; a test that reused another's original-mesh run (`--base-from`) gives that run's, as its comparison and its judge take it; `404` for a missing run, `409 not-ready` without forces (API 1.26)"
             ]
           ]
         }

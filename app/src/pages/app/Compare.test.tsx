@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The Compare screen (GET /compare, API 1.25): the demo's recorded mesh study of the coarse and medium Ahmed bodies,
 // with its table, both runs and their forces on one chart, and no other window; the same two as designs, with its
-// cells warning first; two cases picked, with your own engine; an A/B test's two runs; refusals and an engine too old
+// cells warning first; two cases picked, with your own engine; an A/B test's two runs, their forces read from the test
+// (GET /abtests/{name}/forces, API 1.26; an engine of API 1.25 told it can't chart them); refusals and an engine too old
 // to compare; the same picture of each, side by side (ComparePictures.tsx); and the screen's words and numbers
 // (compareView.ts).
 import { screen, waitFor, within } from "@testing-library/react";
@@ -23,6 +24,21 @@ import {
 
 const MESH = recorded.mesh as unknown as Comparison;
 const DESIGN = recorded.design as unknown as Comparison;
+/** Your own engine's A/B test wing-fix: the mesh study's numbers, as its two runs. */
+const AB: Comparison = {
+  ...MESH, kind: "abtest",
+  a: { ...MESH.a, case: "wing-fix (original mesh)", made: null }, b: { ...MESH.b, case: "wing-fix (repaired mesh)", made: null },
+  groups: MESH.groups.map((g) => ({ ...g, drag: g.drag && { ...g.drag, meshOk: null }, vertical: g.vertical && { ...g.vertical, meshOk: null } })),
+};
+
+/** A force history named `name` whose groups' drag settles to `drag` N. */
+function history(name: string, drag = 50): ForceHistory {
+  const t = Array.from({ length: 101 }, (_, i) => i * 20);
+  const groups = ["forceCoeffs", "forcesTotal"].map((g, k) => ({
+    name: g, total: k === 0, n: 101, t, drag: t.map((x) => drag + 5 * Math.exp(-x / 300)), vertical: t.map(() => 30),
+  }));
+  return { case: name, transient: false, vertical: "lift", groups };
+}
 
 const demo = (query: string) =>
   renderScreen(<ComparePage />, { path: "/demo/compare", at: `/demo/compare${query}`, transport: demoTransport(undefined, 0) });
@@ -40,10 +56,12 @@ const pictureSet = (name: string, set: string, files: string[], made: string | n
 });
 
 /** Your own engine: its cases with results, the comparison it answers (`answer`, of the path asked), or a refusal;
- *  `old`: one before API 1.25, which has no /compare; each case's force history settles to 50 N of drag. `sets`: its
- *  sets of pictures (none by default), each picture a PNG's first bytes; `fetched`, the pictures asked for. */
+ *  `old`: one before API 1.25, which has no /compare, `api125` one of API 1.25, which has no A/B test's forces; each
+ *  case's force history settles to 50 N of drag, an A/B test's original mesh's too and its repaired mesh's to 49 N.
+ *  `sets`: its sets of pictures (none by default), each picture a PNG's first bytes; `fetched`, the pictures asked for. */
 function engine(o: {
-  cases?: string[]; answer?: (path: string) => Comparison; refuse?: EngineError; old?: boolean; sets?: PictureSet[];
+  cases?: string[]; answer?: (path: string) => Comparison; refuse?: EngineError; old?: boolean; api125?: boolean;
+  sets?: PictureSet[];
 } = {}) {
   const asked: string[] = [];
   const fetched: string[] = [];
@@ -71,12 +89,11 @@ function engine(o: {
       }
       if (route === "/results") return { items: (o.cases ?? []).map((c) => ({ case: c })), waiting: [] } as T;
       const forces = /^\/results\/([^/]+)\/forces$/.exec(route);
-      if (forces) {
-        const t = Array.from({ length: 101 }, (_, i) => i * 20);
-        const groups = ["forceCoeffs", "forcesTotal"].map((name, k) => ({
-          name, total: k === 0, n: 101, t, drag: t.map((x) => 50 + 5 * Math.exp(-x / 300)), vertical: t.map(() => 30),
-        }));
-        return { case: decodeURIComponent(forces[1]!), transient: false, vertical: "lift", groups } satisfies ForceHistory as T;
+      if (forces) return history(decodeURIComponent(forces[1]!)) as T;
+      const runForces = /^\/abtests\/([^/]+)\/forces$/.exec(route);
+      if (runForces && !o.old && !o.api125) {
+        const fixed = new URLSearchParams(path.split("?")[1] ?? "").get("side") === "fixed";
+        return history(`${decodeURIComponent(runForces[1]!)} (${fixed ? "repaired" : "original"} mesh)`, fixed ? 49 : 50) as T;
       }
       if (route !== "/compare" || o.old) throw new EngineError("not-found", `no such API route ${route}`, 404);
       if (o.refuse) throw o.refuse;
@@ -191,13 +208,8 @@ describe("the Compare screen", () => {
     await waitFor(() => expect(router.state.location.search).toMatch(/^\?a=wing&b=wing-v2&mesh=true&from=1\d\d0$/));
   });
 
-  it("compares an A/B test's two runs: no case to pick, no links to results, and no force charts", async () => {
-    const ab: Comparison = {
-      ...MESH, kind: "abtest",
-      a: { ...MESH.a, case: "wing-fix (original mesh)", made: null }, b: { ...MESH.b, case: "wing-fix (repaired mesh)", made: null },
-      groups: MESH.groups.map((g) => ({ ...g, drag: g.drag && { ...g.drag, meshOk: null }, vertical: g.vertical && { ...g.vertical, meshOk: null } })),
-    };
-    const e = engine({ answer: () => ab });
+  it("compares an A/B test's two runs: no case to pick, no links to results, its runs' forces read from the test", async () => {
+    const e = engine({ answer: () => AB });
     own("?abtest=wing-fix", e);
     expect(await screen.findByRole("heading", { level: 1, name: "wing-fix (original mesh) against wing-fix (repaired mesh)" }))
       .toBeVisible();
@@ -206,8 +218,22 @@ describe("the Compare screen", () => {
     expect(screen.queryByRole("link", { name: "wing-fix (original mesh)" })).toBeNull();
     expect(screen.queryByRole("form", { name: "What to compare" })).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "Between the meshes" })).toBeNull();
+    // both runs' forces on one chart each, read from the A/B test (API 1.26), not as two cases: and no pictures
+    expect(await screen.findByRole("img", { name: "Drag of forceCoeffs in both runs, in N" })).toBeVisible();
+    expect(screen.getByRole("img", { name: "Lift of forceCoeffs in both runs, in N" })).toBeVisible();
+    expect(screen.getByRole("list", { name: "Lines" })).toHaveTextContent("a: wing-fix (original mesh)b: wing-fix (repaired mesh)");
+    expect(new Set(e.asked)).toEqual(new Set([
+      "/compare?abtest=wing-fix", "/abtests/wing-fix/forces?side=base", "/abtests/wing-fix/forces?side=fixed",
+    ]));
+    expect(screen.queryByRole("heading", { name: "The same picture of each" })).toBeNull();
+  });
+
+  it("tells an engine of API 1.25 it can't chart an A/B test's runs yet: its table still compares them", async () => {
+    own("?abtest=wing-fix", engine({ answer: () => AB, api125: true }));
+    expect(await screen.findByText("Your engine can't chart an A/B test's runs yet")).toBeVisible();
+    expect(screen.getByText(/older than these charts \(it speaks API 1\.25\)/)).toBeVisible();
+    expect(forceRows()).toHaveLength(4);
     expect(screen.queryByRole("img", { name: /in both runs/ })).toBeNull();
-    expect(e.asked).toEqual(["/compare?abtest=wing-fix"]);
   });
 
   it("in the demo, compares its finished A/B test's two runs: the same forces on both meshes, both still drifting", async () => {
@@ -223,6 +249,10 @@ describe("the Compare screen", () => {
     expect(rows).toHaveLength(4);
     expect(rows[0]).toMatch(/^forcesTotalTotalDrag17\.1317\.1300 %7\.5Inside the noise$/);
     expect(rows.every((r) => /0 %[\d.]+Inside the noise$/.test(r))).toBe(true);    // every force the same on both
+    // both runs' forces, recorded from the same test: one line on the other, the window over the whole of both
+    expect(await screen.findByRole("img", { name: "Drag of forcesTotal in both runs, in N" })).toBeVisible();
+    expect(screen.getByRole("img", { name: "Lift of forcesTotal in both runs, in N" })).toBeVisible();
+    expect(screen.getAllByRole("slider", { name: "Start of the averaged part" })[0]).toHaveAttribute("aria-valuenow", "1");
   });
 
   it("puts the same picture of each side by side: of a set of the same written time first, another picked of either", async () => {

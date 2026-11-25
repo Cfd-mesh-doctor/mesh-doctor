@@ -7,8 +7,11 @@ import clusters from "./clusters.json";
 import recorded from "./fixtures.json";
 import compared from "./compare.json";
 import forces from "./forces.json";
+import forcesAb from "./forces-ab.json";
 import forcesMedium from "./forces-medium.json";
-import { DEMO_COMPARE_NOTE, DEMO_RESULTS_NOTE, RECORDED, RECORDED_COMPARE_AB, RECORDED_RESULTS } from "./results";
+import {
+  DEMO_AB_FORCES_NOTE, DEMO_COMPARE_NOTE, DEMO_RESULTS_NOTE, RECORDED, RECORDED_COMPARE_AB, RECORDED_RESULTS,
+} from "./results";
 import results from "./results.json";
 import resultsMedium from "./results-medium.json";
 import { demoTransport, shiftTimes, withCaseSizes } from "./transport";
@@ -235,11 +238,34 @@ describe("demo transport", () => {
       .rejects.toMatchObject({ code: "bad-request" });
   });
 
+  it("has its finished A/B test's two runs' forces, named as compared, and refuses as the engine does", async () => {
+    const t = demoTransport(answers(), 0);
+    const base = await api.abtestForces(t, RECORDED_COMPARE_AB, "base");
+    const fixed = await api.abtestForces(t, RECORDED_COMPARE_AB, "fixed");
+    expect([base.case, fixed.case]).toEqual([compared.abtest.a.case, compared.abtest.b.case]);
+    // every iteration of its 201 (and the one before), each group the comparison has, the total one first
+    for (const run of [base, fixed]) {
+      expect([run.transient, run.vertical]).toEqual([false, "lift"]);
+      expect(run.groups.map((g) => [g.name, g.total, g.n, g.t.length, g.drag.length, g.t.at(-1)])).toEqual([
+        ["forcesTotal", true, 202, 202, 202, 201], ["forceCoeffs", false, 202, 202, 202, 201],
+      ]);
+    }
+    expect(compared.abtest.groups.map((g) => g.name)).toEqual(base.groups.map((g) => g.name));
+    // the same forces on both meshes, as the comparison says
+    expect(fixed.groups[0]!.drag.at(-1)).toBe(base.groups[0]!.drag.at(-1));
+    const refused = (path: string, code: string, message: string) =>
+      expect(t.request("GET", path)).rejects.toMatchObject({ code, message });
+    await refused(`/abtests/${RECORDED_COMPARE_AB}/forces`, "bad-request", "missing query parameter side");
+    await refused(`/abtests/${RECORDED_COMPARE_AB}/forces?side=both`, "bad-request", "side: 'both' not one of ['base', 'fixed']");
+    await refused("/abtests/nope/forces?side=base", "not-found", "no base run in A/B test nope");
+    await refused("/abtests/ahmed25-medium-fix/forces?side=fixed", "unavailable", DEMO_AB_FORCES_NOTE);
+  });
+
   it("ships no paths from the recording machine", () => {
     expect(JSON.stringify(clusters)).not.toMatch(/\/home\/|\/mnt\/|\/tmp\/|[A-Z]:\\\\|Users[\\/]/);
     expect(JSON.stringify(results)).not.toMatch(/\/home\/|\/mnt\/|\/tmp\/|[A-Z]:\\\\|Users[\\/]/);
     expect(JSON.stringify(forces)).not.toMatch(/\/home\/|\/mnt\/|\/tmp\/|[A-Z]:\\\\|Users[\\/]/);
-    for (const doc of [resultsMedium, forcesMedium, compared]) {
+    for (const doc of [resultsMedium, forcesMedium, compared, forcesAb]) {
       expect(JSON.stringify(doc)).not.toMatch(/\/home\/|\/mnt\/|\/tmp\/|[A-Z]:\\\\|Users[\\/]/);
     }
     const text = JSON.stringify(recorded);

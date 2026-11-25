@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The Compare screen in a real browser: in the demo, Compare… on a case's results page, the medium mesh picked as a
 // mesh study, its table, both runs' forces on one chart and its pictures (the coarse case has none), and its finished
-// A/B test's two runs from the test's own page; with your own engine, two cases picked from the Results screen and
-// compared with the pairing key, the same picture of each side by side, another window asked for from the charts and
-// kept in the address, and an engine too old to compare told so.
+// A/B test's two runs and their forces from the test's own page; with your own engine, two cases picked from the
+// Results screen and compared with the pairing key, the same picture of each side by side, another window asked for
+// from the charts and kept in the address, and an engine too old to compare told so.
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { KEY, mockEngine, pairingLink, resultsDoc, type PictureSetDoc } from "./engine";
 
@@ -63,6 +63,8 @@ test("the demo's finished A/B test: Compare forces on its page compares its two 
   })).toBeVisible();
   await expect(page.getByRole("note")).toContainText("still drifting over the window");
   await expect(page.getByRole("row").nth(1)).toContainText("Inside the noise");
+  // both runs' forces, recorded from the same test
+  await expect(page.getByRole("img", { name: "Drag of forcesTotal in both runs, in N" })).toBeVisible();
   await page.getByRole("link", { name: "A/B test", exact: true }).click();
   await expect(page).toHaveURL(/\/demo\/abtests\/ahmed25-coarse-fix$/);
 });

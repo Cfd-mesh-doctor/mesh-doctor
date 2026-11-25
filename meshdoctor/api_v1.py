@@ -29,7 +29,7 @@ import tplan
 import validate
 import version
 
-API_VERSION = "1.25"
+API_VERSION = "1.26"
 PREFIX = "/api/v1"
 WRITES_MAX = solve.transient.MAX_WRITES   # the most times a stretch of a transient run writes
 MAX_BODY = 64 * 1024
@@ -418,33 +418,16 @@ def live_abtest(p, q, b):
                           "description": "average forces from this iteration on (default: the last 2 windows)"}},
        ok=_ref("judge"))
 def abtest_judge(p, q, b):
-    test, side = _name(p["name"]) + "_ab", q["side"]
-    if side == "base" and not _is_case(test, side):
-        test = _reused_base(test) or test     # a test made with --base-from: judge the run it reused
-    if not _is_case(test, side):
+    import abtest as ab, caseinfo, compare  # only reads the logs and force files
+    side = q["side"]
+    case = compare.ab_run(_name(p["name"]), side)      # a test made with --base-from: the run it reused
+    if not case:
         raise ApiError("not-found", f"no {side} run in A/B test {p['name']}")
-    case = os.path.join(md_api.md_dir(), test, side)
-    import abtest as ab, caseinfo           # only reads the logs and force files
     # log.foamRun_hot is the one-iteration hotspot run made after the test, not part of it
     logs = [f for f in caseinfo.solver_logs(case) if not f.endswith("_hot")] or None
     out = ab.judge(case, q.get("window"), avg_from=q.get("avgFrom"), to=q.get("to"), logs=logs)
-    out["run"] = f"{test}/{side}"
+    out["run"] = os.path.relpath(case, md_api.md_dir()).replace(os.sep, "/")
     return out
-
-
-def _is_case(test, side):
-    return os.path.isfile(os.path.join(md_api.md_dir(), test, side, "system", "controlDict"))
-
-
-def _reused_base(test):
-    """The A/B folder whose original-mesh run this test reused (--base-from), if any.
-    Only its folder name is taken from the file, so the answer stays in the workspace."""
-    try:
-        prev = schema.read(os.path.join(md_api.md_dir(), test, "ab_result.json"), "abtest").get("baseReusedFrom")
-    except (OSError, ValueError):
-        return None
-    prev = os.path.basename(str(prev or "").rstrip("/"))
-    return prev if prev.endswith("_ab") and md_api.SAFE.match(prev[:-3]) and prev != test else None
 
 
 _live_judged = {}                           # (case, window, avgFrom, logs' size and time) -> verdict
@@ -580,6 +563,19 @@ FORCE_HISTORY = {
 def results_forces(p, q, b):
     import results                         # only reads the case's force files
     return _answer(results.forces_of(_name(p["case"])))
+
+
+@route("GET", "/abtests/{name}/forces", "One run of an A/B test's force history for charts, as GET "
+       "/results/{case}/forces gives a case's: its original mesh's run (base) or its repaired mesh's (fixed), or of a "
+       "test of solver settings on one mesh its settings' and the variant's, named as GET /compare names that run. A "
+       "test that reused another's original-mesh run (--base-from) gives that run's (API 1.26)",
+       query={"side": {"schema": {"enum": ["base", "fixed"]}, "required": True,
+                       "description": "base: the original mesh's run (or its settings'); fixed: the repaired mesh's "
+                                      "(or the variant's)"}},
+       ok=FORCE_HISTORY)
+def abtest_forces(p, q, b):
+    import compare                         # only reads the run's force files
+    return _answer(compare.ab_forces(_name(p["name"]), q["side"]))
 
 
 _MEAN_N = {"type": "number", "description": "its mean over the window, in N"}
