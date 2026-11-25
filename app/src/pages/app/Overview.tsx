@@ -282,7 +282,7 @@ export function Overview() {
                 All jobs <ArrowRight className="size-3.5" />
               </Link>
             </CardTitleRow>
-            <CardDescription>Repairs and A/B tests, newest first</CardDescription>
+            <CardDescription>Jobs of every kind, newest first</CardDescription>
           </CardHeader>
           {jobs.isPending ? (
             <TableSkeleton rows={4} cols={3} />
@@ -293,7 +293,7 @@ export function Overview() {
             <Table>
               <THead>
                 <TR className="hover:bg-transparent">
-                  <TH>Run</TH>
+                  <TH>Job</TH>
                   <TH>State</TH>
                   <TH className="hidden text-right sm:table-cell">Started</TH>
                 </TR>

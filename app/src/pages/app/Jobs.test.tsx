@@ -153,6 +153,9 @@ describe("the Jobs screen", () => {
     await screen.findAllByRole("button", { name: "ahmed25-medium-fix" });
     expect(screen.getByRole("columnheader", { name: "Duration" })).toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Took" })).toBeNull();
+    // A job of any kind: a set of pictures or a new case isn't a run.
+    expect(screen.getByRole("columnheader", { name: "Job" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Run" })).toBeNull();
   });
 
   it("words the step of a test of solver settings by its settings, a continuation's too, from the test's job", async () => {
@@ -305,9 +308,11 @@ describe("the Jobs screen before any job has run", () => {
   it("says where jobs start, and opens the engine's own dashboard in a new tab", async () => {
     ownEngine();
     expect(await screen.findByRole("heading", { name: "No jobs yet" })).toBeInTheDocument();
-    expect(screen.getByText(/^Repairs started with a case's Repair button, and A\/B tests started from a finished repair, show here while they run, with their progress, as do those started from the engine's own dashboard\./))
+    // Every kind of job, and where each starts: not only repairs and A/B tests.
+    expect(screen.getByText(/^Each job shows here while it runs, with its progress: a repair \(a case's Repair button\), an A\/B test \(from a finished repair\), a new case or a solve \(on Solve\), a transient plan \(from a solved run\) and pictures \(on Pictures\), and repairs and A\/B tests started from the engine's own dashboard\./))
       .toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Go to your cases" })).toHaveAttribute("href", "/app/cases");
+    expect(screen.getByRole("link", { name: "Go to Solve" })).toHaveAttribute("href", "/app/solve");
     // A repair run in a terminal (as Getting started says to) isn't a job: the list says where it shows instead.
     const empty = screen.getByRole("heading", { name: "No jobs yet" }).parentElement!;
     expect(empty).toHaveTextContent("A repair run in a terminal isn't a job: it shows under Repair runs on the Overview once its copy is made.");
@@ -341,7 +346,7 @@ describe("the Jobs screen once jobs have run", () => {
   it("names the dashboard without linking it in the demo, which has no engine of its own", async () => {
     open(path);
     // The description, with the Overview's link in it.
-    expect(await screen.findByText((_, el) => el?.tagName === "P" && /started here or from the engine's dashboard\. Repairs start from the Cases and Repairs screens, A\/B tests from the A\/B tests screen and a finished repair's report; a repair run in a terminal shows on the Overview instead\. Only one big job runs at a time/.test(el.textContent ?? ""))).toBeInTheDocument();
+    expect(await screen.findByText((_, el) => el?.tagName === "P" && /^Everything the engine has run or is running, started here or from the engine's dashboard: repairs \(from Cases and Repairs\), A\/B tests \(from A\/B tests or a finished repair's report\), new cases and solves \(from Solve and a run's page\), transient plans \(from a run's page or Cases\) and pictures \(from Pictures\)\. A repair run in a terminal shows on the Overview instead\. Only one big job runs at a time/.test(el.textContent ?? ""))).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute("href", "/demo"); // the demo's own
     expect(screen.queryByRole("link", { name: "the engine's dashboard" })).toBeNull();
   });

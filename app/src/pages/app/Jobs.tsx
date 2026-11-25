@@ -328,11 +328,12 @@ export function Jobs() {
       <PageHeader
         title="Jobs"
         description={
-          // Where jobs start stays said once there are some (the empty list says it too, with its own button), and
-          // where a repair run in a terminal shows instead, as it isn't a job.
+          // Where each kind of job starts stays said once there are some (the empty list says it too, with its own
+          // buttons), and where a repair run in a terminal shows instead, as it isn't a job.
           <>
-            Repairs and A/B tests the engine has run or is running, started here or from <DashboardLink />. Repairs start
-            from the Cases and Repairs screens, A/B tests from the A/B tests screen and a finished repair&apos;s report; a
+            Everything the engine has run or is running, started here or from <DashboardLink />: repairs (from Cases
+            and Repairs), A/B tests (from A/B tests or a finished repair&apos;s report), new cases and solves (from Solve
+            and a run&apos;s page), transient plans (from a run&apos;s page or Cases) and pictures (from Pictures). A
             repair run in a terminal shows on the{" "}
             <Link to={to()} className="font-medium text-primary underline-offset-4 hover:underline">Overview</Link>{" "}
             instead. Only one big job runs at a time, to keep memory safe.
@@ -384,7 +385,7 @@ export function Jobs() {
                     Cancel and Report out of sight: Progress from sm, Duration from md, Started from xl (at lg the
                     sidebar takes the room). At 640 and 1024 px the table was 25 and 37 px wider than its card.
                     Progress takes a third of the table only from xl: below that, a job's name has its line first. */}
-                <TH>Run</TH>
+                <TH>Job</TH>
                 <TH>State</TH>
                 <TH className="hidden sm:table-cell xl:w-[32%]">Progress</TH>
                 <TH className="hidden xl:table-cell">Started</TH>

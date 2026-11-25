@@ -53,7 +53,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
   },
   {
     title: "Jobs: what is running",
-    text: "Repairs, A/B tests, new cases and solves run as jobs, whether started here or from the engine's dashboard, and Jobs shows their progress live. Cancel stops a job that is running; a job's link opens what it makes: a repair's report, an A/B test, a new case or a solve's run. A repair run in a terminal shows on the Overview instead.",
+    text: "Repairs, A/B tests, new cases, solves, transient plans and pictures run as jobs, whether started here or from the engine's dashboard, and Jobs shows their progress live. Cancel stops a job that is running; a job's link opens what it makes: a repair's report, an A/B test, a new case, a solve's run, a transient plan or a set of pictures. A repair run in a terminal shows on the Overview instead.",
     page: "/jobs",
     spot: "jobs",
   },
