@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The Pictures screen's words and checks: a set's name, address and title, the set a picture job makes, the written
-// times a run can be pictured at, and the memory a picture job takes.
+// times a run can be pictured at (the split ones too, on an engine that joins one first), and the memory a picture job
+// takes.
 import { describe, expect, it } from "vitest";
 import type { Job, MachineInfo, Run } from "@/engine/types";
 import {
-  hasMeanFlow, jobOfSet, kindsText, makingPictures, parseSet, pictureFileName, pictureTimes, picturesMemory, setHeading,
-  setName, setOfJob, setPath, setShown, setTitle, timeName,
+  hasMeanFlow, jobOfSet, joinsTimes, kindsText, makingPictures, parseSet, pictureFileName, pictureTimes, picturesMemory,
+  setHeading, setName, setOfJob, setPath, setShown, setTitle, splitTimes, timeName,
 } from "./pictureSets";
 
 const job = (id: string, state: Job["state"], params: Record<string, unknown>, kind: Job["kind"] = "pictures") =>
@@ -87,6 +88,19 @@ describe("the times a run can be pictured at", () => {
     const steady = run([100]);
     expect(hasMeanFlow(steady)).toBe(false);
     expect(pictureTimes(steady, true)).toEqual([]);
+  });
+
+  it("are each one it keeps, the split ones too, on an engine that joins one first (API 1.19)", () => {
+    expect(["1.19", "1.20", "2.0"].map(joinsTimes)).toEqual([true, true, true]);
+    expect(["1.18", "1.2", "1.0", "", null, undefined].map(joinsTimes)).toEqual([false, false, false, false, false, false]);
+    const r = { times: [100, 200, 300], joined: [300], averaging: null } as Pick<Run, "times" | "joined" | "averaging">;
+    expect(pictureTimes(r, false)).toEqual(["300"]);
+    expect(pictureTimes(r, false, true)).toEqual(["300", "200", "100"]);
+    expect([...splitTimes(r)]).toEqual(["100", "200"]);
+    expect(splitTimes({ times: [300], joined: [300] }).size).toBe(0);
+    // a run that lists only its joined times: those
+    expect(pictureTimes(run([300]), false, true)).toEqual(["300"]);
+    expect(splitTimes({ joined: [300] }).size).toBe(0);
   });
 });
 

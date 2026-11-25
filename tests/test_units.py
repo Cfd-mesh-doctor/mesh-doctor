@@ -3461,6 +3461,12 @@ class DiskGuardTest(unittest.TestCase):
     def bytes_in(root):
         return sum(os.path.getsize(os.path.join(d, n)) for d, _, names in os.walk(root) for n in names)
 
+    def test_a_join_takes_three_quarters_of_its_split_fields_and_shares_a_disk_with_its_neighbours(self):
+        self.assertEqual(self.g.join_mb(8 * self.g.MB), 8)              # as much as split (measured: 0.96 of it)
+        self.assertEqual(self.g.join_mb(1), 1)                          # a byte or more is 1 MB
+        self.assertTrue(self.g.same_disk(self.d, os.path.join(self.d, "not", "made", "yet")))   # the nearest above
+        self.assertFalse(self.g.same_disk(self.d, ""))                  # one that can't be read
+
     def test_a_copy_is_measured_file_by_file_as_the_copy_walks_it(self):
         src, outside = os.path.join(self.d, "cases", "yours"), os.path.join(self.d, "surfaces")
         self.write(outside, {"body.stl": "solid body\n" * 50})
@@ -4142,8 +4148,11 @@ if a[2:3] == ["--selftest"]:
     sys.exit(0 if how == "pass" else 3)
 script, foam = os.path.basename(a[1]), a[2]
 view = os.path.dirname(foam)
+procs = sorted(n for n in os.listdir(view) if n.startswith("processor"))
 with open(os.path.join(os.path.dirname(view), "seen"), "a") as f:
     f.write(script + " " + os.environ.get("PYTHONPATH", "") + " " + " ".join(sorted(os.listdir(view)))
+            + "".join(" %s:%s" % (p, ",".join(sorted(os.listdir(os.path.join(view, p))))) for p in procs)
+            + (" split" if "decomposed" in a or "--decomposed" in a else "")
             + (" --mean" if "--mean" in a else "") + "\\n")
 out = a[3] if script == "vortex_views.py" else a[4]
 if os.environ.get("MD_TEST_PV_FAILS") == script:
@@ -4210,6 +4219,154 @@ for n in names:
     @staticmethod
     def files(folder):
         return sorted(os.path.relpath(os.path.join(d, f), folder) for d, _, fs in os.walk(folder) for f in fs)
+
+    @staticmethod
+    def split(case, times, procs=2, sizes=None):
+        """`case` split onto `procs` processes, with the flow (U and p) at these times in each processor folder;
+        `sizes`: {field: its bytes in each one}."""
+        for n in range(procs):
+            os.makedirs(os.path.join(case, f"processor{n}", "constant", "polyMesh"), exist_ok=True)
+            for t in times:
+                os.makedirs(os.path.join(case, f"processor{n}", t))
+                for field in ("U", "p"):
+                    with open(os.path.join(case, f"processor{n}", t, field), "wb") as f:
+                        f.write(b"x" * (sizes or {}).get(field, 0))
+
+    def ours(self, case):
+        """`case` made by Mesh Doctor (its marker says done), and OpenFOAM's environment a stand-in reconstructPar's,
+        which joins a time into the case's own folder (or, with MD_TEST_JOIN=fail, writes U only and stops) and lists
+        each join it makes in <case>/joins."""
+        import jobs
+        with open(os.path.join(case, jobs.CASE_MARKER), "w") as f:
+            json.dump({"state": "done", "template": "ahmed-body"}, f)
+        foam = os.path.join(self.tmp, "foam")
+        os.makedirs(foam)
+        with open(os.path.join(foam, "reconstructPar"), "w") as f:
+            f.write("#!/usr/bin/env python3\nimport os, sys\nt = sys.argv[sys.argv.index('-time') + 1]\n"
+                    "open('joins', 'a').write(' '.join(sys.argv[1:]) + '\\n')\n"
+                    "os.makedirs(t, exist_ok=True)\nopen(os.path.join(t, 'U'), 'w').close()\n"
+                    "if os.environ.get('MD_TEST_JOIN') == 'fail':\n    sys.exit(1)\n"
+                    "for f in ('p', 'k'):\n    open(os.path.join(t, f), 'w').close()\n")
+        os.chmod(os.path.join(foam, "reconstructPar"), 0o755)
+        bashrc = os.path.join(self.tmp, "bashrc")
+        with open(bashrc, "w") as f:
+            f.write(f"export WM_PROJECT_DIR=/nowhere\nexport PATH={foam}:$PATH\n")
+        patch = mock.patch.dict(os.environ, {"MESHDOCTOR_FOAM_BASHRC": bashrc})
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_a_time_split_onto_the_processes_is_one_to_picture(self):
+        import jobs, solve
+        case = self.case(times=("100",))
+        self.split(case, ("100", "150", "200"))
+        self.assertEqual(self.p.kept(case), {"100": "joined", "150": "split", "200": "split"})
+        self.assertEqual((self.p.times(case), self.p.latest(case), self.p.processors(case)),
+                         (["100"], "200", ["processor0", "processor1"]))
+        self.assertIsNone(self.p.why_not(case, "150"))
+        self.assertEqual(self.p.why_not(case, "175"),
+                         ("bad-request", "ahmedP has no written time 175 with its flow (U and p); its latest are 100, "
+                                         "150, 200"))
+        os.remove(os.path.join(case, "processor1", "200", "p"))          # in every processor folder, or not at all
+        self.assertEqual(list(self.p.kept(case)), ["100", "150"])
+        self.assertEqual([self.p.how(case, t) for t in ("100", "150")], ["joined", "split"])    # a case you made
+        self.ours(case)
+        self.assertEqual(self.p.how(case, "150"), "join")                 # a run Mesh Doctor made
+        link = os.path.join(self.tmp, "cases", "linked")
+        os.symlink(case, link)
+        self.assertEqual(self.p.how(link, "150"), "split")                # reached through a link: only read
+        os.makedirs(os.path.join(case, "150"))                            # a join cut short: not joined
+        for f in ("U", "p", jobs.JOINING):
+            open(os.path.join(case, "150", f), "w").close()
+        self.assertEqual((self.p.kept(case)["150"], self.p.times(case)), ("split", ["100"]))
+        self.assertEqual(solve.times(case), ([100, 150, 200], [100]))
+        os.remove(os.path.join(case, "150", jobs.JOINING))
+        self.assertEqual((self.p.times(case), solve.times(case)[1]), (["100", "150"], [100, 150]))
+
+    def test_a_case_you_made_is_read_split_through_links_of_its_own(self):
+        case = self.case(times=("100",))
+        self.split(case, ("100", "150"), procs=3)
+        before = self.files(case)
+        out = os.path.join(self.tmp, "set")
+        cmds, _ = self.p.plan(case, "/view", out, self.p.KINDS, "pvbatch", split=True)
+        self.assertEqual((cmds["cuts"][4], cmds["spots"][4], cmds["vortices"][-1]),
+                         ("decomposed", "decomposed", "--decomposed"))    # each script's Decomposed Case
+        doc = self.p.make(case, out, "150", self.p.KINDS, join=True)      # a case you made is never joined
+        procs = " ".join(f"processor{n}:150,constant" for n in range(3))  # its constant and only that time
+        with open(os.path.join(out, "seen")) as f:
+            self.assertEqual(f.read().splitlines(), [
+                f"{s} /usr/lib/python3/dist-packages case.foam constant processor0 processor1 processor2 system "
+                f"{procs} split" for s in ("cut_views.py", "vortex_views.py", "pressure_spots.py")])
+        self.assertEqual(doc["notes"], ["written time 150 is split onto its 3 processes, so ParaView read it as it "
+                                        "is, split: a case you made is only read"])
+        self.assertEqual(len(doc["pictures"]), 8)
+        self.assertEqual(self.files(case), before)                        # nothing written in the case
+        with self.assertRaisesRegex(RuntimeError, r"^ahmedP has no written time 175 with its flow"):
+            self.p.make(case, os.path.join(self.tmp, "none"), "175", self.p.KINDS)
+        ws, launched, ram, post = self.jobs_here(case)
+        st, job, _ = post({"name": "ahmedP"})                             # its latest, split: read as it is
+        self.assertEqual((st, job["params"]["time"], ram), (202, "150", [(case, "pictures-split")]))
+
+    def test_a_run_mesh_doctor_made_has_its_time_joined_first(self):
+        import jobs, solve
+        case = self.case(times=("100",))
+        self.split(case, ("100", "150", "200"))
+        self.ours(case)
+        out = os.path.join(self.tmp, "set")
+        doc = self.p.make(case, out, "150", ("spots",), join=True)
+        self.assertEqual(sorted(os.listdir(os.path.join(case, "150"))), ["U", "k", "p"])     # whole, and no mark
+        with open(os.path.join(case, "joins")) as f:
+            self.assertEqual(f.read().splitlines(), ["-time 150"])
+        with open(os.path.join(out, "seen")) as f:                        # then read whole, as a joined one is
+            self.assertEqual(f.read(), "pressure_spots.py /usr/lib/python3/dist-packages 150 case.foam constant "
+                                       "system\n")
+        self.assertEqual(doc["notes"], ["written time 150 was split onto its 2 processes, so it was joined first, in "
+                                        "the run's own folder"])
+        self.assertIn("pictures: joining written time 150 from its 2 processes, into its folder (reconstructPar)\n",
+                      sys.stdout.getvalue())                              # in the job's log
+        self.assertEqual(solve.times(case)[1], [100, 150])                # GET /runs lists it as joined now
+        with mock.patch.dict(os.environ, {"MD_TEST_JOIN": "fail"}), \
+                self.assertRaisesRegex(RuntimeError, r"^reconstructPar didn't join ahmedP's written time 200 \(exit "
+                                                     r"1\): the job's log says why$"):
+            self.p.make(case, os.path.join(self.tmp, "other"), "200", ("spots",), join=True)
+        self.assertFalse(os.path.exists(os.path.join(case, "200")) or os.path.exists(os.path.join(self.tmp, "other")))
+        os.makedirs(os.path.join(case, "200"))                            # its folder there before: only the mark goes
+        with mock.patch.dict(os.environ, {"MD_TEST_JOIN": "fail"}), self.assertRaises(RuntimeError):
+            self.p.join_time(case, "200")
+        self.assertEqual(os.listdir(os.path.join(case, "200")), ["U"])
+        self.p.join_time(case, "200")                                     # a join cut short is joined again
+        self.assertEqual(sorted(os.listdir(os.path.join(case, "200"))), ["U", "k", "p"])
+        self.assertNotIn(jobs.JOINING, os.listdir(os.path.join(case, "200")))
+        os.remove(os.path.join(case, jobs.CASE_MARKER))
+        with self.assertRaisesRegex(RuntimeError, r"^ahmedP is a case you made, which Mesh Doctor only reads"):
+            self.p.join_time(case, "150")
+
+    def test_a_picture_job_counts_the_time_it_joins_on_the_disk(self):
+        import api_v1, diskguard, schema
+        case = self.case(times=("100",))
+        self.split(case, ("100", "150"), sizes={"U": 3 * diskguard.MB, "p": diskguard.MB})   # 8 MB split
+        ws, launched, _, post = self.jobs_here(case)
+        get = lambda **q: api_v1.handle("GET", "/api/v1/disk/pictures", {k: str(v) for k, v in q.items()})
+        st, doc, _ = get(name="ahmedP", time="150")
+        self.assertEqual((st, doc["needMb"], doc["join"]), (200, 7, None))    # a case you made is read as it is
+        self.ours(case)
+        st, doc, _ = get(name="ahmedP")                                      # its latest: split
+        self.assertEqual(st, 200, doc)
+        self.assertEqual({k: v for k, v in doc["join"].items() if k != "freeMb"},
+                         {"time": "150", "processes": 2, "needMb": 8, "sameDisk": True})     # its 8 MB split
+        self.assertIsInstance(doc["join"]["freeMb"], int)
+        self.assertEqual(schema.check(doc, api_v1.DISK_PICTURES), [])
+        self.assertIsNone(get(name="ahmedP", time="100")[1]["join"])        # joined already
+        with mock.patch.object(diskguard, "free_mb", lambda path: diskguard.KEEP_MB + 12):
+            st, err, _ = post({"name": "ahmedP"})                            # 7 + 8 MB on one disk: counted together
+        self.assertEqual((st, err["error"]["code"], launched), (409, "not-enough-disk", []))
+        self.assertIn("the set of about 19 pictures of ahmedP and joining its written time 150 from its 2 processes "
+                      "into its folder need about 15 MB, and the disk has 1.0 GB free", err["error"]["message"])
+        with mock.patch.object(diskguard, "free_mb", lambda path: diskguard.KEEP_MB + 14), \
+                mock.patch.object(diskguard, "same_disk", lambda a, b: False):
+            st, job, _ = post({"name": "ahmedP"})                            # on two disks: each fits its own
+        self.assertEqual((st, job["params"]["time"]), (202, "150"), job)
+        argv = launched[0]
+        self.assertEqual(argv[argv.index("--time") + 1], "150")
 
     def test_the_vortex_levels_go_as_the_speed_squared(self):
         self.assertEqual(self.p.q_levels(15), [3000, 10000, 30000])
@@ -4351,7 +4508,8 @@ for n in names:
         self.assertIsNone(self.p.why_not(case))
         self.assertEqual(self.p.times(case), ["100", "200"])
         self.assertEqual(self.p.why_not(case, "300"),
-                         ("bad-request", "ahmedP has no time 300 on its whole mesh; its latest are 100, 200"))
+                         ("bad-request", "ahmedP has no written time 300 with its flow (U and p); its latest are 100, "
+                                         "200"))
         self.frame.update(flowSign=1)
         self.assertRegex(self.p.why_not(case)[1], r"^ahmedP's flow goes toward \+x, with z up: the picture scripts' "
                                                    r"cameras need it toward -x, with z up$")
@@ -4411,7 +4569,7 @@ for n in names:
                                                        os.path.join(ws, ".pictures", "ahmedP", "200")])
         st, doc, _ = post({"name": "ahmedP", "time": "300"})
         self.assertEqual((st, doc["error"]["message"]),
-                         (400, "ahmedP has no time 300 on its whole mesh; its latest are 100, 200"))
+                         (400, "ahmedP has no written time 300 with its flow (U and p); its latest are 100, 200"))
         st, doc, _ = post({"name": "ahmedP", "time": "100"})               # one big job at a time
         self.assertEqual((st, doc["error"]["code"], len(launched)), (409, "busy", 1))
         self.assertEqual(schema.validate(jobs.get(job["id"]), "job"), [])  # the job schema has the kind

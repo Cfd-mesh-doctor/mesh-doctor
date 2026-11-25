@@ -39,6 +39,9 @@ ACTIVE = ("queued", "running")
 CASE_MARKER = ".meshdoctor-case.json"
 # In a case a solve job solves (solve.py): the run's state, iteration and the stretches solved so far.
 SOLVE_STATUS = ".meshdoctor-solve.json"
+# In a written time a picture job is joining from a run's processes (pictures.join): not joined until it has gone, so a
+# join cut short isn't taken for one that is whole (pictures.times, solve.times).
+JOINING = ".meshdoctor-joining"
 ID = re.compile(r"^[0-9]{8}-[0-9]{6}-[a-z]+-[A-Za-z0-9_.-]{1,80}-[0-9a-f]{4}$")
 SAFE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$")      # md_api.SAFE: a case's folder name
 START_GRACE = 60          # seconds a queued job may wait for its wrapper before it counts as lost
@@ -312,7 +315,9 @@ def submit(kind, params, name, cmd, log, result=None, ram=None, ws=None, disk=No
     cmd: the argument list to run (no shell).  log and result: paths relative
     to the workspace.  ram: (case folder, "repair" | "solve") for the RAM guard, or
     (cells, "mesh") for a mesh the job makes.  disk: (MB, folder, what needs it)
-    for the disk guard: what the job writes into that folder."""
+    for the disk guard: what the job writes into that folder, or a list of them
+    for a job that writes into folders on different disks (a picture job that
+    joins a run's time first)."""
     ws = ws or workspace()
     why = busy(ws)
     if why:
@@ -321,8 +326,8 @@ def submit(kind, params, name, cmd, log, result=None, ram=None, ws=None, disk=No
         ok, msg = ramguard.check_cells(*ram) if isinstance(ram[0], int) else ramguard.check(*ram)
         if not ok:
             raise Refused("not-enough-memory", msg)
-    if disk:
-        ok, msg = diskguard.check(*disk)
+    for need in (disk if isinstance(disk, list) else [disk] if disk else []):
+        ok, msg = diskguard.check(*need)
         if not ok:
             raise Refused("not-enough-disk", msg)
     config.ensure_workspace(ws)

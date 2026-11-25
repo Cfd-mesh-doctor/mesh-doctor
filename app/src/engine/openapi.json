@@ -1760,7 +1760,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.18"
+    "version": "1.19"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -3321,13 +3321,13 @@
             }
           },
           {
-            "description": "the written time to picture, as its folder says it (default: the latest on the case's whole mesh; with mean, the latest with a mean flow)",
+            "description": "the written time to picture, as its folder says it (default: the latest; with mean, the latest with a mean flow). One still split onto the case's processes (GET /runs' times, not joined) is joined first, into the run's own folder, when Mesh Doctor made the run; a case you made is read as it is, split (API 1.19)",
             "in": "query",
             "name": "time",
             "required": false,
             "schema": {
               "default": "",
-              "description": "the written time to picture, as its folder says it (default: the latest on the case's whole mesh; with mean, the latest with a mean flow)",
+              "description": "the written time to picture, as its folder says it (default: the latest; with mean, the latest with a mean flow). One still split onto the case's processes (GET /runs' times, not joined) is joined first, into the run's own folder, when Mesh Doctor made the run; a case you made is read as it is, split (API 1.19)",
               "pattern": "^([0-9][0-9.eE+-]*)?$",
               "type": "string"
             }
@@ -3377,6 +3377,51 @@
                         "null"
                       ]
                     },
+                    "join": {
+                      "description": "when the time pictured is still split onto the processes of a run Mesh Doctor made, the job joins it first, into the run's own folder in the cases folder (reconstructPar), and this is what that writes; null when it doesn't (a joined time, or a case you made, which is read as it is) (API 1.19)",
+                      "properties": {
+                        "freeMb": {
+                          "description": "the free space of the run's folder's disk; null when it can't be read",
+                          "minimum": 0,
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "needMb": {
+                          "description": "the joined time, counted as its fields take split (joined, they take a little less: the faces the processes share go)",
+                          "minimum": 0,
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "processes": {
+                          "description": "the processes it is split onto",
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "sameDisk": {
+                          "description": "it is the workspace's disk, so the guard counts the set and the join together against freeMb",
+                          "type": "boolean"
+                        },
+                        "time": {
+                          "description": "the time it joins, as its folders say it",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "time",
+                        "processes",
+                        "needMb",
+                        "freeMb",
+                        "sameDisk"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
                     "keepMb": {
                       "description": "kept free for everything else: the disk guard refuses the job when what it writes and this are more than freeMb",
                       "minimum": 0,
@@ -3395,7 +3440,8 @@
                     "needMb",
                     "freeMb",
                     "keepMb",
-                    "folder"
+                    "folder",
+                    "join"
                   ],
                   "type": "object"
                 }
@@ -3414,7 +3460,7 @@
             "description": "Error (the code says which; see STATUS in api_v1.py)"
           }
         },
-        "summary": "What a picture job writes in the engine's workspace, as the disk guard counts it before the job starts (about 0.3 MB a picture: one per colour of each cut, per vortex level and view, and the worst spot's three views), and the free space there, in MB (API 1.18)"
+        "summary": "What a picture job writes in the engine's workspace, as the disk guard counts it before the job starts (about 0.3 MB a picture: one per colour of each cut, per vortex level and view, and the worst spot's three views), and the free space there, in MB (API 1.18); and a time it joins first, split onto the processes of a run Mesh Doctor made, in the run's own folder (API 1.19)"
       }
     },
     "/disk/repair": {
@@ -3876,7 +3922,7 @@
                   },
                   {
                     "additionalProperties": false,
-                    "description": "make pictures of a solved case's flow with ParaView, offscreen, at a written time, or of a transient run's mean flow: cuts from its cut list (cuts.json) or made from its model's size, its vortices, and any spot of unphysical pressure on its walls (Cp below -5: a numerical error). The case is only read: ParaView reads it through a folder of links, and the pictures go in the workspace, with a list of them; a computer's first set starts with ParaView's self test (API 1.15; the mean flow and the self test, API 1.16)",
+                    "description": "make pictures of a solved case's flow with ParaView, offscreen, at a written time, or of a transient run's mean flow: cuts from its cut list (cuts.json) or made from its model's size, its vortices, and any spot of unphysical pressure on its walls (Cp below -5: a numerical error). The case is only read: ParaView reads it through a folder of links, and the pictures go in the workspace, with a list of them; a computer's first set starts with ParaView's self test (API 1.15; the mean flow and the self test, API 1.16). The one exception: a time of a run Mesh Doctor made that is still split onto its processes is joined first, into the run's own folder, as its solve joins the latest of each stretch (API 1.19)",
                     "properties": {
                       "kind": {
                         "enum": [
@@ -3904,7 +3950,7 @@
                           },
                           "time": {
                             "default": "",
-                            "description": "the written time to picture, as its folder says it (default: the latest on the case's whole mesh; with mean, the latest with a mean flow)",
+                            "description": "the written time to picture, as its folder says it (default: the latest; with mean, the latest with a mean flow). One still split onto the case's processes (GET /runs' times, not joined) is joined first, into the run's own folder, when Mesh Doctor made the run; a case you made is read as it is, split (API 1.19)",
                             "pattern": "^([0-9][0-9.eE+-]*)?$",
                             "type": "string"
                           }
@@ -5518,7 +5564,7 @@
                             ]
                           },
                           "joined": {
-                            "description": "those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10)",
+                            "description": "those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10), and any other a picture job has joined to picture it (API 1.19)",
                             "items": {
                               "type": "number"
                             },
@@ -5766,7 +5812,7 @@
                       ]
                     },
                     "joined": {
-                      "description": "those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10)",
+                      "description": "those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10), and any other a picture job has joined to picture it (API 1.19)",
                       "items": {
                         "type": "number"
                       },
@@ -6107,7 +6153,7 @@
                           ]
                         },
                         "joined": {
-                          "description": "those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10)",
+                          "description": "those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10), and any other a picture job has joined to picture it (API 1.19)",
                           "items": {
                             "type": "number"
                           },
@@ -6470,7 +6516,7 @@
                       ]
                     },
                     "joined": {
-                      "description": "those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10)",
+                      "description": "those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10), and any other a picture job has joined to picture it (API 1.19)",
                       "items": {
                         "type": "number"
                       },

@@ -23,7 +23,7 @@ Courant number of C (1 by default) to SECONDS of flow (8 L/U by default), with n
 steady flow.  A transient run counts seconds, not iterations: its --to, its progress and its continuations are times.
 Each of its stretches writes 4 times, evenly to its end, or N (--writes, 1 to 200; given with a continuation, the run
 writes N a stretch from then on), and it keeps every time it writes, for pictures of the flow over time; on several
-processes the latest of each stretch is joined.
+processes the latest of each stretch is joined, and a picture job joins any other time it pictures.
 It averages its flow (transient.py's meanFlow: UMean, pMean, UPrime2Mean, pPrime2Mean) from when its forces have
 settled: as it solves, the solve reads its forces every AVERAGE_CHECK_S, and before each stretch, and once they have
 settled (the transient judge's rule) switches the averaging on, which OpenFOAM takes up at its next time step; its
@@ -127,7 +127,8 @@ def writes_ok(writes):
 
 def times(case):
     """The written times run folder `case` keeps, as numbers, oldest first, and those of them joined: (times, joined).
-    Its processors' and its own (joined) when it is split, else its own; not its start (0)."""
+    Its processors' and its own (joined) when it is split, else its own; not its start (0), nor a time a picture job
+    is still joining (jobs.JOINING in it)."""
     def listed(folder):
         out = set()
         try:
@@ -139,7 +140,8 @@ def times(case):
                 t = float(n)
             except ValueError:
                 continue
-            if t > 0 and math.isfinite(t) and os.path.isdir(os.path.join(folder, n)):
+            if t > 0 and math.isfinite(t) and os.path.isdir(os.path.join(folder, n)) \
+                    and not os.path.lexists(os.path.join(folder, n, jobs.JOINING)):
                 out.add(num(n))
         return out
     joined = listed(case)

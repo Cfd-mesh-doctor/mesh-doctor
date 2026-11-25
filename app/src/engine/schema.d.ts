@@ -195,7 +195,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** What a picture job writes in the engine's workspace, as the disk guard counts it before the job starts (about 0.3 MB a picture: one per colour of each cut, per vortex level and view, and the worst spot's three views), and the free space there, in MB (API 1.18) */
+        /** What a picture job writes in the engine's workspace, as the disk guard counts it before the job starts (about 0.3 MB a picture: one per colour of each cut, per vortex level and view, and the worst spot's three views), and the free space there, in MB (API 1.18); and a time it joins first, split onto the processes of a run Mesh Doctor made, in the run's own folder (API 1.19) */
         get: operations["disk_pictures"];
         put?: never;
         post?: never;
@@ -1872,7 +1872,7 @@ export interface operations {
                 mean?: boolean;
                 /** @description a case in the cases folder with a written result: a run (GET /runs), or a case you made (GET /cases) */
                 name: string;
-                /** @description the written time to picture, as its folder says it (default: the latest on the case's whole mesh; with mean, the latest with a mean flow) */
+                /** @description the written time to picture, as its folder says it (default: the latest; with mean, the latest with a mean flow). One still split onto the case's processes (GET /runs' times, not joined) is joined first, into the run's own folder, when Mesh Doctor made the run; a case you made is read as it is, split (API 1.19) */
                 time?: string;
             };
             header?: never;
@@ -1895,6 +1895,19 @@ export interface operations {
                         folder: "workspace" | "cases";
                         /** @description the free space of the disk it writes on (inside WSL 2, at most that of the Windows drive that holds Linux's own disk); null when it can't be read */
                         freeMb: number | null;
+                        /** @description when the time pictured is still split onto the processes of a run Mesh Doctor made, the job joins it first, into the run's own folder in the cases folder (reconstructPar), and this is what that writes; null when it doesn't (a joined time, or a case you made, which is read as it is) (API 1.19) */
+                        join: {
+                            /** @description the free space of the run's folder's disk; null when it can't be read */
+                            freeMb: number | null;
+                            /** @description the joined time, counted as its fields take split (joined, they take a little less: the faces the processes share go) */
+                            needMb: number | null;
+                            /** @description the processes it is split onto */
+                            processes: number;
+                            /** @description it is the workspace's disk, so the guard counts the set and the join together against freeMb */
+                            sameDisk: boolean;
+                            /** @description the time it joins, as its folders say it */
+                            time: string;
+                        } | null;
                         /** @description kept free for everything else: the disk guard refuses the job when what it writes and this are more than freeMb */
                         keepMb: number;
                         /** @description what the job writes on the disk as it goes, as the engine's disk guard counts it before the job starts (meshdoctor/diskguard.py); null when it can't be measured, and the guard lets the job through */
@@ -2132,7 +2145,7 @@ export interface operations {
                         /** @description a case in the cases folder with a written result: a run (GET /runs), or a case you made (GET /cases) */
                         name: string;
                         /**
-                         * @description the written time to picture, as its folder says it (default: the latest on the case's whole mesh; with mean, the latest with a mean flow)
+                         * @description the written time to picture, as its folder says it (default: the latest; with mean, the latest with a mean flow). One still split onto the case's processes (GET /runs' times, not joined) is joined first, into the run's own folder, when Mesh Doctor made the run; a case you made is read as it is, split (API 1.19)
                          * @default
                          */
                         time?: string;
@@ -2985,7 +2998,7 @@ export interface operations {
                             finished: string | null;
                             /** @description the last iteration in its solver log (a transient run's: the time in s, as are its other times) */
                             iteration: number | null;
-                            /** @description those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10) */
+                            /** @description those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10), and any other a picture job has joined to picture it (API 1.19) */
                             joined?: number[];
                             /** @description the case it solves: a case in the cases folder that Mesh Doctor made */
                             name: string;
@@ -3072,7 +3085,7 @@ export interface operations {
                         finished: string | null;
                         /** @description the last iteration in its solver log (a transient run's: the time in s, as are its other times) */
                         iteration: number | null;
-                        /** @description those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10) */
+                        /** @description those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10), and any other a picture job has joined to picture it (API 1.19) */
                         joined?: number[];
                         /** @description itself, Stop, and its convergence judge (GET /judge?case=; a transient run's with window=auto, over the last half of its time steps as its page judges it, API 1.11) */
                         links?: Record<string, unknown>;
@@ -3196,7 +3209,7 @@ export interface operations {
                             finished: string | null;
                             /** @description the last iteration in its solver log (a transient run's: the time in s, as are its other times) */
                             iteration: number | null;
-                            /** @description those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10) */
+                            /** @description those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10), and any other a picture job has joined to picture it (API 1.19) */
                             joined?: number[];
                             /** @description the case it solves: a case in the cases folder that Mesh Doctor made */
                             name: string;
@@ -3321,7 +3334,7 @@ export interface operations {
                         finished: string | null;
                         /** @description the last iteration in its solver log (a transient run's: the time in s, as are its other times) */
                         iteration: number | null;
-                        /** @description those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10) */
+                        /** @description those of its times that are joined, the whole mesh's, in the case's own folder: every one when it isn't split, else the latest of each stretch (API 1.10), and any other a picture job has joined to picture it (API 1.19) */
                         joined?: number[];
                         /** @description itself, Stop, and its convergence judge (GET /judge?case=; a transient run's with window=auto, over the last half of its time steps as its page judges it, API 1.11) */
                         links?: Record<string, unknown>;

@@ -6,7 +6,11 @@
 
 The case (a run Mesh Doctor made, or a case you made, in the cases folder) is only read: ParaView reads it through
 a folder of links in the workspace (its constant, system and the time pictured, and an empty case.foam), and the
-pictures go in the workspace too, in .pictures/<case>/<time>/, with pictures.json listing them.  Cuts follow the
+pictures go in the workspace too, in .pictures/<case>/<time>/, with pictures.json listing them.  A time still split
+onto the case's processes (on several processes a run joins only the latest of each stretch) is joined first, into the
+run's own folder (reconstructPar -time), when Mesh Doctor made the run: the one thing a picture writes in a case, as
+its solve would, so that the run then lists it as joined.  A case you made is read as it is, split (ParaView's
+Decomposed Case): each processor folder through links of its own, with its constant and only that time.  Cuts follow the
 case's cut list (cuts.json at its root, as a case made from the Ahmed body template has), or without one are made
 from its model's size; vortices and spots of unphysical pressure on the walls (Cp below -5: a numerical error) need
 only the case.  The scripts' cameras need the flow toward -x and z up.  With --mean they picture a transient run's
@@ -15,7 +19,7 @@ mean flow (UMean and pMean, written once its averaging is on) in place of the fl
 must come out red), in .pictures/.selftest/, which is kept once it has passed.  The API serves the sets (sets(),
 one(), picture(), delete()): only a picture a set's list names is read, in the set's own folders, never through a link.
 """
-import argparse, json, math, os, re, shutil, stat, subprocess, sys, time
+import argparse, json, math, os, re, shlex, shutil, stat, subprocess, sys, time
 
 import caseinfo
 import config
@@ -48,6 +52,8 @@ FILE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}\.png$")     # a picture's 
 PNG = b"\x89PNG\r\n\x1a\n"      # the first bytes of every PNG file
 MAX_PNG = 32 << 20              # the largest picture served: ParaView's 1920 x 1080 PNGs are well under 1 MB
 AUTO_CUTS = 7                   # the pictures of the cuts cut_views.py makes from the model's size: 3, 2 and 2 colours
+FLOW = ("U", "p")               # the flow a picture reads (MEAN in their place for a mean flow's)
+PROC = re.compile(r"^processor[0-9]+$")     # a processor folder of a case split onto its processes
 
 
 def _num(text):
@@ -61,15 +67,68 @@ def _has(folder, field):
     return any(os.path.isfile(os.path.join(folder, field + z)) for z in ("", ".gz"))
 
 
+def _fields(folder, fields):
+    return all(_has(folder, f) for f in fields)
+
+
+def processors(case):
+    """The processor folders of a case split onto its processes, by number (processor0, processor1, ...); [] when it
+    isn't split."""
+    try:
+        names = [n for n in os.listdir(case) if PROC.match(n) and os.path.isdir(os.path.join(case, n))]
+    except OSError:
+        return []
+    return sorted(names, key=lambda n: int(n[len("processor"):]))
+
+
+def kept(case, fields=FLOW):
+    """{time: how it is kept} of the written times that hold these fields (the flow, U and p, by default), oldest
+    first, as their folders say them: "joined" on the case's whole mesh, else "split" in every one of its processor
+    folders.  A time a picture job is still joining (jobs.JOINING in it) is split."""
+    def written(folder):
+        try:
+            return [d for d in os.listdir(folder) if _num(d) and float(d) > 0]
+        except OSError:
+            return []
+    out = {d: "joined" for d in written(case) if _fields(os.path.join(case, d), fields)
+           and not os.path.lexists(os.path.join(case, d, jobs.JOINING))}
+    procs = processors(case)
+    for d in written(os.path.join(case, procs[0])) if procs else []:
+        if d not in out and all(_fields(os.path.join(case, p, d), fields) for p in procs):
+            out[d] = "split"
+    return dict(sorted(out.items(), key=lambda kv: float(kv[0])))
+
+
 def times(case):
-    """The written times with the flow (U and p) on the case's whole mesh, oldest first, as their folders say them."""
-    return sorted((d for d in os.listdir(case) if _num(d) and float(d) > 0
-                   and _has(os.path.join(case, d), "U") and _has(os.path.join(case, d), "p")), key=float)
+    """The written times with the flow (U and p) on the case's whole mesh, joined, oldest first, as their folders say
+    them."""
+    return [t for t, how in kept(case).items() if how == "joined"]
 
 
 def mean_times(case):
     """Those of times() that hold a transient run's mean flow too (UMean and pMean), oldest first."""
-    return [t for t in times(case) if all(_has(os.path.join(case, t), f) for f in MEAN)]
+    return [t for t, how in kept(case, FLOW + MEAN).items() if how == "joined"]
+
+
+def latest(case, mean=False):
+    """The latest written time with the flow (with `mean`, a transient run's mean flow too), joined or split; None
+    when it has none."""
+    return next(reversed(kept(case, FLOW + MEAN if mean else FLOW)), None)
+
+
+def ours(case):
+    """Did Mesh Doctor make this case (its marker says so), in a folder of its own, not one reached through a link?
+    Only then may a picture job join a time of it in its folder: a case you made is only ever read."""
+    return not os.path.islink(os.path.normpath(case)) and md_api.made(case) is not None
+
+
+def how(case, at):
+    """How a picture job reads written time `at`: "joined", on the case's whole mesh; "join", split onto the processes
+    of a run Mesh Doctor made (ours()), which it joins first, into the run's own folder (join_time()); or "split",
+    split in a case you made, which ParaView reads as it is (make())."""
+    if at in times(case):
+        return "joined"
+    return "join" if ours(case) else "split"
 
 
 def set_name(at, mean=False):
@@ -140,13 +199,14 @@ def q_levels(uinf):
 def why_not(case, at=None, mean=False):
     """Why this case (its mean flow, with `mean`) can't be pictured, as (code, message) naming no folders, or None."""
     name = os.path.basename(os.path.normpath(case))
-    have = times(case)
+    have = list(kept(case))
     if not have:
-        return "not-ready", (f"{name} has no written result on its whole mesh to picture (a time with U and p): "
-                             "solve it first")
+        return "not-ready", (f"{name} has no written result to picture (a time with U and p, on its whole mesh or "
+                             "split onto its processes): solve it first")
     if at is not None and at not in have:
-        return "bad-request", f"{name} has no time {at} on its whole mesh; its latest are {', '.join(have[-4:])}"
-    means = mean_times(case) if mean else []
+        return "bad-request", (f"{name} has no written time {at} with its flow (U and p); its latest are "
+                               f"{', '.join(have[-4:])}")
+    means = list(kept(case, FLOW + MEAN)) if mean else []
     if mean and not means:
         return "not-ready", (f"{name} has no mean flow (UMean and pMean): a transient run writes it in each time once "
                              "its averaging is on, from when its forces have settled")
@@ -191,23 +251,49 @@ def how_many(case, kinds):
     return n
 
 
-def _disk(case, name, kinds):
-    """What a pictures job of `case` writes, for the disk guard: (MB, the workspace's folder of sets, what needs it,
-    with its verb), from how_many() pictures."""
+def _join_of(case, at):
+    """What a picture job writes into the run's own folder when it joins time `at` first (how(): split onto the
+    processes of a run Mesh Doctor made): (MB, the run's folder, its processes), from that time's fields as they are
+    split; None when it doesn't join it."""
+    if how(case, at) != "join":
+        return None
+    procs = processors(case)
+    return diskguard.join_mb(sum(diskguard.size(os.path.join(case, p, at)) for p in procs)), case, len(procs)
+
+
+def _disk(case, name, kinds, at):
+    """What a pictures job of time `at` of `case` writes, for the disk guard: ([(MB, folder, what needs it, with its
+    verb)], the join (_join_of) or None).  Its set of how_many() pictures in the workspace, and a time it joins first
+    in the run's own folder: one check of both when the two are on one disk."""
     n = how_many(case, kinds)
-    return diskguard.pictures_mb(n), root(), f"the set of about {n} pictures of {name} needs"
+    pictures = (diskguard.pictures_mb(n), root(), f"the set of about {n} pictures of {name} needs")
+    join = _join_of(case, at)
+    if join is None:
+        return [pictures], None
+    joining = f"joining its written time {at} from its {join[2]} processes into its folder"
+    if diskguard.same_disk(case, root()):
+        return [(pictures[0] + join[0], root(), f"the set of about {n} pictures of {name} and {joining} need")], join
+    return [pictures, (join[0], case, f"{joining} needs")], join
 
 
 def disk_of(name, at=None, kinds=KINDS, mean=False):
-    """GET /disk/pictures: what a pictures job writes, as start's disk guard counts it: ((MB, folder, what), None), or
-    (None, the refusal start would give)."""
+    """GET /disk/pictures: what a pictures job writes, as start's disk guard counts it: ({"set": (MB, the workspace's
+    folder of sets), "join": _join_of()'s, "time": the time pictured}, None), or (None, the refusal start would
+    give)."""
     why = refusal(name, at, mean)
-    return (None, md_api._refuse(*why)) if why else (_disk(tplan._case(name), name, kinds), None)
+    if why:
+        return None, md_api._refuse(*why)
+    case = tplan._case(name)
+    at = at or latest(case, mean)
+    n = how_many(case, kinds)
+    return {"set": (diskguard.pictures_mb(n), root()), "join": _join_of(case, at), "time": at}, None
 
 
-def plan(case, view, out, kinds, pvbatch, mean=False, since=None):
+def plan(case, view, out, kinds, pvbatch, mean=False, since=None, split=False):
     """({kind: the pvbatch command that makes its pictures, reading the links folder `view`, into out/<kind>},
-    notes on what is left out).  With `mean`, of the mean flow, averaged from time `since` (s; None: not known)."""
+    notes on what is left out).  With `mean`, of the mean flow, averaged from time `since` (s; None: not known);
+    with `split`, of a time read split onto the case's processes (each script's Decomposed Case)."""
+    read = "decomposed" if split else "reconstructed"
     d = caseinfo.describe(case)
     name, w, uinf = os.path.basename(os.path.normpath(case)), ",".join(walls(case, d["total"])), d["Uinf"]
     foam, run, cmds, notes = os.path.join(view, "case.foam"), [pvbatch, "--force-offscreen-rendering"], {}, []
@@ -221,12 +307,12 @@ def plan(case, view, out, kinds, pvbatch, mean=False, since=None):
             if not os.path.isfile(spec):                # cut_views makes three from the walls' bounds
                 spec = "auto"
                 notes.append(f"cuts made from the model's size: {name} has no cut list ({CUTS} at its root)")
-            cmds[kind] = run + [script, foam, "reconstructed", into, spec, note, "--walls", w, "--uinf", f"{uinf:g}"]
+            cmds[kind] = run + [script, foam, read, into, spec, note, "--walls", w, "--uinf", f"{uinf:g}"]
         elif kind == "vortices":
             cmds[kind] = run + [script, foam, into, ",".join(map(str, q_levels(uinf))), "--walls", w,
-                                "--views", ",".join(VIEWS), "--note", note]
+                                "--views", ",".join(VIEWS), "--note", note] + (["--decomposed"] if split else [])
         else:
-            cmds[kind] = run + [script, foam, "reconstructed", into, "spots", "--walls", w, "--uinf", f"{uinf:g}",
+            cmds[kind] = run + [script, foam, read, into, "spots", "--walls", w, "--uinf", f"{uinf:g}",
                                 "--rho", f"{d['rho'] or 1.205:g}", "--note", note]
         if mean:
             cmds[kind].append("--mean")
@@ -332,11 +418,48 @@ def selftest(folder, pvbatch, env):
     return f"ParaView stopped, exit {rc}" if rc else "it wrote no verdict"
 
 
-def make(case, out, at, kinds, mean=False, selftest_dir=None):
+def join_time(case, at):
+    """Join written time `at` of a run Mesh Doctor made from its processes into the run's own folder (reconstructPar
+    -time), as its solve joins the latest of each stretch; reconstructPar's output goes to the job's log.  While it
+    joins, the time holds jobs.JOINING, so one cut short isn't taken for joined; one that fails is removed again (only
+    its mark, when its folder was there before).  RuntimeError when it isn't joined."""
+    name = os.path.basename(os.path.normpath(case))
+    if not ours(case):
+        raise RuntimeError(f"{name} is a case you made, which Mesh Doctor only reads: its split times are read as "
+                           "they are")
+    folder = os.path.join(case, at)
+    if os.path.islink(folder) or (os.path.lexists(folder) and not os.path.isdir(folder)):
+        raise RuntimeError(f"{name}'s written time {at} is in the way: it isn't a folder of its own")
+    fresh = not os.path.lexists(folder)
+    os.makedirs(folder, exist_ok=True)
+    mark = os.path.join(folder, jobs.JOINING)
+    open(mark, "w").close()
+    print(f"pictures: joining written time {at} from its {len(processors(case))} processes, into its folder "
+          "(reconstructPar)", flush=True)
+    bashrc = shlex.quote(config.settings()["bashrc"])
+    rc, _ = _run(["bash", "-c", f"source {bashrc} >/dev/null 2>&1; [ -n \"$WM_PROJECT_DIR\" ] || exit 2; "
+                  f"exec reconstructPar -time {shlex.quote(at)}"], None, case)
+    if rc == 0 and _fields(folder, FLOW):
+        os.unlink(mark)
+        return
+    if fresh:
+        shutil.rmtree(folder, ignore_errors=True)
+    elif os.path.lexists(mark):
+        os.unlink(mark)
+    if rc == 2:
+        raise RuntimeError(f"OpenFOAM's environment didn't load, so {name}'s written time {at} wasn't joined: check "
+                           f"the bashrc setting ({prog.name()} config)")
+    raise RuntimeError(f"reconstructPar didn't join {name}'s written time {at}" + (f" (exit {rc})" if rc else "")
+                       + ": the job's log says why")
+
+
+def make(case, out, at, kinds, mean=False, selftest_dir=None, join=False):
     """Make a set of pictures of `case` at time `at` (its mean flow, with `mean`) in folder `out`; pictures.json
-    lists them.  A set made there before is replaced once the new one is whole; any other folder in the way is
-    refused and left as it is.  With `selftest_dir`, the vortex script's self test runs first, unless it has passed
-    there (selftest()).  The document; RuntimeError when no picture was made."""
+    lists them.  A time still split onto the case's processes is joined first with `join`, when Mesh Doctor made the
+    run (join_time(), how()'s "join"), else read as it is, split, each processor folder through links of its own with
+    its constant and only that time.  A set made there before is replaced once the new one is whole; any other folder in
+    the way is refused and left as it is.  With `selftest_dir`, the vortex script's self test runs first, unless it
+    has passed there (selftest()).  The document; RuntimeError when no picture was made."""
     pvbatch = selfcheck.paraview()[0]
     if not pvbatch:
         raise RuntimeError("ParaView's pvbatch isn't found")
@@ -345,6 +468,18 @@ def make(case, out, at, kinds, mean=False, selftest_dir=None):
         if not _replaceable(folder):
             raise RuntimeError(f"{folder} is in the way: it isn't a set of pictures Mesh Doctor made, so it is left "
                                "as it is")
+    procs, said = processors(case), []
+    if join and at not in times(case) and ours(case):
+        join_time(case, at)
+        said.append(f"written time {at} was split onto its {len(procs)} processes, so it was joined first, in the "
+                    "run's own folder")
+    whole = at in times(case)
+    if not whole and kept(case).get(at) != "split":
+        raise RuntimeError(f"{os.path.basename(os.path.normpath(case))} has no written time {at} with its flow (U and "
+                           "p)")
+    if not whole:
+        said.append(f"written time {at} is split onto its {len(procs)} processes, so ParaView read it as it is, split: "
+                    "a case you made is only read")
     shutil.rmtree(new, ignore_errors=True)
     os.makedirs(new, mode=0o700)
     open(os.path.join(new, MARK), "w").close()      # first, so that a set cut short can be replaced
@@ -353,15 +488,20 @@ def make(case, out, at, kinds, mean=False, selftest_dir=None):
     why = selftest(selftest_dir, pvbatch, env) if selftest_dir else None
     first = [f"ParaView's self test didn't pass ({why}), so these pictures may be blank or wrongly coloured; it runs "
              "again with the next set"] if why else []
-    since = transient.average_from(os.path.join(case, at), float(at)) if mean else None
+    since = transient.average_from(os.path.join(case, *(() if whole else procs[:1]), at), float(at)) if mean else None
     try:
         os.mkdir(view, 0o700)
-        for d in ("constant", "system", at):        # ParaView reads the case through these links: it is only read
+        for d in ("constant", "system") + ((at,) if whole else ()):    # ParaView reads the case through these links
             links.append(os.path.join(view, d))
             os.symlink(os.path.join(os.path.abspath(case), d), links[-1])
+        for proc in () if whole else procs:         # split: each processor folder's constant and only this time
+            os.mkdir(os.path.join(view, proc), 0o700)
+            for d in ("constant", at):
+                links.append(os.path.join(view, proc, d))
+                os.symlink(os.path.join(os.path.abspath(case), proc, d), links[-1])
         open(os.path.join(view, "case.foam"), "w").close()
-        cmds, notes = plan(case, view, new, kinds, pvbatch, mean, since)
-        notes = first + notes
+        cmds, notes = plan(case, view, new, kinds, pvbatch, mean, since, split=not whole)
+        notes = first + said + notes
         for kind, cmd in cmds.items():
             print(f"pictures: {kind}", flush=True)
             os.makedirs(os.path.join(new, kind))
@@ -401,13 +541,14 @@ def start(name, at=None, kinds=KINDS, mean=False):
     config.ensure_workspace(ws)
     os.makedirs(os.path.join(ws, PICTURES, name), mode=0o700, exist_ok=True)
     case = tplan._case(name)
-    at = at or (mean_times(case) if mean else times(case))[-1]
+    at = at or latest(case, mean)
     rel = f"{PICTURES}/{name}/{set_name(at, mean)}"
     cmd = [sys.executable, os.path.join(PKG, "pictures.py"), case, "--time", at, "--kinds", ",".join(kinds),
            "--out", os.path.join(ws, rel)] + (["--mean"] if mean else [])
     return md_api._submit("pictures", {"name": name, "time": at, "kinds": list(kinds), "mean": mean}, name, cmd,
-                          log=f"{rel}.log", result=f"{rel}/pictures.json", ram=(case, "pictures"),
-                          disk=_disk(case, name, kinds))
+                          log=f"{rel}.log", result=f"{rel}/pictures.json",
+                          ram=(case, "pictures-split" if how(case, at) == "split" else "pictures"),
+                          disk=_disk(case, name, kinds, at)[0])
 
 
 # --------------------------------------------------------------------------
@@ -590,8 +731,9 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog=prog.name() + " pictures", description=__doc__.split("\n\n")[0])
     ap.add_argument("case", help="a case with a written result: its name in the cases folder, or its folder (only "
                                  "read)")
-    ap.add_argument("--time", help="the written time to picture (default: the latest on its whole mesh; with --mean, "
-                                   "the latest with a mean flow)")
+    ap.add_argument("--time", help="the written time to picture (default: the latest; with --mean, the latest with a "
+                                   "mean flow); one still split onto its processes is joined first, in its folder, "
+                                   "when Mesh Doctor made the run, else read as it is, split")
     ap.add_argument("--kinds", default=",".join(KINDS), help="what to make, of %(default)s (default: all)")
     ap.add_argument("--mean", action="store_true", help="a transient run's mean flow (UMean and pMean), at a time "
                                                         "written once its averaging is on")
@@ -607,11 +749,11 @@ def main(argv=None):
     why = why_not(case, a.time, a.mean)
     if why:
         sys.exit(f"pictures: {why[1]}")
-    at = a.time or (mean_times(case) if a.mean else times(case))[-1]
+    at = a.time or latest(case, a.mean)
     sets = os.path.join(config.settings()["workspace"], PICTURES)
     out = a.out or os.path.join(sets, os.path.basename(os.path.normpath(case)), set_name(at, a.mean))
     try:
-        doc = make(case, out, at, kinds, a.mean, os.path.join(sets, SELFTEST))
+        doc = make(case, out, at, kinds, a.mean, os.path.join(sets, SELFTEST), join=how(case, at) == "join")
     except (RuntimeError, OSError) as e:
         sys.exit(f"pictures: {e}")
     for n in doc["notes"]:

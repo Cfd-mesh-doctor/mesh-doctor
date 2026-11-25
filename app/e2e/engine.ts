@@ -352,7 +352,8 @@ export async function mockEngine(
     // What the other jobs write (API 1.12), as the disk guard counts them for the coarse Ahmed body's mesh of 66 MB: a
     // repair 212 MB (its copy and its points' backup, its sets and room to collapse faces), an A/B test 484 MB (two
     // runs), its continuation 106 MB (two written times), a new case its mesh with its sets, and a set of pictures
-    // 7 MB (API 1.18: about 20 pictures of 0.3 MB, and its list).
+    // 7 MB (API 1.18: about 20 pictures of 0.3 MB, and its list), with a time still split onto a run's processes that
+    // the picture job joins first, 41 MB on the same disk (API 1.19: the coarse Ahmed body's, split onto 6 processes).
     const diskJob = /^\/disk\/(repair|abtest|abextend|case|pictures)$/.exec(path);
     if (diskJob) {
       const query = new URL(req.url()).searchParams;
@@ -364,8 +365,14 @@ export async function mockEngine(
       }
       const needMb = kind === "repair" ? 212 : kind === "abtest" ? 484 : kind === "abextend" ? 106
         : kind === "pictures" ? 7 : Math.ceil((cells ?? 0) * 0.14 / 1024 * 1.03);
+      const r = kind === "pictures" ? runs.get(query.get("name") ?? "") : undefined;
+      const kept = (k: "times" | "joined") => (((r as Record<string, unknown> | undefined)?.[k] ?? []) as number[]).map(String);
+      const at = query.get("time") || String(Math.max(...kept("times").map(Number)));
+      const join = kept("times").includes(at) && !kept("joined").includes(at)
+        ? { time: at, processes: r?.nProcs, needMb: 41, freeMb: opts.diskFreeMb ?? 402_339, sameDisk: true } : null;
+      const joins = kind === "pictures" && Number(state.apiVersion.split(".")[1]) >= 19;
       return json(200, { needMb, freeMb: opts.diskFreeMb ?? 402_339, keepMb: 1024,
-        folder: kind === "case" ? "cases" : "workspace" });
+        folder: kind === "case" ? "cases" : "workspace", ...(joins ? { join } : {}) });
     }
     if (path === "/check" && opts.check !== null) return json(200, opts.check ?? readiness());
     if (path === "/templates" && opts.templates !== null) return json(200, opts.templates ?? TEMPLATES);

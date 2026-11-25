@@ -23,8 +23,11 @@ import glob, gzip, os, re
 import config
 
 # pictures: ParaView reading a case with its cell data made point data, as the picture scripts do (18 GB at 31M
-# cells, 7 GB at 12M: skills/paraview-post)
-KB_PER_CELL = {"repair": 1.5, "solve": 1.35, "post": 0.5, "mesh": 2.2, "pictures": 0.6}
+# cells, 7 GB at 12M: skills/paraview-post); pictures-split: reading a time still split onto the processes as it is
+# (Decomposed Case), 1.5 times as much (the coarse Ahmed body's 0.48M cells on 6 processes: 0.97 GB at its peak, and
+# 0.81 GB read joined; reconstructPar, which joins one, took 0.38 GB)
+KB_PER_CELL = {"repair": 1.5, "solve": 1.35, "post": 0.5, "mesh": 2.2, "pictures": 0.6, "pictures-split": 0.9}
+LABEL = {"pictures-split": "pictures read split"}       # a kind as the guard's message says it (else its name)
 HEADROOM_MB = 512
 
 
@@ -135,7 +138,7 @@ def check_cells(cells, kind):
     if not cells or free is None:
         return True, "RAM guard: mesh size or free memory unknown; not checked"
     need = int(cells * KB_PER_CELL[kind] / 1024) + HEADROOM_MB
-    msg = f"{kind} of {cells:,} cells needs about {need / 1024:.1f} GB; {free / 1024:.1f} GB free"
+    msg = f"{LABEL.get(kind, kind)} of {cells:,} cells needs about {need / 1024:.1f} GB; {free / 1024:.1f} GB free"
     if need > free:
         return False, ("not enough memory: " + msg +
                        ". Close other programs (ParaView, another solver) or run it on a bigger machine.")

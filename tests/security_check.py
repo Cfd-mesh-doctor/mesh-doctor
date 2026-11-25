@@ -161,6 +161,8 @@ CHECKS = [
      '"code": "bad-request"'),
     ("v1 a picture job's disk check takes a mean that is true or false", "GET",
      "/api/v1/disk/pictures?name=ahmed&mean=yes", {}, 400, '"code": "bad-request"'),
+    ("v1 a picture job's disk check takes no '..' time", "GET", "/api/v1/disk/pictures?name=ahmed&time=../0", {},
+     400, '"code": "bad-request"'),
     ("v1 a picture job's disk check of a missing case", "GET", "/api/v1/disk/pictures?name=nope", {}, 404,
      '"code": "not-found"'),
     ("v1 a set of pictures takes no '..'", "GET", "/api/v1/pictures/../2000", {}, 400, '"code": "bad-request"'),

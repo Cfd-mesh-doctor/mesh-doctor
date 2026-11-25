@@ -33,7 +33,11 @@ the workspace: each its settings, mesh and start fields, split onto its processe
 joined: the one it ends at, and the one after it that maps where the solution moves (AB_TIMES).  Measured: 3.3 times
 the mesh a run, on the Ahmed body's 0.48 and 0.84 million cell meshes from 0, on 6 processes; the guard counts its copy
 and 2.65 times the mesh.  A test that reuses an earlier one's first run makes one copy.  Running its second run longer
-writes that run's own times, split.
+writes that run's own times, split.  A picture job (pictures.py) writes its set of pictures into the workspace, about
+0.3 MB a picture; one that pictures a time of a run Mesh Doctor made that is still split onto its processes first
+joins it into the run's own folder, counted as its fields take split, measured as they are (the coarse Ahmed body's
+time 2000 took 39.4 MB joined, of 41.0 MB split onto 6 processes); on one disk with the workspace, the two are counted
+together.
 1 GB is kept free for everything else.
 
 The free space is that of the cases folder's disk.  Inside WSL 2, Linux's own disk is a file on a Windows drive (C:,
@@ -142,6 +146,29 @@ def extend_mb(mesh, times):
 def pictures_mb(pictures):
     """The MB a set of this many pictures takes (pictures.py), with its list and log."""
     return _up(pictures * PICTURE_MB + PICTURES_MB)
+
+
+def join_mb(split):
+    """The MB joining a written time onto the whole mesh takes (reconstructPar), from the bytes its fields take split
+    onto the processes (`split`): as much, rounded up (measured: 0.96 of it, as the faces the processes share go)."""
+    return mb(split)
+
+
+def same_disk(a, b):
+    """Are folders `a` and `b` (or the nearest folders above them that are there) on one disk, whose free space they
+    share?  False when either can't be read."""
+    def device(path):
+        while not os.path.isdir(path):
+            up = os.path.dirname(path)
+            if up == path:
+                return None
+            path = up
+        try:
+            return os.stat(path).st_dev
+        except OSError:
+            return None
+    da, db = device(a), device(b)
+    return da is not None and da == db
 
 
 def _up(x):

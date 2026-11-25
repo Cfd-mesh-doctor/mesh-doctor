@@ -43,9 +43,11 @@ const run = (name: string, more: Record<string, unknown> = {}) => ({
 
 /** Your own engine with these sets of pictures, jobs and runs (its sets being made are those of its active picture
  * jobs); `old`: an engine before API 1.17, which has no picture routes; `refuse`: what it answers a delete with;
- * `broken`: the picture it can't serve. */
+ * `broken`: the picture it can't serve; `apiVersion`: what GET / says (none: an engine that doesn't say, so not one
+ * that joins a split time first, API 1.19); `twoDisks`: its runs' folders on another disk than its workspace. */
 function engine(o: {
   sets?: PictureSet[]; jobs?: Job[]; runs?: Run[]; old?: boolean; refuse?: EngineError; broken?: string;
+  apiVersion?: string; twoDisks?: boolean;
 } = {}) {
   const sets = new Map((o.sets ?? []).map((s) => [`${s.case}/${s.set}`, structuredClone(s)]));
   const posted: { path: string; body?: unknown }[] = [];
@@ -92,7 +94,18 @@ function engine(o: {
         const items = ["ahmed", ...Object.keys(made).filter((n) => n !== "ahmed")];
         return { items, cells: Object.fromEntries(items.map((n) => [n, 478_901])), made } as T;
       }
-      if (route === "/disk/pictures") return { needMb: 7, freeMb: 402_339, keepMb: 1024, folder: "workspace" } as T;
+      if (route === "/" && o.apiVersion) {
+        return { apiVersion: o.apiVersion, version: "0.4.0", jobKinds: ["repair", "solve", "pictures"] } as T;
+      }
+      if (route === "/disk/pictures") {
+        // a time still split onto a run's processes, which a picture job joins first (API 1.19): 40 MB
+        const q = new URLSearchParams(query);
+        const r = (o.runs ?? []).find((x) => x.name === q.get("name"));
+        const at = q.get("time") || String(Math.max(...(r?.times ?? [])));
+        const split = (r?.times ?? []).some((t) => String(t) === at) && !(r?.joined ?? []).some((t) => String(t) === at);
+        const join = split ? { time: at, processes: r?.nProcs, needMb: 40, freeMb: 402_339, sameDisk: !o.twoDisks } : null;
+        return { needMb: 7, freeMb: 402_339, keepMb: 1024, folder: "workspace", ...(o.apiVersion ? { join } : {}) } as T;
+      }
       if (o.old && route.startsWith("/pictures")) throw new EngineError("not-found", `no such API route ${route}`, 404);
       if (route === "/pictures") {
         const of = new URLSearchParams(query).get("case");
@@ -205,6 +218,64 @@ describe("the Pictures screen", () => {
     await user.click(within(dialog).getByRole("button", { name: "Make pictures" }));
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0]?.body).toEqual({ kind: "pictures", params: { name: "t", time: "", kinds: "cuts,vortices,spots", mean: true } });
+  });
+
+  it("offers a run's times split onto its processes, on an engine that joins one first, and counts the join", async () => {
+    const user = userEvent.setup();
+    const { posted, asked } = listPage({ runs: [run("wing", { joined: [300] })], apiVersion: "1.19" });
+    await user.click((await screen.findAllByRole("button", { name: "Make pictures…" }))[0]!);
+    const dialog = await screen.findByRole("dialog", { name: "Make pictures" });
+    const time = await within(dialog).findByRole("combobox", { name: "Written time" });
+    await waitFor(() => expect(within(time).getAllByRole("option").map((x) => x.textContent))
+      .toEqual(["The latest (300)", "200 (split)", "100 (split)"]));
+    expect(dialog).toHaveTextContent("As its folder names it.");
+    await waitFor(() => expect(dialog).toHaveTextContent(/The set of pictures needs about 7 MB of disk space/));
+    expect(dialog).toHaveTextContent("The case itself is only read.");
+    await user.selectOptions(time, "200");
+    expect(dialog).toHaveTextContent("The run itself only gets the time joined into its folder.");
+    expect(dialog).toHaveTextContent("It is split onto its 4 processes: the job joins it first, into the run's own "
+      + "folder, as the solve joins its latest, and the run then lists it as joined.");
+    await waitFor(() => expect(dialog).toHaveTextContent("Joining written time 200 from its 4 processes into the run's "
+      + "folder and the set of pictures need about 47 MB of disk space; the disk the engine's workspace is on has"));
+    expect(dialog).not.toHaveTextContent(/The set of pictures needs/);
+    expect(asked).toContain("/disk/pictures?name=wing&time=200&kinds=cuts%2Cvortices%2Cspots&mean=false");
+    await user.click(within(dialog).getByRole("button", { name: "Make pictures" }));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]?.body).toEqual({ kind: "pictures", params: { name: "wing", time: "200", kinds: "cuts,vortices,spots", mean: false } });
+  });
+
+  it("counts a join apart on the disk of the run's folder, when that isn't the workspace's", async () => {
+    const user = userEvent.setup();
+    listPage({ runs: [run("wing", { joined: [200] })], apiVersion: "1.19", twoDisks: true });
+    await user.click((await screen.findAllByRole("button", { name: "Make pictures…" }))[0]!);
+    const dialog = await screen.findByRole("dialog", { name: "Make pictures" });
+    const time = await within(dialog).findByRole("combobox", { name: "Written time" });
+    await waitFor(() => expect(within(time).getAllByRole("option").map((x) => x.textContent))
+      .toEqual(["The latest (300, split)", "200", "100 (split)"]));
+    expect(dialog).toHaveTextContent("It is split onto its 4 processes: the job joins it first");
+    await waitFor(() => expect(dialog).toHaveTextContent("Joining written time 300 from its 4 processes into the run's "
+      + "folder needs about 40 MB of disk space; the disk the cases are on has"));
+    expect(dialog).toHaveTextContent(/The set of pictures needs about 7 MB of disk space; the disk the engine's workspace/);
+    // a case you made: its split time is read as it is
+    await user.selectOptions(within(dialog).getByRole("combobox", { name: "Run or case" }), "ahmed");
+    expect(dialog).toHaveTextContent("The latest with U and p, on its whole mesh or split onto its processes: a split "
+      + "one is read as it is, as a case you made is only read.");
+    expect(dialog).toHaveTextContent("The case itself is only read.");
+  });
+
+  it("offers a run's joined times only on an engine that doesn't join a split one, and says to update it", async () => {
+    const user = userEvent.setup();
+    listPage({ runs: [run("wing", { joined: [300] })] });
+    await user.click((await screen.findAllByRole("button", { name: "Make pictures…" }))[0]!);
+    const dialog = await screen.findByRole("dialog", { name: "Make pictures" });
+    const time = await within(dialog).findByRole("combobox", { name: "Written time" });
+    expect(within(time).getAllByRole("option").map((x) => x.textContent)).toEqual(["The latest (300)"]);
+    expect(dialog).toHaveTextContent("Its other times are split onto its processes: update Mesh Doctor (git pull) and "
+      + "restart it to picture them too.");
+    await waitFor(() => expect(dialog).toHaveTextContent(/The set of pictures needs about 7 MB of disk space/));
+    expect(dialog).not.toHaveTextContent(/Joining/);
+    await user.selectOptions(within(dialog).getByRole("combobox", { name: "Run or case" }), "ahmed");
+    expect(dialog).toHaveTextContent("The latest with U and p on its whole mesh. The engine says if it has none.");
   });
 });
 

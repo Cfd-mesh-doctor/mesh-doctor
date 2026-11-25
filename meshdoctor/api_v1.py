@@ -29,7 +29,7 @@ import tplan
 import validate
 import version
 
-API_VERSION = "1.18"
+API_VERSION = "1.19"
 PREFIX = "/api/v1"
 WRITES_MAX = solve.transient.MAX_WRITES   # the most times a stretch of a transient run writes
 MAX_BODY = 64 * 1024
@@ -603,7 +603,8 @@ RUN = {"type": "object", "required": ["name", "state", "step", "iteration", "sta
                              "controlDict's purgeWrite says) (API 1.10)"},
     "joined": {"type": "array", "items": {"type": "number"},
                "description": "those of its times that are joined, the whole mesh's, in the case's own folder: every "
-                              "one when it isn't split, else the latest of each stretch (API 1.10)"}}}
+                              "one when it isn't split, else the latest of each stretch (API 1.10), and any other a "
+                              "picture job has joined to picture it (API 1.19)"}}}
 RUN_ONE = dict(RUN, properties=dict(RUN["properties"], links={
     "type": "object", "description": "itself, Stop, and its convergence judge (GET /judge?case=; a transient run's "
                                      "with window=auto, over the last half of its time steps as its page judges it, "
@@ -947,13 +948,18 @@ JOBS = {
                    "vortices, and any spot of unphysical pressure on its walls (Cp below -5: a numerical error). The "
                    "case is only read: ParaView reads it through a folder of links, and the pictures go in the "
                    "workspace, with a list of them; a computer's first set starts with ParaView's self test (API "
-                   "1.15; the mean flow and the self test, API 1.16)",
+                   "1.15; the mean flow and the self test, API 1.16). The one exception: a time of a run Mesh Doctor "
+                   "made that is still split onto its processes is joined first, into the run's own folder, as its "
+                   "solve joins the latest of each stretch (API 1.19)",
         "params": _params({"name": dict(NAME, description="a case in the cases folder with a written result: a run "
                                                           "(GET /runs), or a case you made (GET /cases)"),
                            "time": {"type": "string", "default": "", "pattern": r"^([0-9][0-9.eE+-]*)?$",
                                     "description": "the written time to picture, as its folder says it (default: "
-                                                   "the latest on the case's whole mesh; with mean, the latest with "
-                                                   "a mean flow)"},
+                                                   "the latest; with mean, the latest with a mean flow). One still "
+                                                   "split onto the case's processes (GET /runs' times, not joined) "
+                                                   "is joined first, into the run's own folder, when Mesh Doctor "
+                                                   "made the run; a case you made is read as it is, split (API "
+                                                   "1.19)"},
                            "kinds": {"type": "string", "default": ",".join(pictures.KINDS),
                                      "pattern": r"^(cuts|vortices|spots)(,(cuts|vortices|spots))*$",
                                      "description": "what to make, comma-separated: cuts, vortices, spots"},
@@ -1152,15 +1158,41 @@ def disk_case(p, q, b):
     return _disk_job(templates.disk_of(q["template"], q["size"]), "cases")
 
 
+DISK_PICTURES = dict(DISK_JOB, required=DISK_JOB["required"] + ["join"], properties=dict(DISK_JOB["properties"], join={
+    "type": ["object", "null"], "required": ["time", "processes", "needMb", "freeMb", "sameDisk"],
+    "description": "when the time pictured is still split onto the processes of a run Mesh Doctor made, the job joins "
+                   "it first, into the run's own folder in the cases folder (reconstructPar), and this is what that "
+                   "writes; null when it doesn't (a joined time, or a case you made, which is read as it is) "
+                   "(API 1.19)", "properties": {
+        "time": {"type": "string", "description": "the time it joins, as its folders say it"},
+        "processes": {"type": "integer", "minimum": 1, "description": "the processes it is split onto"},
+        "needMb": {"type": ["integer", "null"], "minimum": 0,
+                   "description": "the joined time, counted as its fields take split (joined, they take a little "
+                                  "less: the faces the processes share go)"},
+        "freeMb": {"type": ["integer", "null"], "minimum": 0,
+                   "description": "the free space of the run's folder's disk; null when it can't be read"},
+        "sameDisk": {"type": "boolean",
+                     "description": "it is the workspace's disk, so the guard counts the set and the join together "
+                                    "against freeMb"}}}))
+
+
 @route("GET", "/disk/pictures", "What a picture job writes in the engine's workspace, as the disk guard counts it "
        "before the job starts (about 0.3 MB a picture: one per colour of each cut, per vortex level and view, "
-       "and the worst spot's three views), and the free space there, in MB (API 1.18)",
+       "and the worst spot's three views), and the free space there, in MB (API 1.18); and a time it joins first, "
+       "split onto the processes of a run Mesh Doctor made, in the run's own folder (API 1.19)",
        query={"name": dict(_job_query("pictures", "name"), required=True), "time": _job_query("pictures", "time"),
               "kinds": _job_query("pictures", "kinds"), "mean": _job_query("pictures", "mean")},
-       ok=DISK_JOB)
+       ok=DISK_PICTURES)
 def disk_pictures(p, q, b):
-    return _disk_job(pictures.disk_of(q["name"], q["time"] or None, tuple(dict.fromkeys(q["kinds"].split(","))),
-                                      q["mean"]), "workspace")
+    import diskguard
+    planned, why = pictures.disk_of(q["name"], q["time"] or None, tuple(dict.fromkeys(q["kinds"].split(","))),
+                                    q["mean"])
+    doc = _disk_job((planned and planned["set"], why), "workspace")
+    join = planned["join"]
+    doc["join"] = None if join is None else {
+        "time": planned["time"], "processes": join[2], "needMb": join[0], "freeMb": diskguard.free_mb(join[1]),
+        "sameDisk": diskguard.same_disk(join[1], planned["set"][1])}
+    return doc
 
 
 NULL_TEXT = {"type": ["string", "null"]}

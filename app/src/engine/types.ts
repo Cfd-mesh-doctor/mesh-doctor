@@ -23,6 +23,9 @@ export type DiskInfo = Json<operations["disk"]["responses"][200]>;
  *  disk guard counts it before the job starts, and the free space of the disk it writes on, in MB (GET /disk/repair,
  *  /disk/abtest, /disk/abextend and /disk/case, API 1.12; /disk/pictures, API 1.18). */
 export type DiskJob = Json<operations["disk_repair"]["responses"][200]>;
+/** GET /disk/pictures (API 1.18), with the written time a picture job joins first when it is still split onto a run's
+ *  processes, and the disk the join takes (`join`, API 1.19: absent from an older engine). */
+export type DiskPictures = Since<Json<operations["disk_pictures"]["responses"][200]>, "join">;
 /** The jobs GET /disk/{kind} answers for, by their kind in POST /jobs (`case`: a new case from a template). */
 export type DiskJobKind = "repair" | "abtest" | "abextend" | "case" | "pictures";
 export type RepairSummary = RepairList["items"][number];

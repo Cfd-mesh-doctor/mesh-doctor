@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Making a set of pictures from the app: which run or case, the written time, the kinds and, for a transient run that
 // has averaged its flow, its mean flow; whether it fits in the memory of the engine's computer and on the disk of its
-// workspace; then POST /jobs (a `pictures` job) and the new job on the Jobs screen, which links its set. The demo
-// can't start jobs: it says so and gives the command that does the same in a terminal.
+// workspace; then POST /jobs (a `pictures` job) and the new job on the Jobs screen, which links its set. A time still
+// split onto a run's processes is joined first, into the run's own folder (API 1.19), and the disk this takes is said
+// first. The demo can't start jobs: it says so and gives the command that does the same in a terminal.
 import { ImagePlus } from "lucide-react";
 import { useId, useState } from "react";
 import { useNavigate } from "react-router";
@@ -12,11 +13,13 @@ import { Button } from "@/components/ui/button";
 import { DialogActions, DialogClose, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { isPlainName, picturesCommand } from "@/engine/commands";
 import { useAppPath, useEngine } from "@/engine/context";
-import { useCases, useDiskJob, useJobs, useMachine, useReadiness, useRuns, useStartJob } from "@/engine/hooks";
-import { JOB_KIND_LABEL, isActive, type PictureKind, type Run } from "@/engine/types";
+import {
+  useCases, useDiskJob, useEngineInfo, useJobs, useMachine, useReadiness, useRuns, useStartJob,
+} from "@/engine/hooks";
+import { JOB_KIND_LABEL, isActive, type DiskPictures, type PictureKind, type Run } from "@/engine/types";
 import { formatInt } from "@/lib/format";
 import { DiskNote, FIELD, GB, JobDialog, Note } from "./dialogParts";
-import { KINDS, hasMeanFlow, pictureTimes, picturesMemory } from "./pictureSets";
+import { KINDS, hasMeanFlow, joinsTimes, pictureTimes, picturesMemory, splitTimes } from "./pictureSets";
 import { formatTime } from "./solveStart";
 
 /**
@@ -35,8 +38,35 @@ export function MakePicturesDialog({ open, onOpenChange, name = null }: {
   );
 }
 
-/** A run with a result to picture: one that isn't solving, with a joined written time. */
-const pictureable = (r: Run) => r.state !== "running" && (r.joined?.length ?? 0) > 0;
+/** A run with a result to picture: one that isn't solving, with a written time (a joined one, on an engine that
+ * doesn't join a split one first). */
+const pictureable = (r: Run, joins: boolean) =>
+  r.state !== "running" && ((joins ? r.times ?? r.joined : r.joined)?.length ?? 0) > 0;
+
+/**
+ * What a picture job takes on the disk, as the engine's guard counts it: its set of pictures in the workspace and,
+ * when it joins a split time first (API 1.19), that time in the run's own folder; the two together when they are on
+ * one disk.
+ */
+function PicturesDisk({ disk }: { disk: DiskPictures | undefined }) {
+  const set = <DiskNote disk={disk} needs="The set of pictures needs" refuses="a picture job" />;
+  const join = disk?.join;
+  if (!disk || !join || join.needMb == null) return set;
+  const joining = `Joining written time ${join.time} from its ${join.processes} processes into the run's folder`;
+  if (join.sameDisk) {
+    return disk.needMb == null ? set : (
+      <DiskNote disk={{ ...disk, needMb: disk.needMb + join.needMb }} needs={`${joining} and the set of pictures need`}
+        refuses="a picture job" />
+    );
+  }
+  return (
+    <>
+      {set}
+      <DiskNote disk={{ needMb: join.needMb, freeMb: join.freeMb, keepMb: disk.keepMb, folder: "cases" }}
+        needs={`${joining} needs`} refuses="a picture job" />
+    </>
+  );
+}
 
 function MakePicturesForm({ name, onDone }: { name: string | null; onDone: () => void }) {
   const { mode } = useEngine();
@@ -47,11 +77,14 @@ function MakePicturesForm({ name, onDone }: { name: string | null; onDone: () =>
   const jobs = useJobs();
   const machine = useMachine();
   const readiness = useReadiness();
+  const info = useEngineInfo();
   const start = useStartJob();
   const id = useId();
   const demo = mode === "demo";
+  // an engine that joins a time still split onto a run's processes, to picture it (API 1.19)
+  const joins = joinsTimes(info.data?.apiVersion);
 
-  const solved = (runs.data?.items ?? []).filter(pictureable);
+  const solved = (runs.data?.items ?? []).filter((r) => pictureable(r, joins));
   const made = cases.data?.made ?? {};
   // A case you made: in the cases folder, not made by Mesh Doctor. Whether it has a result the engine says at start.
   const yours = (cases.data?.items ?? []).filter((c) => !(c in made));
@@ -60,10 +93,13 @@ function MakePicturesForm({ name, onDone }: { name: string | null; onDone: () =>
   const run = (runs.data?.items ?? []).find((r) => r.name === chosen);
   const [mean, setMean] = useState(false);
   const withMean = mean && hasMeanFlow(run);
-  const times = run ? pictureTimes(run, withMean) : [];
+  const times = run ? pictureTimes(run, withMean, joins) : [];
+  const split = run && joins ? splitTimes(run) : new Set<string>();
   const [time, setTime] = useState("");
   // the time chosen, while the run (and the mean flow or not) still has it; else the latest
   const at = times.includes(time) ? time : "";
+  // the time the job pictures is split onto the run's processes: it is joined first
+  const joinsFirst = split.has(at || times[0] || "");
   const [kinds, setKinds] = useState<readonly PictureKind[]>(KINDS.map((k) => k.value));
   const toggle = (k: PictureKind, on: boolean) =>
     setKinds((now) => KINDS.map((x) => x.value).filter((v) => (v === k ? on : now.includes(v))));
@@ -77,8 +113,9 @@ function MakePicturesForm({ name, onDone }: { name: string | null; onDone: () =>
   const paraview = readiness.data?.checks.find((c) => c.id === "pvbatch");
   const query = !demo && plain && chosen && kinds.length > 0
     ? { name: chosen, time: at, kinds: kinds.join(","), mean: String(withMean) } : null;
-  // the set's pictures, as the engine's disk guard counts them (API 1.18)
+  // the set's pictures, as the engine's disk guard counts them (API 1.18), and a time it joins first (API 1.19)
   const disk = useDiskJob("pictures", query);
+  const pictureDisk: DiskPictures | undefined = disk.data;
   const computer = demo ? "the demo engine's computer" : "your engine's computer";
   const ready = !demo && plain && !solving && !nothing && kinds.length > 0 && !busy && !start.isPending;
   const command = chosen ? picturesCommand(chosen, { time: at || undefined, kinds, mean: withMean }) : null;
@@ -99,7 +136,7 @@ function MakePicturesForm({ name, onDone }: { name: string | null; onDone: () =>
       <DialogTitle>{name ? `Make pictures of ${name}` : "Make pictures"}</DialogTitle>
       <DialogDescription>
         ParaView draws the flow offscreen, at a written time of a solved case, and the pictures go in the engine&apos;s
-        workspace. The case itself is only read.
+        workspace. {joinsFirst ? "The run itself only gets the time joined into its folder." : "The case itself is only read."}
       </DialogDescription>
 
       {runs.isError && cases.isError ? (
@@ -166,14 +203,22 @@ function MakePicturesForm({ name, onDone }: { name: string | null; onDone: () =>
                   <label htmlFor={`${id}-time`} className="text-sm font-medium">Written time</label>
                   <select id={`${id}-time`} className={FIELD} value={at} onChange={(e) => setTime(e.target.value)}
                     disabled={times.length === 0}>
-                    <option value="">The latest{times[0] ? ` (${times[0]})` : ""}</option>
-                    {times.slice(1).map((t) => <option key={t} value={t}>{t}</option>)}
+                    <option value="">
+                      The latest{times[0] ? ` (${times[0]}${split.has(times[0]) ? ", split" : ""})` : ""}
+                    </option>
+                    {times.slice(1).map((t) => <option key={t} value={t}>{split.has(t) ? `${t} (split)` : t}</option>)}
                   </select>
                   <p className="text-xs text-muted-foreground">
                     {solving ? "It is solving: picture it once it has stopped or finished."
-                      : nothing ? (withMean ? "No time with its mean flow is joined yet." : "It has no joined time yet.")
-                      : (run.times?.length ?? 0) > (run.joined?.length ?? 0)
-                      ? "Its other times are split on its processes: only a joined time can be pictured for now."
+                      : nothing ? (withMean ? `No time with its mean flow is ${joins ? "written" : "joined"} yet.`
+                        : `It has no ${joins ? "written" : "joined"} time yet.`)
+                      : joinsFirst
+                      ? `It is split onto ${run.nProcs ? `its ${run.nProcs}` : "its"} processes: the job joins it `
+                        + "first, into the run's own folder, as the solve joins its latest, and the run then lists it "
+                        + "as joined."
+                      : !joins && (run.times?.length ?? 0) > (run.joined?.length ?? 0)
+                      ? "Its other times are split onto its processes: update Mesh Doctor (git pull) and restart it "
+                        + "to picture them too."
                       : "As its folder names it."}
                   </p>
                 </>
@@ -181,7 +226,10 @@ function MakePicturesForm({ name, onDone }: { name: string | null; onDone: () =>
                 <>
                   <span className="block text-sm font-medium">Written time</span>
                   <p className="text-[13px] text-muted-foreground">
-                    The latest with U and p on its whole mesh. The engine says if it has none.
+                    {joins
+                      ? "The latest with U and p, on its whole mesh or split onto its processes: a split one is read as "
+                        + "it is, as a case you made is only read. The engine says if it has none."
+                      : "The latest with U and p on its whole mesh. The engine says if it has none."}
                   </p>
                 </>
               )}
@@ -226,7 +274,7 @@ function MakePicturesForm({ name, onDone }: { name: string | null; onDone: () =>
                   so the memory isn&apos;t checked here; the engine checks it when the job starts.
                 </Note>
               )}
-              <DiskNote disk={disk.data} needs="The set of pictures needs" refuses="a picture job" />
+              <PicturesDisk disk={pictureDisk} />
               {paraview && paraview.state !== "ok" && (
                 <Note tone="warn">
                   ParaView isn&apos;t ready on {computer}: {paraview.found}. Ready to solve? on the Solve screen says how to

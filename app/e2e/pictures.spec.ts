@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The Pictures screen in a real browser: the demo's set, its pictures shown through blob: URLs, one open large and
 // saved as a PNG, and the set deleted for the visit only; with your own engine, a set's pictures fetched with the
-// pairing key, and Make pictures… from a run's page.
+// pairing key, Make pictures… from a run's page, and a time still split onto its processes pictured, joined first.
 import { expect, test, type Page } from "@playwright/test";
 import { KEY, mockEngine, pairingLink, run, type PictureSetDoc } from "./engine";
 
@@ -79,6 +79,33 @@ test("with your own engine, a set's pictures come with the key, and a run's page
   const dialog = page.getByRole("dialog", { name: "Make pictures of ahmed-coarse" });
   await dialog.getByLabel("Written time").selectOption("1000");
   await expect(dialog).toContainText("The set of pictures needs about 7 MB of disk space");
+  await dialog.getByRole("button", { name: "Make pictures", exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/jobs\?job=/);
+  expect(engine.started).toEqual([
+    { kind: "pictures", params: { name: "ahmed-coarse", time: "1000", kinds: "cuts,vortices,spots", mean: false } },
+  ]);
+});
+
+test("Make pictures… pictures a time still split onto a run's processes, on an engine that joins it first", async ({ page }) => {
+  const solved = run("ahmed-coarse", {
+    state: "done", step: "done", iteration: 2000, written: 2000, stretches: [{ from: 0, to: 2000 }],
+    finished: new Date(Date.now() - 900_000).toISOString(), times: [1000, 2000], joined: [2000],
+  });
+  const engine = await mockEngine(page, {
+    made: { "ahmed-coarse": { template: "ahmed-body" } }, runs: [solved], noJobs: true, pictures: [],
+  });
+  engine.apiVersion = "1.19";
+  await pair(page);
+  await page.goto("/app/solve/ahmed-coarse");
+  const card = page.locator("section").filter({ has: page.getByRole("heading", { name: "Pictures of its flow" }) });
+  await card.getByRole("button", { name: "Make pictures…" }).click();
+  const dialog = page.getByRole("dialog", { name: "Make pictures of ahmed-coarse" });
+  const time = dialog.getByLabel("Written time");
+  await expect(time.locator("option")).toHaveText(["The latest (2000)", "1000 (split)"]);
+  await time.selectOption("1000");
+  await expect(dialog).toContainText("It is split onto its 4 processes: the job joins it first, into the run's own folder");
+  await expect(dialog).toContainText("Joining written time 1000 from its 4 processes into the run's folder and the set "
+    + "of pictures need about 48 MB of disk space");
   await dialog.getByRole("button", { name: "Make pictures", exact: true }).click();
   await expect(page).toHaveURL(/\/app\/jobs\?job=/);
   expect(engine.started).toEqual([

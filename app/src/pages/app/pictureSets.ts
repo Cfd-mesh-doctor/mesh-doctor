@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The Pictures screen's words and checks: the kinds a set has, a set's name, address and title, the set a picture job
-// makes, the written times of a run that can be pictured, and whether a picture job fits in the memory of the
-// engine's computer.
+// makes, the written times of a run that can be pictured (the split ones too, on an engine that joins one first), and
+// whether a picture job fits in the memory of the engine's computer.
 import { isActive, type Job, type MachineInfo, type PictureKind, type PictureSetBrief, type Run } from "@/engine/types";
 import { machineFields } from "@/estimate/machine";
 import type { MemoryCheck } from "./repairStart";
@@ -99,18 +99,32 @@ export function setShown(s: Pick<PictureSetBrief, "made" | "job">): SetShown {
  * times (2000, 0.0006). */
 export const timeName = (t: number) => timeInput(t);
 
+/** Does the engine picture a written time still split onto a run's processes (API 1.19), joining it first into the
+ * run's own folder? An older one pictures a joined time only. */
+export function joinsTimes(apiVersion: string | null | undefined): boolean {
+  const m = /^(\d+)\.(\d+)/.exec(apiVersion ?? "");
+  return m != null && (Number(m[1]) > 1 || (Number(m[1]) === 1 && Number(m[2]) >= 19));
+}
+
 /**
- * The written times of a run that a picture job can picture, newest first, as their folders name them: the joined
- * ones, on the whole mesh (on several processes, the latest of each stretch: the others are pictured once they are
- * joined). With `mean`, those a transient run wrote with its mean flow: after the time its averaging started from,
- * up to the latest written with it. Empty for a run that has none yet.
+ * The written times of a run that a picture job can picture, newest first, as their folders name them: each one it
+ * keeps, with `split` (an engine that joins a split time first, joinsTimes()), else the joined ones only, on the whole
+ * mesh (on several processes, the latest of each stretch). With `mean`, those a transient run wrote with its mean
+ * flow: after the time its averaging started from, up to the latest written with it. Empty for a run that has none
+ * yet.
  */
-export function pictureTimes(run: Pick<Run, "joined" | "averaging">, mean: boolean): string[] {
+export function pictureTimes(run: Pick<Run, "times" | "joined" | "averaging">, mean: boolean, split = false): string[] {
   const av = run.averaging;
   const from = av?.from;
   const last = av?.written;
   const ok = (t: number) => !mean || (from != null && last != null && t > from && t <= last);
-  return [...(run.joined ?? [])].filter(ok).sort((a, b) => b - a).map(timeName);
+  return [...((split ? run.times ?? run.joined : run.joined) ?? [])].filter(ok).sort((a, b) => b - a).map(timeName);
+}
+
+/** The written times a run keeps still split onto its processes, not joined, as their folders name them. */
+export function splitTimes(run: Pick<Run, "times" | "joined">): Set<string> {
+  const joined = new Set((run.joined ?? []).map(timeName));
+  return new Set((run.times ?? []).map(timeName).filter((t) => !joined.has(t)));
 }
 
 /** Whether a run has its mean flow to picture: a transient run that has written a time with it. */

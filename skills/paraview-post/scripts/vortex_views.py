@@ -8,9 +8,10 @@
 #
 # Usage (WSL): PYTHONPATH=/usr/lib/python3/dist-packages pvbatch --force-offscreen-rendering vortex_views.py \
 #              CASE.foam OUTDIR "Q1,Q2,..." --walls p1,p2,... [--views rear34,top,side,front34,zoom]
-#              [--zoom PATCH] [--note "text; {it}"] [--mean]
+#              [--zoom PATCH] [--note "text; {it}"] [--mean] [--decomposed]
 # Axes: x forward (the flow goes toward -x), z up, the model on a ground at z = 0. --zoom PATCH adds a close-up view
 # around that patch. --mean: the vortices of a transient run's mean flow (UMean, from its fieldAverage) in place of U.
+# --decomposed: a case split onto its processes, read as it is (its processor* folders: ParaView's Decomposed Case).
 #              vortex_views.py --selftest OUTDIR      (a synthetic vortex: checks the pipeline and the colour sign)
 # The self test's verdict goes in OUTDIR/selftest.json, {passed, reason, wx, drawn, red, blue}: its picture from
 # behind must show the test vortex, red (an offscreen renderer that draws nothing gives a blank picture); it exits 3
@@ -48,6 +49,7 @@ ASPECT = W / H
 CAR = opt('--walls', 'none').split(',')
 MEAN = '--mean' in sys.argv
 UF = 'UMean' if MEAN else 'U'          # the velocity read: a transient run's mean flow, with --mean
+DECOMPOSED = '--decomposed' in sys.argv
 GREY = [0.78, 0.78, 0.80]
 INK = [0.12, 0.12, 0.14]
 T0 = time.time()
@@ -235,7 +237,7 @@ def bounds(src):
 
 def reader(regions, arrays, poly=None):
     r = OpenFOAMReader(FileName=CASE)
-    r.CaseType = 'Reconstructed Case'
+    r.CaseType = 'Decomposed Case' if DECOMPOSED else 'Reconstructed Case'
     setp(r, SkipZeroTime=1)
     if poly is not None:
         setp(r, Decomposepolyhedra=poly)
