@@ -10,8 +10,13 @@
 # cut one model height behind it; they are written to OUTDIR/cuts.json, so their titles go with the pictures.
 # Usage (WSL): PYTHONPATH=/usr/lib/python3/dist-packages pvbatch --force-offscreen-rendering cut_views.py \
 #              CASE.foam decomposed|reconstructed OUTDIR CUTS.json "note under every title; {it} = iteration"
-#              --walls p1,p2,... [--uinf 15] [--mean]   (p must be kinematic, p/rho, as in incompressible solvers)
-# --mean: a transient run's mean flow (UMean and pMean, from its fieldAverage) in place of U and p.
+#              --walls p1,p2,... [--uinf 15] [--mean] [--over-time]   (p must be kinematic, p/rho, as in
+#              incompressible solvers)
+# --mean: a transient run's mean flow (UMean and pMean, from its fieldAverage) in place of U and p; each cut also
+# shows how much the speed swings about it (Urms: the rms of its fluctuations, from UPrime2Mean, over the free-stream
+# speed) when the case has UPrime2Mean.
+# --over-time: the first cut's speed at each time the case has, oldest first, one picture each, named
+# <cut>_U_at_<time>.png with the time as its folder names it, in place of each cut's colours at the latest time.
 import json
 import math
 import os
@@ -35,6 +40,7 @@ CAR = _opt('--walls', 'none').split(',')
 UINF = float(_opt('--uinf', '15'))
 MEAN = '--mean' in sys.argv          # a transient run's mean flow, in place of U and p
 PF, UF = ('pMean', 'UMean') if MEAN else ('p', 'U')
+OVER_TIME = '--over-time' in sys.argv  # the first cut's speed at each time, in place of each cut's colours
 QINF = 0.5 * UINF ** 2             # p is kinematic (p/rho): Cp = p / QINF
 INK, GREY = [0.12, 0.12, 0.14], [0.78, 0.78, 0.80]
 STEP = 0.002                        # probe spacing (m); a cut may set its own "step"
@@ -86,31 +92,66 @@ def reader(regions, arrays):
     return r
 
 
+def available(r):
+    """The cell arrays the case has, as the reader offers them."""
+    try:
+        return list(r.CellArrays.Available)
+    except Exception:
+        try:
+            info = r.GetProperty('CellArrayInfo')
+            return [info[i] for i in range(0, len(info), 2)]
+        except Exception:
+            return []
+
+
 rs = reader(['patch/' + p for p in CAR], [PF])
 tv = rs.TimestepValues
 tv = list(tv) if hasattr(tv, '__len__') else [tv]
 TIME = max(tv)
 V.ViewTime = TIME
-NOTE = NOTE.replace('{it}', '%g' % TIME)
+RAW_NOTE, NOTE = NOTE, NOTE.replace('{it}', '%g' % TIME)
+
+
+def time_names():
+    """{time: its folder's name} of the times the case has (processor0's, when it is read split)."""
+    base = os.path.dirname(os.path.abspath(CASE))
+    out = {}
+    for n in os.listdir(os.path.join(base, 'processor0') if KIND == 'decomposed' else base):
+        try:
+            out[float(n)] = n
+        except ValueError:
+            pass
+    return out
+
+
+TNAME = time_names()
 car = MergeBlocks(Input=rs)
 ri = reader(['internalMesh'], [PF, UF])
+RMS = MEAN and not OVER_TIME and 'UPrime2Mean' in available(ri)      # how much the mean flow's speed swings
+if RMS:
+    ri.CellArrays = [PF, UF, 'UPrime2Mean']
 vol = CellDatatoPointData(Input=ri) if KIND == 'decomposed' else ri   # a reconstructed read interpolates itself
 vol = Calculator(Input=vol, AttributeType='Point Data', ResultArrayName='Cp', Function='%s/%g' % (PF, QINF))
 vol = Calculator(Input=vol, AttributeType='Point Data', ResultArrayName='Cpt',
                  Function='({p}+0.5*({u}_X*{u}_X+{u}_Y*{u}_Y+{u}_Z*{u}_Z))/{q:g}'.format(p=PF, u=UF, q=QINF))
+if RMS:     # the rms of the speed's fluctuations over the free-stream speed: a third of UPrime2Mean's trace, rooted
+    vol = Calculator(Input=vol, AttributeType='Point Data', ResultArrayName='Urms',
+                     Function='sqrt(abs(UPrime2Mean_XX+UPrime2Mean_YY+UPrime2Mean_ZZ)/3)/%g' % UINF)
 vol.UpdatePipeline(TIME)
-log('time', TIME, 'volume', vol.GetDataInformation().GetNumberOfCells(), 'cells')
+log('time', TIME, 'volume', vol.GetDataInformation().GetNumberOfCells(), 'cells', 'with Urms' if RMS else '')
 
 LUTS = {
     'U': (('POINTS', UF, 'Magnitude'), '|%s| (m/s)' % UF, '%.0f', None, 'Viridis (matplotlib)', (0.0, 1.5 * UINF)),
     'Cp': (('POINTS', 'Cp'), 'Cp', '%.1f', [-2.5, 0.231, 0.299, 0.754, 0.0, 0.865, 0.865, 0.865,
                                             1.0, 0.706, 0.016, 0.150], None, (-2.5, 1.0)),
     'Cpt': (('POINTS', 'Cpt'), 'Cp,t', '%.1f', None, 'Inferno (matplotlib)', (0.0, 1.0)),
+    'Urms': (('POINTS', 'Urms'), "u' rms / U", '%.2f', None, 'Plasma (matplotlib)', (0.0, 0.3)),
 }
 WORDS = {'U': 'speed', 'Cp': 'pressure coefficient Cp', 'Cpt': 'total pressure coefficient Cp,t (1 = no losses)'}
 if MEAN:
     WORDS = {'U': 'speed of the mean flow', 'Cp': 'pressure coefficient Cp of the mean flow',
-             'Cpt': 'total pressure coefficient Cp,t of the mean flow (1 = no losses)'}
+             'Cpt': 'total pressure coefficient Cp,t of the mean flow (1 = no losses)',
+             'Urms': 'how much the speed swings about its mean (rms / free-stream speed)'}
 
 
 def apply_lut(name):
@@ -236,7 +277,8 @@ def auto_cuts():
 
 
 done, failed = [], []
-for cut in auto_cuts() if SPEC == 'auto' else json.load(open(SPEC))['cuts']:
+CUTS = auto_cuts() if SPEC == 'auto' else json.load(open(SPEC))['cuts']
+for cut in CUTS[:1] if OVER_TIME else CUTS:
     ax, v, b = cut['plane'], float(cut['at']), list(cut['box'])
     step = float(cut.get('step', STEP))
     i = AXIS[ax]
@@ -271,14 +313,23 @@ for cut in auto_cuts() if SPEC == 'auto' else json.load(open(SPEC))['cuts']:
         continue
     bb = list(b)
     bb[2 * i], bb[2 * i + 1] = v, v
-    for name in cut['colours']:
-        out = '%s_%s' % (cut['name'], name)
+    if OVER_TIME:                       # its speed at each time, oldest first
+        shots = [('U', t) for t in sorted(tv)]
+    else:
+        shots = [(name, None) for name in list(cut['colours'])
+                 + (['Urms'] if RMS and 'Urms' not in cut['colours'] else [])]
+    for name, t in shots:
+        at = None if t is None else TNAME.get(t, '%g' % t)
+        out = '%s_%s' % (cut['name'], name) if t is None else '%s_U_at_%s' % (cut['name'], at)
         try:
+            if t is not None:
+                V.ViewTime = t
+                keep.UpdatePipeline(t)
             clear()
             show_grey(cc)
             show_field(keep, name)
             frame(bb, d, up)
-            TXT.Text = '%s: %s\n%s' % (cut['title'], WORDS[name], NOTE)
+            TXT.Text = '%s: %s\n%s' % (cut['title'], WORDS[name], NOTE if t is None else RAW_NOTE.replace('{it}', at))
             Render(V)
             SaveScreenshot(os.path.join(OUT, out + '.png'), V, ImageResolution=[W, H])
             done.append(out)

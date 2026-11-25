@@ -29,7 +29,21 @@ export const KINDS: readonly { value: PictureKind; label: string; about: string 
   },
 ];
 
-const KIND_WORD: Record<PictureKind, string> = { cuts: "cuts", vortices: "vortices", spots: "spots" };
+/** A cut over time (API 1.20): a set made with it has the first cut's speed at each written time, oldest first. */
+const OVER_TIME = {
+  value: "times",
+  label: "Over time",
+  about: "The first cut's speed at each written time up to the one pictured, oldest first: the flow as it changes.",
+} as const;
+
+/** What a kind of picture is, as a set's page heads it: those the dialog offers, and a cut over time. */
+export function kindInfo(kind: PictureKind | undefined): { value: PictureKind; label: string; about: string } | undefined {
+  return [...KINDS, OVER_TIME].find((k) => k.value === kind);
+}
+
+const KIND_WORD: Record<PictureKind, string> = {
+  cuts: "cuts", vortices: "vortices", spots: "spots", times: "a cut over time",
+};
 
 /** The kinds in words: "cuts, vortices and spots". */
 export function kindsText(kinds: readonly PictureKind[]): string {

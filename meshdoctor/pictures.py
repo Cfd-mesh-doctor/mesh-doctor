@@ -2,7 +2,7 @@
 # Copyright (C) 2026 The Mesh Doctor authors
 """Pictures of a solved case's flow: ParaView's pvbatch runs the paraview-post scripts offscreen.
 
-    python3 -m meshdoctor pictures <case> [--time T] [--kinds cuts,vortices,spots] [--mean]
+    python3 -m meshdoctor pictures <case> [--time T] [--kinds cuts,vortices,spots,times] [--mean]
 
 The case (a run Mesh Doctor made, or a case you made, in the cases folder) is only read: ParaView reads it through
 a folder of links in the workspace (its constant, system and the time pictured, and an empty case.foam), and the
@@ -13,9 +13,12 @@ its solve would, so that the run then lists it as joined.  A case you made is re
 Decomposed Case): each processor folder through links of its own, with its constant and only that time.  Cuts follow the
 case's cut list (cuts.json at its root, as a case made from the Ahmed body template has), or without one are made
 from its model's size; vortices and spots of unphysical pressure on the walls (Cp below -5: a numerical error) need
-only the case.  The scripts' cameras need the flow toward -x and z up.  With --mean they picture a transient run's
-mean flow (UMean and pMean, written once its averaging is on) in place of the flow at that time, into
-.pictures/<case>/<time>_mean/.  A computer's first set starts with the vortex script's self test (a test vortex that
+only the case.  A cut over time (the kind times, not made unless asked) pictures the first cut's speed at each written
+time up to the one pictured, at most MAX_TIMES evenly picked, each read as it is kept: joined, or split onto the
+processes, as they are (none is joined for it).  The scripts' cameras need the flow toward -x and z up.  With --mean
+they picture a transient run's mean flow (UMean and pMean, written once its averaging is on) in place of the flow at
+that time, into .pictures/<case>/<time>_mean/, and each cut shows how much the speed swings about it too (from
+UPrime2Mean).  A computer's first set starts with the vortex script's self test (a test vortex that
 must come out red), in .pictures/.selftest/, which is kept once it has passed.  The API serves the sets (sets(),
 one(), picture(), delete()): only a picture a set's list names is read, in the set's own folders, never through a link.
 """
@@ -34,8 +37,10 @@ import transient
 PKG = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = os.path.join(os.path.dirname(PKG), "skills", "paraview-post", "scripts")
 PICTURES = ".pictures"          # in the workspace: <case>/<time>/ (<time>_mean/: a mean flow's), a set, and its .log
-KINDS = ("cuts", "vortices", "spots")
-SCRIPT = {"cuts": "cut_views.py", "vortices": "vortex_views.py", "spots": "pressure_spots.py"}
+KINDS = ("cuts", "vortices", "spots")   # what a set has unless asked otherwise
+ALL_KINDS = KINDS + ("times",)          # and a cut over time: the first cut's speed at each written time (API 1.20)
+SCRIPT = {"cuts": "cut_views.py", "vortices": "vortex_views.py", "spots": "pressure_spots.py", "times": "cut_views.py"}
+MAX_TIMES = 50                          # the most written times a cut over time pictures, evenly picked
 CUTS = "cuts.json"
 MARK = ".meshdoctor-pictures"  # in a set (and one being made): make() replaces only a folder that has it
 MEAN = ("UMean", "pMean")       # a transient run's mean flow (transient.AVERAGE), pictured in place of U and p
@@ -43,12 +48,15 @@ SELFTEST = ".selftest"          # in PICTURES: the vortex script's self test (a 
 Q_AT_15 = (3000, 10000, 30000)  # Q levels (1/s²) that showed a car's vortices at 15 m/s; Q goes as the speed²
 VIEWS = {"rear34": "from behind", "top": "from above", "side": "from the side"}
 FORCE_OBJECT = re.compile(r"([A-Za-z_][\w.:-]*)\s*\{[^{}]*\btype\s+(?:forces|forceCoeffs)\s*;")
-WORDS = {"U": "speed", "Cp": "pressure coefficient Cp", "Cpt": "total pressure coefficient Cp,t"}
+WORDS = {"U": "speed", "Cp": "pressure coefficient Cp", "Cpt": "total pressure coefficient Cp,t",
+         "Urms": "how much the speed swings about its mean (rms / free-stream speed)"}
 SPOT_CP = -5                    # pressure_spots.py's LIM: a wall face with Cp below it is a spot of unphysical pressure
 SPOT_VIEWS = {"closeup": "close up, with the surface mesh", "normal": "further back",
               "side": "from the side of the model"}
 SET = re.compile(r"^[0-9][0-9.eE+-]{0,39}(_mean)?$")              # a set's folder: the time pictured (_mean: its mean)
 FILE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}\.png$")     # a picture's file, in its kind's folder of its set
+TIME_NAME = re.compile(r"^[0-9][0-9.eE+-]{0,39}$")                   # a written time, as its folder names it
+AT_TIME = re.compile(r"(.+)_U_at_([0-9][0-9.eE+-]{0,39})")           # a cut over time's picture: <cut>_U_at_<time>
 PNG = b"\x89PNG\r\n\x1a\n"      # the first bytes of every PNG file
 MAX_PNG = 32 << 20              # the largest picture served: ParaView's 1920 x 1080 PNGs are well under 1 MB
 AUTO_CUTS = 7                   # the pictures of the cuts cut_views.py makes from the model's size: 3, 2 and 2 colours
@@ -129,6 +137,25 @@ def how(case, at):
     if at in times(case):
         return "joined"
     return "join" if ours(case) else "split"
+
+
+def strip(case, at, mean=False):
+    """The written times a cut over time pictures, up to `at`, oldest first: (those times, whether ParaView reads them
+    split, how many the case keeps up to `at`).  Each one kept with the flow (and the mean flow, with `mean`), at most
+    MAX_TIMES of them, evenly picked from the first to the last.  They are read split, as they are, when any of them
+    isn't joined (a run on several processes keeps each one in its processor folders and joins only the latest of each
+    stretch), so none is joined for it, and then only those in every processor folder are pictured."""
+    fields = FLOW + MEAN if mean else FLOW
+    have = {t: h for t, h in kept(case, fields).items() if float(t) <= float(at)}
+    split = any(h == "split" for h in have.values())
+    procs = processors(case)
+    upto = [t for t in have if not split or all(_fields(os.path.join(case, p, t), fields) for p in procs)]
+    if MAX_TIMES < 2:                               # the latest alone (or none)
+        upto = upto[len(upto) - max(MAX_TIMES, 0):]
+    elif len(upto) > MAX_TIMES:                     # the first and the latest, and evenly between
+        step = (len(upto) - 1) / (MAX_TIMES - 1)
+        upto = [upto[round(i * step)] for i in range(MAX_TIMES)]
+    return upto, split, len(have)
 
 
 def set_name(at, mean=False):
@@ -235,17 +262,20 @@ def refusal(name, at=None, mean=False):
     return ("not-found", f"no case {name} in the cases folder") if case is None else why_not(case, at, mean)
 
 
-def how_many(case, kinds):
-    """About how many pictures a set of these kinds makes of `case`: one per colour of each cut in its cut list (else
-    AUTO_CUTS), one per vortex level and view, and the worst spot's three views."""
+def how_many(case, kinds, at=None, mean=False):
+    """About how many pictures a set of these kinds makes of `case` at time `at`: one per colour of each cut in its cut
+    list (else AUTO_CUTS, of 3 cuts), with `mean` one more a cut (how much the speed swings), one per vortex level and
+    view, the worst spot's three views, and one per time of a cut over time (strip())."""
     n = 0
     for kind in kinds:
         if kind == "cuts":
             try:
                 with open(os.path.join(case, CUTS), encoding="utf-8") as f:
-                    n += sum(len(c["colours"]) for c in json.load(f)["cuts"]) or AUTO_CUTS
+                    n += sum(len(c["colours"]) + bool(mean) for c in json.load(f)["cuts"]) or AUTO_CUTS + 3 * mean
             except (OSError, ValueError, KeyError, TypeError):
-                n += AUTO_CUTS
+                n += AUTO_CUTS + 3 * bool(mean)
+        elif kind == "times":
+            n += len(strip(case, at, mean)[0]) if at else 0
         else:
             n += len(Q_AT_15) * len(VIEWS) if kind == "vortices" else len(SPOT_VIEWS)
     return n
@@ -261,11 +291,11 @@ def _join_of(case, at):
     return diskguard.join_mb(sum(diskguard.size(os.path.join(case, p, at)) for p in procs)), case, len(procs)
 
 
-def _disk(case, name, kinds, at):
-    """What a pictures job of time `at` of `case` writes, for the disk guard: ([(MB, folder, what needs it, with its
-    verb)], the join (_join_of) or None).  Its set of how_many() pictures in the workspace, and a time it joins first
-    in the run's own folder: one check of both when the two are on one disk."""
-    n = how_many(case, kinds)
+def _disk(case, name, kinds, at, mean=False):
+    """What a pictures job of time `at` of `case` (its mean flow, with `mean`) writes, for the disk guard: ([(MB,
+    folder, what needs it, with its verb)], the join (_join_of) or None).  Its set of how_many() pictures in the
+    workspace, and a time it joins first in the run's own folder: one check of both when the two are on one disk."""
+    n = how_many(case, kinds, at, mean)
     pictures = (diskguard.pictures_mb(n), root(), f"the set of about {n} pictures of {name} needs")
     join = _join_of(case, at)
     if join is None:
@@ -285,14 +315,15 @@ def disk_of(name, at=None, kinds=KINDS, mean=False):
         return None, md_api._refuse(*why)
     case = tplan._case(name)
     at = at or latest(case, mean)
-    n = how_many(case, kinds)
+    n = how_many(case, kinds, at, mean)
     return {"set": (diskguard.pictures_mb(n), root()), "join": _join_of(case, at), "time": at}, None
 
 
-def plan(case, view, out, kinds, pvbatch, mean=False, since=None, split=False):
+def plan(case, view, out, kinds, pvbatch, mean=False, since=None, split=False, over_time=None):
     """({kind: the pvbatch command that makes its pictures, reading the links folder `view`, into out/<kind>},
     notes on what is left out).  With `mean`, of the mean flow, averaged from time `since` (s; None: not known);
-    with `split`, of a time read split onto the case's processes (each script's Decomposed Case)."""
+    with `split`, of a time read split onto the case's processes (each script's Decomposed Case); `over_time`: (the links
+    folder of a cut over time's times, whether they are read split), without which it has none."""
     read = "decomposed" if split else "reconstructed"
     d = caseinfo.describe(case)
     name, w, uinf = os.path.basename(os.path.normpath(case)), ",".join(walls(case, d["total"])), d["Uinf"]
@@ -302,12 +333,19 @@ def plan(case, view, out, kinds, pvbatch, mean=False, since=None, split=False):
         note = f"{name}, the mean flow " + ("" if since is None else f"from {since:.4g} s ") + "to {it} s"
     for kind in kinds:
         script, into = os.path.join(SCRIPTS, SCRIPT[kind]), os.path.join(out, kind)
-        if kind == "cuts":
+        if kind == "times" and over_time is None:
+            continue
+        if kind in ("cuts", "times"):
             spec = os.path.join(case, CUTS)
             if not os.path.isfile(spec):                # cut_views makes three from the walls' bounds
                 spec = "auto"
-                notes.append(f"cuts made from the model's size: {name} has no cut list ({CUTS} at its root)")
-            cmds[kind] = run + [script, foam, read, into, spec, note, "--walls", w, "--uinf", f"{uinf:g}"]
+                said = f"cuts made from the model's size: {name} has no cut list ({CUTS} at its root)"
+                notes += [] if said in notes else [said]
+            at_view, at_split = over_time if kind == "times" else (view, split)
+            cmds[kind] = run + [script, os.path.join(at_view, "case.foam"), "decomposed" if at_split else
+                                "reconstructed", into, spec, note, "--walls", w, "--uinf", f"{uinf:g}"]
+            if kind == "times":
+                cmds[kind].append("--over-time")
         elif kind == "vortices":
             cmds[kind] = run + [script, foam, into, ",".join(map(str, q_levels(uinf))), "--walls", w,
                                 "--views", ",".join(VIEWS), "--note", note] + (["--decomposed"] if split else [])
@@ -319,26 +357,45 @@ def plan(case, view, out, kinds, pvbatch, mean=False, since=None, split=False):
     return cmds, notes
 
 
-def listing(case, folder, mean=False):
-    """The pictures in a set's folder, each {file, kind, title}: each kind's PNGs, titled from the cut list, the Q
-    level and the view, or the spot (and the mean flow, with `mean`)."""
-    cuts = {}
-    for path in (os.path.join(case, CUTS), os.path.join(folder, "cuts", CUTS)):     # the case's, else cut_views' own
+def _cut_titles(case, folder):
+    """{cut: its title}: from the case's cut list, else from the one cut_views made from the model's size in the
+    set (for its cuts, or its cut over time)."""
+    for path in (os.path.join(case, CUTS), os.path.join(folder, "cuts", CUTS), os.path.join(folder, "times", CUTS)):
         try:
             with open(path, encoding="utf-8") as f:
-                cuts = {c["name"]: c.get("title", c["name"]) for c in json.load(f)["cuts"]}
-            break
+                return {c["name"]: c.get("title", c["name"]) for c in json.load(f)["cuts"]}
         except (OSError, ValueError, KeyError, TypeError):
             pass
+    return {}
+
+
+def _time_order(f):
+    """A picture of a cut over time's place in its set: by its time."""
+    m = AT_TIME.fullmatch(f[:-4])
+    return (0, float(m.group(2)), f) if m and _num(m.group(2)) else (1, 0.0, f)
+
+
+def listing(case, folder, mean=False):
+    """The pictures in a set's folder, each {file, kind, title} (and a cut over time's, its time): each kind's PNGs,
+    titled from the cut list, the Q level and the view, the spot, or the time (and the mean flow, with `mean`)."""
+    cuts = _cut_titles(case, folder)
     out = []
-    for kind in KINDS:
+    for kind in ALL_KINDS:
         d = os.path.join(folder, kind)
         files = sorted(f for f in (os.listdir(d) if os.path.isdir(d) else []) if f.endswith(".png"))
-        for f in sorted(files, key=_vortex_order) if kind == "vortices" else files:
-            stem, title = f[:-4], f[:-4]
+        order = {"vortices": _vortex_order, "times": _time_order}.get(kind)
+        for f in sorted(files, key=order) if order else files:
+            stem, title, more = f[:-4], f[:-4], {}
             if kind == "cuts":
                 cut, _, colour = stem.rpartition("_")
-                title = f"{cuts.get(cut, cut)}: {WORDS.get(colour, colour)}" + (" of the mean flow" if mean else "")
+                title = f"{cuts.get(cut, cut)}: {WORDS.get(colour, colour)}" + (" of the mean flow" if mean and
+                                                                                 colour != "Urms" else "")
+            elif kind == "times":
+                m = AT_TIME.fullmatch(stem)
+                if m:
+                    title = f"{cuts.get(m.group(1), m.group(1))}: speed" + (
+                        f" of the mean flow to {m.group(2)} s" if mean else f", written time {m.group(2)}")
+                    more = {"time": m.group(2)}
             elif kind == "vortices":
                 m = re.fullmatch(r"Q([0-9.e+]+)_(\w+)", stem)
                 if m:
@@ -349,7 +406,7 @@ def listing(case, folder, mean=False):
                 title = (f"The worst spot of unphysical pressure (Cp below {SPOT_CP})"
                          + (" in the mean flow" if mean else "") + ", "
                          + (SPOT_VIEWS.get(m.group(1), m.group(1)) if m else stem))
-            out.append({"file": f"{kind}/{f}", "kind": kind, "title": title})
+            out.append(dict({"file": f"{kind}/{f}", "kind": kind, "title": title}, **more))
     return out
 
 
@@ -480,10 +537,21 @@ def make(case, out, at, kinds, mean=False, selftest_dir=None, join=False):
     if not whole:
         said.append(f"written time {at} is split onto its {len(procs)} processes, so ParaView read it as it is, split: "
                     "a case you made is only read")
+    ts, ts_split, ts_all = strip(case, at, mean) if "times" in kinds else ([], False, 0)
+    if "times" in kinds and not ts:
+        said.append(f"no cut over time: no written time up to {at} is in every one of its processor folders")
+    if ts and len(ts) < ts_all:
+        said.append(f"the cut over time pictures {len(ts)} of its {ts_all} written times up to {at}"
+                    + (", evenly picked" if len(ts) == MAX_TIMES else ": the others aren't in every one of its "
+                       "processor folders"))
+    if ts and ts_split:
+        said.append(f"the cut over time read its written times as they are, split onto its {len(procs)} processes: "
+                    "none was joined for it")
     shutil.rmtree(new, ignore_errors=True)
     os.makedirs(new, mode=0o700)
     open(os.path.join(new, MARK), "w").close()      # first, so that a set cut short can be replaced
     view, links, cmds, notes, ran = os.path.join(new, "view"), [], {}, [], []
+    tview = os.path.join(new, "view_times")         # a cut over time's: its times, as they are kept
     env = dict(os.environ, PYTHONPATH=selfcheck.PV_PYTHONPATH)
     why = selftest(selftest_dir, pvbatch, env) if selftest_dir else None
     first = [f"ParaView's self test didn't pass ({why}), so these pictures may be blank or wrongly coloured; it runs "
@@ -500,7 +568,19 @@ def make(case, out, at, kinds, mean=False, selftest_dir=None, join=False):
                 links.append(os.path.join(view, proc, d))
                 os.symlink(os.path.join(os.path.abspath(case), proc, d), links[-1])
         open(os.path.join(view, "case.foam"), "w").close()
-        cmds, notes = plan(case, view, new, kinds, pvbatch, mean, since, split=not whole)
+        if ts:
+            os.mkdir(tview, 0o700)
+            for d in ("constant", "system") + (() if ts_split else tuple(ts)):
+                links.append(os.path.join(tview, d))
+                os.symlink(os.path.join(os.path.abspath(case), d), links[-1])
+            for proc in procs if ts_split else ():
+                os.mkdir(os.path.join(tview, proc), 0o700)
+                for d in ("constant",) + tuple(ts):
+                    links.append(os.path.join(tview, proc, d))
+                    os.symlink(os.path.join(os.path.abspath(case), proc, d), links[-1])
+            open(os.path.join(tview, "case.foam"), "w").close()
+        cmds, notes = plan(case, view, new, kinds, pvbatch, mean, since, split=not whole,
+                           over_time=(tview, ts_split) if ts else None)
         notes = first + said + notes
         for kind, cmd in cmds.items():
             print(f"pictures: {kind}", flush=True)
@@ -519,6 +599,7 @@ def make(case, out, at, kinds, mean=False, selftest_dir=None, join=False):
             if os.path.islink(link):
                 os.unlink(link)
         shutil.rmtree(view, ignore_errors=True)     # (it never follows a link)
+        shutil.rmtree(tview, ignore_errors=True)
     doc = {"case": os.path.basename(os.path.normpath(case)), "time": at, "mean": bool(mean), "kinds": list(kinds),
            "made": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "notes": notes,
            "pictures": listing(case, new, mean)}
@@ -545,10 +626,13 @@ def start(name, at=None, kinds=KINDS, mean=False):
     rel = f"{PICTURES}/{name}/{set_name(at, mean)}"
     cmd = [sys.executable, os.path.join(PKG, "pictures.py"), case, "--time", at, "--kinds", ",".join(kinds),
            "--out", os.path.join(ws, rel)] + (["--mean"] if mean else [])
+    if "times" in kinds:            # a cut over time: ParaView holds a time's fields twice as it steps to the next
+        ram = "pictures-times-split" if strip(case, at, mean)[1] else "pictures-times"
+    else:                           # its time, read as it is
+        ram = "pictures-split" if how(case, at) == "split" else "pictures"
     return md_api._submit("pictures", {"name": name, "time": at, "kinds": list(kinds), "mean": mean}, name, cmd,
-                          log=f"{rel}.log", result=f"{rel}/pictures.json",
-                          ram=(case, "pictures-split" if how(case, at) == "split" else "pictures"),
-                          disk=_disk(case, name, kinds, at)[0])
+                          log=f"{rel}.log", result=f"{rel}/pictures.json", ram=(case, ram),
+                          disk=_disk(case, name, kinds, at, mean)[0])
 
 
 # --------------------------------------------------------------------------
@@ -589,18 +673,21 @@ def _latest(case=None):
 
 
 def _kinds(kinds):
-    """The kinds a set (or its job) names, in its order: those of KINDS only."""
-    return list(dict.fromkeys(k for k in kinds if k in KINDS)) if isinstance(kinds, list) else []
+    """The kinds a set (or its job) names, in its order: those of ALL_KINDS only."""
+    return list(dict.fromkeys(k for k in kinds if k in ALL_KINDS)) if isinstance(kinds, list) else []
 
 
 def _shown(doc):
-    """The pictures of a set that are served: each {file, kind, title}, its file <kind>/<a plain .png name>."""
+    """The pictures of a set that are served: each {file, kind, title}, its file <kind>/<a plain .png name>, and a
+    cut over time's, its time."""
     out = []
     for p in doc["pictures"]:
         kind, file = (p.get("kind"), p.get("file")) if isinstance(p, dict) else (None, None)
-        if kind in KINDS and isinstance(file, str) and file.startswith(kind + "/") and isinstance(p.get("title"), str) \
-                and FILE.match(file[len(kind) + 1:]):
-            out.append({"file": file, "kind": kind, "title": p["title"]})
+        if kind in ALL_KINDS and isinstance(file, str) and file.startswith(kind + "/") \
+                and isinstance(p.get("title"), str) and FILE.match(file[len(kind) + 1:]):
+            at = p.get("time") if kind == "times" else None
+            out.append(dict({"file": file, "kind": kind, "title": p["title"]},
+                            **({"time": at} if isinstance(at, str) and TIME_NAME.match(at) else {})))
     return out
 
 
@@ -674,8 +761,8 @@ def one(name, at):
 def picture(name, at, kind, file):
     """GET /pictures/{case}/{set}/{kind}/{file}: (the PNG file's bytes, None), or (None, (code, message)).  Only a
     picture its set lists is read, in the set's own folders (never through a link), and only if it is a PNG file."""
-    if kind not in KINDS or not FILE.match(file):
-        return None, ("bad-request", f"bad picture: its kind ({', '.join(KINDS)}), then its file, a plain .png name")
+    if kind not in ALL_KINDS or not FILE.match(file):
+        return None, ("bad-request", f"bad picture: its kind ({', '.join(ALL_KINDS)}), then its file, a plain .png name")
     doc, why = one(name, at)
     if why:
         return None, why
@@ -734,15 +821,16 @@ def main(argv=None):
     ap.add_argument("--time", help="the written time to picture (default: the latest; with --mean, the latest with a "
                                    "mean flow); one still split onto its processes is joined first, in its folder, "
                                    "when Mesh Doctor made the run, else read as it is, split")
-    ap.add_argument("--kinds", default=",".join(KINDS), help="what to make, of %(default)s (default: all)")
+    ap.add_argument("--kinds", default=",".join(KINDS), help="what to make, of %(default)s (the default) and times: "
+                    "the first cut's speed at each written time up to the one pictured, at most " + str(MAX_TIMES))
     ap.add_argument("--mean", action="store_true", help="a transient run's mean flow (UMean and pMean), at a time "
                                                         "written once its averaging is on")
     ap.add_argument("--out", help="the set's folder (default: the workspace's .pictures/<case>/<time>, or "
                                   "<time>_mean), replaced only if it holds a set made before")
     a = ap.parse_args(argv)
     kinds = [k for k in a.kinds.split(",") if k]
-    if not kinds or any(k not in KINDS for k in kinds):
-        sys.exit(f"pictures: --kinds takes {', '.join(KINDS)}")
+    if not kinds or any(k not in ALL_KINDS for k in kinds):
+        sys.exit(f"pictures: --kinds takes {', '.join(ALL_KINDS)}")
     case = a.case if os.path.isdir(a.case) else tplan._case(a.case)
     if not case:
         sys.exit(f"pictures: no case {a.case} in the cases folder")

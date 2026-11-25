@@ -1760,7 +1760,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.19"
+    "version": "1.20"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -3333,14 +3333,14 @@
             }
           },
           {
-            "description": "what to make, comma-separated: cuts, vortices, spots",
+            "description": "what to make, comma-separated: cuts, vortices, spots, and times (a cut over time: the first cut's speed at each written time up to the one pictured, at most 50 evenly picked, each read as it is kept, joined or split, none joined for it: API 1.20)",
             "in": "query",
             "name": "kinds",
             "required": false,
             "schema": {
               "default": "cuts,vortices,spots",
-              "description": "what to make, comma-separated: cuts, vortices, spots",
-              "pattern": "^(cuts|vortices|spots)(,(cuts|vortices|spots))*$",
+              "description": "what to make, comma-separated: cuts, vortices, spots, and times (a cut over time: the first cut's speed at each written time up to the one pictured, at most 50 evenly picked, each read as it is kept, joined or split, none joined for it: API 1.20)",
+              "pattern": "^(cuts|vortices|spots|times)(,(cuts|vortices|spots|times))*$",
               "type": "string"
             }
           },
@@ -3922,7 +3922,7 @@
                   },
                   {
                     "additionalProperties": false,
-                    "description": "make pictures of a solved case's flow with ParaView, offscreen, at a written time, or of a transient run's mean flow: cuts from its cut list (cuts.json) or made from its model's size, its vortices, and any spot of unphysical pressure on its walls (Cp below -5: a numerical error). The case is only read: ParaView reads it through a folder of links, and the pictures go in the workspace, with a list of them; a computer's first set starts with ParaView's self test (API 1.15; the mean flow and the self test, API 1.16). The one exception: a time of a run Mesh Doctor made that is still split onto its processes is joined first, into the run's own folder, as its solve joins the latest of each stretch (API 1.19)",
+                    "description": "make pictures of a solved case's flow with ParaView, offscreen, at a written time, or of a transient run's mean flow: cuts from its cut list (cuts.json) or made from its model's size, its vortices, and any spot of unphysical pressure on its walls (Cp below -5: a numerical error). The case is only read: ParaView reads it through a folder of links, and the pictures go in the workspace, with a list of them; a computer's first set starts with ParaView's self test (API 1.15; the mean flow and the self test, API 1.16). The one exception: a time of a run Mesh Doctor made that is still split onto its processes is joined first, into the run's own folder, as its solve joins the latest of each stretch (API 1.19). Asked for, a cut over time: the first cut's speed at each written time up to the one pictured, read as they are kept; and a mean flow's cuts show how much the speed swings about it (API 1.20)",
                     "properties": {
                       "kind": {
                         "enum": [
@@ -3934,8 +3934,8 @@
                         "properties": {
                           "kinds": {
                             "default": "cuts,vortices,spots",
-                            "description": "what to make, comma-separated: cuts, vortices, spots",
-                            "pattern": "^(cuts|vortices|spots)(,(cuts|vortices|spots))*$",
+                            "description": "what to make, comma-separated: cuts, vortices, spots, and times (a cut over time: the first cut's speed at each written time up to the one pictured, at most 50 evenly picked, each read as it is kept, joined or split, none joined for it: API 1.20)",
+                            "pattern": "^(cuts|vortices|spots|times)(,(cuts|vortices|spots|times))*$",
                             "type": "string"
                           },
                           "mean": {
@@ -4758,12 +4758,13 @@
                             ]
                           },
                           "kinds": {
-                            "description": "what it has, in order",
+                            "description": "what it has, in order (times, a cut over time: API 1.20)",
                             "items": {
                               "enum": [
                                 "cuts",
                                 "vortices",
-                                "spots"
+                                "spots",
+                                "times"
                               ]
                             },
                             "type": "array"
@@ -4864,12 +4865,13 @@
                       "type": "string"
                     },
                     "kinds": {
-                      "description": "what it has, in order",
+                      "description": "what it has, in order (times, a cut over time: API 1.20)",
                       "items": {
                         "enum": [
                           "cuts",
                           "vortices",
-                          "spots"
+                          "spots",
+                          "times"
                         ]
                       },
                       "type": "array"
@@ -4897,15 +4899,21 @@
                         "properties": {
                           "file": {
                             "description": "<kind>/<file>, which GET /pictures/{case}/{set}/{kind}/{file} serves",
-                            "pattern": "^(cuts|vortices|spots)/[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}\\.png$",
+                            "pattern": "^(cuts|vortices|spots|times)/[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}\\.png$",
                             "type": "string"
                           },
                           "kind": {
                             "enum": [
                               "cuts",
                               "vortices",
-                              "spots"
+                              "spots",
+                              "times"
                             ]
+                          },
+                          "time": {
+                            "description": "the written time a picture of a cut over time (times) shows, as its folder names it; its set lists them oldest first (API 1.20)",
+                            "pattern": "^[0-9][0-9.eE+-]{0,39}$",
+                            "type": "string"
                           },
                           "title": {
                             "description": "what it shows",
@@ -5065,7 +5073,8 @@
               "enum": [
                 "cuts",
                 "vortices",
-                "spots"
+                "spots",
+                "times"
               ]
             }
           },

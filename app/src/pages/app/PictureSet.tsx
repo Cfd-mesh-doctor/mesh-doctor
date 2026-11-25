@@ -25,7 +25,7 @@ import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
 import { Section } from "@/pages/report/Section";
 import { saveFile } from "@/report/save";
-import { KINDS, jobOfSet, parseSet, pictureFileName, setTitle } from "./pictureSets";
+import { jobOfSet, kindInfo, parseSet, pictureFileName, setTitle } from "./pictureSets";
 
 const LINK = "font-medium text-primary underline-offset-4 hover:underline";
 
@@ -118,7 +118,7 @@ function Viewer({ s, index, onIndex, onClose, idOf }: {
     shown.current = i;
     onIndex(i);
   };
-  const kind = KINDS.find((k) => k.value === picture?.kind)?.label ?? picture?.kind;
+  const kind = kindInfo(picture?.kind)?.label ?? picture?.kind;
   return (
     <Dialog open={picture != null} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent
@@ -355,7 +355,7 @@ export function PictureSetPage() {
       )}
       <div className="space-y-4">
         {s.pictures.length > 0 && kinds.map((k) => {
-          const info = KINDS.find((x) => x.value === k);
+          const info = kindInfo(k);
           const of = s.pictures.flatMap((p, i) => (p.kind === k ? [{ p, i }] : []));
           const title = info?.label ?? k;
           return (

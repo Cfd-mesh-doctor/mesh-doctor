@@ -416,6 +416,17 @@ describe("a set of pictures", () => {
     expect(screen.getByRole("button", { name: "Delete…" })).toBeInTheDocument();
   });
 
+  it("heads a cut over time's pictures, each at its time, oldest first", async () => {
+    const times = ["0.0002", "0.0004"].map((t) => ({
+      file: `times/c1_side_U_at_${t}.png`, kind: "times" as const, time: t,
+      title: `Side cut on the centreline: speed, written time ${t}`,
+    }));
+    setPage("ahmed", "2000", { sets: [{ ...SET, kinds: ["cuts", "times"], pictures: [SET.pictures[0]!, ...times] }] });
+    const card = within((await screen.findByRole("heading", { name: "Over time" })).closest("section")!);
+    expect(card.getByText(/The first cut's speed at each written time/)).toBeInTheDocument();
+    expect(card.getAllByRole("button").map((b) => b.textContent)).toEqual(times.map((p) => p.title));
+  });
+
   it("says when the engine has no such set", async () => {
     setPage("ahmed", "1000", { sets: [SET] });
     expect(await screen.findByRole("heading", { name: "No such set of pictures" })).toBeInTheDocument();

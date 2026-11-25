@@ -25,9 +25,14 @@ import config
 # pictures: ParaView reading a case with its cell data made point data, as the picture scripts do (18 GB at 31M
 # cells, 7 GB at 12M: skills/paraview-post); pictures-split: reading a time still split onto the processes as it is
 # (Decomposed Case), 1.5 times as much (the coarse Ahmed body's 0.48M cells on 6 processes: 0.97 GB at its peak, and
-# 0.81 GB read joined; reconstructPar, which joins one, took 0.38 GB)
-KB_PER_CELL = {"repair": 1.5, "solve": 1.35, "post": 0.5, "mesh": 2.2, "pictures": 0.6, "pictures-split": 0.9}
-LABEL = {"pictures-split": "pictures read split"}       # a kind as the guard's message says it (else its name)
+# 0.81 GB read joined; reconstructPar, which joins one, took 0.38 GB); pictures-times, -times-split: a set with a cut
+# over time, which steps ParaView through the written times and holds a time's fields twice as it moves on to the next
+# (the same 0.48M cells, its 4 times pictured 4 times over: 1.17 GB at its peak read joined, 1.39 GB read split; it
+# levels off by the fifth picture, so it doesn't grow with the times pictured)
+KB_PER_CELL = {"repair": 1.5, "solve": 1.35, "post": 0.5, "mesh": 2.2, "pictures": 0.6, "pictures-split": 0.9,
+               "pictures-times": 1.4, "pictures-times-split": 1.9}
+LABEL = {"pictures-split": "pictures read split", "pictures-times": "pictures over time",
+         "pictures-times-split": "pictures over time read split"}   # a kind as the guard's message says it (else its name)
 HEADROOM_MB = 512
 
 

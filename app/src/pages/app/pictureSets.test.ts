@@ -5,7 +5,8 @@
 import { describe, expect, it } from "vitest";
 import type { Job, MachineInfo, Run } from "@/engine/types";
 import {
-  hasMeanFlow, jobOfSet, joinsTimes, kindsText, makingPictures, parseSet, pictureFileName, pictureTimes, picturesMemory,
+  hasMeanFlow, jobOfSet, joinsTimes, kindInfo, kindsText, makingPictures, parseSet, pictureFileName, pictureTimes,
+  picturesMemory,
   setHeading, setName, setOfJob, setPath, setShown, setTitle, splitTimes, timeName,
 } from "./pictureSets";
 
@@ -30,6 +31,9 @@ describe("a set of pictures", () => {
     expect(kindsText(["cuts"])).toBe("cuts");
     expect(kindsText(["cuts", "spots"])).toBe("cuts and spots");
     expect(kindsText(["cuts", "vortices", "spots"])).toBe("cuts, vortices and spots");
+    expect(kindsText(["cuts", "times"])).toBe("cuts and a cut over time");
+    expect(kindInfo("times")?.label).toBe("Over time");
+    expect(kindInfo("cuts")?.label).toBe("Cuts");
   });
 
   it("is being made while its job waits or runs, else made, or how its job ended", () => {

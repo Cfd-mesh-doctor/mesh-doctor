@@ -29,7 +29,7 @@ import tplan
 import validate
 import version
 
-API_VERSION = "1.19"
+API_VERSION = "1.20"
 PREFIX = "/api/v1"
 WRITES_MAX = solve.transient.MAX_WRITES   # the most times a stretch of a transient run writes
 MAX_BODY = 64 * 1024
@@ -748,7 +748,8 @@ _SET = {"case": dict(NAME, description="the case pictured, in the cases folder")
         "time": {"type": "string", "description": "the written time pictured, as its folder says it"},
         "mean": {"type": "boolean",
                  "description": "of a transient run's mean flow (UMean and pMean), not of the flow at that time"},
-        "kinds": {"type": "array", "items": {"enum": list(pictures.KINDS)}, "description": "what it has, in order"},
+        "kinds": {"type": "array", "items": {"enum": list(pictures.ALL_KINDS)},
+                  "description": "what it has, in order (times, a cut over time: API 1.20)"},
         "made": {"type": ["string", "null"],
                  "description": "when it was made (UTC, ISO 8601); null while a job makes it for the first time"}}
 PICTURE_SETS = {"type": "object", "required": list(_SET) + ["count", "job"], "properties": dict(_SET, **{
@@ -762,10 +763,13 @@ PICTURE_SETS = {"type": "object", "required": list(_SET) + ["count", "job"], "pr
 PICTURE_SET = {"type": "object", "required": list(_SET) + ["notes", "pictures"], "properties": dict(_SET, **{
     "notes": {"type": "array", "items": {"type": "string"}, "description": "what was left out, and why"},
     "pictures": {"type": "array", "items": {"type": "object", "required": ["file", "kind", "title"], "properties": {
-        "file": {"type": "string", "pattern": f"^({'|'.join(pictures.KINDS)})/" + pictures.FILE.pattern[1:],
+        "file": {"type": "string", "pattern": f"^({'|'.join(pictures.ALL_KINDS)})/" + pictures.FILE.pattern[1:],
                  "description": "<kind>/<file>, which GET /pictures/{case}/{set}/{kind}/{file} serves"},
-        "kind": {"enum": list(pictures.KINDS)},
-        "title": {"type": "string", "description": "what it shows"}}}}})}
+        "kind": {"enum": list(pictures.ALL_KINDS)},
+        "title": {"type": "string", "description": "what it shows"},
+        "time": {"type": "string", "pattern": pictures.TIME_NAME.pattern,
+                 "description": "the written time a picture of a cut over time (times) shows, as its folder names "
+                                "it; its set lists them oldest first (API 1.20)"}}}}})}
 
 
 def _set(v):
@@ -802,7 +806,7 @@ def picture_set(p, q, b):
        "the one answer that isn't JSON).  Only a picture its set lists is read, in the set's own folders and never "
        "through a link, and only a PNG file (API 1.17)",
        ok={"type": "string", "contentMediaType": "image/png", "description": "the PNG file"}, ctype="image/png",
-       params={"set": SET_NAME, "kind": {"enum": list(pictures.KINDS)},
+       params={"set": SET_NAME, "kind": {"enum": list(pictures.ALL_KINDS)},
                "file": {"type": "string", "pattern": pictures.FILE.pattern, "description": "a plain .png name"}})
 def picture(p, q, b):
     return Raw(_answer(pictures.picture(_name(p["case"]), _set(p["set"]), p["kind"], p["file"])), "image/png")
@@ -950,7 +954,9 @@ JOBS = {
                    "workspace, with a list of them; a computer's first set starts with ParaView's self test (API "
                    "1.15; the mean flow and the self test, API 1.16). The one exception: a time of a run Mesh Doctor "
                    "made that is still split onto its processes is joined first, into the run's own folder, as its "
-                   "solve joins the latest of each stretch (API 1.19)",
+                   "solve joins the latest of each stretch (API 1.19). Asked for, a cut over time: the first cut's "
+                   "speed at each written time up to the one pictured, read as they are kept; and a mean flow's cuts "
+                   "show how much the speed swings about it (API 1.20)",
         "params": _params({"name": dict(NAME, description="a case in the cases folder with a written result: a run "
                                                           "(GET /runs), or a case you made (GET /cases)"),
                            "time": {"type": "string", "default": "", "pattern": r"^([0-9][0-9.eE+-]*)?$",
@@ -961,8 +967,11 @@ JOBS = {
                                                    "made the run; a case you made is read as it is, split (API "
                                                    "1.19)"},
                            "kinds": {"type": "string", "default": ",".join(pictures.KINDS),
-                                     "pattern": r"^(cuts|vortices|spots)(,(cuts|vortices|spots))*$",
-                                     "description": "what to make, comma-separated: cuts, vortices, spots"},
+                                     "pattern": r"^(cuts|vortices|spots|times)(,(cuts|vortices|spots|times))*$",
+                                     "description": "what to make, comma-separated: cuts, vortices, spots, and times "
+                                                    "(a cut over time: the first cut's speed at each written time up "
+                                                    "to the one pictured, at most 50 evenly picked, each read as it is "
+                                                    "kept, joined or split, none joined for it: API 1.20)"},
                            "mean": {"type": "boolean", "default": False,
                                     "description": "a transient run's mean flow (UMean and pMean) in place of the "
                                                    "flow at that time: a time written once its averaging is on (GET "

@@ -4153,7 +4153,7 @@ with open(os.path.join(os.path.dirname(view), "seen"), "a") as f:
     f.write(script + " " + os.environ.get("PYTHONPATH", "") + " " + " ".join(sorted(os.listdir(view)))
             + "".join(" %s:%s" % (p, ",".join(sorted(os.listdir(os.path.join(view, p))))) for p in procs)
             + (" split" if "decomposed" in a or "--decomposed" in a else "")
-            + (" --mean" if "--mean" in a else "") + "\\n")
+            + (" --mean" if "--mean" in a else "") + (" --over-time" if "--over-time" in a else "") + "\\n")
 out = a[3] if script == "vortex_views.py" else a[4]
 if os.environ.get("MD_TEST_PV_FAILS") == script:
     sys.exit(2)
@@ -4168,6 +4168,12 @@ if script == "cut_views.py" and a[5] == "auto":
     with open(os.path.join(out, "cuts.json"), "w") as f:
         json.dump({"cuts": [{"name": "a1_side_centre", "title": "Side cut on the model's centre plane"}]}, f)
     names = ["a1_side_centre_U"]
+here = os.path.join(view, procs[0]) if procs else view
+written = sorted((d for d in os.listdir(here) if d[:1].isdigit()), key=float)
+if script == "cut_views.py" and "--over-time" in a:             # the first cut's speed at each time it has
+    names = ["%s_U_at_%s" % (names[0][:-2], t) for t in written]
+elif script == "cut_views.py" and "--mean" in a and os.path.exists(os.path.join(here, written[-1], "UPrime2Mean")):
+    names = names + [names[0][:-2] + "_Urms"]                   # how much the mean flow's speed swings
 for n in names:
     open(os.path.join(out, n + ".png"), "wb").close()
 """
@@ -4471,6 +4477,84 @@ for n in names:
         with open(os.path.join(out, "seen")) as f:
             self.assertEqual([line.rsplit(" ", 1)[1] for line in f.read().splitlines()], ["--mean"] * 3)
 
+    def test_a_cut_over_time_pictures_the_first_cut_at_each_kept_time(self):
+        case = self.case(times=("50", "100", "200", "300"))
+        before, out = self.files(case), os.path.join(self.tmp, "set")
+        self.assertEqual(self.p.strip(case, "200"), (["50", "100", "200"], False, 3))
+        self.assertEqual(self.p.how_many(case, ("cuts", "times"), "200"), 7 + 3)
+        doc = self.p.make(case, out, "200", ("cuts", "times"))
+        side = "Side cut on the centreline, seen from the side (+y), nose to the left"
+        self.assertEqual([p for p in doc["pictures"] if p["kind"] == "times"],
+                         [{"file": f"times/c1_side_centre_U_at_{t}.png", "kind": "times", "time": t,
+                           "title": f"{side}: speed, written time {t}"} for t in ("50", "100", "200")])   # by time
+        self.assertEqual((doc["kinds"], doc["notes"]), (["cuts", "times"], []))
+        with open(os.path.join(out, "seen")) as f:
+            self.assertEqual(f.read().splitlines(),
+                             ["cut_views.py /usr/lib/python3/dist-packages 200 case.foam constant system",
+                              "cut_views.py /usr/lib/python3/dist-packages 100 200 50 case.foam constant system "
+                              "--over-time"])                           # its own links: each time up to 200
+        self.assertFalse(os.path.exists(os.path.join(out, "view_times")))
+        self.assertEqual(self.files(case), before)                       # nothing written in the case
+        self.assertEqual(self.p._shown(doc)[-1], doc["pictures"][-1])    # served with its time
+        self.assertNotIn("time", self.p._shown({"pictures": [dict(doc["pictures"][-1], time="../1")]})[0])
+        cmds, _ = self.p.plan(case, "/view", "/set", ("times",), "pvbatch", over_time=("/strip", True))
+        self.assertEqual(cmds["times"][3:6] + cmds["times"][-1:],
+                         ["/strip/case.foam", "decomposed", "/set/times", "--over-time"])
+        self.assertEqual(self.p.plan(case, "/view", "/set", ("times",), "pvbatch")[0], {})   # no times: no command
+        ws, launched, ram, post = self.jobs_here(case)
+        st, job, _ = post({"name": "ahmedP", "time": "200", "kinds": "times"})   # read joined: still twice the fields
+        self.assertEqual((st, ram), (202, [(case, "pictures-times")]))
+
+    def test_a_cut_over_time_reads_a_split_run_as_it_is_and_pictures_fifty_times_at_most(self):
+        case = self.case(times=("0.0006",))
+        self.split(case, ["0.0002", "0.0004", "0.0006"])
+        self.ours(case)                                                  # a run Mesh Doctor made: still none joined
+        self.assertEqual(self.p.strip(case, "0.0006"), (["0.0002", "0.0004", "0.0006"], True, 3))
+        before, out = self.files(case), os.path.join(self.tmp, "set")
+        doc = self.p.make(case, out, "0.0006", ("times",))
+        self.assertEqual([p["time"] for p in doc["pictures"]], ["0.0002", "0.0004", "0.0006"])
+        self.assertEqual(doc["notes"], ["the cut over time read its written times as they are, split onto its 2 "
+                                        "processes: none was joined for it"])
+        with open(os.path.join(out, "seen")) as f:
+            self.assertEqual(f.read().splitlines(),
+                             ["cut_views.py /usr/lib/python3/dist-packages case.foam constant processor0 processor1 "
+                              "system processor0:0.0002,0.0004,0.0006,constant processor1:0.0002,0.0004,0.0006,"
+                              "constant split --over-time"])
+        self.assertEqual(self.files(case), before)                       # nothing joined, nothing written
+        with mock.patch.object(self.p, "MAX_TIMES", 2):
+            self.assertEqual(self.p.strip(case, "0.0006"), (["0.0002", "0.0006"], True, 3))
+            doc = self.p.make(case, out, "0.0006", ("times",))
+        self.assertEqual(doc["notes"][0], "the cut over time pictures 2 of its 3 written times up to 0.0006, evenly "
+                                          "picked")
+        with mock.patch.object(self.p, "MAX_TIMES", 1):
+            self.assertEqual(self.p.strip(case, "0.0006"), (["0.0006"], True, 3))   # the latest alone
+        ws, launched, ram, post = self.jobs_here(case)
+        st, job, _ = post({"name": "ahmedP", "kinds": "cuts,times"})     # its times read split: the most memory
+        self.assertEqual((st, job["params"]["kinds"], ram), (202, ["cuts", "times"], [(case, "pictures-times-split")]))
+
+    def test_a_mean_flows_cuts_show_how_much_the_speed_swings(self):
+        case = self.case(times=("0.0003", "0.0006"), mean={"0.0006": "0.0003"})
+        open(os.path.join(case, "0.0006", "UPrime2Mean"), "w").close()
+        self.assertEqual(self.p.how_many(case, ("cuts",), "0.0006", mean=True), 7 + 3)   # one more for each cut
+        doc = self.p.make(case, os.path.join(self.tmp, "set"), "0.0006", ("cuts", "times"), mean=True)
+        side = "Side cut on the centreline, seen from the side (+y), nose to the left"
+        self.assertEqual([(p["file"], p["title"]) for p in doc["pictures"] if p["kind"] == "cuts"][1:],
+                         [("cuts/c1_side_centre_U.png", f"{side}: speed of the mean flow"),
+                          ("cuts/c1_side_centre_Urms.png", f"{side}: how much the speed swings about its mean "
+                                                           "(rms / free-stream speed)")])
+        self.assertEqual([(p["time"], p["title"]) for p in doc["pictures"] if p["kind"] == "times"],
+                         [("0.0006", f"{side}: speed of the mean flow to 0.0006 s")])   # the times with a mean flow
+
+    def test_a_cut_over_time_needs_more_memory_than_a_time_read_once(self):
+        import ramguard                                  # as measured: 1.17 GB read joined, 1.39 GB split, at 0.48M
+        with mock.patch.object(ramguard, "available_mb", return_value=1300):
+            self.assertEqual(ramguard.check_cells(478901, "pictures-times"),
+                             (True, "pictures over time of 478,901 cells needs about 1.1 GB; 1.3 GB free"))
+            ok, msg = ramguard.check_cells(478901, "pictures-times-split")
+            self.assertTrue(ramguard.check_cells(478901, "pictures-split")[0])
+        self.assertFalse(ok)
+        self.assertIn("pictures over time read split of 478,901 cells needs about 1.4 GB; 1.3 GB free", msg)
+
     def test_a_computers_first_set_starts_with_the_self_test(self):
         case, st = self.case(), os.path.join(self.tmp, "work", ".pictures", self.p.SELFTEST)
         ran = os.path.join(os.path.dirname(st), "selftests")            # the stand-in's list of the self tests run
@@ -4593,9 +4677,11 @@ for n in names:
     def test_the_job_takes_a_time_and_the_kinds(self):
         import api_v1, schema
         params = api_v1.JOBS["pictures"]["params"]
-        for good in ({"name": "ahmed"}, {"name": "ahmed", "time": "0.0012", "kinds": "cuts,spots", "mean": True}):
+        for good in ({"name": "ahmed"}, {"name": "ahmed", "time": "0.0012", "kinds": "cuts,spots", "mean": True},
+                     {"name": "ahmed", "kinds": "times,cuts"}):
             self.assertEqual(schema.check(good, params), [], good)
-        for bad in ({"name": "ahmed", "kinds": "cuts,photos"}, {"name": "ahmed", "time": "../0"},
+        for bad in ({"name": "ahmed", "kinds": "cuts,photos"}, {"name": "ahmed", "kinds": "time"},
+                    {"name": "ahmed", "time": "../0"},
                     {"name": "ahmed", "mean": "yes"}):
             self.assertNotEqual(schema.check(bad, params), [], bad)
 
@@ -4722,7 +4808,7 @@ for n in names:
                          (409, f"the pictures 100 of ahmedP are being made: job {job['id']} is queued"))
         op = api_v1.openapi()["paths"]["/pictures/{case}/{set}/{kind}/{file}"]["get"]
         self.assertEqual(list(op["responses"]["200"]["content"]), ["image/png"])
-        self.assertEqual([p["schema"].get("enum") for p in op["parameters"]], [None, None, list(self.p.KINDS), None])
+        self.assertEqual([p["schema"].get("enum") for p in op["parameters"]], [None, None, list(self.p.ALL_KINDS), None])
 
     def test_a_set_made_is_deleted_with_its_log_but_not_while_a_job_makes_it(self):
         import api_v1, jobs
