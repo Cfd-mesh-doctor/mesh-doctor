@@ -195,6 +195,13 @@
   scroll-margin-top: 6rem;
 }
 
+/* While the tour is open, a screen's page has room below its foot, as tall as the screen, so a part near the foot of
+   a short page can still go up above the tour's box (the Results screen's list, on a phone). The tour holds the page
+   still, so the room is never scrolled to by hand. */
+body:has([data-tour-box]) main {
+  padding-bottom: 100dvh;
+}
+
 /* The copy-link button by a doc heading (HeadingLink): with a mouse it shows while the heading is pointed at, or the
    button has the focus or has just copied; on a touch screen, which can't point, it always shows. */
 @media (hover: hover) and (pointer: fine) {

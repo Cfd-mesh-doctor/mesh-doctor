@@ -43,7 +43,7 @@ describe("the demo's tour on a first visit", () => {
     const user = userEvent.setup();
     show(at);
     expect(await screen.findByRole("dialog", { name: "Welcome to Mesh Doctor" }))
-      .toHaveTextContent(/Step 1 of 8.*This demo replays a real run/);
+      .toHaveTextContent(/Step 1 of 10.*This demo replays a real run/);
     expect(screen.getByRole("button", { name: "Next" })).toHaveFocus();
     expect(localStorage.getItem(TOUR_SEEN)).toBe("1");
     expect(screen.queryByRole("note", { name: "Tour", hidden: true })).toBeNull(); // the offer is your own app's
@@ -105,7 +105,7 @@ describe("your own app's tour", () => {
     // With repair runs, the Overview step is the demo's: the tiles and lists.
     await user.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByRole("dialog", { name: TOUR_STEPS[1]!.title })).toHaveTextContent(TOUR_STEPS[1]!.text);
-    for (let i = 0; i < 6; i++) await user.click(screen.getByRole("button", { name: "Next" }));
+    for (let i = 0; i < 8; i++) await user.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByRole("dialog", { name: "Reports: did the repair help?" })).toHaveTextContent("A report opens with its verdict.");
     expect(router.state.location.pathname).toBe("/app/repairs/latest-fix/report");
   });
@@ -118,7 +118,7 @@ describe("your own app's tour", () => {
     await waitFor(() => expect(e.asked).toContain("/repairs"));
     await user.click(await screen.findByRole("button", { name: "Next" }));
     const step = await screen.findByRole("dialog", { name: "Overview: where to start" });
-    expect(step).toHaveTextContent("Step 2 of 8");
+    expect(step).toHaveTextContent("Step 2 of 10");
     expect(step).toHaveTextContent("Until your first repair, the Overview opens with Getting started: the three steps to "
       + "one, each ticked off once the engine lists it. The step marked Next is the one to do now.");
     expect(FIRST_STEPS_TOUR_STEP.spot).toBe("start"); // what it rings: the Overview's Getting started
@@ -129,7 +129,7 @@ describe("your own app's tour", () => {
     const user = userEvent.setup();
     const { router } = showApp(engine([{ name: "running-fix", finished: null }]));
     await user.click(screen.getByRole("button", { name: "Take the tour" }));
-    for (let i = 0; i < 7; i++) await user.click(await screen.findByRole("button", { name: "Next" }));
+    for (let i = 0; i < 9; i++) await user.click(await screen.findByRole("button", { name: "Next" }));
     expect(screen.getByRole("dialog", { name: "Reports: did the repair help?" }))
       .toHaveTextContent("No repair has finished yet. When one has, Report beside it on the Overview, or beside its job here, opens its report");
     expect(router.state.location.pathname).toBe("/app/jobs");

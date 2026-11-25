@@ -71,21 +71,21 @@ test("a newcomer's main button leads to the three steps, which say how often eac
   await expect(page).toHaveURL(/\/connect$/);
 });
 
-test("the demo's tour walks through the app's screens in eight steps from the keyboard, then hands the focus back", async ({ page }) => {
+test("the demo's tour walks through the app's screens in ten steps from the keyboard, then hands the focus back", async ({ page }) => {
   await page.goto("/demo/jobs");
   const open = page.getByRole("complementary").getByRole("button", { name: "Take the tour" }); // in the sidebar
   await open.click();
   const tour = page.getByRole("dialog", { name: "Welcome to Mesh Doctor" });
-  await expect(tour).toContainText("Step 1 of 8");
+  await expect(tour).toContainText("Step 1 of 10");
   await expect(tour.getByRole("button", { name: "Next" })).toBeFocused();
   // Each step opens the screen it describes and rings the part it means, lifted above the shade; and the tour stands
   // aside: the Overview's tiles show whole.
   const screens = [/\/demo$/, /\/demo\/cases$/, /\/demo\/solve$/, /\/demo\/repairs$/, /\/demo\/abtests$/,
-    /\/demo\/jobs$/, /\/demo\/repairs\/ahmed35-medium-fix\/report$/];
-  const spots = ["tiles", "cases", "new-case", "repairs", "abtests", "jobs", "verdict"];
-  for (let i = 2; i <= 8; i++) {
+    /\/demo\/pictures$/, /\/demo\/results$/, /\/demo\/jobs$/, /\/demo\/repairs\/ahmed35-medium-fix\/report$/];
+  const spots = ["tiles", "cases", "new-case", "repairs", "abtests", "pictures", "results", "jobs", "verdict"];
+  for (let i = 2; i <= 10; i++) {
     await page.keyboard.press("Enter");
-    await expect(page.getByRole("dialog")).toContainText(`Step ${i} of 8`);
+    await expect(page.getByRole("dialog")).toContainText(`Step ${i} of 10`);
     await expect(page).toHaveURL(screens[i - 2]!);
     const spot = page.locator("[data-tour-spot]");
     await expect(spot).toHaveAttribute("data-tour", spots[i - 2]!);
@@ -140,7 +140,7 @@ test.describe("in a browser that hasn't seen the tour", () => {
     await page.getByRole("link", { name: "Explore the demo" }).first().click();
     await expect(page).toHaveURL(/\/demo$/);
     const tour = page.getByRole("dialog", { name: "Welcome to Mesh Doctor" });
-    await expect(tour).toContainText("Step 1 of 8");
+    await expect(tour).toContainText("Step 1 of 10");
     await expect(tour.getByRole("button", { name: "Next" })).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(tour).toBeHidden();
@@ -161,11 +161,11 @@ test("your own app has the tour too: its own welcome, and it ends on your latest
   await open.click();
   await expect(page.getByRole("dialog", { name: "Welcome to Mesh Doctor" }))
     .toContainText("This browser is paired with the Mesh Doctor engine on your computer");
-  const screens = [/\/app$/, /\/app\/cases$/, /\/app\/solve$/, /\/app\/repairs$/, /\/app\/abtests$/, /\/app\/jobs$/,
-    /\/app\/repairs\/old-fix\/report$/];
-  for (let i = 2; i <= 8; i++) {
+  const screens = [/\/app$/, /\/app\/cases$/, /\/app\/solve$/, /\/app\/repairs$/, /\/app\/abtests$/,
+    /\/app\/pictures$/, /\/app\/results$/, /\/app\/jobs$/, /\/app\/repairs\/old-fix\/report$/];
+  for (let i = 2; i <= 10; i++) {
     await page.keyboard.press("Enter");
-    await expect(page.getByRole("dialog")).toContainText(`Step ${i} of 8`);
+    await expect(page.getByRole("dialog")).toContainText(`Step ${i} of 10`);
     await expect(page).toHaveURL(screens[i - 2]!);
   }
   await page.keyboard.press("Enter");
@@ -183,7 +183,7 @@ test("before your first repair, your own app's tour rings Getting started on the
   await expect(page.getByRole("dialog", { name: "Welcome to Mesh Doctor" })).toBeVisible();
   await page.keyboard.press("Enter");
   const step = page.getByRole("dialog", { name: "Overview: where to start" });
-  await expect(step).toContainText("Step 2 of 8");
+  await expect(step).toContainText("Step 2 of 10");
   await expect(page).toHaveURL(/\/app$/);
   const spot = page.locator("[data-tour-spot]");
   await expect(spot).toHaveCount(1);

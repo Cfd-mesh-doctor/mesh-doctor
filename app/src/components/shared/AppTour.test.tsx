@@ -6,9 +6,9 @@ import { describe, expect, it, vi } from "vitest";
 import { demoTransport } from "@/demo/transport";
 import { renderScreen } from "@/test/render";
 import { AppTour } from "./AppTour";
-import { TOUR_STEPS } from "./tourSteps";
+import { TOUR_STEPS, engineTourSteps } from "./tourSteps";
 
-const PARTS = ["tiles", "cases", "new-case", "repairs", "abtests", "jobs", "verdict"];
+const PARTS = ["tiles", "cases", "new-case", "repairs", "abtests", "pictures", "results", "jobs", "verdict"];
 
 /** The tour's button, and stand-ins for the parts of the screens it rings. */
 function Opener({ parts }: { parts: string[] }) {
@@ -49,6 +49,27 @@ describe("the app tour", () => {
     expect(TOUR_STEPS[at]!.text).toMatch(/ For a first run step by step, open Try it on the Ahmed body, at the foot of the menu\.$/);
   });
 
+  it("opens Pictures and Results after A/B tests and before Jobs, as the sidebar lists them, ringing each screen's list", () => {
+    const at = TOUR_STEPS.findIndex((s) => s.page === "/pictures");
+    expect(TOUR_STEPS.slice(at - 1, at + 3).map((s) => [s.page, s.spot])).toEqual([
+      ["/abtests", "abtests"], ["/pictures", "pictures"], ["/results", "results"], ["/jobs", "jobs"],
+    ]);
+    expect(TOUR_STEPS[at]!.text).toMatch(/^Pictures has ParaView draw a solved case's flow on the engine's computer: /);
+    expect(TOUR_STEPS[at + 1]!.text).toMatch(/ Compare puts two cases, or an A\/B test's two runs, side by side /);
+  });
+
+  it("is your own app's tour too, from Cases to Jobs, between its own welcome, Overview and report", () => {
+    const steps = engineTourSteps("a-fix");
+    expect(steps).toHaveLength(TOUR_STEPS.length);
+    expect(steps.slice(2, -1)).toEqual(TOUR_STEPS.slice(2, -1));
+    expect(steps[0]!.text).toMatch(/your own cases, solves, repair runs, A\/B tests, pictures, results and jobs/);
+    expect(steps.at(-1)!.page).toBe("/repairs/a-fix/report");
+    // Before a repair has finished: Getting started on the Overview, and a last step with nothing to ring.
+    expect(engineTourSteps(null, true).map((s) => s.spot)).toEqual(
+      [undefined, "start", "cases", "new-case", "repairs", "abtests", "pictures", "results", "jobs", undefined],
+    );
+  });
+
   it("steps through with Enter and back again, then hands the focus back when done", async () => {
     const user = userEvent.setup();
     show();
@@ -80,8 +101,8 @@ describe("the app tour", () => {
     const at = () => router.state.location.pathname;
     await user.click(screen.getByRole("button", { name: "Take the tour" }));
     expect(at()).toBe("/demo/jobs"); // the welcome stays where the tour was opened
-    for (const page of ["/demo", "/demo/cases", "/demo/solve", "/demo/repairs", "/demo/abtests", "/demo/jobs",
-      "/demo/repairs/ahmed35-medium-fix/report"]) {
+    for (const page of ["/demo", "/demo/cases", "/demo/solve", "/demo/repairs", "/demo/abtests", "/demo/pictures",
+      "/demo/results", "/demo/jobs", "/demo/repairs/ahmed35-medium-fix/report"]) {
       await user.keyboard("{Enter}");
       await waitFor(() => expect(at()).toBe(page));
     }

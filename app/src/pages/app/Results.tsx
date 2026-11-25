@@ -142,7 +142,7 @@ export function Results() {
       {q.isError && !old && (
         <ErrorPanel className="mb-6" error={q.error} onRetry={() => void q.refetch()} retrying={q.isFetching} />
       )}
-      <Card>
+      <Card data-tour="results">
         {q.isPending ? (
           <TableSkeleton rows={4} cols={5} />
         ) : old ? (

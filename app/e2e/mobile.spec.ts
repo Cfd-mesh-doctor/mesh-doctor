@@ -588,7 +588,7 @@ test("on a phone the menu's Take the tour closes the menu and opens the tour", a
 test("on a phone the tour brings the part it means into view, clear of the top bar and above the tour", async ({ page }) => {
   await page.goto("/demo");
   await page.getByRole("button", { name: "Take the tour" }).click();
-  for (let i = 1; i < 8; i++) await page.keyboard.press("Enter");
+  for (let i = 1; i < 10; i++) await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog", { name: "Reports: did the repair help?" })).toBeVisible();
   // A report's verdict is far down a phone's screen, below its five number tiles.
   const verdict = page.locator('[data-tour="verdict"]');
@@ -597,6 +597,23 @@ test("on a phone the tour brings the part it means into view, clear of the top b
     const part = await verdict.boundingBox();
     const tour = await page.getByRole("dialog").boundingBox();
     expect(part && tour && part.y >= 56 && part.y < tour.y).toBe(true);
+  }).toPass({ timeout: 5000 });
+});
+
+test("on a phone the tour's Results step brings the list up, so its first case shows above the tour, not just its head", async ({ page }) => {
+  await page.goto("/demo");
+  await page.getByRole("button", { name: "Take the tour" }).click();
+  for (let i = 1; i < 8; i++) await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog", { name: "Results: each solved case's forces" })).toBeVisible();
+  // It stood under the page's words, with only its head above the tour's box: the page ended at the screen's foot, so
+  // it couldn't go up until the page had room below it while the tour is open.
+  const part = page.locator('[data-tour="results"]');
+  await expect(part).toHaveAttribute("data-tour-spot", "");
+  await expect(async () => {
+    const list = await part.boundingBox();
+    const first = await part.locator("tbody tr").first().boundingBox();
+    const tour = await page.getByRole("dialog").boundingBox();
+    expect(list && first && tour && list.y >= 56 && first.y + first.height <= tour.y).toBe(true);
   }).toPass({ timeout: 5000 });
 });
 

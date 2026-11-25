@@ -19,7 +19,7 @@ export interface TourStep {
 export const TOUR_STEPS: readonly TourStep[] = [
   {
     title: "Welcome to Mesh Doctor",
-    text: "This demo replays a real run of the public Ahmed-body example. Nothing here runs, so click anything you like. The tour opens each screen in turn and takes about a minute.",
+    text: "This demo replays a real run of the public Ahmed-body example. Nothing here runs, so click anything you like. The tour opens each screen in turn and takes a minute or two.",
   },
   {
     title: "Overview: the whole picture",
@@ -52,6 +52,18 @@ export const TOUR_STEPS: readonly TourStep[] = [
     spot: "abtests",
   },
   {
+    title: "Pictures: see the flow",
+    text: "Pictures has ParaView draw a solved case's flow on the engine's computer: plane cuts through it, its vortices and any spots of unphysical pressure, at a written time or of a transient run's mean flow. Make pictures starts a set; each set's page shows its pictures, and a cut over time plays through its written times.",
+    page: "/pictures",
+    spot: "pictures",
+  },
+  {
+    title: "Results: each solved case's forces",
+    text: "Results lists each solved case's drag and downforce or lift, averaged over the end of its run, with how sure each mean is and whether its forces still drift. A case's page charts its forces over the run. Compare puts two cases, or an A/B test's two runs, side by side and says whether each difference is real or inside the noise.",
+    page: "/results",
+    spot: "results",
+  },
+  {
     title: "Jobs: what is running",
     text: "Repairs, A/B tests, new cases, solves, transient plans and pictures run as jobs, whether started here or from the engine's dashboard, and Jobs shows their progress live. Cancel stops a job that is running; a job's link opens what it makes: a repair's report, an A/B test, a new case, a solve's run, a transient plan or a set of pictures. A repair run in a terminal shows on the Overview instead.",
     page: "/jobs",
@@ -80,19 +92,18 @@ export const FIRST_STEPS_TOUR_STEP: TourStep = {
  * repair, or stays on Jobs, where a job's report opens, before one has finished. With `noRuns` (the engine lists no repair run
  * yet), its Overview step is about Getting started, which the Overview opens with until then. */
 export function engineTourSteps(report: string | null, noRuns = false): readonly TourStep[] {
-  const [, overview, cases, solve, repairs, abtests, jobs, reports] =
-    TOUR_STEPS as readonly [TourStep, TourStep, TourStep, TourStep, TourStep, TourStep, TourStep, TourStep];
+  // The demo's steps from Cases to Jobs are your own app's too, as they are; the welcome, the Overview and the report
+  // are its own.
+  const overview = TOUR_STEPS[1]!;
+  const screens = TOUR_STEPS.slice(2, -1);
+  const reports = TOUR_STEPS[TOUR_STEPS.length - 1]!;
   return [
     {
       title: "Welcome to Mesh Doctor",
-      text: "This browser is paired with the Mesh Doctor engine on your computer, so these screens show your own cases, solves, repair runs, A/B tests and jobs, read from the engine. Your meshes stay on your computer. The tour opens each screen in turn and takes about a minute.",
+      text: "This browser is paired with the Mesh Doctor engine on your computer, so these screens show your own cases, solves, repair runs, A/B tests, pictures, results and jobs, read from the engine. Your meshes stay on your computer. The tour opens each screen in turn and takes a minute or two.",
     },
     noRuns ? FIRST_STEPS_TOUR_STEP : overview,
-    cases,
-    solve,
-    repairs,
-    abtests,
-    jobs,
+    ...screens,
     report === null
       ? {
           title: reports.title,

@@ -107,7 +107,7 @@ export function Pictures() {
       {sets.isError && !old && (
         <ErrorPanel className="mb-6" error={sets.error} onRetry={() => sets.refetch()} retrying={sets.isFetching} />
       )}
-      <Card>
+      <Card data-tour="pictures">
         {sets.isPending ? (
           <TableSkeleton rows={4} cols={4} />
         ) : old ? (

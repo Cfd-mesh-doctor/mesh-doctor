@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The app's short walkthrough: eight steps in plain words on where things are and what each screen tells you, which
-// can be skipped at any step. Each step opens the screen it describes and rings the part it means, and the tour stands
-// aside so it shows. It opens with the focus on Next, so Enter steps through it; each new step is read out, as the
-// focus stays put while the words change; and closing it hands the focus back to whatever opened it, or on to the
-// page's content when that's gone. The steps are the demo's or your own app's (tourSteps.ts).
+// The app's short walkthrough: a step for each screen, in plain words, on where things are and what each one tells
+// you, which can be skipped at any step. Each step opens the screen it describes and rings the part it means, and the
+// tour stands aside so it shows. It opens with the focus on Next, so Enter steps through it; each new step is read
+// out, as the focus stays put while the words change; and closing it hands the focus back to whatever opened it, or
+// on to the page's content when that's gone. The steps are the demo's or your own app's (tourSteps.ts).
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,8 @@ export function AppTour({ open, onClose, steps }: { open: boolean; onClose: () =
   const last = step === steps.length - 1;
   // Rings the part of the screen the step means once it's there (a screen shows its data after it opens), and brings
   // it into view when it's off the screen or low on it, where the tour stands, or when it reaches under the tour's box
-  // and would fit above it once scrolled up (Getting started, on a laptop's screen). It looks again whenever the part
+  // and would fit above it once scrolled up (Getting started, on a laptop's screen; the Results screen's list, on a
+  // phone, where the page has room below its foot for it while the tour is open). It looks again whenever the part
   // moves on the page in the next two seconds, as the cards above it fill in and push it down (Solve, on a phone). CSS
   // lifts it above the tour's shade, and its scroll-margin-top keeps it clear of the header.
   useEffect(() => {
