@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, httpTransport } from "./client";
+import { api, httpTransport, type Transport } from "./client";
 import { EngineError, explain } from "./errors";
 
 const KEY = "k".repeat(43);
@@ -187,6 +187,52 @@ describe("httpTransport", () => {
   it("refuses an answer that isn't the engine's JSON", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("<html>", { status: 200 })));
     await expect(api.cases(httpTransport(ENGINE, KEY))).rejects.toMatchObject({ code: "bad-response" });
+  });
+
+  it("fetches a picture with the key, by its case, set and file, as the PNG the engine served", async () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    const fetch = vi.fn().mockResolvedValue(new Response(png, { status: 200, headers: { "Content-Type": "image/png" } }));
+    vi.stubGlobal("fetch", fetch);
+    const blob = await api.picture(httpTransport(ENGINE, KEY), "my case", "0.0006_mean", "cuts/c1_side_U.png");
+    expect(blob.size).toBe(4);
+    expect(blob.type).toBe("image/png");
+    const [url, init] = fetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${ENGINE}/api/v1/pictures/my%20case/0.0006_mean/cuts/c1_side_U.png`);
+    expect(init.headers).toEqual({ "X-MD-Key": KEY });
+    expect(init.method).toBe("GET");
+    expect(init.credentials).toBe("omit");
+  });
+
+  it("turns a picture the engine refuses into its error, and refuses an answer that isn't a picture", async () => {
+    const refused = { error: { code: "not-found", message: "the set 2000 of ahmed lists no picture cuts/x.png" } };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(answer(404, refused)));
+    await expect(api.picture(httpTransport(ENGINE, KEY), "ahmed", "2000", "cuts/x.png"))
+      .rejects.toMatchObject({ code: "not-found", status: 404, message: refused.error.message });
+    const page = new Response("<html>", { status: 200, headers: { "Content-Type": "text/html" } });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(page));
+    await expect(api.picture(httpTransport(ENGINE, KEY), "ahmed", "2000", "cuts/x.png"))
+      .rejects.toMatchObject({ code: "bad-response" });
+  });
+
+  it("says a connection that can't fetch files can't show pictures", async () => {
+    const t = { kind: "engine", scope: "x", request: vi.fn() } as unknown as Transport;
+    await expect(api.picture(t, "ahmed", "2000", "cuts/x.png")).rejects.toMatchObject({ code: "unsupported" });
+    expect(t.request).not.toHaveBeenCalled();
+  });
+
+  it("asks for the sets of pictures, a case's, one set, and deletes one", async () => {
+    const fetch = vi.fn().mockImplementation(async () => answer(200, { items: [] }));
+    vi.stubGlobal("fetch", fetch);
+    const t = httpTransport(ENGINE, KEY);
+    await api.pictureSets(t, null);
+    await api.pictureSets(t, "my case");
+    await api.pictureSet(t, "my case", "2000");
+    await api.deletePictures(t, "my case", "2000");
+    const asked = fetch.mock.calls.map(([url, init]) => `${(init as RequestInit).method} ${String(url).slice(ENGINE.length)}`);
+    expect(asked).toEqual([
+      "GET /api/v1/pictures", "GET /api/v1/pictures?case=my%20case", "GET /api/v1/pictures/my%20case/2000",
+      "POST /api/v1/pictures/my%20case/2000/delete",
+    ]);
   });
 });
 

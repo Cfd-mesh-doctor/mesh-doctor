@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Saving a report the app shows as a file, to keep or to share: the engine's own document, named and written as
-// `meshdoctor report` writes it, so it opens in the report viewer (and the engine's) like any report. The file is
-// made in this tab; nothing is sent anywhere.
+// `meshdoctor report` writes it, so it opens in the report viewer (and the engine's) like any report; and any other
+// file the app holds (a picture of a set). The file is made in this tab; nothing is sent anywhere.
 import type { Report } from "./read";
 
 /** Compact JSON with every character outside printable ASCII escaped, as Python's json.dump writes it (the engine
@@ -21,14 +21,19 @@ export function reportFileName(name: string): string {
  * returns (FileSaver.js waits 40 s too). */
 export const KEEP_MS = 40_000;
 
-/** Hands the browser the report as a file to save. */
-export function saveReport(report: Report): void {
-  const url = URL.createObjectURL(new Blob([asciiJson(report)], { type: "application/json" }));
+/** Hands the browser `blob` as a file to save, named `name`. */
+export function saveFile(blob: Blob, name: string): void {
+  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = reportFileName(report.name);
+  a.download = name;
   document.body.append(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), KEEP_MS);
+}
+
+/** Hands the browser the report as a file to save. */
+export function saveReport(report: Report): void {
+  saveFile(new Blob([asciiJson(report)], { type: "application/json" }), reportFileName(report.name));
 }

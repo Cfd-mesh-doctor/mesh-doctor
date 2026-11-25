@@ -244,7 +244,7 @@ describe("the Jobs screen", () => {
     expect(within(details).getByRole("link", { name: "Open the run" })).toHaveAttribute("href", "/demo/solve/ahmed-coarse");
   });
 
-  it("names a picture job, and links it to no report, from its row or its details", async () => {
+  it("names a picture job, and links it to its set of pictures, not a report, from its row or its details", async () => {
     const answers = structuredClone(DEMO_ANSWERS);
     const items = (answers["/jobs"] as JobList).items;
     const done = items.find((j) => j.state === "done")!;
@@ -252,12 +252,16 @@ describe("the Jobs screen", () => {
     items.unshift({ ...done, id, kind: "pictures", name: "ahmed-coarse",
                     params: { name: "ahmed-coarse", time: "300", kinds: ["cuts", "vortices", "spots"] } });
     const view = renderScreen(<Jobs />, { path, at: path, transport: demoTransport(answers, 0) });
-    expect(await screen.findAllByText("Pictures")).toHaveLength(1);                             // its kind
+    expect(await screen.findAllByText("Pictures")).toHaveLength(2);                 // its kind, and its link's text
+    expect(screen.getByRole("link", { name: "The pictures of ahmed-coarse" }))
+      .toHaveAttribute("href", "/demo/pictures/ahmed-coarse/300");
     expect(screen.queryByRole("link", { name: "Report of ahmed-coarse" })).toBeNull();          // a repair's, not its
     view.unmount();
     renderScreen(<Jobs />, { path, at: `${path}?job=${id}`, transport: demoTransport(answers, 0) });
     const details = await screen.findByRole("dialog", { name: "ahmed-coarse" });
     expect(within(details).getByText("Pictures")).toBeInTheDocument();
+    expect(within(details).getByRole("link", { name: "Open the pictures" }))
+      .toHaveAttribute("href", "/demo/pictures/ahmed-coarse/300");
     expect(within(details).queryByRole("link", { name: "Open report" })).toBeNull();
   });
 

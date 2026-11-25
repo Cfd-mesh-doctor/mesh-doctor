@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Every job on the engine: live progress while running, details, cancelling (after a confirmation), the report of a
-// finished repair's run, an A/B job's test page, a new case on Cases, and a solve's or a transient plan's run page. The
-// filter lives in the address (?show=failed), so a reload or a link keeps it.
-import { FileText, FlaskConical, FolderOpen, Hourglass, ListChecks, OctagonX, Play } from "lucide-react";
+// finished repair's run, an A/B job's test page, a new case on Cases, a solve's or a transient plan's run page, and a
+// picture job's set of pictures. The filter lives in the address (?show=failed), so a reload or a link keeps it.
+import { FileText, FlaskConical, FolderOpen, Hourglass, Image, ListChecks, OctagonX, Play } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { DashboardLink } from "@/components/shared/DashboardLink";
@@ -24,6 +24,7 @@ import { elapsed, formatDateTime, formatDuration, formatPercent, formatRelative 
 import { useTitle } from "@/lib/useTitle";
 import { settingsOf, stepText } from "@/report/abtest";
 import { caseStep } from "./caseStart";
+import { setOfJob, setPath } from "./pictureSets";
 
 const FILTERS = ["all", "active", "done", "failed", "cancelled"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -41,11 +42,16 @@ const isRunJob = (job: Job) => job.kind === "solve" || job.kind === "tplan";
  * test's page, running or not: it follows a running test, and says how a stopped one ended. A solve's and a transient
  * plan's is the run's page, running or not too: it follows the solve (or says it is starting, or why it didn't), and
  * shows the plan (or that it is being made). A repair's is its run's report, once the repair is done
- * (GET /repairs/{name}/report). A new case's is the case on Cases, once it has its mesh. A picture job's pictures
- * have no page yet (the Pictures screen is to come), so it has none. */
+ * (GET /repairs/{name}/report). A new case's is the case on Cases, once it has its mesh. A picture job's is the page
+ * of the set it makes, while it makes it and once it has (one that failed or was cancelled made none, or kept the one
+ * made before). */
 function runPath(job: Job): string | null {
   if (isAbJob(job)) return `/abtests/${encodeURIComponent(job.name)}`;
   if (isRunJob(job)) return `/solve/${encodeURIComponent(job.name)}`;
+  if (job.kind === "pictures") {
+    const set = setOfJob(job);
+    return set && (isActive(job.state) || job.state === "done") ? setPath(set.name, set.set) : null;
+  }
   if (job.state !== "done") return null;
   if (job.kind === "case") return `/cases?q=${encodeURIComponent(job.name)}`;
   return job.kind === "repair" ? `/repairs/${encodeURIComponent(job.name)}/report` : null;
@@ -63,6 +69,8 @@ function RunLink({ job }: { job: Job }) {
     ? ["Case", `The case ${job.name} on Cases`]
     : job.kind === "tplan"
     ? ["Plan", `The transient plan of ${job.name}`]
+    : job.kind === "pictures"
+    ? (isActive(job.state) ? ["Follow", `Follow the pictures of ${job.name}`] : ["Pictures", `The pictures of ${job.name}`])
     : !isAbJob(job) && job.kind !== "solve"
     ? ["Report", `Report of ${job.name}`]
     : isActive(job.state)
@@ -256,6 +264,7 @@ function DetailsDialog({ job, jobs, onClose, onCancel, nameOf }: {
                       : job.kind === "case" ? <><FolderOpen /> Open on Cases</>
                       : job.kind === "solve" ? <><Play /> Open the run</>
                       : job.kind === "tplan" ? <><Hourglass /> Open the plan</>
+                      : job.kind === "pictures" ? <><Image /> Open the pictures</>
                       : <><FileText /> Open report</>}
                   </Link>
                 </Button>
@@ -424,8 +433,9 @@ export function Jobs() {
                         <Button variant="danger-ghost" size="sm" onClick={() => setCancelId(j.id)}>Cancel</Button>
                       </div>
                     ) : runPath(j) ? (
-                      // A finished repair offers its report, an A/B job its test's page and a solve or a plan its
-                      // run's page; the details open from the job's name or row, as on phones.
+                      // A finished repair offers its report, an A/B job its test's page, a solve or a plan its
+                      // run's page and a picture job its set; the details open from the job's name or row, as on
+                      // phones.
                       <RunLink job={j} />
                     ) : (
                       // On phones the whole row opens the details, so the button is left out.

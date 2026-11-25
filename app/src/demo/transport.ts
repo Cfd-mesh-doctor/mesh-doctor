@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The demo: answers recorded from a real engine (the public Ahmed-body example, see fixtures.json's
-// "_about"), served without any engine. It can cancel its own jobs; it cannot start anything.
+// "_about"), served without any engine. It can cancel its own jobs and delete its set of pictures, in this tab only;
+// it cannot start anything.
 import type { Method, Transport } from "@/engine/client";
 import { EngineError } from "@/engine/errors";
 import type {
-  AbtestDetail, CaseList, Job, JobList, MachineInfo, Readiness, RepairList, TemplateList, VariantList,
+  AbtestDetail, CaseList, Job, JobList, MachineInfo, PictureSet, Readiness, RepairList, TemplateList, VariantList,
 } from "@/engine/types";
 import { caseName } from "@/engine/verdict";
 import { toMillis } from "@/lib/format";
@@ -12,6 +13,7 @@ import { RECORDED } from "@/report/samples";
 import { DEMO_JUDGE_NOTE, DEMO_LIVE_NOTE, RECORDED_ABTESTS, briefOf, demoAbtest, recordedJudge } from "./abtests";
 import { DEMO_CLUSTERS_NOTE, recordedCluster } from "./clusters";
 import recorded from "./fixtures.json";
+import { briefOfSet, demoPictureSet, demoPictureSrc } from "./pictures";
 import templates from "./templates.json";
 
 type Answers = Record<string, unknown>;
@@ -91,6 +93,9 @@ function wait(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 const TIME_KEYS = new Set(["created", "started", "finished", "updated", "time"]);
+/** A date, as the engine writes its times (2026-11-21T18:00:00Z): not a written time of a case, such as a picture
+ * job's "300", which Date.parse reads as the year 300. */
+const DATE = /^\d{4}-\d\d-\d\d/;
 
 function eachTime(doc: unknown, fn: (t: number, text: string) => number): void {
   if (Array.isArray(doc)) {
@@ -98,7 +103,7 @@ function eachTime(doc: unknown, fn: (t: number, text: string) => number): void {
   } else if (doc && typeof doc === "object") {
     const o = doc as Record<string, unknown>;
     for (const [k, v] of Object.entries(o)) {
-      if (TIME_KEYS.has(k) && typeof v === "string" && Number.isFinite(toMillis(v))) {
+      if (TIME_KEYS.has(k) && typeof v === "string" && DATE.test(v) && Number.isFinite(toMillis(v))) {
         o[k] = new Date(fn(toMillis(v), v)).toISOString();
       } else {
         eachTime(v, fn);
@@ -196,6 +201,15 @@ export function demoTransport(answers: Answers = DEMO_ANSWERS, delayMs = DELAY_M
   const data: Answers = { "/machine": DEMO_MACHINE, "/variants": DEMO_VARIANTS, ...structuredClone(answers) };
   const by = shiftTimes(data);
   const jobs = () => data["/jobs"] as JobList | undefined;
+  // Its set of pictures, made three hours ago: the recording's engine had none to list.
+  const sets: PictureSet[] = [demoPictureSet(new Date(Date.now() - 3 * 3_600_000).toISOString().replace(/\.\d{3}Z$/, "Z"))];
+  const setOf = (route: string) => {
+    const m = /^\/pictures\/([^/]+)\/([^/]+)/.exec(route);
+    const [name, set] = [decodeURIComponent(m?.[1] ?? ""), decodeURIComponent(m?.[2] ?? "")];
+    const found = sets.find((s) => s.case === name && s.set === set);
+    if (!found) throw new EngineError("not-found", `no set of pictures ${set} of ${name}`, 404);
+    return found;
+  };
 
   /** A recorded report as the engine would send it now: its times moved with the rest of the demo, and without its
    *  A/B test while the job list has that test running (unless `withAbtest`, for the A/B tests' own answers). */
@@ -233,6 +247,11 @@ export function demoTransport(answers: Answers = DEMO_ANSWERS, delayMs = DELAY_M
       await wait(delayMs, signal);
       const route = path.split("?")[0] || "/";
       if (method === "POST") {
+        if (/^\/pictures\/[^/]+\/[^/]+\/delete$/.test(route)) {
+          const set = setOf(route);
+          sets.splice(sets.indexOf(set), 1);
+          return { case: set.case, set: set.set, deleted: set.pictures.length } as T;
+        }
         const m = /^\/jobs\/([^/]+)\/cancel$/.exec(route);
         if (!m) throw new EngineError("forbidden", "The demo can't start jobs. Connect your own engine to run Mesh Doctor.", 403);
         const id = decodeURIComponent(m[1] ?? "");
@@ -286,8 +305,25 @@ export function demoTransport(answers: Answers = DEMO_ANSWERS, delayMs = DELAY_M
         if (!shape) throw new EngineError("not-found", DEMO_CLUSTERS_NOTE, 404);
         return structuredClone(shape) as T;
       }
+      if (route === "/pictures") {
+        const of = new URLSearchParams(path.split("?")[1] ?? "").get("case");
+        return { items: sets.filter((s) => of == null || s.case === of).map(briefOfSet) } as T;
+      }
+      if (/^\/pictures\/[^/]+\/[^/]+$/.test(route)) return structuredClone(setOf(route)) as T;
       if (!(route in data)) throw new EngineError("not-found", "Not in the demo data", 404);
       return structuredClone(data[route]) as T;
+    },
+    /** A picture of its set: the bundle's copy of the gallery's. */
+    async blob(path: string, signal?: AbortSignal): Promise<Blob> {
+      await wait(delayMs, signal);
+      const set = setOf(path);
+      const file = path.split("/").slice(4).map(decodeURIComponent).join("/");
+      if (!set.pictures.some((p) => p.file === file)) {
+        throw new EngineError("not-found", `the set ${set.set} of ${set.case} lists no picture ${file}`, 404);
+      }
+      const res = await fetch(demoPictureSrc(file), { signal });
+      if (!res.ok) throw new EngineError("bad-response", `The demo's picture ${file} didn't load`, res.status);
+      return res.blob();
     },
   };
 }

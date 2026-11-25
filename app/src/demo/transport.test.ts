@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { api } from "@/engine/client";
 import type { Job } from "@/engine/types";
 import { DEMO_CLUSTERS_NOTE, RECORDED_CLUSTERS, recordedCluster } from "./clusters";
@@ -35,6 +35,38 @@ describe("demo transport", () => {
     expect(jobs.items[0]?.state).toBe("cancelled");
     expect(data["/jobs"].items[0]?.state).toBe("running"); // the recording itself is untouched
     await expect(api.cancelJob(t, "20261121-110000-repair-b-0002")).rejects.toMatchObject({ code: "finished" });
+  });
+
+  it("has the gallery's set of pictures, serves them, and deletes it for the rest of the visit only", async () => {
+    const fetch = vi.fn(async () => new Response(new Uint8Array([0x89, 0x50]), { headers: { "Content-Type": "image/png" } }));
+    vi.stubGlobal("fetch", fetch);
+    try {
+      const t = demoTransport(answers(), 0);
+      const sets = await api.pictureSets(t, null);
+      expect(sets.items).toEqual([expect.objectContaining({ case: "ahmed-25-medium", set: "2000", count: 5, job: null })]);
+      await expect(api.pictureSets(t, "another")).resolves.toEqual({ items: [] });
+      const set = await api.pictureSet(t, "ahmed-25-medium", "2000");
+      expect(set.pictures.map((p) => p.kind)).toEqual(["cuts", "cuts", "cuts", "vortices", "vortices"]);
+      const blob = await api.picture(t, "ahmed-25-medium", "2000", "cuts/c1_side_centre_U.png");
+      expect(blob.size).toBe(2);
+      expect(String((fetch.mock.calls[0] as unknown[])[0])).toMatch(/ahmed_c1_side_centre_U/);
+      await expect(api.picture(t, "ahmed-25-medium", "2000", "cuts/nothing.png")).rejects.toMatchObject({ code: "not-found" });
+      await expect(api.deletePictures(t, "ahmed-25-medium", "2000"))
+        .resolves.toEqual({ case: "ahmed-25-medium", set: "2000", deleted: 5 });
+      await expect(api.pictureSets(t, null)).resolves.toEqual({ items: [] });
+      await expect(api.pictureSet(t, "ahmed-25-medium", "2000")).rejects.toMatchObject({ code: "not-found" });
+      // the next visit has it again
+      await expect(api.pictureSets(demoTransport(answers(), 0), null)).resolves.toMatchObject({ items: [{ set: "2000" }] });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("moves dates only, not the written time a picture job pictures", () => {
+    const data = { "/jobs": { items: [{ ...job("j", "done", "2026-11-21T18:00:00Z"), params: { name: "a", time: "300" } }] } };
+    shiftTimes(data, Date.parse("2026-11-25T00:00:00Z"));
+    expect(data["/jobs"].items[0]?.params).toEqual({ name: "a", time: "300" });
+    expect(data["/jobs"].items[0]?.created).toBe("2026-11-24T23:56:00.000Z");
   });
 
   it("never starts anything", async () => {

@@ -61,6 +61,17 @@ export function abCommand(source: string | null, name: string, { iters, init, va
 }
 
 /** The command that continues the second run of A/B test `name` to iteration `to` and judges it again. */
+/** The command that makes a set of pictures of case `name` in a terminal, as a picture job does: at `time` (else the
+ * latest), of the `kinds` (all, unless fewer), of its mean flow with `mean`; null for a case whose name isn't a plain
+ * folder name. */
+export function picturesCommand(name: string, { time, kinds, mean }: {
+  time?: string; kinds?: readonly string[]; mean?: boolean;
+} = {}): string | null {
+  if (!PLAIN.test(name) || (time && !/^[0-9][0-9.eE+-]*$/.test(time))) return null;
+  return [`meshdoctor pictures ${name}`, time && `--time ${time}`, kinds && kinds.length < 3 && `--kinds ${kinds.join(",")}`,
+    mean && "--mean"].filter(Boolean).join(" ");
+}
+
 export function abExtendCommand(name: string, to: number): string | null {
   return PLAIN.test(name) && Number.isInteger(to) ? `meshdoctor ab extend ${name} ${to}` : null;
 }

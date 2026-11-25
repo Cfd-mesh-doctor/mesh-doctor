@@ -19,6 +19,11 @@ function screens(home: string): RouteObject[] {
     { path: "solve", handle: h("Solve"), lazy: async () => ({ Component: (await import("@/pages/app/Solve")).Solve }) },
     { path: "repairs", handle: h("Repairs"), lazy: async () => ({ Component: (await import("@/pages/app/Repairs")).Repairs }) },
     { path: "abtests", handle: h("A/B tests"), lazy: async () => ({ Component: (await import("@/pages/app/AbTests")).AbTests }) },
+    {
+      path: "pictures",
+      handle: h("Pictures"),
+      lazy: async () => ({ Component: (await import("@/pages/app/Pictures")).Pictures }),
+    },
     { path: "jobs", handle: h("Jobs"), lazy: async () => ({ Component: (await import("@/pages/app/Jobs")).Jobs }) },
     {
       path: "estimate",
@@ -37,6 +42,11 @@ function screens(home: string): RouteObject[] {
       lazy: async () => ({ Component: (await import("@/pages/app/AbTest")).AbTest }),
     },
     { path: "solve/:name", handle: h("Run"), lazy: async () => ({ Component: (await import("@/pages/app/Run")).RunPage }) },
+    {
+      path: "pictures/:name/:set",
+      handle: h("Set of pictures"),
+      lazy: async () => ({ Component: (await import("@/pages/app/PictureSet")).PictureSetPage }),
+    },
     {
       path: "first-run",
       handle: h("First run"),

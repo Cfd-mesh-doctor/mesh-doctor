@@ -12,7 +12,8 @@
 // counts time in s: its progress, stretches, charts and Continue are in seconds, it names the steady run it started
 // from, and says from when it averages its flow (`averaging`, API 1.9: once its forces have settled) and the written
 // times it keeps (`times`, `joined`, API 1.10: every one, the times each stretch writes), and its judge is the
-// transient judge, in time steps, which the live page answers while it solves and once it has ended.
+// transient judge, in time steps, which the live page answers while it solves and once it has ended. Once a run has
+// ended, its page lists its sets of pictures and makes more (Pictures.tsx's RunPicturesCard).
 import { ArrowLeft, CircleStop, FastForward, ListChecks, Play } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
@@ -34,6 +35,7 @@ import { JudgeCard, LegendLine } from "@/pages/report/AbCards";
 import { Section } from "@/pages/report/Section";
 import { tableRun } from "@/report/abtest";
 import { judgeOf } from "@/report/summary";
+import { RunPicturesCard } from "./Pictures";
 import { SolveDialog } from "./SolveDialog";
 import { TransientPlanCard } from "./TransientPlan";
 import { RunComparison } from "./VerifyInstall";
@@ -490,6 +492,12 @@ export function RunPage() {
       {ended && !transient && ahmed && (
         <Section title="Against the accuracy check">
           <RunComparison className="mt-4" run={run} />
+        </Section>
+      )}
+
+      {ended && (
+        <Section title="Pictures">
+          <RunPicturesCard name={name} />
         </Section>
       )}
 

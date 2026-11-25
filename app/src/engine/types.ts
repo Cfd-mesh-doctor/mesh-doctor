@@ -19,12 +19,12 @@ export type MachineInfo = Json<operations["machine"]["responses"][200]>;
 /** The free space for a new case in the cases folder, and with `case`, what solving that case takes on the disk, in MB
  *  (GET /disk, API 1.7): what the engine's disk guard checks a solve against. */
 export type DiskInfo = Json<operations["disk"]["responses"][200]>;
-/** What a repair, an A/B test, its continuation or a new case writes on the disk, as the engine's disk guard counts it
- *  before the job starts, and the free space of the disk it writes on, in MB (GET /disk/repair, /disk/abtest,
- *  /disk/abextend and /disk/case, API 1.12). */
+/** What a repair, an A/B test, its continuation, a new case or a set of pictures writes on the disk, as the engine's
+ *  disk guard counts it before the job starts, and the free space of the disk it writes on, in MB (GET /disk/repair,
+ *  /disk/abtest, /disk/abextend and /disk/case, API 1.12; /disk/pictures, API 1.18). */
 export type DiskJob = Json<operations["disk_repair"]["responses"][200]>;
 /** The jobs GET /disk/{kind} answers for, by their kind in POST /jobs (`case`: a new case from a template). */
-export type DiskJobKind = "repair" | "abtest" | "abextend" | "case";
+export type DiskJobKind = "repair" | "abtest" | "abextend" | "case" | "pictures";
 export type RepairSummary = RepairList["items"][number];
 export type Job = components["schemas"]["Job"];
 export type JobState = Job["state"];
@@ -77,6 +77,19 @@ export type RunValidation = Json<operations["run_validation"]["responses"][200]>
 /** The transient plan a tplan job made of a case (API 1.6): from its latest result, the time step a transient run would
  *  need at each Courant number, which cells set it, and the steps and hours such a run would take. */
 export type TransientPlan = Json<operations["transient_plan"]["responses"][200]>;
+
+/** The sets of pictures of the flow in the engine's workspace (GET /pictures, API 1.17), newest first: each set made,
+ *  and each one a picture job is making for the first time (`count` and `made` null until then), with its latest
+ *  job. A set is named by the time it pictures, `<time>_mean` for a transient run's mean flow. */
+export type PictureSetList = Json<operations["list_pictures"]["responses"][200]>;
+export type PictureSetBrief = PictureSetList["items"][number];
+/** One set (GET /pictures/{case}/{set}): each picture's file (`<kind>/<name>.png`) and what it shows, and the notes on
+ *  what was left out and why. */
+export type PictureSet = Json<operations["picture_set"]["responses"][200]>;
+export type PictureKind = PictureSet["kinds"][number];
+export type Picture = PictureSet["pictures"][number];
+/** A set deleted (POST /pictures/{case}/{set}/delete): how many pictures it had. */
+export type PicturesDeleted = Json<operations["delete_pictures"]["responses"][200]>;
 
 /** The API major version this app speaks; the engine reports major.minor and any 1.x works. */
 export const API_MAJOR = 1;

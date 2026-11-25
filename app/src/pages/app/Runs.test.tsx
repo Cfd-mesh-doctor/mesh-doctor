@@ -7,7 +7,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import type { Transport } from "@/engine/client";
 import { EngineError } from "@/engine/errors";
-import type { Job, MachineInfo, Made, Run, RunValidation } from "@/engine/types";
+import type { Job, MachineInfo, Made, PictureSetBrief, Run, RunValidation } from "@/engine/types";
 import { renderScreen } from "@/test/render";
 import { RunPage } from "./Run";
 import { Solve } from "./Solve";
@@ -101,6 +101,8 @@ function engine(o: {
   api?: string;
   /** the cases of yours in its cases folder: mine, unless given */
   yours?: string[];
+  /** its sets of pictures (API 1.17); none, as an older engine, unless given */
+  pictures?: PictureSetBrief[];
 } = {}) {
   const posted: { path: string; body?: unknown }[] = [];
   const judged: string[] = [];
@@ -140,6 +142,10 @@ function engine(o: {
       if (route === "/" && o.api) {
         return { apiVersion: o.api, version: "0.2.0", jobKinds: ["repair", "abtest", "abextend", "case", "solve",
           "tplan"] } as T;
+      }
+      if (route === "/pictures" && o.pictures) {
+        const of = new URLSearchParams(path.split("?")[1] ?? "").get("case");
+        return { items: o.pictures.filter((s) => s.case === of) } as T;
       }
       if (route === "/judge") {
         judged.push(path);
@@ -407,6 +413,23 @@ describe("a run's page", () => {
     await user.click(screen.getByRole("button", { name: "Stop" }));
     expect(await screen.findByText("Stopping: the solver writes the iteration it has reached, then ends.")).toBeInTheDocument();
     expect(posted).toEqual([{ path: "/runs/t/stop", body: undefined }]);
+  });
+
+  it("lists the sets of pictures of a run that has ended, and makes more of it; one solving has none yet", async () => {
+    const user = userEvent.setup();
+    const set: PictureSetBrief = {
+      case: "b", set: "150", time: "150", mean: false, kinds: ["cuts", "vortices"], made: HOUR_AGO, count: 8, job: null,
+    };
+    const view = runPage("b", { made: { b: { template: "ahmed-body" } }, runs: [stopped("b")], pictures: [set] });
+    const card = (await screen.findByRole("heading", { name: "Pictures of its flow" })).closest("section")!;
+    expect(await within(card).findByRole("link", { name: "Written time 150" })).toHaveAttribute("href", "/app/pictures/b/150");
+    expect(card).toHaveTextContent("cuts and vortices · 8 pictures");
+    await user.click(within(card).getByRole("button", { name: "Make pictures…" }));
+    expect(await screen.findByRole("dialog", { name: "Make pictures of b" })).toBeInTheDocument();
+    view.unmount();
+    runPage("a", { made: { a: { template: "ahmed-body" } }, runs: [run("a")], pictures: [] });
+    expect(await screen.findByRole("heading", { name: /^Solving/ })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Pictures of its flow" })).toBeNull();
   });
 
   it("judges a run that has ended, and continues it from the latest iteration written", async () => {

@@ -5,7 +5,8 @@ import { api } from "./client";
 import { useEngine } from "./context";
 import { asEngineError } from "./errors";
 import {
-  isActive, type AbtestDetail, type DiskJobKind, type Job, type JobList, type JobRequest, type RunDetail,
+  isActive, type AbtestDetail, type DiskJobKind, type Job, type JobList, type JobRequest, type PictureSet,
+  type PictureSetList, type RunDetail,
 } from "./types";
 
 export function makeQueryClient(): QueryClient {
@@ -160,7 +161,9 @@ export function useTemplateDisk(template: string | null, size?: string) {
 
 /** The param of a job a GET /disk/{kind} answer is for: while it stays the same, the last answer shows while the next
  * comes (other iterations, another mesh size), but never another case's, run's or template's. */
-const DISK_SUBJECT: Record<DiskJobKind, string> = { repair: "source", abtest: "name", abextend: "name", case: "template" };
+const DISK_SUBJECT: Record<DiskJobKind, string> = {
+  repair: "source", abtest: "name", abextend: "name", case: "template", pictures: "name",
+};
 
 /** What a repair, an A/B test, its continuation or a new case writes on the disk, as the engine's disk guard counts it
  * before the job starts, and the free space there (API 1.12), for the job's dialog, from the params it would start
@@ -296,6 +299,68 @@ export function useTransientPlan(name: string, enabled: boolean, version: string
   });
 }
 
+/** The sets of pictures (API 1.17), or only case `of`'s: asked for again every 3 s while a picture job waits or runs
+ * (`making`, or a set listed with its job under way), else every 15 s. An engine before API 1.17 has none to list
+ * (not-found): it isn't asked again. */
+export function usePictureSets(making: boolean, of: string | null = null) {
+  const { transport } = useEngine();
+  return useQuery<PictureSetList>({
+    queryKey: [transport?.scope, "pictures", of],
+    queryFn: transport ? ({ signal }) => api.pictureSets(transport, of, signal) : skipToken,
+    refetchInterval: (q) => refused(q.state.status, q.state.error, ["not-found"]) ? false
+      : making || q.state.data?.items.some((s) => s.job != null && isActive(s.job.state)) ? ACTIVE_POLL_MS : IDLE_POLL_MS,
+  });
+}
+
+/** One set of pictures: asked for again every 3 s while a job makes it (`making`, given the set as it is now, or while
+ * the engine answers that it is being made the first time, not-ready), else every 15 s, and not again once the engine
+ * has none (not-found). Its key is under the sets', so it is asked for again with them. */
+export function usePictureSet(name: string, set: string, making: (now: PictureSet | undefined) => boolean) {
+  const { transport } = useEngine();
+  return useQuery<PictureSet>({
+    queryKey: [transport?.scope, "pictures", "set", name, set],
+    queryFn: transport ? ({ signal }) => api.pictureSet(transport, name, set, signal) : skipToken,
+    retry: false,
+    refetchInterval: (q) => making(q.state.data) || refused(q.state.status, q.state.error, ["not-ready"]) ? ACTIVE_POLL_MS
+      : refused(q.state.status, q.state.error, ["not-found"]) ? false : IDLE_POLL_MS,
+  });
+}
+
+/** One picture of a set, the PNG itself, once `enabled` (once it scrolls into view). A set made again holds new
+ * pictures under the same names, so `made` (when the set was made) is part of its key. It stays cached for ten
+ * minutes once no picture shows it. */
+export function usePicture(name: string, set: string, made: string | null, file: string, enabled: boolean) {
+  const { transport } = useEngine();
+  return useQuery<Blob>({
+    queryKey: [transport?.scope, "picture", name, set, made, file],
+    queryFn: transport && enabled ? ({ signal }) => api.picture(transport, name, set, file, signal) : skipToken,
+    staleTime: Infinity,
+    gcTime: 10 * 60_000,
+    retry: false,
+  });
+}
+
+/** Deletes a set of pictures Mesh Doctor made. The set leaves the lists at once and its own answer goes (its page,
+ * opened again, asks the engine afresh); then the sets are asked for again. */
+export function useDeletePictures() {
+  const { transport } = useEngine();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, set }: { name: string; set: string }) => {
+      if (!transport) throw new Error("not connected");
+      return api.deletePictures(transport, name, set);
+    },
+    onSuccess: (_done, { name, set }) => {
+      qc.setQueriesData<PictureSetList>(
+        { queryKey: [transport?.scope, "pictures"], predicate: (q) => q.queryKey.length === 3 },
+        (old) => old && { ...old, items: old.items.filter((s) => !(s.case === name && s.set === set)) },
+      );
+      qc.removeQueries({ queryKey: [transport?.scope, "pictures", "set", name, set], exact: true });
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: [transport?.scope, "pictures"] }),
+  });
+}
+
 /** Stops a run: the solver writes the iteration it is at and ends. The run's answer goes into its page at once; then
  * it, the runs and the jobs are asked for again. */
 export function useStopRun() {
@@ -342,6 +407,7 @@ export function useStartJob() {
         void qc.invalidateQueries({ queryKey: [transport?.scope, "runs"] });
         void qc.invalidateQueries({ queryKey: [transport?.scope, "run", body.params.name] });
       }
+      if (body.kind === "pictures") void qc.invalidateQueries({ queryKey: [transport?.scope, "pictures"] });
     },
   });
 }

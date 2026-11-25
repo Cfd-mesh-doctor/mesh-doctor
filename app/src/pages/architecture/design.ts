@@ -159,7 +159,7 @@ export const DESIGN: DocSection[] = [
             [
               "pictures",
               "`pictures` (CLI), a `pictures` job",
-              "people looking at a solved case's flow; the web app's Pictures screen (coming)"
+              "people looking at a solved case's flow; the web app's Pictures screen and a run's page"
             ],
             [
               "`meshDoctor/map.json`",

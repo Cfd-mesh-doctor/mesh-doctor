@@ -199,6 +199,16 @@ const TEMPLATES = {
   ],
 };
 
+/** A set of pictures as GET /pictures/{case}/{set} answers it (API 1.17). */
+export interface PictureSetDoc {
+  case: string; set: string; time: string; mean: boolean; kinds: string[]; made: string | null; notes: string[];
+  pictures: { file: string; kind: string; title: string }[];
+}
+
+/** Each picture it serves: a PNG of one pixel. */
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+  "base64");
+
 interface AbDetail {
   status?: { step?: string; time?: string } | null;
   result?: { finished?: string | null; residualRatioFixedOverBase?: Record<string, number> } | null;
@@ -232,6 +242,8 @@ export async function mockEngine(
     tplans?: Record<string, unknown>;
     /** The free space GET /disk and GET /disk/{kind} say (API 1.7, 1.12), in MB: 393 GB by default. */
     diskFreeMb?: number;
+    /** Its sets of pictures (API 1.17), made in a terminal (no job); none, as from an older engine, unless given. */
+    pictures?: PictureSetDoc[];
   } = {},
 ): Promise<MockEngine> {
   const state: MockEngine = {
@@ -339,8 +351,9 @@ export async function mockEngine(
     }
     // What the other jobs write (API 1.12), as the disk guard counts them for the coarse Ahmed body's mesh of 66 MB: a
     // repair 212 MB (its copy and its points' backup, its sets and room to collapse faces), an A/B test 484 MB (two
-    // runs), its continuation 106 MB (two written times), and a new case its mesh with its sets.
-    const diskJob = /^\/disk\/(repair|abtest|abextend|case)$/.exec(path);
+    // runs), its continuation 106 MB (two written times), a new case its mesh with its sets, and a set of pictures
+    // 7 MB (API 1.18: about 20 pictures of 0.3 MB, and its list).
+    const diskJob = /^\/disk\/(repair|abtest|abextend|case|pictures)$/.exec(path);
     if (diskJob) {
       const query = new URL(req.url()).searchParams;
       const kind = diskJob[1]!;
@@ -350,7 +363,7 @@ export async function mockEngine(
         return json(404, { error: { code: "not-found", message: `no template ${query.get("template")}` } });
       }
       const needMb = kind === "repair" ? 212 : kind === "abtest" ? 484 : kind === "abextend" ? 106
-        : Math.ceil((cells ?? 0) * 0.14 / 1024 * 1.03);
+        : kind === "pictures" ? 7 : Math.ceil((cells ?? 0) * 0.14 / 1024 * 1.03);
       return json(200, { needMb, freeMb: opts.diskFreeMb ?? 402_339, keepMb: 1024,
         folder: kind === "case" ? "cases" : "workspace" });
     }
@@ -379,6 +392,30 @@ export async function mockEngine(
         { kind: body.kind, params: body.params, started: null });
       jobs.unshift(made);
       return json(202, made);
+    }
+    // Its sets of pictures (API 1.17): the list, a set, a picture (a PNG, its one answer that isn't JSON), and a delete.
+    const sets = opts.pictures;
+    if (sets && path === "/pictures") {
+      const of = new URL(req.url()).searchParams.get("case");
+      return json(200, { items: sets.filter((s) => of == null || s.case === of).map((s) => ({
+        case: s.case, set: s.set, time: s.time, mean: s.mean, kinds: s.kinds, made: s.made, count: s.pictures.length,
+        job: null,
+      })) });
+    }
+    const pic = sets && /^\/pictures\/([^/]+)\/([^/]+)(?:\/(.+))?$/.exec(path);
+    if (sets && pic) {
+      const [name, at, rest] = [decodeURIComponent(pic[1]!), decodeURIComponent(pic[2]!), pic[3]];
+      const i = sets.findIndex((s) => s.case === name && s.set === at);
+      if (i < 0) return json(404, { error: { code: "not-found", message: `no set of pictures ${at} of ${name}` } });
+      if (rest === "delete" && req.method() === "POST") {
+        const [gone] = sets.splice(i, 1);
+        return json(200, { case: name, set: at, deleted: gone!.pictures.length });
+      }
+      if (!rest) return json(200, sets[i]);
+      if (!sets[i]!.pictures.some((p) => p.file === decodeURIComponent(rest))) {
+        return json(404, { error: { code: "not-found", message: `the set ${at} of ${name} lists no picture ${rest}` } });
+      }
+      return route.fulfill({ status: 200, headers: { ...cors, "Content-Type": "image/png" }, body: PNG });
     }
     const cancel = /^\/jobs\/([^/]+)\/cancel$/.exec(path);
     if (cancel && req.method() === "POST") {

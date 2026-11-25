@@ -27,19 +27,19 @@ interface Item {
 }
 
 // Solve sets cases up and runs them, so it comes after Cases, before what's done to a case (a repair, then an A/B
-// test of it).
+// test of it), and then the pictures of a solved one's flow.
 const MAIN: Item[] = [
   { label: "Overview", icon: LayoutDashboard, path: "" },
   { label: "Cases", icon: FolderOpen, path: "/cases" },
   { label: "Solve", icon: Play, path: "/solve" },
   { label: "Repairs", icon: Wrench, path: "/repairs" },
   { label: "A/B tests", icon: FlaskConical, path: "/abtests" },
+  { label: "Pictures", icon: Image, path: "/pictures" },
   { label: "Jobs", icon: ListChecks, path: "/jobs" },
   { label: "Size estimator", icon: Calculator, path: "/estimate" },
 ];
 
 const NEXT: Item[] = [
-  { label: "Pictures", icon: Image, soon: "ParaView renders of the flow" },
   { label: "Results", icon: ChartLine, soon: "Forces, convergence and comparisons" },
   { label: "Local tools", icon: Toolbox, soon: "Zone repair, full-car pipeline, workbooks" },
 ];
@@ -131,7 +131,7 @@ export function Sidebar({ onNavigate, onTour }: { onNavigate?: () => void; onTou
           ))}
         </div>
         <div>
-          {/* Said as "Coming next 3 screens": the count is how many are coming. */}
+          {/* Said as "Coming next 2 screens": the count is how many are coming. */}
           <button
             type="button"
             aria-expanded={nextOpen}

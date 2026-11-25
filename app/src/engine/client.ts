@@ -5,8 +5,8 @@ import { NOT_THE_ENGINE, EngineError, isEngineCode } from "./errors";
 import { localAccessState } from "./permission";
 import type {
   AbtestDetail, AbtestList, AbtestLive, CaseJudge, CaseList, ClusterShape, DiskInfo, DiskJob, DiskJobKind, EngineInfo, Job,
-  JobList, JobRequest, JudgeAnswer, MachineInfo, Readiness, RepairList, RunDetail, RunList, RunLive, RunValidation,
-  TemplateList, TransientPlan, VariantList,
+  JobList, JobRequest, JudgeAnswer, MachineInfo, PictureSet, PictureSetList, PicturesDeleted, Readiness, RepairList,
+  RunDetail, RunList, RunLive, RunValidation, TemplateList, TransientPlan, VariantList,
 } from "./types";
 import { API_MAJOR } from "./types";
 import type { Report } from "@/report/read";
@@ -18,6 +18,9 @@ export interface Transport {
   /** Keeps cached answers from different engines (and the demo) apart. */
   readonly scope: string;
   request<T>(method: Method, path: string, body?: unknown, signal?: AbortSignal): Promise<T>;
+  /** A file the engine answers with as itself, not as JSON: a picture (API 1.17). Its refusals are JSON, as every
+   * answer's. A transport without it (a test's) can't show pictures. */
+  blob?(path: string, signal?: AbortSignal): Promise<Blob>;
 }
 
 // Chrome's Local Network Access: says up front that the request goes to this computer.
@@ -25,63 +28,93 @@ type LocalRequestInit = RequestInit & { targetAddressSpace?: "loopback" | "local
 
 const TIMEOUT_MS = 15_000;
 
+/** The engine's refusal in an answer that isn't ok: its code and message, else the HTTP status. */
+function refusal(doc: unknown, status: number): EngineError {
+  const err = (doc as { error?: { code?: unknown; message?: unknown } } | null)?.error;
+  return new EngineError(
+    isEngineCode(err?.code) ? err.code : "bad-response",
+    typeof err?.message === "string" ? err.message : `HTTP ${status}`,
+    status,
+  );
+}
+
+/** An answer's JSON document, or the engine's refusal. `late`: the time ran out while it was being read. */
+async function readJson<T>(res: Response, late: () => boolean): Promise<T> {
+  let doc: unknown;
+  try {
+    doc = await res.json();
+  } catch {
+    if (late()) throw new EngineError("timeout", "The answer took too long");
+    throw new EngineError("bad-response", `HTTP ${res.status} ${NOT_THE_ENGINE}`, res.status);
+  }
+  if (!res.ok) throw refusal(doc, res.status);
+  return doc as T;
+}
+
+/** A file the engine answers with as itself (a picture), or its refusal, which is JSON as ever. */
+async function readFile(res: Response, late: () => boolean): Promise<Blob> {
+  if (!res.ok) return readJson<never>(res, late);
+  if (!(res.headers.get("Content-Type") ?? "").startsWith("image/")) {
+    throw new EngineError("bad-response", `HTTP ${res.status} without the engine's picture`, res.status);
+  }
+  try {
+    return await res.blob();
+  } catch {
+    if (late()) throw new EngineError("timeout", "The answer took too long");
+    throw new EngineError("bad-response", "The picture broke off on its way", res.status);
+  }
+}
+
 export function httpTransport(engine: string, key: string, timeoutMs = TIMEOUT_MS): Transport {
+  /** One request, its answer read by `read` within the time allowed. */
+  async function send<T>(method: Method, path: string, body: unknown, signal: AbortSignal | undefined,
+    read: (res: Response, late: () => boolean) => Promise<T>): Promise<T> {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    const stop = () => ctrl.abort();
+    signal?.addEventListener("abort", stop, { once: true });
+    try {
+      let res: Response;
+      try {
+        const init: LocalRequestInit = {
+          method,
+          headers: body === undefined ? { "X-MD-Key": key } : { "X-MD-Key": key, "Content-Type": "application/json" },
+          body: body === undefined ? undefined : JSON.stringify(body),
+          signal: ctrl.signal,
+          cache: "no-store",
+          credentials: "omit",
+          mode: "cors",
+          redirect: "error",
+          referrerPolicy: "no-referrer",
+          targetAddressSpace: "loopback",
+        };
+        res = await fetch(`${engine}/api/v1${path}`, init);
+      } catch {
+        if (signal?.aborted) throw new EngineError("aborted", "Cancelled");
+        if (ctrl.signal.aborted) throw new EngineError("timeout", `No answer from ${engine} in ${timeoutMs / 1000} s`);
+        // A network error says nothing more: not running, blocked by the browser, or this site not allowed.
+        if ((await localAccessState()) === "denied") {
+          throw new EngineError("permission-denied", "The browser blocked access to apps on this device");
+        }
+        throw new EngineError("unreachable", `Nothing answered at ${engine}`);
+      }
+      return await read(res, () => ctrl.signal.aborted && !signal?.aborted);
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", stop);
+    }
+  }
   return {
     kind: "engine",
     scope: engine,
-    async request<T>(method: Method, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-      const stop = () => ctrl.abort();
-      signal?.addEventListener("abort", stop, { once: true });
-      try {
-        let res: Response;
-        try {
-          const init: LocalRequestInit = {
-            method,
-            headers: body === undefined ? { "X-MD-Key": key } : { "X-MD-Key": key, "Content-Type": "application/json" },
-            body: body === undefined ? undefined : JSON.stringify(body),
-            signal: ctrl.signal,
-            cache: "no-store",
-            credentials: "omit",
-            mode: "cors",
-            redirect: "error",
-            referrerPolicy: "no-referrer",
-            targetAddressSpace: "loopback",
-          };
-          res = await fetch(`${engine}/api/v1${path}`, init);
-        } catch {
-          if (signal?.aborted) throw new EngineError("aborted", "Cancelled");
-          if (ctrl.signal.aborted) throw new EngineError("timeout", `No answer from ${engine} in ${timeoutMs / 1000} s`);
-          // A network error says nothing more: not running, blocked by the browser, or this site not allowed.
-          if ((await localAccessState()) === "denied") {
-            throw new EngineError("permission-denied", "The browser blocked access to apps on this device");
-          }
-          throw new EngineError("unreachable", `Nothing answered at ${engine}`);
-        }
-        let doc: unknown;
-        try {
-          doc = await res.json();
-        } catch {
-          if (ctrl.signal.aborted && !signal?.aborted) throw new EngineError("timeout", "The answer took too long");
-          throw new EngineError("bad-response", `HTTP ${res.status} ${NOT_THE_ENGINE}`, res.status);
-        }
-        if (!res.ok) {
-          const err = (doc as { error?: { code?: unknown; message?: unknown } } | null)?.error;
-          throw new EngineError(
-            isEngineCode(err?.code) ? err.code : "bad-response",
-            typeof err?.message === "string" ? err.message : `HTTP ${res.status}`,
-            res.status,
-          );
-        }
-        return doc as T;
-      } finally {
-        clearTimeout(timer);
-        signal?.removeEventListener("abort", stop);
-      }
-    },
+    request: <T>(method: Method, path: string, body?: unknown, signal?: AbortSignal) =>
+      send(method, path, body, signal, readJson<T>),
+    blob: (path: string, signal?: AbortSignal) => send("GET", path, undefined, signal, readFile),
   };
 }
+
+/** A set of pictures' address in the API: its case and its set (the time pictured, `_mean` for a mean flow's). */
+const setPath = (name: string, set: string) => `/pictures/${encodeURIComponent(name)}/${encodeURIComponent(set)}`;
 
 /** The API calls the screens use; each one is a route in the engine's OpenAPI document. */
 export const api = {
@@ -163,4 +196,19 @@ export const api = {
   /** The judge on a case's solve, over all its solver logs: is it converged? */
   caseJudge: (t: Transport, name: string, signal?: AbortSignal) =>
     t.request<CaseJudge>("GET", `/judge?case=${encodeURIComponent(name)}`, undefined, signal),
+  /** The sets of pictures in the engine's workspace, newest first, or only case `of`'s (API 1.17); an older engine
+   * answers not-found. */
+  pictureSets: (t: Transport, of: string | null, signal?: AbortSignal) =>
+    t.request<PictureSetList>("GET", of == null ? "/pictures" : `/pictures?case=${encodeURIComponent(of)}`, undefined,
+      signal),
+  /** One set: each picture's file and what it shows, and what was left out. */
+  pictureSet: (t: Transport, name: string, set: string, signal?: AbortSignal) =>
+    t.request<PictureSet>("GET", setPath(name, set), undefined, signal),
+  /** One picture of a set, by its file as the set lists it (`<kind>/<name>.png`): the PNG itself. */
+  picture: (t: Transport, name: string, set: string, file: string, signal?: AbortSignal): Promise<Blob> =>
+    t.blob ? t.blob(`${setPath(name, set)}/${file.split("/").map(encodeURIComponent).join("/")}`, signal)
+      : Promise.reject(new EngineError("unsupported", "This connection can't show pictures")),
+  /** Deletes a set Mesh Doctor made, with its job's log; the case is never touched. */
+  deletePictures: (t: Transport, name: string, set: string) =>
+    t.request<PicturesDeleted>("POST", `${setPath(name, set)}/delete`),
 };

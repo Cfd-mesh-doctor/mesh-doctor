@@ -56,7 +56,7 @@ Every file Mesh Doctor writes for another program to read carries `"schemaVersio
 | `<name>_ab/ab_result.json` | A/B test | dashboard, reports |
 | judge output | `judge` (CLI, API) | dashboard live pages, reports |
 | transient plan | `transient-plan` (CLI), a `tplan` job | people deciding on a transient run; the web app's run page |
-| pictures | `pictures` (CLI), a `pictures` job | people looking at a solved case's flow; the web app's Pictures screen (coming) |
+| pictures | `pictures` (CLI), a `pictures` job | people looking at a solved case's flow; the web app's Pictures screen and a run's page |
 | `meshDoctor/map.json` | map | repair map page, reports |
 | `.jobs/<id>.json` | job runner (`jobs.py`, `jobrun.py`) | API, `meshdoctor jobs`, dashboard |
 | `<name>.mdreport.json` | `meshdoctor report` (`report.py`) | the report viewer, anywhere |
