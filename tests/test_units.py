@@ -620,6 +620,39 @@ class ResultsTest(unittest.TestCase):
         shutil.rmtree(os.path.join(self.d, "cases"))
         self.assertEqual(api_v1.handle("GET", "/api/v1/results", {})[:2], (200, {"items": [], "waiting": []}))
 
+    def test_a_force_history_for_charts_thinned_by_its_extremes(self):
+        import api_v1
+        self.assertEqual(self.r.thin(5, [[1, 2, 3, 4, 5]], runs=3), [0, 1, 2, 3, 4])    # short: every value
+        col = [0.0] * 1000
+        col[333], col[777] = 9.0, -9.0                                                     # two spikes
+        keep = self.r.thin(1000, [col], runs=10)
+        self.assertEqual((keep[0], keep[-1]), (0, 999))
+        self.assertTrue({333, 777} <= set(keep) and keep == sorted(set(keep)) and len(keep) <= 2 + 2 * 10)
+        drag = lambda t: 50 + 0.5 * math.sin(t / 7)                                   # noqa: E731
+        self.run_with_wing(3000, drag)
+        st, doc, _ = api_v1.handle("GET", "/api/v1/results/car/forces", {})
+        self.assertEqual(st, 200, doc)
+        self.assertEqual((doc["case"], doc["transient"], doc["vertical"]), ("car", False, "downforce"))
+        body, wing = doc["groups"]
+        self.assertEqual((body["name"], body["total"], body["n"], wing["name"], wing["total"], wing["n"]),
+                         ("body", True, 3000, "wing", False, 3000))
+        self.assertLess(len(body["t"]), 3000)
+        self.assertEqual((body["t"][0], body["t"][-1]), (1, 3000))
+        self.assertEqual(len(body["t"]), len(body["drag"]), len(body["vertical"]))
+        for t, v, w in zip(body["t"], body["drag"], body["vertical"]):
+            self.assertAlmostEqual(v, drag(t))
+            self.assertEqual(w, 30.0)                                      # downforce, positive as its results say
+        self.assertEqual(set(wing["drag"]) | set(wing["vertical"]), {2.0, 12.0})
+        self.assertEqual(max(body["drag"]), max(drag(t) for t in range(1, 3001)))    # the extremes stay
+        op = api_v1.openapi()["paths"]["/results/{case}/forces"]["get"]
+        self.assertEqual(op["operationId"], "results_forces")
+        self.assertEqual(api_v1.handle("GET", "/api/v1/results/nope/forces", {})[1]["error"]["code"], "not-found")
+        os.makedirs(os.path.join(self.d, "cases", "empty", "system"))
+        open(os.path.join(self.d, "cases", "empty", "system", "controlDict"), "w").close()
+        st, doc, _ = api_v1.handle("GET", "/api/v1/results/empty/forces", {})
+        self.assertEqual((st, doc["error"]["code"]), (409, "not-ready"))
+        self.assertNotIn(self.d, doc["error"]["message"])
+
     def test_the_api_and_the_command_answer_the_same(self):
         import api_v1
         self.run_with_wing(300, lambda t: 50.0)

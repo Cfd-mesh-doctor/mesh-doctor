@@ -29,7 +29,7 @@ import tplan
 import validate
 import version
 
-API_VERSION = "1.23"
+API_VERSION = "1.24"
 PREFIX = "/api/v1"
 WRITES_MAX = solve.transient.MAX_WRITES   # the most times a stretch of a transient run writes
 MAX_BODY = 64 * 1024
@@ -553,6 +553,33 @@ def results_list(p, q, b):
 def results_of(p, q, b):
     import results                         # only reads the case's force files and logs
     return _answer(results.of(_name(p["case"]), q.get("from"), q.get("to")))
+
+
+_SERIES = {"type": "array", "items": {"type": "number"}}
+FORCE_HISTORY = {
+    "type": "object", "required": ["case", "transient", "vertical", "groups"],
+    "properties": {
+        "case": {"type": "string"},
+        "transient": {"type": "boolean", "description": "its times are seconds of flow; else iterations"},
+        "vertical": {"enum": ["downforce", "lift"], "description": "what its vertical force is, as its results say"},
+        "groups": {"type": "array", "description": "each force group: the total group first, then by drag",
+                   "items": {"type": "object", "required": ["name", "total", "n", "t", "drag", "vertical"],
+                             "properties": {
+                                 "name": {"type": "string"}, "total": {"type": "boolean"},
+                                 "n": {"type": "integer", "description": "its values before thinning"},
+                                 "t": dict(_SERIES, description="each iteration or time kept"),
+                                 "drag": dict(_SERIES, description="its drag then, in N"),
+                                 "vertical": {"type": "array", "items": {"type": ["number", "null"]},
+                                              "description": "its downforce or lift then, in N; null where it has "
+                                                             "none"}}}}}}
+
+
+@route("GET", "/results/{case}/forces", "A case's force history for charts: each force group's drag and vertical force "
+       "over the whole run, in N and in the directions its results use, thinned to about 1000 runs of values, each "
+       "kept by its lowest and highest, so a swing or a spike still shows (API 1.24)", ok=FORCE_HISTORY)
+def results_forces(p, q, b):
+    import results                         # only reads the case's force files
+    return _answer(results.forces_of(_name(p["case"])))
 
 
 @route("GET", "/live", "The live (transient) case: forces, averaging window, time step, processes, memory",

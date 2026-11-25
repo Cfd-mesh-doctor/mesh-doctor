@@ -222,6 +222,19 @@ export function resultsDoc(name: string, more: Record<string, unknown> = {}) {
   };
 }
 
+/** A case's force history as GET /results/{case}/forces answers it (API 1.24): each group's, every 10th iteration of
+ *  its 2,000, settling to its results' means with a small swing. */
+export function forceHistoryOf(doc: ReturnType<typeof resultsDoc>) {
+  const t = Array.from({ length: 201 }, (_, i) => i * 10);
+  const settle = (mean: number, swing: number) => t.map((_, i) => mean * (1 + 0.5 * Math.exp(-i / 20)) + swing * Math.sin(i / 3));
+  return {
+    case: doc.case, transient: doc.transient, vertical: "lift",
+    groups: doc.groups.map((g) => ({
+      name: g.name, total: g.total, n: 2001, t, drag: settle(g.drag.mean, 0.1), vertical: settle(g.vertical.mean, 0.3),
+    })),
+  };
+}
+
 /** Each picture it serves: a PNG of one pixel. */
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
   "base64");
@@ -444,9 +457,17 @@ export async function mockEngine(
       }
       return route.fulfill({ status: 200, headers: { ...cors, "Content-Type": "image/png" }, body: PNG });
     }
-    // Its results (API 1.23): each case's over the judge's window, and one case's over a window asked for.
+    // Its results (API 1.23): each case's over the judge's window, and one case's over a window asked for; and each
+    // one's force history (API 1.24).
     const results = opts.caseResults;
     if (results && path === "/results") return json(200, { items: results, waiting: [] });
+    const history = results && /^\/results\/([^/]+)\/forces$/.exec(path);
+    if (results && history) {
+      const name = decodeURIComponent(history[1]!);
+      const doc = results.find((d) => d.case === name);
+      if (!doc) return json(404, { error: { code: "not-found", message: `no case ${name} in the cases folder` } });
+      return json(200, forceHistoryOf(doc));
+    }
     const one = results && /^\/results\/([^/]+)$/.exec(path);
     if (results && one) {
       const name = decodeURIComponent(one[1]!);

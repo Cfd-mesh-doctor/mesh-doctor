@@ -5,6 +5,7 @@ import type { Job } from "@/engine/types";
 import { DEMO_CLUSTERS_NOTE, RECORDED_CLUSTERS, recordedCluster } from "./clusters";
 import clusters from "./clusters.json";
 import recorded from "./fixtures.json";
+import forces from "./forces.json";
 import { DEMO_RESULTS_NOTE, RECORDED_RESULTS } from "./results";
 import results from "./results.json";
 import { demoTransport, shiftTimes, withCaseSizes } from "./transport";
@@ -165,11 +166,27 @@ describe("demo transport", () => {
     await expect(api.caseResults(t, "ahmed-25-fine", { from: null, to: null }))
       .rejects.toMatchObject({ code: "unavailable", message: expect.stringContaining(`${RECORDED_RESULTS} only`) });
     await expect(api.caseResults(t, "nope", { from: null, to: null })).rejects.toMatchObject({ code: "not-found" });
+
+    // its force history: each group's every 4th iteration, the total group first, whose window's mean is its results'
+    const h = await api.forceHistory(t, RECORDED_RESULTS);
+    expect(h).toMatchObject({ case: RECORDED_RESULTS, transient: false, vertical: "lift" });
+    expect(h.groups.map((x) => [x.name, x.total, x.n, x.t.length, x.drag.length, x.vertical.length])).toEqual([
+      ["forceCoeffs", true, 501, 501, 501, 501], ["forcesTotal", false, 501, 501, 501, 501],
+    ]);
+    const f = h.groups[0]!;
+    expect([f.t[0], f.t[1], f.t.at(-1)]).toEqual([0, 4, 2000]);
+    const inWindow = f.t.flatMap((x, i) => (x > 1600 ? [f.drag[i]!] : []));
+    expect(inWindow).toHaveLength(100);
+    expect(inWindow.reduce((s, v) => s + v, 0) / inWindow.length).toBeCloseTo(g.drag!.mean, 1);
+    await expect(api.forceHistory(t, "ahmed-25-fine")).rejects.toMatchObject({ code: "unavailable" });
+    await expect(api.forceHistory(t, "nope")).rejects.toMatchObject({ code: "not-found" });
+    await expect(t.request("GET", "/results/nope/more")).rejects.toMatchObject({ code: "not-found" });
   });
 
   it("ships no paths from the recording machine", () => {
     expect(JSON.stringify(clusters)).not.toMatch(/\/home\/|\/mnt\/|\/tmp\/|[A-Z]:\\\\|Users[\\/]/);
     expect(JSON.stringify(results)).not.toMatch(/\/home\/|\/mnt\/|\/tmp\/|[A-Z]:\\\\|Users[\\/]/);
+    expect(JSON.stringify(forces)).not.toMatch(/\/home\/|\/mnt\/|\/tmp\/|[A-Z]:\\\\|Users[\\/]/);
     const text = JSON.stringify(recorded);
     expect(text).not.toMatch(/\/home\/|\/mnt\/|\/tmp\/|[A-Z]:\\\\|Users[\\/]/);
   });

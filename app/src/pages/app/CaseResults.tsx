@@ -2,10 +2,11 @@
 // A solved case's results (GET /results/{case}, API 1.23): its total group's drag, downforce or lift, L/D and CdA over
 // the averaging window, with how sure each mean is and how far it still drifts; the window, the judge's unless the
 // address asks for another (?from=&to=), with the judge's verdict; every force group's forces and coefficients, and
-// how far its residuals fell. Plain warnings come first. While another window is being averaged, the last one's
-// numbers stay, dimmed.
+// how far its residuals fell. Plain warnings come first. Its force charts (ForceCharts.tsx, API 1.24) show a group's
+// forces over the whole run with the window shaded: dragging its edges, or moving them with the arrow keys, asks for
+// another, as From and To do. While another window is being averaged, the last one's numbers stay, dimmed.
 import { ArrowLeft, ChartLine, Hourglass, RotateCcw, TriangleAlert } from "lucide-react";
-import { useId, useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { EmptyState, PageHeader, StatTile } from "@/components/shared/page";
@@ -21,10 +22,11 @@ import type { CaseResults, ResultForce, ResultsWindow } from "@/engine/types";
 import { formatCells, formatNumber, formatRelative } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
+import { ForceCharts } from "./ForceCharts";
 import { DriftBadge, VerdictBadge } from "./Results";
 import {
-  driftText, driftWarns, newtons, ordersText, plusMinus, resultsPagePath, spanText, totalGroup, verticalWord,
-  windowNumber, windowOf, windowProblem, windowText,
+  chartWindow, driftText, driftWarns, newtons, ordersText, plusMinus, resultsPagePath, spanText, totalGroup,
+  verticalWord, windowNumber, windowOf, windowProblem, windowText,
 } from "./resultsView";
 
 const LINK = "font-medium text-primary underline-offset-4 hover:underline";
@@ -293,6 +295,11 @@ function ResidualsCard({ doc }: { doc: CaseResults }) {
   );
 }
 
+/** The last window's numbers, dimmed while another is averaged. */
+function Dim({ busy, children }: { busy: boolean; children: ReactNode }) {
+  return <div className={cn("transition-opacity", busy && "opacity-60")} aria-busy={busy || undefined}>{children}</div>;
+}
+
 /** Why there are no numbers to show: nothing to average yet, or a window it can't take (not-ready), or one the demo
  * didn't record (unavailable). */
 function Refused({ code, message, demo }: { code: string; message: string; demo: boolean }) {
@@ -315,6 +322,7 @@ export function CaseResultsPage() {
   useTitle(`Results of ${name}`);
   const { mode } = useEngine();
   const to = useAppPath();
+  const navigate = useNavigate();
   const [params] = useSearchParams();
   const w = windowOf(params);
   const q = useCaseResults(name, w);
@@ -341,6 +349,11 @@ export function CaseResultsPage() {
   );
   // The form starts again from the address's window when it changes (Back, or The judge's window).
   const windowCard = <WindowCard key={`${w.from}:${w.to}`} name={name} doc={doc} w={w} />;
+  // The charts' window is the address's as soon as it changes, while the numbers for it are still being averaged.
+  const charts = (
+    <ForceCharts name={name} window={chartWindow(w, doc)}
+      onWindow={(from, upTo) => void navigate(to(resultsPagePath(name, { from, to: upTo })))} />
+  );
 
   if (!doc) {
     if (e?.code === "not-found") {
@@ -365,7 +378,11 @@ export function CaseResultsPage() {
         {header}
         {asked && windowCard}
         {e && (e.code === "not-ready" || e.code === "unavailable") ? (
-          <Refused code={e.code} message={e.message} demo={mode === "demo"} />
+          <>
+            <Refused code={e.code} message={e.message} demo={mode === "demo"} />
+            {/* the run's forces, to move the window back to where there are some */}
+            <div className="mt-4">{charts}</div>
+          </>
         ) : q.isError ? (
           <ErrorPanel error={q.error} onRetry={() => void q.refetch()} retrying={q.isFetching} />
         ) : (
@@ -385,12 +402,13 @@ export function CaseResultsPage() {
       )}
       {doc.warnings.length > 0 && <Warnings warnings={doc.warnings} />}
       {windowCard}
-      <div className={cn("transition-opacity", q.isPlaceholderData && "opacity-60")} aria-busy={q.isPlaceholderData || undefined}>
-        <Headline doc={doc} />
+      <Dim busy={q.isPlaceholderData}><Headline doc={doc} /></Dim>
+      {charts}
+      <Dim busy={q.isPlaceholderData}>
         <ForcesCard doc={doc} />
         <CoefficientsCard doc={doc} />
         <ResidualsCard doc={doc} />
-      </div>
+      </Dim>
     </>
   );
 }

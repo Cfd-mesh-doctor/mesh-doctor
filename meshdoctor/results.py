@@ -23,6 +23,8 @@ values), its final level (the median of its last values up to the window's end) 
 judge's verdict on the run.  Plain warnings: a drift over DRIFT_WARN says to run longer before comparing; a single
 symmetry plane in the mesh's boundary says the forces may be for half a model.  GET /api/v1/results/{case} answers the
 same, and GET /api/v1/results (listing) gives every case's in the cases folder that has a force history, newest first.
+GET /api/v1/results/{case}/forces (history) gives each group's drag and vertical force over the whole run, thinned to
+about POINTS runs of values, each kept by its lowest and highest, for charts.
 """
 import argparse, json, math, os, re, statistics, sys, time
 
@@ -37,6 +39,7 @@ import transient
 
 DRIFT_WARN = 0.01    # a drift over 1 %: run longer before comparing (the cfd-results skill's rule)
 SMALL = 0.01         # a force under 1 % of the total group's drag is too small for its drift to be judged
+POINTS = 1000        # a force history for charts: thinned to this many runs of values, each kept by its extremes
 FIRST = 10           # a residual's first level: the largest of its first FIRST values
 LAST = 20            # its final level: the median of its last LAST values up to the window's end
 SYMMETRY = ("symmetryPlane", "symmetry")
@@ -280,6 +283,49 @@ def of_case(case, t_from=None, t_to=None, name=None):
     return schema.stamp(doc, "results")
 
 
+def thin(n, columns, runs=POINTS):
+    """The indices of an n-long history to keep for a chart: all of them up to 2 * runs; else the first and the last,
+    and in each of `runs` runs of them each column's lowest and highest, so a swing or a spike still shows; in order."""
+    if n <= 2 * runs:
+        return list(range(n))
+    keep = {0, n - 1}
+    for b in range(runs):
+        lo, hi = b * n // runs, (b + 1) * n // runs
+        for col in columns:
+            span = range(lo, hi)
+            keep.add(min(span, key=col.__getitem__))
+            keep.add(max(span, key=col.__getitem__))
+    return sorted(keep)
+
+
+def history(case, name=None):
+    """Each force group's drag and vertical force over the case's whole force history, in N and in the directions its
+    results use (axes.vertical: positive downforce for a car with downforce), thinned for a chart (thin(): `n` says how
+    many values there were); the total group first, then by drag.  Raises ValueError(code, message) as of_case does,
+    the message naming no folders."""
+    name = name or os.path.basename(os.path.normpath(case))
+    frc = {g: F for g, F in caseinfo.parse_forces(case).items() if F.get("Time")}
+    if not frc:
+        raise ValueError("not-ready", f"{name} has no force history yet: its forces or forceCoeffs function objects "
+                                      "write one, in postProcessing, as it solves")
+    d = caseinfo.describe(case, frc)
+    groups = []
+    for g in d["groups"]:
+        vert = dict(caseinfo.series(frc, d, g, "vertical"))
+        rows = [(t, v, vert.get(t)) for t, v in caseinfo.series(frc, d, g, "drag")
+                if math.isfinite(t) and math.isfinite(v)]
+        rows = [(t, v, w if w is not None and math.isfinite(w) else None) for t, v, w in rows]
+        if not rows:
+            continue
+        drag = [r[1] for r in rows]
+        whole = all(r[2] is not None for r in rows)
+        keep = thin(len(rows), [drag] + ([[r[2] for r in rows]] if whole else []))
+        groups.append({"name": g, "total": g == d["total"], "n": len(rows), "t": [rows[i][0] for i in keep],
+                       "drag": [rows[i][1] for i in keep], "vertical": [rows[i][2] for i in keep]})
+    groups.sort(key=lambda r: (not r["total"], -abs(statistics.fmean(r["drag"]))))
+    return {"case": name, "transient": caseinfo.transient(case), "vertical": d["vertical"], "groups": groups}
+
+
 def listing():
     """GET /results: {"items": the results document of each case in the cases folder with a force history, over the
     judge's window, newest first (by when its forces were last written); "waiting": each case whose forces can't be
@@ -311,6 +357,21 @@ def of(name, t_from=None, t_to=None):
         return None, ("not-found", f"no case {name} in the cases folder")
     try:
         return of_case(case, t_from, t_to, name), None
+    except ValueError as e:
+        return None, (e.args[0], e.args[1])
+
+
+def forces_of(name):
+    """GET /results/{case}/forces: (the force history of case `name` in the cases folder, None), or (None, (code,
+    message)) naming no folders."""
+    import md_api
+    if not md_api.SAFE.match(name):
+        return None, ("bad-request", "bad case name")
+    case = tplan._case(name)
+    if not case:
+        return None, ("not-found", f"no case {name} in the cases folder")
+    try:
+        return history(case, name), None
     except ValueError as e:
         return None, (e.args[0], e.args[1])
 

@@ -3,18 +3,18 @@
 // judge's window, the cases not averaged yet, and an engine too old to say; a case's page (GET /results/{case}) with
 // its headline numbers, warnings, every force group's forces and coefficients and its residuals, and another window
 // asked for in its address, which the engine (or the demo, which can't) answers.
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { DEMO_RESULTS_NOTE } from "@/demo/results";
 import { demoTransport } from "@/demo/transport";
 import type { Transport } from "@/engine/client";
 import { EngineError } from "@/engine/errors";
-import type { CaseResults, ResultForce, ResultsList } from "@/engine/types";
+import type { CaseResults, ForceHistory, ResultForce, ResultsList } from "@/engine/types";
 import { renderScreen } from "@/test/render";
 import { CaseResultsPage } from "./CaseResults";
 import { Results } from "./Results";
-import { headlineDrift, resultsPagePath, waitingParts, windowOf, windowProblem } from "./resultsView";
+import { chartWindow, headlineDrift, resultsPagePath, waitingParts, windowOf, windowProblem } from "./resultsView";
 
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString().replace(/\.\d{3}Z$/, "Z");
 const force = (mean: number, more: Partial<ResultForce> = {}): ResultForce =>
@@ -41,10 +41,25 @@ function results(name: string, more: Partial<CaseResults> = {}): CaseResults {
   };
 }
 
+/** Its force history as GET /results/{case}/forces gives it (API 1.24): each group's, at 201 of its 2,001 values from
+ *  its forces' start to their end (every 10th iteration of 2,000), settling to its mean with a small swing. */
+function history(doc: CaseResults): ForceHistory {
+  const t = Array.from({ length: 201 }, (_, i) => doc.start + (i * (doc.end - doc.start)) / 200);
+  const settle = (mean: number, swing: number) => t.map((_, i) => mean * (1 + 0.5 * Math.exp(-i / 20)) + swing * Math.sin(i / 3));
+  return {
+    case: doc.case, transient: doc.transient, vertical: doc.axes.vertical,
+    groups: doc.groups.map((g) => ({
+      name: g.name, total: g.total, n: 2001, t, drag: settle(g.drag?.mean ?? 0, 0.1), vertical: settle(g.vertical?.mean ?? 0, 0.3),
+    })),
+  };
+}
+
 /** Your own engine with these results; `waiting`: the cases it can't average yet; `old`: one before API 1.23, which
- * has no results routes; `refuse`: what it answers for a case. A window asked for is averaged as given, with 20 N of
- * drag, unless it starts at or after the forces' end. */
-function engine(o: { docs?: CaseResults[]; waiting?: ResultsList["waiting"]; old?: boolean; refuse?: Record<string, EngineError> } = {}) {
+ * has no results routes; `oldForces`: one of API 1.23, with no force histories; `refuse`: what it answers for a case.
+ * A window asked for is averaged as given, with 20 N of drag, unless it starts at or after the forces' end. */
+function engine(o: {
+  docs?: CaseResults[]; waiting?: ResultsList["waiting"]; old?: boolean; oldForces?: boolean; refuse?: Record<string, EngineError>;
+} = {}) {
   const asked: string[] = [];
   const transport: Transport = {
     kind: "engine",
@@ -54,13 +69,14 @@ function engine(o: { docs?: CaseResults[]; waiting?: ResultsList["waiting"]; old
       const [route = "", query = ""] = path.split("?");
       if (o.old) throw new EngineError("not-found", "no such API route", 404);
       if (route === "/results") return { items: o.docs ?? [], waiting: o.waiting ?? [] } as T;
-      const m = /^\/results\/([^/]+)$/.exec(route);
-      if (!m) throw new EngineError("not-found", `no such API route ${route}`, 404);
+      const m = /^\/results\/([^/]+)(\/forces)?$/.exec(route);
+      if (!m || (m[2] && o.oldForces)) throw new EngineError("not-found", `no such API route ${route}`, 404);
       const name = decodeURIComponent(m[1]!);
       const refused = o.refuse?.[name];
       if (refused) throw refused;
       const doc = (o.docs ?? []).find((d) => d.case === name);
       if (!doc) throw new EngineError("not-found", `no case ${name} in the cases folder`, 404);
+      if (m[2]) return history(doc) as T;
       const q = new URLSearchParams(query);
       if (!q.has("from") && !q.has("to")) return structuredClone(doc) as T;
       const from = q.has("from") ? Number(q.get("from")) : doc.window.from!;
@@ -96,6 +112,17 @@ describe("the Results screen's words", () => {
     expect(windowProblem("x", "")).toBe("From must be a number of 0 or more.");
     expect(windowProblem("", "-5")).toBe("To must be a number of 0 or more.");
     expect(windowProblem("2000", "1000")).toBe("From must come before To.");
+  });
+
+  it("shades the window the address asks for on the charts, else the one averaged over, up to the end without a To", () => {
+    const doc = results("car");
+    expect(chartWindow({ from: null, to: null }, doc)).toEqual({ from: 1600, to: null });
+    expect(chartWindow({ from: 1000, to: null }, doc)).toEqual({ from: 1000, to: null });
+    expect(chartWindow({ from: null, to: 1800 }, doc)).toEqual({ from: 1600, to: 1800 });
+    expect(chartWindow({ from: 500, to: 900 }, undefined)).toEqual({ from: 500, to: 900 });
+    expect(chartWindow({ from: null, to: 900 }, undefined)).toBeNull();
+    const short = results("car", { window: { from: 1600, to: 1900, how: "judge", n: 300 } });
+    expect(chartWindow({ from: null, to: null }, short)).toEqual({ from: 1600, to: 1900 });
   });
 
   it("judges only a drift of a force large enough, as the engine does, and stands a waiting case's name out", () => {
@@ -225,6 +252,50 @@ describe("a case's results", () => {
     expect(screen.getByLabelText("From (iteration)")).toHaveValue("");
   });
 
+  it("charts its total group's drag and lift over the run with the window shaded, and another group's when picked", async () => {
+    const user = userEvent.setup();
+    page("car", engine({ docs: [results("car")] }));
+    expect(await screen.findByRole("img", { name: "Drag of forceCoeffs over the run, in N" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Lift of forceCoeffs over the run, in N" })).toBeInTheDocument();
+    expect(screen.getByText(/The total group's drag and lift over the whole run, in N\. The shaded part is the averaging window/)).toBeInTheDocument();
+    for (const start of screen.getAllByRole("slider", { name: "Start of the averaged part" })) {
+      expect(start).toHaveAttribute("aria-valuenow", "1600");
+    }
+    expect(screen.getAllByRole("slider", { name: "End of the averaged part" })[0]).toHaveAttribute("aria-valuenow", "2000");
+    expect(screen.getByText(/after the run's first tenth: larger ones before it run off its edges\. Drawn from 201 of its 2,001 values: each stretch's lowest and highest, so a swing or a spike still shows\.$/)).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Force group"), "mirrors");
+    expect(screen.getByRole("img", { name: "Drag of mirrors over the run, in N" })).toBeInTheDocument();
+    expect(screen.getByText(/The mirrors group's drag and lift/)).toBeInTheDocument();
+  });
+
+  it("averages over the window its edges are moved to on a chart, and keeps it in the address", async () => {
+    const { asked, router } = page("car", engine({ docs: [results("car")] }));
+    const [start] = await screen.findAllByRole("slider", { name: "Start of the averaged part" });
+    // Shift and an arrow: a tenth of the run, 200 iterations, earlier
+    fireEvent.keyDown(start!, { key: "ArrowLeft", shiftKey: true });
+    expect(start).toHaveAttribute("aria-valuenow", "1400");
+    fireEvent.keyUp(start!, { key: "ArrowLeft" });
+    expect(await screen.findByText("Averaged over the window asked for: after iteration 1,400, up to 2,000 (600 values)")).toBeInTheDocument();
+    expect(router.state.location.search).toBe("?from=1400");
+    expect(asked).toContain("/results/car?from=1400");
+    expect(screen.getByLabelText("From (iteration)")).toHaveValue("1400");
+    // its end dragged to iteration 1,800: 9 tenths of the way along the plot's 576 px from 50 (640 px wide in tests)
+    const [end] = screen.getAllByRole("slider", { name: "End of the averaged part" });
+    fireEvent.pointerDown(end!, { pointerId: 1, buttons: 1, clientX: 626 });
+    fireEvent.pointerMove(end!, { pointerId: 1, buttons: 1, clientX: 50 + 0.9 * 576 });
+    fireEvent.pointerUp(end!, { pointerId: 1 });
+    expect(await screen.findByText("Averaged over the window asked for: after iteration 1,400, up to 1,800 (400 values)")).toBeInTheDocument();
+    expect(router.state.location.search).toBe("?from=1400&to=1800");
+    expect(screen.getByLabelText("To (iteration)")).toHaveValue("1800");
+  });
+
+  it("says an engine of API 1.23 can't chart its forces, and still shows its numbers", async () => {
+    page("car", engine({ docs: [results("car")], oldForces: true }));
+    expect(await screen.findByText("Your engine can't chart its forces yet")).toBeInTheDocument();
+    expect(screen.getByText("16.12 N")).toBeInTheDocument();
+    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+  });
+
   it("says what is wrong with a window before asking for it", async () => {
     const user = userEvent.setup();
     const { asked } = page("car", engine({ docs: [results("car")] }));
@@ -243,6 +314,8 @@ describe("a case's results", () => {
     expect(screen.getByText("car's forces end at 2000, before the window's from (3000): pick an earlier one")).toBeInTheDocument();
     expect(screen.getByLabelText("From")).toHaveValue("3000");
     expect(screen.getByRole("button", { name: "The judge's window" })).toBeEnabled();
+    // its forces stay charted, to move the window back to where there are some
+    expect(await screen.findByRole("img", { name: "Drag of forceCoeffs over the run, in N" })).toBeInTheDocument();
   });
 
   it("says a case with too few forces has nothing to average yet", async () => {
@@ -277,6 +350,10 @@ describe("a case's results", () => {
     expect(await screen.findByText("16.12 N")).toBeInTheDocument();
     expect(screen.getByText(/recorded demo/)).toBeInTheDocument();
     expect(screen.getByRole("note")).toHaveTextContent(/symmetry plane/);
+    // its recorded forces, every 4th iteration's
+    expect(await screen.findByRole("img", { name: "Drag of forceCoeffs over the run, in N" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Lift of forceCoeffs over the run, in N" })).toBeInTheDocument();
+    expect(screen.queryByText(/Drawn from/)).not.toBeInTheDocument();
     await user.type(screen.getByLabelText("From (iteration)"), "1000");
     await user.click(screen.getByRole("button", { name: "Average" }));
     expect(await screen.findByText("Not in the demo")).toBeInTheDocument();

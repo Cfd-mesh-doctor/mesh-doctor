@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { LineChart, type LineSeries } from "./LineChart";
 import { nearest, niceTicks, thin } from "./scale";
@@ -91,6 +91,78 @@ describe("line chart", () => {
     view.unmount();
     render(<LineChart label="drag" series={[line("a", [1, 2, 3, 2, 1])]} band={{ from: 6, label: "averaged" }} />);
     expect(screen.queryByText("averaged")).toBeNull();
+  });
+
+  it("shades a band up to its end, with edges that move by the keys or the pointer and say where they were let go", () => {
+    const moved: [number, number | null][] = [];
+    const onChange = (from: number, to: number | null) => { moved.push([from, to]); };
+    const series = [line("a", [1, 2, 3, 2, 1])];
+    const chart = (from: number, to: number | null) => (
+      <LineChart label="drag" series={series} band={{ from, to, label: "averaged", onChange }} />
+    );
+    const view = render(chart(2, 4));
+    // x from 1 to 5 over 576 px from 50: 2 is at 194 and 4 at 482
+    const rect = screen.getByText("averaged").previousElementSibling!;
+    expect([rect.getAttribute("x"), rect.getAttribute("width")]).toEqual(["194", "288"]);
+    const start = screen.getByRole("slider", { name: "Start of the averaged part" });
+    const end = screen.getByRole("slider", { name: "End of the averaged part" });
+    expect([start.getAttribute("aria-valuenow"), end.getAttribute("aria-valuenow")]).toEqual(["2", "4"]);
+
+    // a key moves its edge to the next point, and letting go of it says where, once
+    fireEvent.keyDown(start, { key: "ArrowRight" });
+    expect(start).toHaveAttribute("aria-valuenow", "3");
+    expect(moved).toEqual([]);
+    fireEvent.keyUp(start, { key: "ArrowRight" });
+    expect(moved).toEqual([[3, 4]]);
+    // never onto or past the other edge
+    fireEvent.keyDown(start, { key: "ArrowRight" });
+    fireEvent.keyUp(start, { key: "ArrowRight" });
+    expect(start).toHaveAttribute("aria-valuenow", "3");
+    expect(moved).toEqual([[3, 4]]);
+    // the band given anew ends the move; End takes the end to the last point, which is up to the end: null
+    view.rerender(chart(3, 4));
+    fireEvent.keyDown(end, { key: "End" });
+    fireEvent.keyUp(end, { key: "End" });
+    expect(moved.at(-1)).toEqual([3, null]);
+
+    // dragged: from 3 (at 338) to 2 (at 194), only while a button is down; let go, it says so
+    view.rerender(chart(3, null));
+    expect(end).toHaveAttribute("aria-valuenow", "5");
+    fireEvent.pointerDown(start, { pointerId: 1, buttons: 1, clientX: 338 });
+    fireEvent.pointerMove(start, { pointerId: 1, buttons: 1, clientX: 200 });
+    expect(start).toHaveAttribute("aria-valuenow", "2");
+    fireEvent.pointerMove(start, { pointerId: 1, buttons: 0, clientX: 60 });
+    expect(start).toHaveAttribute("aria-valuenow", "2");
+    fireEvent.pointerUp(start, { pointerId: 1 });
+    expect(moved.at(-1)).toEqual([2, null]);
+    // a key move is let go of by leaving the edge, too
+    view.rerender(chart(2, null));
+    fireEvent.keyDown(end, { key: "ArrowLeft", shiftKey: true });
+    fireEvent.focusOut(end);
+    expect(moved.at(-1)).toEqual([2, 4]);
+    expect(moved).toHaveLength(4);
+
+    // without onChange, no edges to move
+    view.unmount();
+    render(<LineChart label="drag" series={series} band={{ from: 2, label: "averaged" }} />);
+    expect(screen.queryByRole("slider")).toBeNull();
+  });
+
+  it("fits its y axis to the lines from yFrom on, cutting what came before at the plot's edges", () => {
+    const series = [line("a", [100, 2, 3, 2, 1])];
+    const yTicks = (c: HTMLElement) => [...c.querySelectorAll('text[text-anchor="end"]')].map((t) => t.textContent);
+    const view = render(<LineChart label="drag" series={series} yFrom={2} />);
+    expect(yTicks(view.container).at(-1)).toBe("3");
+    const cut = view.container.querySelector("g[clip-path]")!;
+    expect(cut.querySelector("path")).not.toBeNull();
+    expect(view.container.querySelector(`clipPath[id="${cut.getAttribute("clip-path")!.slice(5, -1)}"] rect`)).not.toBeNull();
+    // past every line's end: fits them all, as without; and without, nothing is cut
+    view.unmount();
+    const all = render(<LineChart label="drag" series={series} yFrom={9} />);
+    expect(yTicks(all.container).at(-1)).toBe("100");
+    all.unmount();
+    const plain = render(<LineChart label="drag" series={series} />);
+    expect(plain.container.querySelector("[clip-path]")).toBeNull();
   });
 
   it("says when there is nothing to draw", () => {

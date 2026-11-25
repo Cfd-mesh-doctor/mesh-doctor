@@ -7,7 +7,7 @@ import type {
   AbtestDetail, AbtestList, AbtestLive, CaseJudge, CaseList, ClusterShape, DiskInfo, DiskJob, DiskJobKind, EngineInfo, Job,
   JobList, JobRequest, JudgeAnswer, MachineInfo, PictureSet, PictureSetList, PicturesDeleted, Readiness, RepairList,
   ResultsList, ResultsWindow, RunDetail, RunList, RunLive, RunValidation, TemplateList, TransientPlan, VariantList,
-  CaseResults,
+  CaseResults, ForceHistory,
 } from "./types";
 import { API_MAJOR } from "./types";
 import type { Report } from "@/report/read";
@@ -227,4 +227,7 @@ export const api = {
   /** One case's results over a window: the judge's while from and to are null. */
   caseResults: (t: Transport, name: string, w: ResultsWindow, signal?: AbortSignal) =>
     t.request<CaseResults>("GET", resultsPath(name, w), undefined, signal),
+  /** One case's force history for charts (API 1.24); an older engine answers not-found. */
+  forceHistory: (t: Transport, name: string, signal?: AbortSignal) =>
+    t.request<ForceHistory>("GET", `/results/${encodeURIComponent(name)}/forces`, undefined, signal),
 };

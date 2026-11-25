@@ -29,6 +29,16 @@ export function windowOf(params: URLSearchParams): ResultsWindow {
   return { from: windowNumber(params.get("from")), to: windowNumber(params.get("to")) };
 }
 
+/** The window a case's force charts shade: the one its address asks for (without a From, from the judge's), else the
+ *  one its results were averaged over, with `to` null up to the forces' end; null where neither says where it starts. */
+export function chartWindow(w: ResultsWindow, doc: CaseResults | undefined): { from: number; to: number | null } | null {
+  const from = w.from ?? doc?.window.from ?? null;
+  if (from == null) return null;
+  if (w.from != null || w.to != null) return { from, to: w.to };
+  const to = doc?.window.to;
+  return { from, to: doc && to != null && to < doc.end ? to : null };
+}
+
 /** What is wrong with a window typed in, or null: each a number of 0 or more, from before to. */
 export function windowProblem(from: string, to: string): string | null {
   const [f, t] = [windowNumber(from), windowNumber(to)];

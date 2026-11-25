@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The Results screen in a real browser: the demo's recorded case from the sidebar, its headline numbers and its own
-// page, which says the demo can't average over another window; with your own engine, the cases' results asked for
-// with the pairing key, newest first, and another window averaged, kept in the address and undone with Back.
+// The Results screen in a real browser: the demo's recorded case from the sidebar, its headline numbers, its force
+// charts and its own page, which says the demo can't average over another window; with your own engine, the cases'
+// results asked for with the pairing key, newest first, and another window averaged, kept in the address and undone
+// with Back, and one asked for from the charts, by a key and by dragging an edge of the window.
 import { expect, test, type Page } from "@playwright/test";
 import { KEY, mockEngine, pairingLink, resultsDoc } from "./engine";
 
@@ -28,6 +29,9 @@ test("the demo's results: the sidebar opens them, its case's page has its number
   await expect(page.getByText("Averaged over the judge's window: after iteration 1,600, up to 2,000 (400 values)")).toBeVisible();
   await expect(page.getByRole("note")).toContainText("symmetry plane");
   await expect(page.getByText("16.12 N")).toBeVisible();
+  await expect(page.getByRole("img", { name: "Drag of forceCoeffs over the run, in N" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "Lift of forceCoeffs over the run, in N" })).toBeVisible();
+  await expect(page.getByRole("slider", { name: "Start of the averaged part" }).first()).toHaveAttribute("aria-valuenow", "1600");
 
   await page.getByLabel("From (iteration)").fill("1000");
   await page.getByRole("button", { name: "Average" }).click();
@@ -63,4 +67,23 @@ test("with your own engine, the results come with the key, and another window is
   await expect(page).toHaveURL(/\/app\/results\/wing$/);
   await expect(page.getByText("Averaged over the judge's window: after iteration 1,600, up to 2,000 (400 values)")).toBeVisible();
   await expect(page.getByLabel("From (iteration)")).toHaveValue("");
+
+  // from the charts: Shift and an arrow move the window's start a tenth of the run earlier, letting go asks for it
+  const start = page.getByRole("slider", { name: "Start of the averaged part" }).first();
+  await expect(start).toHaveAttribute("aria-valuenow", "1600");
+  await start.focus();
+  await start.press("Shift+ArrowLeft");
+  await expect(page).toHaveURL(/\/app\/results\/wing\?from=1400$/);
+  await expect(page.getByText("Averaged over the window asked for: after iteration 1,400, up to 2,000 (600 values)")).toBeVisible();
+  // and its end dragged left, to an iteration of the history's, every 10th
+  const end = page.getByRole("slider", { name: "End of the averaged part" }).first();
+  await end.scrollIntoViewIfNeeded();
+  const box = (await end.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 - 60, box.y + box.height / 2, { steps: 6 });
+  await page.mouse.up();
+  await expect(page).toHaveURL(/\/app\/results\/wing\?from=1400&to=1\d\d0$/);
+  await expect(page.getByText(/Averaged over the window asked for: after iteration 1,400, up to 1,\d\d0/)).toBeVisible();
+  await expect(page.getByLabel("To (iteration)")).toHaveValue(/^1\d\d0$/);
 });

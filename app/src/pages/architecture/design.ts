@@ -66,7 +66,7 @@ export const DESIGN: DocSection[] = [
             [
               "`results.py`",
               "core + CLI",
-              "a solved case's results: `of_case()` returns a `results` document: each force group's drag and vertical force over an averaging window (the judge's by default: a steady run's last two judge windows, a transient run's from when its forces settled), with the mean, sd, drift between the window's two halves and the uncertainty of the mean (batch means), in N; CdA and ClA over q = ½ρU² from the case's rhoInf and freestream, L/D, and Cd and Cl only for a group that a forceCoeffs function object covers with its own Aref; each residual's first and final level and the orders it fell, the judge's verdict, and plain warnings (a drift over 1 %, a single symmetry plane: maybe half a model). `listing()` gives the results of every case with a force history, newest first. `meshdoctor results` prints a case's; it only reads the case (API 1.23)"
+              "a solved case's results: `of_case()` returns a `results` document: each force group's drag and vertical force over an averaging window (the judge's by default: a steady run's last two judge windows, a transient run's from when its forces settled), with the mean, sd, drift between the window's two halves and the uncertainty of the mean (batch means), in N; CdA and ClA over q = ½ρU² from the case's rhoInf and freestream, L/D, and Cd and Cl only for a group that a forceCoeffs function object covers with its own Aref; each residual's first and final level and the orders it fell, the judge's verdict, and plain warnings (a drift over 1 %, a single symmetry plane: maybe half a model). `listing()` gives the results of every case with a force history, newest first, and `history()` each group's forces over the whole run, thinned for charts. `meshdoctor results` prints a case's; it only reads the case (API 1.23)"
             ],
             [
               "`repair.py`, `abtest.py`",
@@ -441,6 +441,11 @@ export const DESIGN: DocSection[] = [
               "`GET /results/{case}?from=&to=`",
               "(new)",
               "a solved case's results (`results` schema): each force group's drag and vertical force (mean, sd, drift and the uncertainty of the mean, in N), CdA, ClA and L/D, Cd and Cl where a forceCoeffs gives its area, each residual's levels and the orders it fell, the judge's verdict and plain warnings. `from` and `to` set the averaging window (iterations, or a transient run's seconds), the judge's by default; `to` alone takes the run as it was then; `409 not-ready` without a force history (API 1.23)"
+            ],
+            [
+              "`GET /results/{case}/forces`",
+              "(new)",
+              "a case's force history for charts: each force group's drag and vertical force over the whole run, in N and in the directions its results use, thinned to about 1000 runs of values, each kept by its lowest and highest so a swing or a spike still shows (`n` says how many there were); the total group first (API 1.24)"
             ]
           ]
         }

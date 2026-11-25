@@ -597,6 +597,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/results/{case}/forces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A case's force history for charts: each force group's drag and vertical force over the whole run, in N and in the directions its results use, thinned to about 1000 runs of values, each kept by its lowest and highest, so a swing or a spike still shows (API 1.24) */
+        get: operations["results_forces"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/runs": {
         parameters: {
             query?: never;
@@ -3165,6 +3182,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Results"];
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    results_forces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        case: string;
+                        /** @description each force group: the total group first, then by drag */
+                        groups: {
+                            /** @description its drag then, in N */
+                            drag: number[];
+                            /** @description its values before thinning */
+                            n: number;
+                            name: string;
+                            /** @description each iteration or time kept */
+                            t: number[];
+                            total: boolean;
+                            /** @description its downforce or lift then, in N; null where it has none */
+                            vertical: (number | null)[];
+                        }[];
+                        /** @description its times are seconds of flow; else iterations */
+                        transient: boolean;
+                        /**
+                         * @description what its vertical force is, as its results say
+                         * @enum {unknown}
+                         */
+                        vertical: "downforce" | "lift";
+                    };
                 };
             };
             /** @description Error (the code says which; see STATUS in api_v1.py) */

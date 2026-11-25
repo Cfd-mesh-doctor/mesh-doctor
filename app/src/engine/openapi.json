@@ -2093,7 +2093,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.23"
+    "version": "1.24"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -5952,6 +5952,119 @@
           }
         },
         "summary": "A solved case's results: each force group's drag and vertical force over an averaging window (the judge's by default), how sure they are, its coefficients, how far its residuals fell, and plain warnings; `case` is a case in the cases folder with a force history: a run (GET /runs), or a case you solved yourself (GET /cases) (API 1.23)"
+      }
+    },
+    "/results/{case}/forces": {
+      "get": {
+        "operationId": "results_forces",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case",
+            "required": true,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "case": {
+                      "type": "string"
+                    },
+                    "groups": {
+                      "description": "each force group: the total group first, then by drag",
+                      "items": {
+                        "properties": {
+                          "drag": {
+                            "description": "its drag then, in N",
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          "n": {
+                            "description": "its values before thinning",
+                            "type": "integer"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "t": {
+                            "description": "each iteration or time kept",
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          "total": {
+                            "type": "boolean"
+                          },
+                          "vertical": {
+                            "description": "its downforce or lift then, in N; null where it has none",
+                            "items": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "total",
+                          "n",
+                          "t",
+                          "drag",
+                          "vertical"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "transient": {
+                      "description": "its times are seconds of flow; else iterations",
+                      "type": "boolean"
+                    },
+                    "vertical": {
+                      "description": "what its vertical force is, as its results say",
+                      "enum": [
+                        "downforce",
+                        "lift"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "case",
+                    "transient",
+                    "vertical",
+                    "groups"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "A case's force history for charts: each force group's drag and vertical force over the whole run, in N and in the directions its results use, thinned to about 1000 runs of values, each kept by its lowest and highest, so a swing or a spike still shows (API 1.24)"
       }
     },
     "/runs": {

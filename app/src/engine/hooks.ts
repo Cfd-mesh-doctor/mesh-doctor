@@ -5,8 +5,8 @@ import { api } from "./client";
 import { useEngine } from "./context";
 import { asEngineError } from "./errors";
 import {
-  isActive, type AbtestDetail, type CaseResults, type DiskJobKind, type Job, type JobList, type JobRequest,
-  type PictureSet, type PictureSetList, type ResultsList, type ResultsWindow, type RunDetail,
+  isActive, type AbtestDetail, type CaseResults, type DiskJobKind, type ForceHistory, type Job, type JobList,
+  type JobRequest, type PictureSet, type PictureSetList, type ResultsList, type ResultsWindow, type RunDetail,
 } from "./types";
 
 export function makeQueryClient(): QueryClient {
@@ -321,6 +321,19 @@ export function useCaseResults(name: string, w: ResultsWindow) {
     queryFn: transport ? ({ signal }) => api.caseResults(transport, name, w, signal) : skipToken,
     retry: false,
     placeholderData: (last, lastQuery) => (lastQuery?.queryKey[2] === name ? last : undefined),
+    refetchInterval: (q) => (q.state.status === "error" ? false : IDLE_POLL_MS),
+  });
+}
+
+/** One case's force history for its charts (GET /results/{case}/forces, API 1.24), every 15 s while it answers, as
+ * its results are: a run that solves writes its forces as it goes. A refusal (an engine before API 1.24, no such case,
+ * no forces yet) isn't asked again. */
+export function useForceHistory(name: string) {
+  const { transport } = useEngine();
+  return useQuery<ForceHistory>({
+    queryKey: [transport?.scope, "results", name, "forces"],
+    queryFn: transport ? ({ signal }) => api.forceHistory(transport, name, signal) : skipToken,
+    retry: false,
     refetchInterval: (q) => (q.state.status === "error" ? false : IDLE_POLL_MS),
   });
 }

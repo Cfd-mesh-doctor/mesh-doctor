@@ -109,6 +109,10 @@ export interface ResultsWindow {
   from: number | null;
   to: number | null;
 }
+/** A case's force history for charts (GET /results/{case}/forces, API 1.24): each force group's drag and vertical force
+ *  over the whole run, in N, thinned by each stretch's lowest and highest; `n` its values before thinning. */
+export type ForceHistory = Json<operations["results_forces"]["responses"][200]>;
+export type ForceHistoryGroup = ForceHistory["groups"][number];
 
 /** The API major version this app speaks; the engine reports major.minor and any 1.x works. */
 export const API_MAJOR = 1;

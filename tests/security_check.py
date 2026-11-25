@@ -200,6 +200,7 @@ CHECKS = [
     ("v1 results of a missing case", "GET", "/api/v1/results/nope", {}, 404, '"code": "not-found"'),
     ("v1 results list takes no POST", "POST", "/api/v1/results", {"X-MD-Token": TOKEN, "Content-Type": JSON}, 405,
      '"code": "method-not-allowed"', b"{}"),
+    ("v1 force history of a missing case", "GET", "/api/v1/results/nope/forces", {}, 404, '"code": "not-found"'),
     ("v1 wrong method", "GET", "/api/v1/jobs/20260101-000000-repair-x-abcd/cancel", {}, 405, '"code": "method-not-allowed"'),
     ("v1 job without token refused", "POST", "/api/v1/jobs", {"Content-Type": JSON}, 403, "token", V1JOB),
     ("v1 cancel without token refused", "POST", "/api/v1/jobs/20260101-000000-repair-x-abcd/cancel", {}, 403,
