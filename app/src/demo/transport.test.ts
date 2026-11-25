@@ -5,6 +5,8 @@ import type { Job } from "@/engine/types";
 import { DEMO_CLUSTERS_NOTE, RECORDED_CLUSTERS, recordedCluster } from "./clusters";
 import clusters from "./clusters.json";
 import recorded from "./fixtures.json";
+import { DEMO_RESULTS_NOTE, RECORDED_RESULTS } from "./results";
+import results from "./results.json";
 import { demoTransport, shiftTimes, withCaseSizes } from "./transport";
 
 const job = (id: string, state: Job["state"], at: string): Job => ({
@@ -143,8 +145,31 @@ describe("demo transport", () => {
     expect(doc.checks.find((c) => c.id === "memory")?.found).toBe(`${(free / 1024).toFixed(1)} GB available`);
   });
 
+  it("has the results of its recorded case, its forces written 4 h ago, and says what it didn't record", async () => {
+    const t = demoTransport({ ...answers(), "/cases": { items: [RECORDED_RESULTS, "ahmed-25-fine"] } }, 0);
+    const list = await api.resultsList(t);
+    expect(list).toMatchObject({ items: [{ case: RECORDED_RESULTS }], waiting: [] });
+    const doc = await api.caseResults(t, RECORDED_RESULTS, { from: null, to: null });
+    expect(doc).toMatchObject({ schemaVersion: "1.1", transient: false, window: { from: 1600, to: 2000, how: "judge", n: 400 } });
+    const hours = (Date.now() - Date.parse(doc.updated!)) / 3_600_000;
+    expect(hours).toBeGreaterThan(3.99);
+    expect(hours).toBeLessThan(4.01);
+    // its coefficients are its forces over q, and over its forceCoeffs's own q Aref
+    const g = doc.groups[0]!;
+    expect(g).toMatchObject({ name: "forceCoeffs", total: true, patches: ["ahmedGroup"] });
+    expect(g.CdA).toBeCloseTo(g.drag!.mean / doc.q!, 9);
+    expect(g.Cd).toBeCloseTo(g.drag!.mean / (doc.q! * g.Aref!), 9);
+    expect(g.LD).toBeCloseTo(g.vertical!.mean / g.drag!.mean, 9);
+    await expect(api.caseResults(t, RECORDED_RESULTS, { from: 1000, to: null }))
+      .rejects.toMatchObject({ code: "unavailable", message: DEMO_RESULTS_NOTE });
+    await expect(api.caseResults(t, "ahmed-25-fine", { from: null, to: null }))
+      .rejects.toMatchObject({ code: "unavailable", message: expect.stringContaining(`${RECORDED_RESULTS} only`) });
+    await expect(api.caseResults(t, "nope", { from: null, to: null })).rejects.toMatchObject({ code: "not-found" });
+  });
+
   it("ships no paths from the recording machine", () => {
     expect(JSON.stringify(clusters)).not.toMatch(/\/home\/|\/mnt\/|\/tmp\/|[A-Z]:\\\\|Users[\\/]/);
+    expect(JSON.stringify(results)).not.toMatch(/\/home\/|\/mnt\/|\/tmp\/|[A-Z]:\\\\|Users[\\/]/);
     const text = JSON.stringify(recorded);
     expect(text).not.toMatch(/\/home\/|\/mnt\/|\/tmp\/|[A-Z]:\\\\|Users[\\/]/);
   });

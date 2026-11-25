@@ -2,7 +2,7 @@
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://meshdoctor.invalid/schemas/results/1",
  "title": "Mesh Doctor results of a solved case",
- "description": "output of meshdoctor results and GET /api/v1/results: each force group's drag and vertical force over an averaging window, how sure they are, its coefficients, how far its residuals fell, and plain warnings",
+ "description": "output of meshdoctor results and GET /api/v1/results/{case}, and each item of GET /api/v1/results: each force group's drag and vertical force over an averaging window, how sure they are, its coefficients, how far its residuals fell, and plain warnings",
  "type": "object",
  "required": ["schemaVersion", "case", "transient", "axes", "Uinf", "rho", "q", "cells", "start", "end", "window", "groups", "residuals", "verdict", "symmetry", "warnings"],
  "properties": {
@@ -17,6 +17,7 @@
   "rho": {"type": ["number", "null"], "description": "rhoInf in kg/m3, from its system folder; null where it isn't found"},
   "q": {"type": ["number", "null"], "description": "the dynamic pressure 1/2 rho Uinf^2 in Pa, which CdA and ClA divide by; null without rho or Uinf"},
   "cells": {"type": ["integer", "null"], "description": "its mesh's cells, from the owner header (summed over its processors when it is split); null where it doesn't say"},
+  "updated": {"type": ["string", "null"], "description": "when its force history was last written (UTC, ISO 8601): a run that solves writes it as it goes (results 1.1)"},
   "start": {"type": "number", "description": "the first iteration or time of the total group's force history"},
   "end": {"type": "number", "description": "its last, up to the window's to"},
   "window": {"type": "object", "required": ["from", "to", "how", "n"], "description": "the averaging window: the forces after from, up to and with to",

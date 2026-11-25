@@ -14,7 +14,7 @@
 // times it keeps (`times`, `joined`, API 1.10: every one, the times each stretch writes), and its judge is the
 // transient judge, in time steps, which the live page answers while it solves and once it has ended. Once a run has
 // ended, its page lists its sets of pictures and makes more (Pictures.tsx's RunPicturesCard).
-import { ArrowLeft, CircleStop, FastForward, ListChecks, Play } from "lucide-react";
+import { ArrowLeft, ChartLine, CircleStop, FastForward, ListChecks, Play } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 import { LineChart, type LineSeries } from "@/components/charts/LineChart";
@@ -356,6 +356,12 @@ export function RunPage() {
       {job && (
         <Button variant="ghost" asChild>
           <Link to={to(`/jobs?job=${encodeURIComponent(job.id)}`)}><ListChecks />Job details</Link>
+        </Button>
+      )}
+      {/* Its forces averaged over the judge's window or another (the Results screen), as it solves too. */}
+      {run && (
+        <Button variant="ghost" asChild>
+          <Link to={to(`/results/${encodeURIComponent(name)}`)}><ChartLine />Results</Link>
         </Button>
       )}
       {canStop && (

@@ -575,7 +575,7 @@ test("every page runs under the site's Content-Security-Policy", async ({ page }
   for (const path of [
     "/", "/connect", "/install", "/report", "/estimate", "/how-it-works", "/accuracy", "/gallery", "/docs", "/troubleshooting",
     "/limits", "/safety", "/your-own-case", "/claude-code", "/dashboard-tour", "/architecture", "/demo", "/demo/cases", "/demo/solve", "/demo/repairs", "/demo/jobs", "/demo/settings", "/demo/estimate", "/demo/repairs/ahmed35-medium-fix/report",
-    "/demo/pictures", "/demo/pictures/ahmed-25-medium/2000",
+    "/demo/pictures", "/demo/pictures/ahmed-25-medium/2000", "/demo/results", "/demo/results/ahmed-25-coarse",
   ]) {
     await page.goto(path);
     await page.waitForLoadState("networkidle");

@@ -8,17 +8,18 @@ import { AppLayout } from "./AppLayout";
 
 const show = () => renderScreen(<AppLayout />, { path: "/demo/*", at: "/demo/jobs", transport: demoTransport(undefined, 0) });
 const sidebar = () => within(screen.getByRole("complementary"));
-const fold = (where = sidebar()) => where.getByRole("button", { name: "Coming next 2 screens" });
-const COMING = ["Results", "Local tools"];
+const fold = (where = sidebar()) => where.getByRole("button", { name: "Coming next 1 screen" });
+const COMING = ["Local tools"];
 
 afterEach(() => vi.restoreAllMocks());
 
 describe("the sidebar's Coming next list", () => {
-  it("is folded away at first, saying how many screens are coming, so the eight that work come first", () => {
+  it("is folded away at first, saying how many screens are coming, so the nine that work come first", () => {
     show();
     expect(fold()).toHaveAttribute("aria-expanded", "false");
     for (const name of COMING) expect(sidebar().getByText(name)).not.toBeVisible();
-    for (const name of ["Overview", "Cases", "Solve", "Repairs", "A/B tests", "Pictures", "Jobs", "Size estimator"]) {
+    for (const name of ["Overview", "Cases", "Solve", "Repairs", "A/B tests", "Pictures", "Results", "Jobs",
+      "Size estimator"]) {
       expect(sidebar().getByRole("link", { name: new RegExp(`^${name}`) })).toBeVisible();
     }
   });
@@ -36,7 +37,7 @@ describe("the sidebar's Coming next list", () => {
     expect(fold()).toHaveAttribute("aria-expanded", "true");
     await user.click(fold());
     expect(fold()).toHaveAttribute("aria-expanded", "false");
-    expect(sidebar().getByText("Results")).not.toBeVisible();
+    expect(sidebar().getByText("Local tools")).not.toBeVisible();
     again.unmount();
 
     show();

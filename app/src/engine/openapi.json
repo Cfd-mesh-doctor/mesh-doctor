@@ -1566,7 +1566,7 @@
       },
       "Results": {
         "title": "Mesh Doctor results of a solved case",
-        "description": "output of meshdoctor results and GET /api/v1/results: each force group's drag and vertical force over an averaging window, how sure they are, its coefficients, how far its residuals fell, and plain warnings",
+        "description": "output of meshdoctor results and GET /api/v1/results/{case}, and each item of GET /api/v1/results: each force group's drag and vertical force over an averaging window, how sure they are, its coefficients, how far its residuals fell, and plain warnings",
         "type": "object",
         "required": [
           "schemaVersion",
@@ -1660,6 +1660,13 @@
               "null"
             ],
             "description": "its mesh's cells, from the owner header (summed over its processors when it is split); null where it doesn't say"
+          },
+          "updated": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "when its force history was last written (UTC, ISO 8601): a run that solves writes it as it goes (results 1.1)"
           },
           "start": {
             "type": "number",
@@ -2086,7 +2093,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.22"
+    "version": "1.23"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -5829,11 +5836,70 @@
     },
     "/results": {
       "get": {
+        "operationId": "results_list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/Results"
+                      },
+                      "type": "array"
+                    },
+                    "waiting": {
+                      "description": "the cases with a force history too short to average yet, or that couldn't be read",
+                      "items": {
+                        "properties": {
+                          "case": {
+                            "type": "string"
+                          },
+                          "why": {
+                            "description": "why, in plain words",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "case",
+                          "why"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "waiting"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "The results of each case in the cases folder with a force history, newest first (by when its forces were last written), each over the judge's window as GET /results/{case} gives it; the cases whose forces can't be averaged yet in `waiting`, with why (API 1.23)"
+      }
+    },
+    "/results/{case}": {
+      "get": {
         "operationId": "results_of",
         "parameters": [
           {
-            "description": "a case in the cases folder with a force history: a run (GET /runs), or a case you solved yourself (GET /cases)",
-            "in": "query",
+            "in": "path",
             "name": "case",
             "required": true,
             "schema": {
@@ -5885,7 +5951,7 @@
             "description": "Error (the code says which; see STATUS in api_v1.py)"
           }
         },
-        "summary": "A solved case's results: each force group's drag and vertical force over an averaging window (the judge's by default), how sure they are, its coefficients, how far its residuals fell, and plain warnings (API 1.22)"
+        "summary": "A solved case's results: each force group's drag and vertical force over an averaging window (the judge's by default), how sure they are, its coefficients, how far its residuals fell, and plain warnings; `case` is a case in the cases folder with a force history: a run (GET /runs), or a case you solved yourself (GET /cases) (API 1.23)"
       }
     },
     "/runs": {

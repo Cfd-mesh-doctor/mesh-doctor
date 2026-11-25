@@ -205,6 +205,23 @@ export interface PictureSetDoc {
   pictures: { file: string; kind: string; title: string; time?: string }[];
 }
 
+/** A case's results as GET /results/{case} answers them (API 1.23): steady, solved to 2,000 iterations, averaged
+ *  over the judge's window from 1,600, its total group 16.1 N of drag and 16.1 N of lift. */
+export function resultsDoc(name: string, more: Record<string, unknown> = {}) {
+  const force = (mean: number, drift = 0.002) => ({ mean, sd: 0.45, drift, u: 0.0097, n: 400 });
+  return {
+    schemaVersion: "1.1", case: name, transient: false, axes: { flow: "-x", up: "z", vertical: "lift" },
+    Uinf: 40, rho: 1.205, q: 964, cells: 478_901, updated: new Date(Date.now() - 3_600_000).toISOString(),
+    start: 0, end: 2000, window: { from: 1600, to: 2000, how: "judge", n: 400 },
+    groups: [{
+      name: "forceCoeffs", total: true, patches: ["body"], drag: force(16.12), vertical: force(16.07, 0.008),
+      CdA: 0.016721, ClA: 0.016666, LD: 0.9967, Aref: 0.056, Cd: 0.29859, Cl: 0.29761,
+    }],
+    residuals: { p: { first: 1, final: 0.0139, orders: 1.86 } },
+    verdict: "converged (steady)", symmetry: [], warnings: [], ...more,
+  };
+}
+
 /** Each picture it serves: a PNG of one pixel. */
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
   "base64");
@@ -244,6 +261,9 @@ export async function mockEngine(
     diskFreeMb?: number;
     /** Its sets of pictures (API 1.17), made in a terminal (no job); none, as from an older engine, unless given. */
     pictures?: PictureSetDoc[];
+    /** Its cases' results (GET /results, API 1.23), each as resultsDoc() makes it; none, as from an older engine,
+     * unless given. A window asked for is averaged as given, with 20 N of drag. */
+    caseResults?: ReturnType<typeof resultsDoc>[];
   } = {},
 ): Promise<MockEngine> {
   const state: MockEngine = {
@@ -423,6 +443,22 @@ export async function mockEngine(
         return json(404, { error: { code: "not-found", message: `the set ${at} of ${name} lists no picture ${rest}` } });
       }
       return route.fulfill({ status: 200, headers: { ...cors, "Content-Type": "image/png" }, body: PNG });
+    }
+    // Its results (API 1.23): each case's over the judge's window, and one case's over a window asked for.
+    const results = opts.caseResults;
+    if (results && path === "/results") return json(200, { items: results, waiting: [] });
+    const one = results && /^\/results\/([^/]+)$/.exec(path);
+    if (results && one) {
+      const name = decodeURIComponent(one[1]!);
+      const doc = results.find((d) => d.case === name);
+      if (!doc) return json(404, { error: { code: "not-found", message: `no case ${name} in the cases folder` } });
+      const q = new URL(req.url()).searchParams;
+      if (!q.has("from") && !q.has("to")) return json(200, doc);
+      const from = Number(q.get("from") ?? doc.window.from);
+      const to = Number(q.get("to") ?? doc.end);
+      const [group] = doc.groups;
+      return json(200, { ...doc, window: { from, to, how: "given", n: to - from },
+        groups: [{ ...group, drag: { ...group!.drag, mean: 20 } }] });
     }
     const cancel = /^\/jobs\/([^/]+)\/cancel$/.exec(path);
     if (cancel && req.method() === "POST") {

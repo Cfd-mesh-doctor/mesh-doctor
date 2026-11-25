@@ -5,8 +5,8 @@ import { api } from "./client";
 import { useEngine } from "./context";
 import { asEngineError } from "./errors";
 import {
-  isActive, type AbtestDetail, type DiskJobKind, type Job, type JobList, type JobRequest, type PictureSet,
-  type PictureSetList, type RunDetail,
+  isActive, type AbtestDetail, type CaseResults, type DiskJobKind, type Job, type JobList, type JobRequest,
+  type PictureSet, type PictureSetList, type ResultsList, type ResultsWindow, type RunDetail,
 } from "./types";
 
 export function makeQueryClient(): QueryClient {
@@ -296,6 +296,32 @@ export function useTransientPlan(name: string, enabled: boolean, version: string
     queryFn: transport && enabled ? ({ signal }) => api.transientPlan(transport, name, signal) : skipToken,
     retry: false,
     staleTime: 5 * 60_000,
+  });
+}
+
+/** Each case's results over the judge's window (GET /results, API 1.23), asked for again every 15 s: a run that
+ * solves writes its forces as it goes. An engine before API 1.23 has none to list (not-found): it isn't asked again. */
+export function useResultsList() {
+  const { transport } = useEngine();
+  return useQuery<ResultsList>({
+    queryKey: [transport?.scope, "results"],
+    queryFn: transport ? ({ signal }) => api.resultsList(transport, signal) : skipToken,
+    refetchInterval: (q) => (refused(q.state.status, q.state.error, ["not-found"]) ? false : IDLE_POLL_MS),
+  });
+}
+
+/** One case's results over window `w` (GET /results/{case}), every 15 s while it answers (its key is under the list's,
+ * so it is asked for again with it). While another window of the same case is asked for, the last answer shows
+ * (isPlaceholderData), never another case's. A refusal (no such case, nothing to average yet, a window it can't
+ * take) isn't asked again until the window changes. */
+export function useCaseResults(name: string, w: ResultsWindow) {
+  const { transport } = useEngine();
+  return useQuery<CaseResults>({
+    queryKey: [transport?.scope, "results", name, w.from, w.to],
+    queryFn: transport ? ({ signal }) => api.caseResults(transport, name, w, signal) : skipToken,
+    retry: false,
+    placeholderData: (last, lastQuery) => (lastQuery?.queryKey[2] === name ? last : undefined),
+    refetchInterval: (q) => (q.state.status === "error" ? false : IDLE_POLL_MS),
   });
 }
 

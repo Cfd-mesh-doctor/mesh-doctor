@@ -94,6 +94,22 @@ export type Picture = PictureSet["pictures"][number];
 /** A set deleted (POST /pictures/{case}/{set}/delete): how many pictures it had. */
 export type PicturesDeleted = Json<operations["delete_pictures"]["responses"][200]>;
 
+/** A solved case's results (GET /results/{case}, API 1.23): each force group's forces averaged over a window (the
+ *  judge's unless one is asked for), its coefficients, its residuals' levels, the judge's verdict and plain warnings,
+ *  and when its forces were last written. */
+export type CaseResults = Json<operations["results_of"]["responses"][200]>;
+export type ResultGroup = CaseResults["groups"][number];
+export type ResultForce = NonNullable<ResultGroup["drag"]>;
+/** Each case's results over the judge's window, newest first, and the cases whose forces can't be averaged yet, with
+ *  why (GET /results, API 1.23). */
+export type ResultsList = Json<operations["results_list"]["responses"][200]>;
+/** An averaging window to ask for, in iterations or a transient run's seconds: null from, the judge's window; null to,
+ *  up to the run's end. */
+export interface ResultsWindow {
+  from: number | null;
+  to: number | null;
+}
+
 /** The API major version this app speaks; the engine reports major.minor and any 1.x works. */
 export const API_MAJOR = 1;
 

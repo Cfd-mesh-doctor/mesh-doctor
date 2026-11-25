@@ -27,7 +27,7 @@ interface Item {
 }
 
 // Solve sets cases up and runs them, so it comes after Cases, before what's done to a case (a repair, then an A/B
-// test of it), and then the pictures of a solved one's flow.
+// test of it), and then the pictures of a solved one's flow and its results.
 const MAIN: Item[] = [
   { label: "Overview", icon: LayoutDashboard, path: "" },
   { label: "Cases", icon: FolderOpen, path: "/cases" },
@@ -35,12 +35,12 @@ const MAIN: Item[] = [
   { label: "Repairs", icon: Wrench, path: "/repairs" },
   { label: "A/B tests", icon: FlaskConical, path: "/abtests" },
   { label: "Pictures", icon: Image, path: "/pictures" },
+  { label: "Results", icon: ChartLine, path: "/results" },
   { label: "Jobs", icon: ListChecks, path: "/jobs" },
   { label: "Size estimator", icon: Calculator, path: "/estimate" },
 ];
 
 const NEXT: Item[] = [
-  { label: "Results", icon: ChartLine, soon: "Forces, convergence and comparisons" },
   { label: "Local tools", icon: Toolbox, soon: "Zone repair, full-car pipeline, workbooks" },
 ];
 
@@ -131,7 +131,7 @@ export function Sidebar({ onNavigate, onTour }: { onNavigate?: () => void; onTou
           ))}
         </div>
         <div>
-          {/* Said as "Coming next 2 screens": the count is how many are coming. */}
+          {/* Said as "Coming next 1 screen": the count is how many are coming. */}
           <button
             type="button"
             aria-expanded={nextOpen}
@@ -141,7 +141,7 @@ export function Sidebar({ onNavigate, onTour }: { onNavigate?: () => void; onTou
           >
             Coming next{" "}
             <span className="rounded-full border border-border px-1.5 text-[10px] tabular-nums">{NEXT.length}</span>{" "}
-            <span className="sr-only">screens</span>
+            <span className="sr-only">{NEXT.length === 1 ? "screen" : "screens"}</span>
             <ChevronDown className={cn("ml-auto size-3.5 shrink-0 transition-transform", nextOpen && "rotate-180")} aria-hidden />
           </button>
           <div id={nextId} hidden={!nextOpen} className="mt-1 space-y-0.5">

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The demo: answers recorded from a real engine (the public Ahmed-body example, see fixtures.json's
-// "_about"), served without any engine. It can cancel its own jobs and delete its set of pictures, in this tab only;
+// "_about"; one case's results, see results.ts), served without any engine. It can cancel its own jobs and delete its set of pictures, in this tab only;
 // it cannot start anything.
 import type { Method, Transport } from "@/engine/client";
 import { EngineError } from "@/engine/errors";
@@ -14,6 +14,7 @@ import { DEMO_JUDGE_NOTE, DEMO_LIVE_NOTE, RECORDED_ABTESTS, briefOf, demoAbtest,
 import { DEMO_CLUSTERS_NOTE, recordedCluster } from "./clusters";
 import recorded from "./fixtures.json";
 import { briefOfSet, demoPictureSet, demoPictureSrc } from "./pictures";
+import { demoResultsAnswer } from "./results";
 import templates from "./templates.json";
 
 type Answers = Record<string, unknown>;
@@ -304,6 +305,10 @@ export function demoTransport(answers: Answers = DEMO_ANSWERS, delayMs = DELAY_M
         const shape = await recordedCluster(decodeURIComponent(cluster[1] ?? ""), tag, Number(cluster[2]));
         if (!shape) throw new EngineError("not-found", DEMO_CLUSTERS_NOTE, 404);
         return structuredClone(shape) as T;
+      }
+      if (route === "/results" || route.startsWith("/results/")) {
+        const cases = (data["/cases"] as CaseList | undefined)?.items ?? [];
+        return (await demoResultsAnswer(route, new URLSearchParams(path.split("?")[1] ?? ""), cases)) as T;
       }
       if (route === "/pictures") {
         const of = new URLSearchParams(path.split("?")[1] ?? "").get("case");

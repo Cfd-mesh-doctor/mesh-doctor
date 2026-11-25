@@ -66,7 +66,7 @@ export const DESIGN: DocSection[] = [
             [
               "`results.py`",
               "core + CLI",
-              "a solved case's results: `of_case()` returns a `results` document: each force group's drag and vertical force over an averaging window (the judge's by default: a steady run's last two judge windows, a transient run's from when its forces settled), with the mean, sd, drift between the window's two halves and the uncertainty of the mean (batch means), in N; CdA and ClA over q = ½ρU² from the case's rhoInf and freestream, L/D, and Cd and Cl only for a group that a forceCoeffs function object covers with its own Aref; each residual's first and final level and the orders it fell, the judge's verdict, and plain warnings (a drift over 1 %, a single symmetry plane: maybe half a model). `meshdoctor results` prints it; it only reads the case (API 1.22)"
+              "a solved case's results: `of_case()` returns a `results` document: each force group's drag and vertical force over an averaging window (the judge's by default: a steady run's last two judge windows, a transient run's from when its forces settled), with the mean, sd, drift between the window's two halves and the uncertainty of the mean (batch means), in N; CdA and ClA over q = ½ρU² from the case's rhoInf and freestream, L/D, and Cd and Cl only for a group that a forceCoeffs function object covers with its own Aref; each residual's first and final level and the orders it fell, the judge's verdict, and plain warnings (a drift over 1 %, a single symmetry plane: maybe half a model). `listing()` gives the results of every case with a force history, newest first. `meshdoctor results` prints a case's; it only reads the case (API 1.23)"
             ],
             [
               "`repair.py`, `abtest.py`",
@@ -165,6 +165,11 @@ export const DESIGN: DocSection[] = [
               "pictures",
               "`pictures` (CLI), a `pictures` job",
               "people looking at a solved case's flow; the web app's Pictures screen and a run's page"
+            ],
+            [
+              "results",
+              "`results` (CLI), the API (`GET /results`)",
+              "people comparing solved cases; the web app's Results screen"
             ],
             [
               "`meshDoctor/map.json`",
@@ -428,9 +433,14 @@ export const DESIGN: DocSection[] = [
               "delete a set Mesh Doctor made, with its job's log; `409 busy` while a job makes it, and `422 unsupported` for a folder Mesh Doctor didn't make, which is left as it is (API 1.17)"
             ],
             [
-              "`GET /results?case=&from=&to=`",
+              "`GET /results`",
               "(new)",
-              "a solved case's results (`results` schema): each force group's drag and vertical force (mean, sd, drift and the uncertainty of the mean, in N), CdA, ClA and L/D, Cd and Cl where a forceCoeffs gives its area, each residual's levels and the orders it fell, the judge's verdict and plain warnings. `from` and `to` set the averaging window (iterations, or a transient run's seconds), the judge's by default; `to` alone takes the run as it was then; `409 not-ready` without a force history (API 1.22)"
+              "the results of each case in the cases folder with a force history, newest first (by when its forces were last written), each as `GET /results/{case}` gives it over the judge's window; the cases whose forces can't be averaged yet in `waiting`, with why (API 1.23)"
+            ],
+            [
+              "`GET /results/{case}?from=&to=`",
+              "(new)",
+              "a solved case's results (`results` schema): each force group's drag and vertical force (mean, sd, drift and the uncertainty of the mean, in N), CdA, ClA and L/D, Cd and Cl where a forceCoeffs gives its area, each residual's levels and the orders it fell, the judge's verdict and plain warnings. `from` and `to` set the averaging window (iterations, or a transient run's seconds), the judge's by default; `to` alone takes the run as it was then; `409 not-ready` without a force history (API 1.23)"
             ]
           ]
         }

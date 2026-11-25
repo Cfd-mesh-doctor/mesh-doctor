@@ -6,7 +6,8 @@ import { localAccessState } from "./permission";
 import type {
   AbtestDetail, AbtestList, AbtestLive, CaseJudge, CaseList, ClusterShape, DiskInfo, DiskJob, DiskJobKind, EngineInfo, Job,
   JobList, JobRequest, JudgeAnswer, MachineInfo, PictureSet, PictureSetList, PicturesDeleted, Readiness, RepairList,
-  RunDetail, RunList, RunLive, RunValidation, TemplateList, TransientPlan, VariantList,
+  ResultsList, ResultsWindow, RunDetail, RunList, RunLive, RunValidation, TemplateList, TransientPlan, VariantList,
+  CaseResults,
 } from "./types";
 import { API_MAJOR } from "./types";
 import type { Report } from "@/report/read";
@@ -116,6 +117,15 @@ export function httpTransport(engine: string, key: string, timeoutMs = TIMEOUT_M
 /** A set of pictures' address in the API: its case and its set (the time pictured, `_mean` for a mean flow's). */
 const setPath = (name: string, set: string) => `/pictures/${encodeURIComponent(name)}/${encodeURIComponent(set)}`;
 
+/** GET /results/{case}, with the window's from and to where they are asked for. */
+export function resultsPath(name: string, w: ResultsWindow): string {
+  const q = new URLSearchParams();
+  if (w.from != null) q.set("from", String(w.from));
+  if (w.to != null) q.set("to", String(w.to));
+  const s = q.toString();
+  return `/results/${encodeURIComponent(name)}${s ? `?${s}` : ""}`;
+}
+
 /** The API calls the screens use; each one is a route in the engine's OpenAPI document. */
 export const api = {
   async info(t: Transport, signal?: AbortSignal): Promise<EngineInfo> {
@@ -211,4 +221,10 @@ export const api = {
   /** Deletes a set Mesh Doctor made, with its job's log; the case is never touched. */
   deletePictures: (t: Transport, name: string, set: string) =>
     t.request<PicturesDeleted>("POST", `${setPath(name, set)}/delete`),
+  /** Each case's results over the judge's window, newest first, and the cases still waiting (API 1.23); an older
+   * engine answers not-found. */
+  resultsList: (t: Transport, signal?: AbortSignal) => t.request<ResultsList>("GET", "/results", undefined, signal),
+  /** One case's results over a window: the judge's while from and to are null. */
+  caseResults: (t: Transport, name: string, w: ResultsWindow, signal?: AbortSignal) =>
+    t.request<CaseResults>("GET", resultsPath(name, w), undefined, signal),
 };

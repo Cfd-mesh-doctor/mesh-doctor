@@ -21,9 +21,10 @@ with its own magUInf and rhoInf, as OpenFOAM's forceCoeffs takes them; like ClA,
 direction (positive downforce, for a car with downforce).  Each residual's first level (the largest of its first
 values), its final level (the median of its last values up to the window's end) and how many orders it fell; and the
 judge's verdict on the run.  Plain warnings: a drift over DRIFT_WARN says to run longer before comparing; a single
-symmetry plane in the mesh's boundary says the forces may be for half a model.  GET /api/v1/results answers the same.
+symmetry plane in the mesh's boundary says the forces may be for half a model.  GET /api/v1/results/{case} answers the
+same, and GET /api/v1/results (listing) gives every case's in the cases folder that has a force history, newest first.
 """
-import argparse, json, math, os, re, statistics, sys
+import argparse, json, math, os, re, statistics, sys, time
 
 import abtest
 import caseinfo
@@ -167,7 +168,7 @@ def window(res, frc, d, total, unsteady, t_from=None, t_to=None):
         if settled is not None:
             return settled, to, "settled"
         return s[max(0, len(s) - 2 * w - 1)][0], to, "judge"
-    return to - 2 * w, to, "judge"
+    return max(0, to - 2 * w), to, "judge"                # a run shorter than two windows: all of it
 
 
 def residual_levels(res):
@@ -184,6 +185,18 @@ def residual_levels(res):
         orders = math.log10(first / final) if first > 0 and final > 0 else None
         out[k] = {"first": first, "final": final, "orders": round(orders, 2) + 0.0 if orders is not None else None}
     return out
+
+
+def updated(case):
+    """When the case's force history was last written (UTC, ISO 8601), or None."""
+    stamps = []
+    for files in caseinfo.force_files(case).values():
+        for f in files:
+            try:
+                stamps.append(os.path.getmtime(f))
+            except OSError:
+                pass
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(max(stamps))) if stamps else None
 
 
 def of_case(case, t_from=None, t_to=None, name=None):
@@ -204,6 +217,8 @@ def of_case(case, t_from=None, t_to=None, name=None):
     unsteady = caseinfo.transient(case)
     d = caseinfo.describe(case, frc_to)
     total = d["total"]
+    if len(frc_to[total]["Time"]) < 2:
+        raise ValueError("not-ready", f"{name} has too few forces to average yet: let it solve longer")
     t0, t1, how = window(res, frc_to, d, total, unsteady, t_from, t_to)
     if t0 is not None and t1 is not None and t0 >= t1:
         raise ValueError("not-ready", f"{name}'s forces end at {t1:g}, before the window's from ({t0:g}): pick an "
@@ -257,7 +272,7 @@ def of_case(case, t_from=None, t_to=None, name=None):
     doc = {"case": name, "transient": unsteady,
            "axes": {"flow": ("-" if d["flowSign"] < 0 else "+") + "xyz"[d["flowAxis"]], "up": "xyz"[d["upAxis"]],
                     "vertical": vert, "source": d["source"]},
-           "Uinf": uinf, "rho": rho, "q": q, "cells": ramguard.mesh_cells(case),
+           "Uinf": uinf, "rho": rho, "q": q, "cells": ramguard.mesh_cells(case), "updated": updated(case),
            "start": times[0], "end": times[-1],
            "window": {"from": t0, "to": t1, "how": how, "n": groups[0]["drag"]["n"]},
            "groups": groups, "residuals": residual_levels(abtest.upto(res, t1) if res.get("Time") else res),
@@ -265,8 +280,28 @@ def of_case(case, t_from=None, t_to=None, name=None):
     return schema.stamp(doc, "results")
 
 
+def listing():
+    """GET /results: {"items": the results document of each case in the cases folder with a force history, over the
+    judge's window, newest first (by when its forces were last written); "waiting": each case whose forces can't be
+    averaged yet, with why ({"case", "why"}, naming no folders)}."""
+    import md_api
+    items, waiting = [], []
+    for name in md_api.sources():
+        case = tplan._case(name)
+        if not case or not caseinfo.force_files(case):
+            continue
+        try:
+            items.append(of_case(case, name=name))
+        except ValueError as e:
+            waiting.append({"case": name, "why": e.args[1] if len(e.args) > 1 else str(e)})
+        except (OSError, ArithmeticError, LookupError, TypeError):      # one unreadable case doesn't hide the rest
+            waiting.append({"case": name, "why": f"{name}'s force files couldn't be read"})
+    items.sort(key=lambda doc: doc["updated"] or "", reverse=True)
+    return {"items": items, "waiting": waiting}
+
+
 def of(name, t_from=None, t_to=None):
-    """GET /results?case=: (the results document of case `name` in the cases folder, None), or (None, (code,
+    """GET /results/{case}: (the results document of case `name` in the cases folder, None), or (None, (code,
     message)) naming no folders."""
     import md_api
     if not md_api.SAFE.match(name):

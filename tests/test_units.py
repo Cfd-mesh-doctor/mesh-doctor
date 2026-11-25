@@ -590,27 +590,59 @@ class ResultsTest(unittest.TestCase):
             "c1": {"type": "forceCoeffs", "patches": ["car"], "Aref": 2.0, "magUInf": 20.0, "rhoInf": None},
             "wing": {"type": "forces", "patches": ["wing"], "Aref": None, "magUInf": None, "rhoInf": None}})
 
+    def test_every_case_with_a_force_history_newest_first(self):
+        import api_v1
+        self.run_with_wing(300, lambda t: 50.0)
+        older, starting = (os.path.join(self.d, "cases", n) for n in ("older", "starting"))
+        for name in ("car", "older", "starting", "mesh"):          # each a case: a mesh and a controlDict
+            os.makedirs(os.path.join(self.d, "cases", name, "constant", "polyMesh"), exist_ok=True)
+            open(os.path.join(self.d, "cases", name, "constant", "polyMesh", "owner"), "w").close()
+            os.makedirs(os.path.join(self.d, "cases", name, "system"), exist_ok=True)
+            if name != "car":
+                open(os.path.join(self.d, "cases", name, "system", "controlDict"), "w").close()
+        write_steady_run(older, 100, lambda t: 1e-3, lambda t: 20.0)
+        hour_ago = time.time() - 3600                                  # written an hour before the car's
+        os.utime(os.path.join(older, "postProcessing", "body", "0", "forces.dat"), (hour_ago, hour_ago))
+        os.makedirs(os.path.join(starting, "postProcessing", "forces", "0"))
+        with open(os.path.join(starting, "postProcessing", "forces", "0", "forces.dat"), "w") as f:
+            f.write("1 ((5 0 0) (0 0 0))\n")                            # a solve just started: one row
+        st, doc, _ = api_v1.handle("GET", "/api/v1/results", {})
+        self.assertEqual(st, 200, doc)
+        self.assertEqual([r["case"] for r in doc["items"]], ["car", "older"])          # the mesh has no forces
+        self.assertEqual(doc["items"][0], self.r.of_case(self.case))
+        self.assertEqual(doc["items"][1]["updated"], time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(hour_ago)))
+        self.assertEqual(doc["items"][1]["window"], {"from": 0, "to": 100, "how": "judge", "n": 100})
+        for r in doc["items"]:
+            self.assertEqual(self.schema.validate(r, "results"), [])
+        self.assertEqual(doc["waiting"], [{"case": "starting",
+                                           "why": "starting has too few forces to average yet: let it solve longer"}])
+        self.assertEqual(api_v1.openapi()["paths"]["/results"]["get"]["operationId"], "results_list")
+        shutil.rmtree(os.path.join(self.d, "cases"))
+        self.assertEqual(api_v1.handle("GET", "/api/v1/results", {})[:2], (200, {"items": [], "waiting": []}))
+
     def test_the_api_and_the_command_answer_the_same(self):
         import api_v1
         self.run_with_wing(300, lambda t: 50.0)
-        st, doc, _ = api_v1.handle("GET", "/api/v1/results", {"case": "car"})
+        st, doc, _ = api_v1.handle("GET", "/api/v1/results/car", {})
         self.assertEqual(st, 200, doc)
         self.assertEqual(doc, self.r.of_case(self.case))
         self.assertEqual(self.schema.validate(doc, "results"), [])
-        st, doc, _ = api_v1.handle("GET", "/api/v1/results", {"case": "car", "from": "100", "to": "200"})
+        self.assertEqual((doc["schemaVersion"], doc["updated"]), ("1.1", self.r.updated(self.case)))
+        self.assertRegex(doc["updated"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
+        st, doc, _ = api_v1.handle("GET", "/api/v1/results/car", {"from": "100", "to": "200"})
         self.assertEqual((st, doc["window"]["how"], doc["window"]["n"]), (200, "given", 100))
-        st, doc, _ = api_v1.handle("GET", "/api/v1/results", {"case": "nope"})
+        st, doc, _ = api_v1.handle("GET", "/api/v1/results/nope", {})
         self.assertEqual((st, doc["error"]["code"], doc["error"]["message"]),
                          (404, "not-found", "no case nope in the cases folder"))
-        self.assertEqual(api_v1.handle("GET", "/api/v1/results", {"case": "../car"})[0], 400)
-        self.assertEqual(api_v1.handle("GET", "/api/v1/results", {"case": "car", "from": "300", "to": "200"})[0], 400)
+        self.assertEqual(api_v1.handle("GET", "/api/v1/results/..", {})[0], 400)
+        self.assertEqual(api_v1.handle("GET", "/api/v1/results/car", {"from": "300", "to": "200"})[0], 400)
         os.makedirs(os.path.join(self.d, "cases", "empty", "system"))
         open(os.path.join(self.d, "cases", "empty", "system", "controlDict"), "w").close()
-        st, doc, _ = api_v1.handle("GET", "/api/v1/results", {"case": "empty"})
+        st, doc, _ = api_v1.handle("GET", "/api/v1/results/empty", {})
         self.assertEqual((st, doc["error"]["code"]), (409, "not-ready"))
         self.assertEqual(doc["error"]["message"], "empty has no force history yet: its forces or forceCoeffs "
                                                   "function objects write one, in postProcessing, as it solves")
-        op = api_v1.openapi()["paths"]["/results"]["get"]
+        op = api_v1.openapi()["paths"]["/results/{case}"]["get"]
         self.assertEqual(sorted(p["name"] for p in op["parameters"]), ["case", "from", "to"])
         out = io.StringIO()
         with contextlib.redirect_stdout(out):

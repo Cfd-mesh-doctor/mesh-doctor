@@ -8,7 +8,8 @@ const PAGES = [
   "/", "/connect", "/install", "/report", "/report?sample=ahmed35-medium-fix", "/estimate", "/how-it-works",
   "/accuracy", "/gallery", "/docs", "/troubleshooting", "/limits", "/safety", "/your-own-case", "/claude-code", "/dashboard-tour", "/architecture", "/nowhere",
   "/demo", "/demo/cases", "/demo/repairs", "/demo/jobs", "/demo/settings", "/demo/estimate", "/demo/repairs/ahmed35-medium-fix/report",
-  "/demo/pictures", "/demo/pictures/ahmed-25-medium/2000", "/demo/nowhere",
+  "/demo/pictures", "/demo/pictures/ahmed-25-medium/2000", "/demo/results", "/demo/results/ahmed-25-coarse",
+  "/demo/nowhere",
 ];
 
 /** A line of the ARIA snapshot for a control or picture with no name: `- button`, `- img`, `- link [disabled]:`. */

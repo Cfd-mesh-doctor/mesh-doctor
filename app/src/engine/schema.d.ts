@@ -570,7 +570,24 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A solved case's results: each force group's drag and vertical force over an averaging window (the judge's by default), how sure they are, its coefficients, how far its residuals fell, and plain warnings (API 1.22) */
+        /** The results of each case in the cases folder with a force history, newest first (by when its forces were last written), each over the judge's window as GET /results/{case} gives it; the cases whose forces can't be averaged yet in `waiting`, with why (API 1.23) */
+        get: operations["results_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/results/{case}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A solved case's results: each force group's drag and vertical force over an averaging window (the judge's by default), how sure they are, its coefficients, how far its residuals fell, and plain warnings; `case` is a case in the cases folder with a force history: a run (GET /runs), or a case you solved yourself (GET /cases) (API 1.23) */
         get: operations["results_of"];
         put?: never;
         post?: never;
@@ -1119,7 +1136,7 @@ export interface components {
         };
         /**
          * Mesh Doctor results of a solved case
-         * @description output of meshdoctor results and GET /api/v1/results: each force group's drag and vertical force over an averaging window, how sure they are, its coefficients, how far its residuals fell, and plain warnings
+         * @description output of meshdoctor results and GET /api/v1/results/{case}, and each item of GET /api/v1/results: each force group's drag and vertical force over an averaging window, how sure they are, its coefficients, how far its residuals fell, and plain warnings
          */
         Results: {
             /** @description how its forces are read, as the judge reads them (caseinfo.describe) */
@@ -1168,6 +1185,8 @@ export interface components {
             transient: boolean;
             /** @description the freestream speed in m/s, from its 0/U; null where it isn't found */
             Uinf: number | null;
+            /** @description when its force history was last written (UTC, ISO 8601): a run that solves writes it as it goes (results 1.1) */
+            updated?: string | null;
             /** @description the judge's verdict on the run up to the window's to (its window: auto) */
             verdict: string | null;
             /** @description plain words: a drift over 1 %, a symmetry plane, no q */
@@ -3086,18 +3105,55 @@ export interface operations {
             };
         };
     };
+    results_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Results"][];
+                        /** @description the cases with a force history too short to average yet, or that couldn't be read */
+                        waiting: {
+                            case: string;
+                            /** @description why, in plain words */
+                            why: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     results_of: {
         parameters: {
-            query: {
-                /** @description a case in the cases folder with a force history: a run (GET /runs), or a case you solved yourself (GET /cases) */
-                case: string;
+            query?: {
                 /** @description average the forces after this iteration (a transient run's: this second of flow) (default: the judge's window) */
                 from?: number;
                 /** @description up to and with this iteration or second: the run as it was then (default: its end) */
                 to?: number;
             };
             header?: never;
-            path?: never;
+            path: {
+                case: string;
+            };
             cookie?: never;
         };
         requestBody?: never;

@@ -438,6 +438,7 @@ describe("a run's page", () => {
     expect(await screen.findByRole("heading", { name: "Stopped at iteration 150" })).toBeInTheDocument();
     expect(screen.getByText("Solved 0 → 150, on 4 processes.")).toBeInTheDocument();
     expect(screen.getByText(/^Stopped by request at iteration 150, which it wrote/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Results" })).toHaveAttribute("href", "/app/results/b");
     expect(await screen.findByText("The judge on the whole run")).toBeInTheDocument();
     expect(screen.getByText("converged")).toBeInTheDocument();
     expect(await screen.findByRole("img", { name: "Initial residual of p per iteration, log scale" })).toBeInTheDocument();

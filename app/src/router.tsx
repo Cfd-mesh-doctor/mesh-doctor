@@ -24,6 +24,7 @@ function screens(home: string): RouteObject[] {
       handle: h("Pictures"),
       lazy: async () => ({ Component: (await import("@/pages/app/Pictures")).Pictures }),
     },
+    { path: "results", handle: h("Results"), lazy: async () => ({ Component: (await import("@/pages/app/Results")).Results }) },
     { path: "jobs", handle: h("Jobs"), lazy: async () => ({ Component: (await import("@/pages/app/Jobs")).Jobs }) },
     {
       path: "estimate",
@@ -46,6 +47,11 @@ function screens(home: string): RouteObject[] {
       path: "pictures/:name/:set",
       handle: h("Set of pictures"),
       lazy: async () => ({ Component: (await import("@/pages/app/PictureSet")).PictureSetPage }),
+    },
+    {
+      path: "results/:name",
+      handle: h("Results of a case"),
+      lazy: async () => ({ Component: (await import("@/pages/app/CaseResults")).CaseResultsPage }),
     },
     {
       path: "first-run",

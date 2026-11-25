@@ -25,7 +25,7 @@ import json, os, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 VERSIONS = {"repair": "1.0", "abtest": "1.0", "judge": "1.2", "map": "1.0", "job": "1.4", "report": "1.0",
-            "tplan": "1.2", "results": "1.0"}
+            "tplan": "1.2", "results": "1.1"}
 _cache = {}
 
 
