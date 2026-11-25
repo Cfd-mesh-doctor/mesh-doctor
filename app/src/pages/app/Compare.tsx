@@ -5,7 +5,8 @@
 // in both, b's difference from a in N and in %, and whether it is real or inside the noise (both means' uncertainty and
 // drift); a mesh study also says whether each force moves less between the meshes than it swings. Plain warnings come
 // first. Two cases' forces are drawn over their runs on one chart for each force, the window shaded: dragging its edges
-// asks for another, as From and To do. A case's results page opens it with that case as a (Compare…), to pick b.
+// asks for another, as From and To do; then the same picture of each, side by side (ComparePictures.tsx). A case's
+// results page opens it with that case as a (Compare…), to pick b.
 import { ArrowLeft, ArrowLeftRight, Hourglass, RotateCcw, TriangleAlert } from "lucide-react";
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
@@ -28,6 +29,7 @@ import {
   KIND_TEXT, askOf, comparePagePath, compareWindowText, meshCheck, named, sideText, sideWindowText, signed,
   signedPercent, verdictOf,
 } from "./compareView";
+import { ComparePicturesCard } from "./ComparePictures";
 import { FIELD } from "./dialogParts";
 import { VerdictBadge } from "./Results";
 import { resultsPagePath, windowNumber, windowProblem } from "./resultsView";
@@ -486,10 +488,13 @@ export function ComparePage() {
       {doc.window && windowCard}
       <Dim busy={q.isPlaceholderData}><DifferencesCard doc={doc} /></Dim>
       {ask.abtest == null && (
-        // an end let go at the shorter run's end, where the window ends anyway, isn't kept in the address
-        <CompareCharts doc={doc} onWindow={(from, upTo) => void navigate(to(comparePagePath({
-          ...ask, from, to: upTo != null && upTo < Math.min(doc.a.end, doc.b.end) ? upTo : null,
-        })))} />
+        <>
+          {/* an end let go at the shorter run's end, where the window ends anyway, isn't kept in the address */}
+          <CompareCharts doc={doc} onWindow={(from, upTo) => void navigate(to(comparePagePath({
+            ...ask, from, to: upTo != null && upTo < Math.min(doc.a.end, doc.b.end) ? upTo : null,
+          })))} />
+          <ComparePicturesCard a={doc.a.case} b={doc.b.case} />
+        </>
       )}
       {pick}
     </>

@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The Compare screen in a real browser: in the demo, Compare… on a case's results page, the medium mesh picked as a
-// mesh study, its table and both runs' forces on one chart, and its finished A/B test's two runs from the test's own
-// page; with your own engine, two cases picked from the Results screen and compared with the pairing key, another
-// window asked for from the charts and kept in the address, and an engine too old to compare told so.
-import { expect, test, type Page } from "@playwright/test";
-import { KEY, mockEngine, pairingLink, resultsDoc } from "./engine";
+// mesh study, its table, both runs' forces on one chart and its pictures (the coarse case has none), and its finished
+// A/B test's two runs from the test's own page; with your own engine, two cases picked from the Results screen and
+// compared with the pairing key, the same picture of each side by side, another window asked for from the charts and
+// kept in the address, and an engine too old to compare told so.
+import { expect, test, type Locator, type Page } from "@playwright/test";
+import { KEY, mockEngine, pairingLink, resultsDoc, type PictureSetDoc } from "./engine";
+
+/** Whether a picture has loaded: its blob: URL has given the browser an image with a width. */
+const loaded = (img: Locator) => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0);
 
 /** Pairs with the pretend engine. */
 async function pair(page: Page) {
@@ -36,6 +40,14 @@ test("the demo's mesh study: Compare… on a case's results, the finer mesh pick
   await expect(page.getByRole("img", { name: "Drag of forceCoeffs in both runs, in N" })).toBeVisible();
   await expect(page.getByRole("img", { name: "Lift of forceCoeffs in both runs, in N" })).toBeVisible();
   await expect(page.getByRole("slider", { name: "Start of the averaged part" }).first()).toHaveAttribute("aria-valuenow", "1600");
+  // the same picture of each: the coarse case has no set in the demo, so the medium one's pictures show alone
+  await page.getByRole("heading", { name: "The same picture of each" }).scrollIntoViewIfNeeded();
+  await expect(page.getByText("No pictures of ahmed-25-coarse yet.")).toBeVisible();
+  const cut = page.getByRole("img", { name: /^Side cut on the centreline.+, of ahmed-25-medium at written time 2000$/ });
+  await expect.poll(() => loaded(cut)).toBe(true);
+  await page.getByLabel("Picture", { exact: true }).selectOption({ label: "Vortices, Q = 20,000 1/s², from behind" });
+  await expect.poll(() => loaded(page.getByRole("img", { name: /^Vortices, Q = 20,000 1\/s², from behind, of ahmed-25-medium/ })))
+    .toBe(true);
   // each run a link to its own results
   await page.getByRole("link", { name: "ahmed-25-medium", exact: true }).click();
   await expect(page).toHaveURL(/\/demo\/results\/ahmed-25-medium$/);
@@ -58,7 +70,14 @@ test("the demo's finished A/B test: Compare forces on its page compares its two 
 test("with your own engine, two cases from the Results screen are compared with the key, over a window from the charts", async ({ page }) => {
   const lower = resultsDoc("wing-v2");
   lower.groups[0]!.drag.mean = 15.5;
-  const engine = await mockEngine(page, { caseResults: [resultsDoc("wing"), lower], compare: true });
+  const set = (name: string): PictureSetDoc => ({
+    case: name, set: "2000", time: "2000", mean: false, kinds: ["cuts"], made: new Date(Date.now() - 3_600_000).toISOString(),
+    notes: [], pictures: [{ file: "cuts/c1_side_U.png", kind: "cuts", title: "Side cut: speed" },
+      { file: "cuts/c3_wake_Cpt.png", kind: "cuts", title: "Wake cut: Cp,t" }],
+  });
+  const engine = await mockEngine(page, {
+    caseResults: [resultsDoc("wing"), lower], compare: true, pictures: [set("wing"), set("wing-v2")],
+  });
   await pair(page);
   await page.getByRole("complementary").getByRole("link", { name: "Results" }).click();
   await page.getByRole("link", { name: "Compare two cases" }).click();
@@ -78,6 +97,21 @@ test("with your own engine, two cases from the Results screen are compared with 
   await expect(page.getByRole("img", { name: "Drag of forceCoeffs in both runs, in N" })).toBeVisible();
   const asked = () => engine.requests.filter((r) => new URL(r.url()).pathname === "/api/v1/compare");
   expect(asked().map((r) => new URL(r.url()).search)).toContain("?a=wing&b=wing-v2");
+
+  // the same picture of each, side by side, each fetched with the key; another picked
+  await page.getByRole("heading", { name: "The same picture of each" }).scrollIntoViewIfNeeded();
+  for (const name of ["wing", "wing-v2"]) {
+    await expect.poll(() => loaded(page.getByRole("img", { name: `Side cut: speed, of ${name} at written time 2000` }))).toBe(true);
+  }
+  await page.getByLabel("Picture", { exact: true }).selectOption("cuts/c3_wake_Cpt.png");
+  await expect.poll(() => loaded(page.getByRole("img", { name: "Wake cut: Cp,t, of wing-v2 at written time 2000" }))).toBe(true);
+  const pictures = engine.requests.filter((r) => /^\/api\/v1\/pictures\/wing(-v2)?\/2000\/cuts\//.test(new URL(r.url()).pathname));
+  expect(pictures.map((r) => new URL(r.url()).pathname).sort()).toEqual([
+    "/api/v1/pictures/wing-v2/2000/cuts/c1_side_U.png", "/api/v1/pictures/wing-v2/2000/cuts/c3_wake_Cpt.png",
+    "/api/v1/pictures/wing/2000/cuts/c1_side_U.png", "/api/v1/pictures/wing/2000/cuts/c3_wake_Cpt.png",
+  ]);
+  expect(pictures.every((r) => r.headers()["x-md-key"] === KEY)).toBe(true);
+  await page.getByRole("heading", { level: 1 }).scrollIntoViewIfNeeded();
 
   // Shift and an arrow move the window's start a tenth of the run earlier; letting go asks for it
   const start = page.getByRole("slider", { name: "Start of the averaged part" }).first();

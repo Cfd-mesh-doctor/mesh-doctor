@@ -2,20 +2,23 @@
 // The Compare screen (GET /compare, API 1.25): the demo's recorded mesh study of the coarse and medium Ahmed bodies,
 // with its table, both runs and their forces on one chart, and no other window; the same two as designs, with its
 // cells warning first; two cases picked, with your own engine; an A/B test's two runs; refusals and an engine too old
-// to compare; and the screen's words and numbers (compareView.ts).
+// to compare; the same picture of each, side by side (ComparePictures.tsx); and the screen's words and numbers
+// (compareView.ts).
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import recorded from "@/demo/compare.json";
 import { DEMO_COMPARE_NOTE } from "@/demo/results";
 import { demoTransport } from "@/demo/transport";
 import type { Transport } from "@/engine/client";
 import { EngineError } from "@/engine/errors";
-import type { Compared, Comparison, ForceHistory } from "@/engine/types";
+import type { Compared, Comparison, ForceHistory, PictureSet, PictureSetBrief } from "@/engine/types";
+import { catchDownloads } from "@/test/downloads";
 import { renderScreen } from "@/test/render";
 import { ComparePage } from "./Compare";
 import {
-  askOf, comparePagePath, compareWindowText, meshCheck, sideText, sideWindowText, signed, signedPercent, verdictOf,
+  askOf, comparePagePath, compareWindowText, firstSets, madeSets, meshCheck, pictureChoices, shownPicture, sideText,
+  sideWindowText, signed, signedPercent, verdictOf,
 } from "./compareView";
 
 const MESH = recorded.mesh as unknown as Comparison;
@@ -29,16 +32,43 @@ function forceRows() {
   return screen.getAllByRole("row").slice(1).map((r) => r.textContent ?? "");
 }
 
+/** A set of pictures of case `name` at written time `set`, made an hour ago (null: its first job is making it), with
+ *  a picture for each file (`kind/name.png`). */
+const pictureSet = (name: string, set: string, files: string[], made: string | null = "2026-11-25T10:00:00Z"): PictureSet => ({
+  case: name, set, time: set, mean: false, kinds: ["cuts", "vortices"], made, notes: [],
+  pictures: files.map((f) => ({ file: f, kind: f.startsWith("cuts/") ? "cuts" : "vortices", title: `${f.slice(f.indexOf("/") + 1, -4)} picture` })),
+});
+
 /** Your own engine: its cases with results, the comparison it answers (`answer`, of the path asked), or a refusal;
- *  `old`: one before API 1.25, which has no /compare; each case's force history settles to 50 N of drag. */
-function engine(o: { cases?: string[]; answer?: (path: string) => Comparison; refuse?: EngineError; old?: boolean } = {}) {
+ *  `old`: one before API 1.25, which has no /compare; each case's force history settles to 50 N of drag. `sets`: its
+ *  sets of pictures (none by default), each picture a PNG's first bytes; `fetched`, the pictures asked for. */
+function engine(o: {
+  cases?: string[]; answer?: (path: string) => Comparison; refuse?: EngineError; old?: boolean; sets?: PictureSet[];
+} = {}) {
   const asked: string[] = [];
+  const fetched: string[] = [];
+  const sets = o.sets ?? [];
   const transport: Transport = {
     kind: "engine",
     scope: "test",
     request: async <T,>(_method: string, path: string) => {
       asked.push(path);
       const [route = ""] = path.split("?");
+      if (route === "/jobs") return { items: [] } as T;
+      if (route === "/pictures") {
+        const of = new URLSearchParams(path.split("?")[1] ?? "").get("case");
+        const items: PictureSetBrief[] = sets.filter((s) => s.case === of).map((s) => ({
+          case: s.case, set: s.set, time: s.time, mean: s.mean, kinds: s.kinds, made: s.made,
+          count: s.made ? s.pictures.length : null, job: s.made ? null : { id: `20261125-100000-pictures-${s.case}-0001`, state: "running" },
+        }));
+        return { items } as T;
+      }
+      const set = /^\/pictures\/([^/]+)\/([^/]+)$/.exec(route);
+      if (set) {
+        const found = sets.find((s) => s.case === decodeURIComponent(set[1]!) && s.set === decodeURIComponent(set[2]!));
+        if (!found) throw new EngineError("not-found", "no such set", 404);
+        return structuredClone(found) as T;
+      }
       if (route === "/results") return { items: (o.cases ?? []).map((c) => ({ case: c })), waiting: [] } as T;
       const forces = /^\/results\/([^/]+)\/forces$/.exec(route);
       if (forces) {
@@ -52,8 +82,12 @@ function engine(o: { cases?: string[]; answer?: (path: string) => Comparison; re
       if (o.refuse) throw o.refuse;
       return (o.answer ?? (() => MESH))(path) as T;
     },
+    blob: async (path: string) => {
+      fetched.push(path);
+      return new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: "image/png" });
+    },
   };
-  return { transport, asked };
+  return { transport, asked, fetched };
 }
 
 const own = (query: string, e = engine()) => ({
@@ -62,6 +96,17 @@ const own = (query: string, e = engine()) => ({
 });
 
 describe("the Compare screen", () => {
+  // Pictures show through blob: URLs, which jsdom hasn't; the demo's are the bundle's, fetched.
+  let files: ReturnType<typeof catchDownloads>;
+  beforeEach(() => {
+    files = catchDownloads();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(new Uint8Array([0x89, 0x50]), { headers: { "Content-Type": "image/png" } })));
+  });
+  afterEach(() => {
+    files.restore();
+    vi.unstubAllGlobals();
+  });
+
   it("shows the demo's mesh study: each force's difference, its verdict and mesh check, both runs and their forces", async () => {
     demo("?a=ahmed-25-coarse&b=ahmed-25-medium&mesh=true");
     expect(await screen.findByRole("heading", { level: 1, name: "ahmed-25-coarse against ahmed-25-medium" })).toBeVisible();
@@ -91,6 +136,14 @@ describe("the Compare screen", () => {
     // the other group's charts
     await userEvent.selectOptions(screen.getByLabelText("Force group"), "forcesTotal");
     expect(await screen.findByRole("img", { name: "Drag of forcesTotal in both runs, in N" })).toBeVisible();
+    // the same picture of each: the demo's coarse case has no set, so the medium one's pictures show alone
+    expect(screen.getByRole("heading", { name: "The same picture of each" })).toBeVisible();
+    expect(screen.getByText("No pictures of ahmed-25-coarse yet.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Make pictures of ahmed-25-coarse…" })).toBeVisible();
+    expect(within(await screen.findByLabelText("Picture")).getAllByRole("option")).toHaveLength(5);
+    const cut = await screen.findByRole("img", { name: /^Side cut on the centreline.+Cp,t, of ahmed-25-medium at written time 2000$/ });
+    await waitFor(() => expect(cut.getAttribute("src")).toMatch(/^blob:test\//));
+    expect(screen.getByRole("link", { name: "Open its set of ahmed-25-medium" })).toHaveAttribute("href", "/demo/pictures/ahmed-25-medium/2000");
   });
 
   it("puts the two designs' cells warning first, and says the demo can't average them over another window", async () => {
@@ -172,6 +225,55 @@ describe("the Compare screen", () => {
     expect(rows.every((r) => /0 %[\d.]+Inside the noise$/.test(r))).toBe(true);    // every force the same on both
   });
 
+  it("puts the same picture of each side by side: of a set of the same written time first, another picked of either", async () => {
+    const cuts = ["cuts/c1_side_U.png", "cuts/c3_wake_Cpt.png"];
+    const e = engine({
+      sets: [pictureSet("ahmed-25-coarse", "1000", [...cuts, "vortices/Q20000_rear34.png"]),
+        pictureSet("ahmed-25-coarse", "2000", [...cuts, "vortices/Q20000_rear34.png"]),
+        pictureSet("ahmed-25-medium", "2000", [...cuts, "cuts/c4_only_medium.png", "vortices/Q20000_rear34.png"])],
+    });
+    own("?a=ahmed-25-coarse&b=ahmed-25-medium&mesh=true", e);
+    expect(await screen.findByRole("heading", { name: "The same picture of each" })).toBeVisible();
+    // a's newest set is 1000, but both have 2000: that first; b has one set, so no list for it
+    expect(await screen.findByLabelText("a's set")).toHaveValue("2000");
+    expect(screen.queryByLabelText("b's set")).toBeNull();
+    // the pictures both have, by kind, the first cut shown
+    const pick = await screen.findByLabelText("Picture");
+    expect(within(pick).getAllByRole("group").map((g) => g.getAttribute("label"))).toEqual(["Cuts", "Vortices"]);
+    expect(within(pick).getAllByRole("option").map((x) => x.textContent))
+      .toEqual(["c1_side_U picture", "c3_wake_Cpt picture", "Q20000_rear34 picture"]);
+    await waitFor(() => expect(e.fetched).toEqual(
+      ["/pictures/ahmed-25-coarse/2000/cuts/c1_side_U.png", "/pictures/ahmed-25-medium/2000/cuts/c1_side_U.png"]));
+    for (const img of screen.getAllByRole("img", { name: /^c1_side_U picture, of / })) {
+      await waitFor(() => expect(img.getAttribute("src")).toMatch(/^blob:test\//));
+    }
+    // another picture, then a's other set: each side asks for its own
+    await userEvent.selectOptions(pick, "vortices/Q20000_rear34.png");
+    await waitFor(() => expect(e.fetched).toContain("/pictures/ahmed-25-medium/2000/vortices/Q20000_rear34.png"));
+    await userEvent.selectOptions(screen.getByLabelText("a's set"), "1000");
+    await waitFor(() => expect(e.fetched).toContain("/pictures/ahmed-25-coarse/1000/vortices/Q20000_rear34.png"));
+    expect(screen.getByRole("link", { name: "Open its set of ahmed-25-coarse" })).toHaveAttribute("href", "/app/pictures/ahmed-25-coarse/1000");
+    expect(screen.getByText("written time 1000", { selector: "figcaption span" })).toBeVisible();
+  });
+
+  it("says when two sets have no picture in common, a case has none, or its first set is being made", async () => {
+    const first = own("?a=ahmed-25-coarse&b=ahmed-25-medium", engine({
+      sets: [pictureSet("ahmed-25-coarse", "2000", ["cuts/c1.png"]), pictureSet("ahmed-25-medium", "2000", ["cuts/c9.png"])],
+    }));
+    expect(await screen.findByText(/^These two sets have no picture in common\./)).toBeVisible();
+    expect(screen.queryByLabelText("Picture")).toBeNull();
+    first.unmount();
+
+    own("?a=ahmed-25-coarse&b=ahmed-25-medium", engine({
+      sets: [pictureSet("ahmed-25-medium", "2000", ["cuts/c1.png"], null)],
+    }));
+    expect(await screen.findByText("No pictures of ahmed-25-coarse yet.")).toBeVisible();
+    expect(screen.getByText("Its first set of pictures is being made: it shows here once made.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Make pictures of ahmed-25-medium…" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Make pictures of ahmed-25-coarse…" }));
+    expect(await screen.findByRole("dialog", { name: "Make pictures of ahmed-25-coarse" })).toBeVisible();
+  });
+
   it("says why it can't compare, with the cases to pick again, and that an older engine can't", async () => {
     const first = own("?a=wing&b=nope", engine({ cases: ["wing"], refuse: new EngineError("not-found", "no case nope in the cases folder", 404) }));
     expect(await screen.findByText("Nothing to compare")).toBeVisible();
@@ -214,5 +316,30 @@ describe("the Compare screen's words and numbers", () => {
     const made = { ...MESH.a, made: { template: "ahmed-body", size: "coarse" } };
     expect(sideText(made)).toBe("Steady · 478,901 cells · made from ahmed-body (coarse) · 400 values");
     expect(sideWindowText(MESH.a)).toBe("its judge's window: after iteration 1,600, up to 2,000");
+  });
+
+  it("picks the sets and the pictures to put side by side", () => {
+    const brief = (name: string, set: string, made: string | null = "2026-11-25T10:00:00Z"): PictureSetBrief =>
+      ({ case: name, set, time: set, mean: false, kinds: ["cuts"], made, count: 1, job: null });
+    // a set of the same name in both first, the newest of a's that b has too; else each one's newest made
+    expect(firstSets([brief("a", "3000"), brief("a", "2000"), brief("a", "1000")], [brief("b", "1000"), brief("b", "2000")]))
+      .toEqual(["2000", "2000"]);
+    expect(firstSets([brief("a", "3000", null), brief("a", "2000")], [brief("b", "1000")])).toEqual(["2000", "1000"]);
+    expect(firstSets([], [brief("b", "1000")])).toEqual([null, "1000"]);
+    expect(madeSets([brief("a", "1", null), brief("a", "2")]).map((s) => s.set)).toEqual(["2"]);
+    // the pictures both have in a's order, a cut over time's left out; one side's own when the other has none
+    const a = pictureSet("a", "2000", ["vortices/q.png", "cuts/c1.png", "cuts/c2.png"]);
+    const b = pictureSet("b", "2000", ["cuts/c2.png", "cuts/c1.png"]);
+    a.pictures.push({ file: "times/c1_U_0100.png", kind: "times", title: "at 100" });
+    expect(pictureChoices(a, b)?.map((p) => p.file)).toEqual(["cuts/c1.png", "cuts/c2.png"]);
+    expect(pictureChoices(null, a)?.map((p) => p.file)).toEqual(["vortices/q.png", "cuts/c1.png", "cuts/c2.png"]);
+    expect(pictureChoices(a, undefined)).toBeUndefined();
+    expect(pictureChoices(null, null)).toEqual([]);
+    // the one picked while it is a choice, else the first cut, else the first
+    const choices = pictureChoices(null, a)!;
+    expect(shownPicture(choices, "cuts/c2.png")?.file).toBe("cuts/c2.png");
+    expect(shownPicture(choices, "gone.png")?.file).toBe("cuts/c1.png");
+    expect(shownPicture(choices.slice(0, 1), null)?.file).toBe("vortices/q.png");
+    expect(shownPicture(undefined, null)).toBeUndefined();
   });
 });

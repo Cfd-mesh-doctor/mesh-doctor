@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The Compare screen's words and numbers (Compare.tsx): its address, what kind of comparison it is, a difference and
-// its verdict, and the window both runs are averaged over, in plain words.
+// its verdict, the window both runs are averaged over, in plain words, and the sets and pictures it puts side by side
+// (ComparePictures.tsx).
 import type { BadgeTone } from "@/components/ui/badge";
-import type { CompareAsk, Compared, Comparison, ComparedSide } from "@/engine/types";
+import type {
+  CompareAsk, Compared, Comparison, ComparedSide, Picture, PictureSet, PictureSetBrief,
+} from "@/engine/types";
 import { formatCount, formatInt, formatNumber } from "@/lib/format";
 import { windowNumber } from "./resultsView";
 
@@ -101,4 +104,31 @@ export function sideWindowText(s: ComparedSide): string {
   const w = s.window;
   const how = w.how === "settled" ? "from when its forces settled" : w.how === "given" ? "as asked" : "its judge's window";
   return `${how}: after ${s.transient ? "" : "iteration "}${at(s.transient, w.from)}, up to ${at(s.transient, w.to)}`;
+}
+
+/** A case's sets that have pictures (made at least once), in the engine's order: the newest made first. */
+export const madeSets = (sets: readonly PictureSetBrief[]) => sets.filter((s) => s.made != null);
+
+/** The set each side shows first: one both have by name, so the same written time of each (the newest of a's that b
+ *  has too); else each one's newest. Null for a side with none. */
+export function firstSets(a: readonly PictureSetBrief[], b: readonly PictureSetBrief[]): [string | null, string | null] {
+  const ma = madeSets(a), mb = madeSets(b);
+  const both = ma.find((s) => mb.some((t) => t.set === s.set));
+  return both ? [both.set, both.set] : [ma[0]?.set ?? null, mb[0]?.set ?? null];
+}
+
+/** The pictures to pick from, of each side's set (null: it has none; undefined: still being read): those both sets
+ *  have, by file, in a's order; with one side's set only, that one's own. A cut over time's pictures are left out,
+ *  each one written time of many. Undefined while a set is still being read. */
+export function pictureChoices(a: PictureSet | null | undefined, b: PictureSet | null | undefined): Picture[] | undefined {
+  if (a === undefined || b === undefined) return undefined;
+  const own = (s: PictureSet | null) => (s?.pictures ?? []).filter((p) => p.kind !== "times");
+  if (!a || !b) return own(a ?? b);
+  const files = new Set(own(b).map((p) => p.file));
+  return own(a).filter((p) => files.has(p.file));
+}
+
+/** The picture shown: the one picked while it is still a choice, else the first cut, else the first. */
+export function shownPicture(choices: readonly Picture[] | undefined, picked: string | null): Picture | undefined {
+  return choices?.find((p) => p.file === picked) ?? choices?.find((p) => p.kind === "cuts") ?? choices?.[0];
 }
