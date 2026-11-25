@@ -121,7 +121,10 @@ meshdoctor solve <name> --steady <run> # a transient run (DDES) of a solved stea
 meshdoctor full <case> <name>         # repair a copy of <case> as <workspace>/<name>
 meshdoctor ab <case> <name>           # A/B solver test: original vs repaired mesh
 meshdoctor judge <case>               # is this run converged? (steady or transient)
+meshdoctor results <case>             # its forces, coefficients and residuals, over the judge's window
+meshdoctor compare <a> <b>            # two runs' forces: is each difference real or inside the noise?
 meshdoctor transient-plan <case>      # a steady run won't settle: time step and hours of a transient run
+meshdoctor pictures <case>            # pictures of a solved case's flow, drawn by ParaView
 meshdoctor schema <kind> <file>       # check a result file against its versioned schema
 meshdoctor jobs [list|show|cancel]    # jobs started from the dashboard or the API
 meshdoctor report <name> [--html]     # one portable file: repair, map and A/B, paths removed
@@ -138,7 +141,7 @@ Without the `bin/` launcher or pip, `python3 -m meshdoctor <command>` from the c
 
 The dashboard's data is also a versioned JSON API under `/api/v1`, described at `http://localhost:8765/api/v1/openapi.json` (see [Architecture](docs/architecture.md#api-v1)). Starting a job through it needs the launch token from a dashboard page, or the web app's pairing key.
 
-**The web app:** the same engine also works from the Mesh Doctor web app, a static site at `https://mesh-doctor.vercel.app` (source in [`app/`](app/)). It runs in your browser and talks straight to the engine on this computer, so your cases and results never go to the site. From it you start repairs and A/B tests, follow them as jobs and read their reports. Start the engine with `meshdoctor serve` and leave its window open, then, from a second window, run `meshdoctor pair --open` once for each browser: it opens the pairing link, which holds the key, so treat it like a password. Chrome and Edge ask once to let the site reach apps on your device; Safari doesn't allow it. How it is kept safe: [Safety](docs/safety.md#the-dashboard-answers-only-you).
+**The web app:** the same engine also works from the Mesh Doctor web app, a static site at `https://mesh-doctor.vercel.app` (source in [`app/`](app/)). It runs in your browser and talks straight to the engine on this computer, so your cases and results never go to the site. From it you repair meshes and test the repairs (A/B tests), make and solve cases, plan and start transient runs and make pictures of a solved case's flow, each followed as a job, and read the reports, each case's results and comparisons of two runs. Start the engine with `meshdoctor serve` and leave its window open, then, from a second window, run `meshdoctor pair --open` once for each browser: it opens the pairing link, which holds the key, so treat it like a password. Chrome and Edge ask once to let the site reach apps on your device; Safari doesn't allow it. How it is kept safe: [Safety](docs/safety.md#the-dashboard-answers-only-you).
 
 **On another machine** (a cluster node, a lab PC): the dashboard listens on 127.0.0.1 only. Reach it through an SSH tunnel, never a public address:
 

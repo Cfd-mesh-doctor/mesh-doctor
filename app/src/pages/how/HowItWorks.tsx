@@ -317,6 +317,97 @@ export function HowItWorks() {
                 <code>forceCoeffs</code>, else the cross-flow axis with the larger force.
               </p>
 
+              <Sub>A solved case's results</Sub>
+              <p>
+                <code>meshdoctor results &lt;case&gt; [--from T] [--to T] [--json]</code> gives each force group's drag
+                and vertical force over an averaging window: the judge's by default (a steady run's last two judge
+                windows, a transient run's from when its forces settled), or the one <code>--from</code> and{" "}
+                <code>--to</code> give, in iterations or a transient run's seconds. For each it gives:
+              </p>
+              <ul className={list}>
+                <li>
+                  the mean, the standard deviation, the drift between the window's two halves and the uncertainty of
+                  the mean from batch means, in N;
+                </li>
+                <li>
+                  CdA and ClA (the forces over q = ½ρU²), L/D, and Cd and Cl for a group that a{" "}
+                  <code>forceCoeffs</code> function object covers, with that object's own reference area;
+                </li>
+                <li>each residual's first and final level and how many orders it fell, with the judge's verdict.</li>
+              </ul>
+              <p>
+                It warns in plain words when a force still drifts by more than 1&nbsp;% over the window (run longer
+                before comparing it with another run), and when the mesh has a single symmetry plane, since then the
+                forces may be for half a model. It only reads the case.
+              </p>
+              <p>
+                <code>meshdoctor compare &lt;a&gt; &lt;b&gt; [--from T] [--to T] [--json]</code> averages two runs over
+                the same window: up to the shorter run's end, from the later of their judges' starts. For each force
+                group in both it gives b's difference from a in N and in %, and whether that is real: larger than its
+                noise, which is each side's uncertainty of the mean or its drift, whichever is larger, added in
+                quadrature. Otherwise the difference is inside the noise. Two cases made from the same template at two
+                mesh sizes are a mesh study (as any two are with <code>--mesh</code>), which also says whether each
+                force moves less between the meshes than it swings. It warns when a design comparison's meshes differ
+                by more than 2&nbsp;% in cells, when only one is a half model, when their vertical forces point
+                opposite ways, and when one is still drifting.
+              </p>
+              <p>
+                In the web app, the Results screen lists each solved case's drag and downforce or lift with its verdict
+                and drift. A case's page has the table, its forces over the whole run with the averaging window shaded
+                (drag its edges to average over another), and Compare…, which puts another case beside it; an A/B
+                test's page has Compare forces for its two runs. The Compare screen shows the table, both sides' forces
+                on one chart for each force, and the same picture of each side by side.
+              </p>
+
+              <Sub>Pictures of the flow</Sub>
+              <p>
+                <code>meshdoctor pictures &lt;case&gt; [--time T] [--kinds ...] [--mean]</code> has ParaView's{" "}
+                <code>pvbatch</code> draw a solved case's flow offscreen, with the paraview-post scripts:
+              </p>
+              <ul className={list}>
+                <li>
+                  <strong>cuts</strong>: plane cuts coloured by speed, the pressure coefficient Cp or the total
+                  pressure coefficient Cp,t, from the case's own <code>cuts.json</code> (a case made from the Ahmed
+                  body template has one), or three made from the model's size;
+                </li>
+                <li>
+                  <strong>vortices</strong>: Q-criterion surfaces coloured by x-vorticity, at three levels scaled by
+                  the free-stream speed;
+                </li>
+                <li>
+                  <strong>spots</strong>: wall faces with unphysical pressure (Cp below -5, a numerical error), the
+                  worst one close up;
+                </li>
+                <li>
+                  <strong>times</strong>, only when asked: the first cut's speed at each written time up to the one
+                  pictured, at most 50;
+                </li>
+                <li>
+                  <strong>fastest</strong>, only when asked: the cells that set a transient run's time step, found as
+                  the transient plan finds them, drawn with the walls.
+                </li>
+              </ul>
+              <p>
+                It pictures the latest written time unless <code>--time</code> names another; with{" "}
+                <code>--mean</code>, a transient run's mean flow, each cut also showing how much the speed swings about
+                it. The case is only read: ParaView reads it through a folder of links in the workspace, and the set
+                goes in the workspace's <code>.pictures/&lt;case&gt;/&lt;time&gt;/</code>, its{" "}
+                <code>pictures.json</code> listing each picture and what it shows. The one exception is a time of a
+                run Mesh Doctor made that is still split onto its processes: it is joined first (
+                <code>reconstructPar -time</code>) into the run's own folder, as its solve would. A case you made is
+                read as it is, split. The scripts' cameras need the flow toward -x with z up, so a case in other axes
+                is refused with the reason. A computer's first set starts with a self test, a test vortex that must
+                come out red, which catches ParaView drawing nothing offscreen. Before a job starts, the engine checks
+                the free memory (about 0.6 GB a million cells, more for a time read split or a cut over time) and disk
+                space.
+              </p>
+              <p>
+                In the web app, the Pictures screen lists the sets, and Make pictures… starts one: a run or a case, its
+                time, the kinds and the mean flow, with the memory and disk space it needs shown first. A set's page
+                shows its pictures by kind, each opening large with Download; a cut over time plays through its times.
+                A solved run's page lists its own sets.
+              </p>
+
               <Sub>When a steady run cannot converge: the transient plan</Sub>
               <p>
                 A steady run that plateaus on a physically unsteady flow (a wing-tip vortex, a tyre wake) will not

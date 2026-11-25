@@ -15,7 +15,7 @@ export interface DocEntry {
 /** Read here: pages of this site, each kept equal to the doc or README section it comes from by that page's own test. */
 export const ON_SITE: DocEntry[] = [
   { title: "How it works", page: "/how-it-works", file: "how-it-works.md",
-    about: "Each step and the command behind it: the repair, which looks only at the mesh, then the checks that it helped." },
+    about: "Each step and the command behind it: the repair, which looks only at the mesh, the checks that it helped, a solved case's results and pictures of its flow." },
   { title: "Accuracy check", page: "/accuracy", file: "validation.md",
     about: "The Ahmed body, run through the same chain you would use for a car, against its wind-tunnel measurements." },
   { title: "Gallery", page: "/gallery", file: "gallery.md",

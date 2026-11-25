@@ -30,11 +30,12 @@ describe("finding a problem", () => {
 
   it("finds a web app error, and only it, by the title its error panel links with", () => {
     const quoted = GROUPS.find((g) => g.id === "web-app")!.table.rows.map((r) => r[0] ?? "").filter((s) => /^".+"$/.test(s));
-    expect(quoted).toHaveLength(10);
+    expect(quoted).toHaveLength(11);
     for (const seen of quoted) expect(found(seen.slice(1, -1))).toEqual([seen]);
-    // ...though every word of one is in another problem too: a few of them typed find both.
+    // ...though every word of one is in another problem too: a few of them typed find all three.
     expect(found("with that name already exists")).toEqual([
-      "\"A run with that name already exists\"", "\"An A/B test with that name already exists\""]);
+      "\"A run with that name already exists\"", "\"A case with that name already exists\"",
+      "\"An A/B test with that name already exists\""]);
   });
 
   it("finds nothing for words no problem has", () => {

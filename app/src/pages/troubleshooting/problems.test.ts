@@ -31,12 +31,13 @@ describe("the Troubleshooting page's problems", () => {
   it("quote the web app's messages as the app words them: the errors whose panel links here, and no others", () => {
     const web = GROUPS.find((g) => g.id === "web-app");
     const quoted = column(web!.table, "You see").flatMap((seen) => /^"(.+)"$/.exec(seen)?.slice(1) ?? []);
-    expect(quoted).toHaveLength(10);
+    expect(quoted).toHaveLength(11);
     const errors = [
       ...Object.keys(CODES).map((code) => new EngineError(code as ErrorCode, "what the engine said")),
       new EngineError("forbidden", "forbidden: missing or wrong pairing key (pair again: meshdoctor pair)", 403),
       new EngineError("bad-response", `HTTP 200 ${NOT_THE_ENGINE}`, 200),
       new EngineError("exists", "A/B test wing-fix already exists; extend it or replace it", 409),
+      new EngineError("exists", "a case named wing exists already; pick another name (a case you made is never changed)", 409),
     ];
     const linked = errors.map((e) => explain(e)).filter((x) => x.troubleshooting).map((x) => x.title);
     expect(linked.sort()).toEqual(quoted.sort());

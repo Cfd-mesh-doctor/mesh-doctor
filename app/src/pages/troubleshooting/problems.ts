@@ -180,6 +180,11 @@ export const GROUPS: ProblemGroup[] = [
           "pick another name: the app never replaces a run, so the one with that name keeps its results",
         ],
         [
+          "\"A case with that name already exists\"",
+          "the cases folder has a case of that name, which the list on screen didn't show yet: one you made, or a new case made here",
+          "pick another name: Mesh Doctor never changes a case you made, and **New case** makes one of its own again only when its job failed or was cancelled",
+        ],
+        [
           "\"An A/B test with that name already exists\"",
           "an A/B test takes the name of the run it tests, and that run has been tested, which the list on screen didn't show yet",
           "tick **Replace** to run it again (its results are deleted), or run it longer from the test's own page",
@@ -197,6 +202,26 @@ export const GROUPS: ProblemGroup[] = [
           "Ready to solve? (or `meshdoctor check`) warns: ParaView, pvbatch not found",
           "ParaView isn't installed (`tools/setup_linux.sh --no-paraview` leaves it out); only pictures of the flow need it",
           "`sudo apt install paraview python3-paraview` (about 600 MB), then check again",
+        ],
+        [
+          "Make pictures (or `meshdoctor pictures`) refuses: \"ParaView isn't installed, or pvbatch doesn't start\"",
+          "a picture job checks ParaView before it starts: `pvbatch` isn't found, or `pvbatch --version` fails",
+          "install it as the row above says; if it is installed, run `pvbatch --version` in WSL or Linux to see why it doesn't start",
+        ],
+        [
+          "A set's notes, or its job's failure, say `ParaView stopped (exit -9)`",
+          "ParaView ran out of memory and Linux stopped it. The engine checks the free memory before a picture job starts (about 0.6 GB a million cells, 0.9 GB for a time read split, 1.4 to 1.9 GB for a cut over time), but other programs can take some while it runs",
+          "close other programs, then make the set again; make fewer kinds at once (a cut over time takes the most); on Windows, WSL can be given more memory in `.wslconfig`",
+        ],
+        [
+          "A picture is blank: all background, with nothing drawn",
+          "ParaView drew nothing offscreen: its drawing (OpenGL) doesn't work where the engine runs. A computer's first set starts with a self test that catches this (next row)",
+          "start the engine again with Mesa's software drawing, `LIBGL_ALWAYS_SOFTWARE=1 meshdoctor serve` (or the same before `meshdoctor pictures`): slower, but it needs no graphics driver; then make the set again",
+        ],
+        [
+          "A set's notes say \"ParaView's self test didn't pass\"",
+          "a computer's first set starts with a self test, a test vortex that must come out red; the reason in brackets says what went wrong, and the set's pictures may be blank or wrongly coloured. The test runs again with each set until it passes",
+          "if ParaView drew nothing offscreen, as the row above; if the test vortex came out blue or turns the wrong way, the scripts are tested with Ubuntu 22.04's ParaView 5.10, so with another version don't trust the vortices' colours; otherwise the job's log says why",
         ],
         [
           "`No module named paraview`",
