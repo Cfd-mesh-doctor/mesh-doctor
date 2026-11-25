@@ -2093,7 +2093,7 @@
       "name": "GPL-3.0-or-later"
     },
     "title": "Mesh Doctor API",
-    "version": "1.24"
+    "version": "1.25"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -3086,6 +3086,574 @@
           }
         },
         "summary": "Is this computer ready?  `meshdoctor check` as JSON: Python, numpy, the folders, OpenFOAM 14, the programs a repair, an A/B test and a solve run, ParaView for pictures of the flow (API 1.14), and the memory, each with what was found and the fix, never this machine's folders (API 1.4)"
+      }
+    },
+    "/compare": {
+      "get": {
+        "operationId": "compare_runs",
+        "parameters": [
+          {
+            "description": "a case in the cases folder with a force history (GET /results)",
+            "in": "query",
+            "name": "a",
+            "required": false,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "the case to compare with a: each difference is b's less a's",
+            "in": "query",
+            "name": "b",
+            "required": false,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "instead of a and b: an A/B test (GET /abtests), its original mesh's run as a and its repaired mesh's as b",
+            "in": "query",
+            "name": "abtest",
+            "required": false,
+            "schema": {
+              "description": "plain folder name: letters, digits, _ . - (no leading dot), at most 80 characters",
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "average both after this iteration or second of flow (default: the later of their judges' starts)",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "description": "up to and with this iteration or second (default: the shorter run's end)",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "description": "true: a and b are a mesh study, one design at two mesh sizes (two cases made from one template at two sizes are one without it): each force also says whether it moves less between the meshes than it swings",
+            "in": "query",
+            "name": "mesh",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "a": {
+                      "properties": {
+                        "case": {
+                          "type": "string"
+                        },
+                        "cells": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "end": {
+                          "type": "number"
+                        },
+                        "made": {
+                          "description": "the template and mesh size it was made from, back through the cases it is a copy or a transient run of; null for a case you made",
+                          "properties": {
+                            "size": {
+                              "type": "string"
+                            },
+                            "template": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "template",
+                            "size"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "start": {
+                          "type": "number"
+                        },
+                        "symmetry": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "transient": {
+                          "type": "boolean"
+                        },
+                        "verdict": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "vertical": {
+                          "enum": [
+                            "downforce",
+                            "lift"
+                          ]
+                        },
+                        "warnings": {
+                          "description": "its own results' warnings",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "window": {
+                          "description": "its own results' window",
+                          "properties": {
+                            "from": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "how": {
+                              "enum": [
+                                "given",
+                                "settled",
+                                "judge"
+                              ]
+                            },
+                            "n": {
+                              "type": "integer"
+                            },
+                            "to": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "from",
+                            "to",
+                            "how",
+                            "n"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "case",
+                        "transient",
+                        "cells",
+                        "start",
+                        "end",
+                        "window",
+                        "verdict",
+                        "vertical",
+                        "symmetry",
+                        "made",
+                        "warnings"
+                      ],
+                      "type": "object"
+                    },
+                    "b": {
+                      "properties": {
+                        "case": {
+                          "type": "string"
+                        },
+                        "cells": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "end": {
+                          "type": "number"
+                        },
+                        "made": {
+                          "description": "the template and mesh size it was made from, back through the cases it is a copy or a transient run of; null for a case you made",
+                          "properties": {
+                            "size": {
+                              "type": "string"
+                            },
+                            "template": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "template",
+                            "size"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "start": {
+                          "type": "number"
+                        },
+                        "symmetry": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "transient": {
+                          "type": "boolean"
+                        },
+                        "verdict": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "vertical": {
+                          "enum": [
+                            "downforce",
+                            "lift"
+                          ]
+                        },
+                        "warnings": {
+                          "description": "its own results' warnings",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "window": {
+                          "description": "its own results' window",
+                          "properties": {
+                            "from": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "how": {
+                              "enum": [
+                                "given",
+                                "settled",
+                                "judge"
+                              ]
+                            },
+                            "n": {
+                              "type": "integer"
+                            },
+                            "to": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "from",
+                            "to",
+                            "how",
+                            "n"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "case",
+                        "transient",
+                        "cells",
+                        "start",
+                        "end",
+                        "window",
+                        "verdict",
+                        "vertical",
+                        "symmetry",
+                        "made",
+                        "warnings"
+                      ],
+                      "type": "object"
+                    },
+                    "cells": {
+                      "description": "b's cells less a's, as a fraction of a's",
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "groups": {
+                      "description": "each force group in both, by name, a's total group first (with b's total when their names differ)",
+                      "items": {
+                        "properties": {
+                          "drag": {
+                            "description": "one force of both: null where one of them has none, or for vertical forces that point opposite ways",
+                            "properties": {
+                              "a": {
+                                "description": "its mean over the window, in N",
+                                "type": "number"
+                              },
+                              "b": {
+                                "description": "its mean over the window, in N",
+                                "type": "number"
+                              },
+                              "diff": {
+                                "description": "b's mean less a's, in N",
+                                "type": "number"
+                              },
+                              "meshOk": {
+                                "description": "a mesh study only: it moves no more between the two meshes than it swings",
+                                "type": [
+                                  "boolean",
+                                  "null"
+                                ]
+                              },
+                              "noise": {
+                                "description": "what diff is judged against, in N: each side's noise (the larger of its mean's uncertainty and its drift in N) added in quadrature; null with under 25 values",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "pct": {
+                                "description": "diff in % of a's mean; null when a's is 0",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "real": {
+                                "description": "diff is larger than its noise; false: inside the noise; null: too few values to say",
+                                "type": [
+                                  "boolean",
+                                  "null"
+                                ]
+                              },
+                              "small": {
+                                "description": "under 1 % of the total drag: too small to judge by its %",
+                                "type": "boolean"
+                              },
+                              "swing": {
+                                "description": "the larger of the two standard deviations, in N",
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "a",
+                              "b",
+                              "diff",
+                              "pct",
+                              "noise",
+                              "real",
+                              "swing",
+                              "meshOk",
+                              "small"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "nameB": {
+                            "description": "its name in b (the totals' may differ)",
+                            "type": "string"
+                          },
+                          "patches": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": [
+                              "array",
+                              "null"
+                            ]
+                          },
+                          "total": {
+                            "description": "a's total group: the one its results take for the whole model",
+                            "type": "boolean"
+                          },
+                          "vertical": {
+                            "description": "one force of both: null where one of them has none, or for vertical forces that point opposite ways",
+                            "properties": {
+                              "a": {
+                                "description": "its mean over the window, in N",
+                                "type": "number"
+                              },
+                              "b": {
+                                "description": "its mean over the window, in N",
+                                "type": "number"
+                              },
+                              "diff": {
+                                "description": "b's mean less a's, in N",
+                                "type": "number"
+                              },
+                              "meshOk": {
+                                "description": "a mesh study only: it moves no more between the two meshes than it swings",
+                                "type": [
+                                  "boolean",
+                                  "null"
+                                ]
+                              },
+                              "noise": {
+                                "description": "what diff is judged against, in N: each side's noise (the larger of its mean's uncertainty and its drift in N) added in quadrature; null with under 25 values",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "pct": {
+                                "description": "diff in % of a's mean; null when a's is 0",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "real": {
+                                "description": "diff is larger than its noise; false: inside the noise; null: too few values to say",
+                                "type": [
+                                  "boolean",
+                                  "null"
+                                ]
+                              },
+                              "small": {
+                                "description": "under 1 % of the total drag: too small to judge by its %",
+                                "type": "boolean"
+                              },
+                              "swing": {
+                                "description": "the larger of the two standard deviations, in N",
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "a",
+                              "b",
+                              "diff",
+                              "pct",
+                              "noise",
+                              "real",
+                              "swing",
+                              "meshOk",
+                              "small"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "nameB",
+                          "total",
+                          "patches",
+                          "drag",
+                          "vertical"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "kind": {
+                      "description": "mesh: a mesh study, one design at two mesh sizes (two cases made from one template at two sizes, or any two with mesh=true); abtest: an A/B test's original mesh (a) and repaired one (b); design: any other two",
+                      "enum": [
+                        "design",
+                        "mesh",
+                        "abtest"
+                      ]
+                    },
+                    "vertical": {
+                      "description": "what both vertical forces are; null when they point opposite ways",
+                      "enum": [
+                        "downforce",
+                        "lift",
+                        null
+                      ],
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "warnings": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "window": {
+                      "description": "the window both are averaged over (the forces after from, up to and with to); null when one is steady and the other transient, each then over its own judge's",
+                      "properties": {
+                        "from": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "how": {
+                          "description": "judges: from the later of their judges' starts",
+                          "enum": [
+                            "given",
+                            "judges"
+                          ]
+                        },
+                        "to": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "from",
+                        "to",
+                        "how"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "a",
+                    "b",
+                    "kind",
+                    "window",
+                    "vertical",
+                    "cells",
+                    "groups",
+                    "warnings"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error (the code says which; see STATUS in api_v1.py)"
+          }
+        },
+        "summary": "Two runs' results compared over the same window, up to the shorter run's end, from the later of their judges' starts unless from is given: each force group's drag and vertical force in both, b's difference from a in N and %, and whether it is real or inside the noise (both means' uncertainty and drift); a mesh study (one template at two sizes, or mesh=true) also says whether each moves less between the meshes than it swings; and plain warnings (API 1.25)"
       }
     },
     "/disk": {

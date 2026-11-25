@@ -13,6 +13,7 @@
     python3 -m meshdoctor ab     extend | hotspots | mode ...         A/B follow-ups
     python3 -m meshdoctor judge  <case> [window|auto] [--to N]        convergence verdict
     python3 -m meshdoctor results <case> [--from T] [--to T]          forces, coefficients, residuals
+    python3 -m meshdoctor compare <a> <b> [--from T] [--to T]         two runs' forces: real or inside the noise
     python3 -m meshdoctor transient-plan <case> [--co 1,5,20]         time step and cost of a transient run
     python3 -m meshdoctor pictures <case> [--time T] [--kinds ...]   pictures of its flow (ParaView)
     python3 -m meshdoctor map    <name> [--hot "Label=<dir>"] ...     repair-vs-hotspot map
@@ -42,6 +43,7 @@ SCRIPTS = {
     "ab": "abtest.py",
     "judge": "abtest.py",
     "results": "results.py",
+    "compare": "compare.py",
     "transient-plan": "tplan.py",
     "pictures": "pictures.py",
     "map": "mapdata.py",

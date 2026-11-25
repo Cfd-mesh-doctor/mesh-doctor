@@ -120,6 +120,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Two runs' results compared over the same window, up to the shorter run's end, from the later of their judges' starts unless from is given: each force group's drag and vertical force in both, b's difference from a in N and %, and whether it is real or inside the noise (both means' uncertainty and drift); a mesh study (one template at two sizes, or mesh=true) also says whether each moves less between the meshes than it swings; and plain warnings (API 1.25) */
+        get: operations["compare_runs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/disk": {
         parameters: {
             query?: never;
@@ -1771,6 +1788,175 @@ export interface operations {
                         };
                         /** @description no check failed: a repair, an A/B test and a solve can run here (a warning doesn't stop them) */
                         ready: boolean;
+                    };
+                };
+            };
+            /** @description Error (the code says which; see STATUS in api_v1.py) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    compare_runs: {
+        parameters: {
+            query?: {
+                /** @description a case in the cases folder with a force history (GET /results) */
+                a?: string;
+                /** @description instead of a and b: an A/B test (GET /abtests), its original mesh's run as a and its repaired mesh's as b */
+                abtest?: string;
+                /** @description the case to compare with a: each difference is b's less a's */
+                b?: string;
+                /** @description average both after this iteration or second of flow (default: the later of their judges' starts) */
+                from?: number;
+                /** @description true: a and b are a mesh study, one design at two mesh sizes (two cases made from one template at two sizes are one without it): each force also says whether it moves less between the meshes than it swings */
+                mesh?: boolean;
+                /** @description up to and with this iteration or second (default: the shorter run's end) */
+                to?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        a: {
+                            case: string;
+                            cells: number | null;
+                            end: number;
+                            /** @description the template and mesh size it was made from, back through the cases it is a copy or a transient run of; null for a case you made */
+                            made: {
+                                size: string;
+                                template: string;
+                            } | null;
+                            start: number;
+                            symmetry: string[];
+                            transient: boolean;
+                            verdict: string | null;
+                            /** @enum {unknown} */
+                            vertical: "downforce" | "lift";
+                            /** @description its own results' warnings */
+                            warnings: string[];
+                            /** @description its own results' window */
+                            window: {
+                                from: number | null;
+                                /** @enum {unknown} */
+                                how: "given" | "settled" | "judge";
+                                n: number;
+                                to: number | null;
+                            };
+                        };
+                        b: {
+                            case: string;
+                            cells: number | null;
+                            end: number;
+                            /** @description the template and mesh size it was made from, back through the cases it is a copy or a transient run of; null for a case you made */
+                            made: {
+                                size: string;
+                                template: string;
+                            } | null;
+                            start: number;
+                            symmetry: string[];
+                            transient: boolean;
+                            verdict: string | null;
+                            /** @enum {unknown} */
+                            vertical: "downforce" | "lift";
+                            /** @description its own results' warnings */
+                            warnings: string[];
+                            /** @description its own results' window */
+                            window: {
+                                from: number | null;
+                                /** @enum {unknown} */
+                                how: "given" | "settled" | "judge";
+                                n: number;
+                                to: number | null;
+                            };
+                        };
+                        /** @description b's cells less a's, as a fraction of a's */
+                        cells: number | null;
+                        /** @description each force group in both, by name, a's total group first (with b's total when their names differ) */
+                        groups: {
+                            /** @description one force of both: null where one of them has none, or for vertical forces that point opposite ways */
+                            drag: {
+                                /** @description its mean over the window, in N */
+                                a: number;
+                                /** @description its mean over the window, in N */
+                                b: number;
+                                /** @description b's mean less a's, in N */
+                                diff: number;
+                                /** @description a mesh study only: it moves no more between the two meshes than it swings */
+                                meshOk: boolean | null;
+                                /** @description what diff is judged against, in N: each side's noise (the larger of its mean's uncertainty and its drift in N) added in quadrature; null with under 25 values */
+                                noise: number | null;
+                                /** @description diff in % of a's mean; null when a's is 0 */
+                                pct: number | null;
+                                /** @description diff is larger than its noise; false: inside the noise; null: too few values to say */
+                                real: boolean | null;
+                                /** @description under 1 % of the total drag: too small to judge by its % */
+                                small: boolean;
+                                /** @description the larger of the two standard deviations, in N */
+                                swing: number;
+                            } | null;
+                            name: string;
+                            /** @description its name in b (the totals' may differ) */
+                            nameB: string;
+                            patches: string[] | null;
+                            /** @description a's total group: the one its results take for the whole model */
+                            total: boolean;
+                            /** @description one force of both: null where one of them has none, or for vertical forces that point opposite ways */
+                            vertical: {
+                                /** @description its mean over the window, in N */
+                                a: number;
+                                /** @description its mean over the window, in N */
+                                b: number;
+                                /** @description b's mean less a's, in N */
+                                diff: number;
+                                /** @description a mesh study only: it moves no more between the two meshes than it swings */
+                                meshOk: boolean | null;
+                                /** @description what diff is judged against, in N: each side's noise (the larger of its mean's uncertainty and its drift in N) added in quadrature; null with under 25 values */
+                                noise: number | null;
+                                /** @description diff in % of a's mean; null when a's is 0 */
+                                pct: number | null;
+                                /** @description diff is larger than its noise; false: inside the noise; null: too few values to say */
+                                real: boolean | null;
+                                /** @description under 1 % of the total drag: too small to judge by its % */
+                                small: boolean;
+                                /** @description the larger of the two standard deviations, in N */
+                                swing: number;
+                            } | null;
+                        }[];
+                        /**
+                         * @description mesh: a mesh study, one design at two mesh sizes (two cases made from one template at two sizes, or any two with mesh=true); abtest: an A/B test's original mesh (a) and repaired one (b); design: any other two
+                         * @enum {unknown}
+                         */
+                        kind: "design" | "mesh" | "abtest";
+                        /**
+                         * @description what both vertical forces are; null when they point opposite ways
+                         * @enum {string|null}
+                         */
+                        vertical: "downforce" | "lift" | null;
+                        warnings: string[];
+                        /** @description the window both are averaged over (the forces after from, up to and with to); null when one is steady and the other transient, each then over its own judge's */
+                        window: {
+                            from: number | null;
+                            /**
+                             * @description judges: from the later of their judges' starts
+                             * @enum {unknown}
+                             */
+                            how: "given" | "judges";
+                            to: number;
+                        } | null;
                     };
                 };
             };

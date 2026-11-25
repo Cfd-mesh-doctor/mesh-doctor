@@ -653,6 +653,168 @@ class ResultsTest(unittest.TestCase):
         self.assertEqual((st, doc["error"]["code"]), (409, "not-ready"))
         self.assertNotIn(self.d, doc["error"]["message"])
 
+    def second(self, name, n, drag_of, wing=True, marker=None):
+        """Another case in the cases folder, as run_with_wing makes one: its body drag_of(t), 30 N of downforce."""
+        case = os.path.join(self.d, "cases", name)
+        os.makedirs(os.path.join(case, "system"))
+        with open(os.path.join(case, "system", "controlDict"), "w") as f:
+            f.write(RESULTS_CONTROL)
+        write_steady_run(case, n, lambda t: 1e-3 * math.exp(-t / 40) + 1e-6, drag_of)
+        if wing:
+            os.makedirs(os.path.join(case, "postProcessing", "wing", "0"))
+            with open(os.path.join(case, "postProcessing", "wing", "0", "forces.dat"), "w") as f:
+                f.write("".join(f"{t} ((2 0 -12) (0 0 0))\n" for t in range(1, n + 1)))
+        if marker:
+            with open(os.path.join(case, ".meshdoctor-case.json"), "w") as f:
+                json.dump({"state": "done", **marker}, f)
+        return case
+
+    @staticmethod
+    def cells(case, n):
+        os.makedirs(os.path.join(case, "constant", "polyMesh"), exist_ok=True)
+        with open(os.path.join(case, "constant", "polyMesh", "owner"), "w") as f:
+            f.write(f'FoamFile\n{{\n    note "nPoints:1 nCells:{n} nFaces:1 nInternalFaces:0";\n}}\n')
+
+    def test_two_runs_compared_over_the_same_window_real_or_inside_the_noise(self):
+        import api_v1, compare
+        drag = lambda t: 50 + 0.5 * math.sin(t / 7)                                   # noqa: E731
+        self.run_with_wing(600, drag)
+        self.second("car2", 800, lambda t: drag(t) + 2.0)                     # 2 N more drag, solved further
+        doc, why = compare.of("car", "car2")
+        self.assertIsNone(why)
+        # up to the shorter run's end, from the later of their judges' starts there: both (200, 600]
+        self.assertEqual((doc["kind"], doc["window"], doc["vertical"], doc["cells"]),
+                         ("design", {"from": 200, "to": 600, "how": "judges"}, "downforce", None))
+        self.assertEqual((doc["a"]["case"], doc["b"]["case"], doc["b"]["end"], doc["b"]["made"]), ("car", "car2", 600, None))
+        body, wing = doc["groups"]
+        self.assertEqual((body["name"], body["nameB"], body["total"], wing["name"], wing["total"]),
+                         ("body", "body", True, "wing", False))
+        x = [drag(t) for t in range(201, 601)]
+        d = body["drag"]
+        self.assertAlmostEqual(d["a"], statistics.fmean(x))
+        self.assertAlmostEqual(d["diff"], 2.0)
+        self.assertAlmostEqual(d["pct"], 2.0 / statistics.fmean(x) * 100)
+        ua = abtest.batch_means(x)["u"]
+        drift = abs(statistics.fmean(x[200:]) - statistics.fmean(x[:200]))
+        self.assertAlmostEqual(d["noise"], math.hypot(max(ua, drift), max(ua, drift)), places=6)
+        self.assertEqual((d["real"], d["meshOk"], d["small"]), (True, None, False))
+        self.assertAlmostEqual(d["swing"], statistics.pstdev(x))
+        # the same downforce: no difference, inside the noise (none: constant forces)
+        self.assertEqual((body["vertical"]["diff"], body["vertical"]["noise"], body["vertical"]["real"]), (0.0, 0.0, False))
+        self.assertEqual((wing["drag"]["diff"], wing["drag"]["real"], wing["drag"]["small"]), (0.0, False, False))
+        self.assertEqual(doc["warnings"], [])
+        # a difference smaller than the noise is inside it
+        shutil.rmtree(os.path.join(self.d, "cases", "car2"))
+        self.second("car2", 600, lambda t: drag(t) + 0.001)
+        self.assertIs(compare.of("car", "car2")[0]["groups"][0]["drag"]["real"], False)
+        # a window asked for, over both; the API answers the same, refusals naming no folders
+        doc, _ = compare.of("car", "car2", t_from=100, t_to=300)
+        self.assertEqual((doc["window"], doc["a"]["window"]["n"]), ({"from": 100, "to": 300, "how": "given"}, 200))
+        st, api_doc, _ = api_v1.handle("GET", "/api/v1/compare", {"a": "car", "b": "car2", "from": "100", "to": "300"})
+        self.assertEqual((st, api_doc), (200, json.loads(json.dumps(doc))))
+        self.assertEqual(api_v1.openapi()["paths"]["/compare"]["get"]["operationId"], "compare_runs")
+        for query, code in [({"a": "car"}, 400), ({"a": "car", "b": "car"}, 400), ({"a": "car", "b": "nope"}, 404),
+                            ({"a": "car", "b": "car2", "abtest": "x"}, 400), ({"abtest": "nope"}, 404),
+                            ({"abtest": "nope", "mesh": "true"}, 400), ({"a": "car", "b": "car2", "mesh": "1"}, 400),
+                            ({"a": "car", "b": "car2", "from": "300", "to": "100"}, 400),
+                            ({"a": "car", "b": "car2", "from": "700"}, 409)]:
+            st, err, _ = api_v1.handle("GET", "/api/v1/compare", query)
+            self.assertEqual(st, code, (query, err))
+            self.assertNotIn(self.d, err["error"]["message"])
+        self.assertEqual(api_v1.handle("GET", "/api/v1/compare", {"a": "car", "b": "car2", "from": "700"})[1]["error"]
+                         ["message"], "car's forces end at 600, before the window's from (700): pick an earlier from, "
+                                      "or let it solve longer")
+        # the command says the same in words
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            compare.main(["car", "car2"])
+        self.assertIn("car (a) against car2 (b): two designs", out.getvalue())
+        self.assertIn("inside the noise", out.getvalue())
+
+    def test_a_mesh_study_an_ab_test_and_the_warnings_of_unlike_runs(self):
+        import compare
+        drag = lambda t: 50 + 0.5 * math.sin(t / 7)                                   # noqa: E731
+        self.run_with_wing(600, drag)
+        with open(os.path.join(self.case, ".meshdoctor-case.json"), "w") as f:
+            json.dump({"state": "done", "template": "ahmed-body", "size": "coarse"}, f)
+        self.second("fine", 600, lambda t: drag(t) + 0.2, marker={"template": "ahmed-body", "size": "fine"})
+        # a transient run of the fine one, and a copy of it: made from the same template and size
+        self.second("fineT", 600, drag, marker={"transientOf": "fine"})
+        self.assertEqual(compare.origin(os.path.join(self.d, "cases", "fineT")),
+                         {"template": "ahmed-body", "size": "fine"})
+        doc, _ = compare.of("car", "fine")
+        self.assertEqual((doc["kind"], doc["a"]["made"], doc["b"]["made"]["size"]),
+                         ("mesh", {"template": "ahmed-body", "size": "coarse"}, "fine"))
+        body = doc["groups"][0]
+        # 0.2 N between the meshes, less than the drag's swing (0.35 N): it doesn't move more than it swings
+        self.assertEqual((body["drag"]["real"], body["drag"]["meshOk"], body["vertical"]["meshOk"]), (True, True, True))
+        # a design comparison of meshes 10 % apart in cells, a half model against a whole one, a group only one has
+        self.cells(self.case, 1_000_000)
+        other = self.second("v2", 600, drag, wing=False)
+        self.cells(other, 1_100_000)
+        self.boundary(("inlet", "patch"), ("symmetry", "symmetryPlane"), ("car", "wall"))
+        doc, _ = compare.of("car", "v2")
+        self.assertEqual((doc["kind"], doc["cells"], [g["name"] for g in doc["groups"]]), ("design", 0.1, ["body"]))
+        self.assertEqual(doc["warnings"], [
+            "Their meshes differ by 10.0 % in cells (1,000,000 and 1,100,000): a design comparison wants both meshed the "
+            "same way, with cells within 2 %, or part of the difference is the mesh's.",
+            "Only car has a symmetry plane: if it is half a model, double its forces before comparing them with the "
+            "other's.",
+            "Not compared, as only one of them has it: car's wing."])
+        # the same two as a mesh study, as you say they are: each force's mesh check, and no word of their cells
+        doc, _ = compare.of("car", "v2", mesh=True)
+        self.assertEqual((doc["kind"], doc["groups"][0]["drag"]["meshOk"]), ("mesh", True))
+        self.assertFalse([w for w in doc["warnings"] if w.startswith("Their meshes")])
+        # a run still drifting, and one too short to judge
+        self.second("grows", 600, lambda t: 50 + 0.01 * t)
+        self.assertIn("grows is still drifting over the window (over 1 % between its halves): run longer before "
+                      "trusting a small difference.", compare.of("car", "grows")[0]["warnings"])
+        doc, _ = compare.of("car", "grows", t_from=580)
+        self.assertEqual(doc["groups"][0]["drag"]["real"], None)
+        self.assertIn("Too few values in the window (under 25)", doc["warnings"][-1])
+        # an A/B test's two runs: its original mesh as a, its repaired one as b
+        top = os.path.join(self.d, "work", "wing-fix_ab")
+        for tag, extra in (("base", 0.0), ("fixed", 0.1)):
+            case = os.path.join(top, tag)
+            os.makedirs(os.path.join(case, "system"))
+            with open(os.path.join(case, "system", "controlDict"), "w") as f:
+                f.write(RESULTS_CONTROL)
+            write_steady_run(case, 600, lambda t: 1e-4, lambda t, e=extra: drag(t) + e)
+        doc, why = compare.of(abtest="wing-fix")
+        self.assertIsNone(why)
+        self.assertEqual((doc["kind"], doc["a"]["case"], doc["b"]["case"], doc["a"]["made"]),
+                         ("abtest", "wing-fix (original mesh)", "wing-fix (repaired mesh)", None))
+        self.assertAlmostEqual(doc["groups"][0]["drag"]["diff"], 0.1)
+        # steady against transient: each over its own judge's window, and no window can be asked for both
+        with open(os.path.join(self.d, "cases", "fineT", "system", "fvSchemes"), "w") as f:
+            f.write("ddtSchemes\n{\n    default Euler;\n}\n")
+        self.assertEqual(compare.of("car", "fineT", t_from=100),
+                         (None, ("bad-request", "car and fineT aren't both steady or both transient, so their windows "
+                                                "are in different units (iterations and seconds of flow): leave from "
+                                                "and to out, and each is averaged over its own judge's window")))
+
+    def test_groups_go_together_by_name_whichever_is_each_ones_total(self):
+        import compare
+        self.run_with_wing(600, lambda t: 50.0)
+        # b's wing has more drag than its body, so it is b's total group: each still goes with its own name
+        self.second("small", 600, lambda t: 1.0)
+        doc, _ = compare.of("car", "small")
+        self.assertEqual([(g["name"], g["nameB"], g["total"]) for g in doc["groups"]],
+                         [("body", "body", True), ("wing", "wing", False)])
+        self.assertAlmostEqual(doc["groups"][0]["drag"]["diff"], -49.0)
+        self.assertEqual(doc["warnings"], [])
+        # totals of different names, with nothing else in common, go together
+        other = self.second("whole", 600, lambda t: 51.0, wing=False)
+        os.rename(os.path.join(other, "postProcessing", "body"), os.path.join(other, "postProcessing", "all"))
+        doc, _ = compare.of("car", "whole")
+        self.assertEqual([(g["name"], g["nameB"], g["total"]) for g in doc["groups"]], [("body", "all", True)])
+        self.assertEqual(doc["warnings"], ["Not compared, as only one of them has it: car's wing."])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            compare.main(["car", "whole", "--mesh"])
+        self.assertIn("car (a) against whole (b): a mesh study", out.getvalue())
+        self.assertIn("\nbody/all *  ", out.getvalue())                     # the total's star, after a long name too
+
     def test_the_api_and_the_command_answer_the_same(self):
         import api_v1
         self.run_with_wing(300, lambda t: 50.0)

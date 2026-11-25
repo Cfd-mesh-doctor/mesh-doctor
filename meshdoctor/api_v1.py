@@ -29,7 +29,7 @@ import tplan
 import validate
 import version
 
-API_VERSION = "1.24"
+API_VERSION = "1.25"
 PREFIX = "/api/v1"
 WRITES_MAX = solve.transient.MAX_WRITES   # the most times a stretch of a transient run writes
 MAX_BODY = 64 * 1024
@@ -580,6 +580,96 @@ FORCE_HISTORY = {
 def results_forces(p, q, b):
     import results                         # only reads the case's force files
     return _answer(results.forces_of(_name(p["case"])))
+
+
+_MEAN_N = {"type": "number", "description": "its mean over the window, in N"}
+COMPARED = {
+    "type": ["object", "null"], "required": ["a", "b", "diff", "pct", "noise", "real", "swing", "meshOk", "small"],
+    "description": "one force of both: null where one of them has none, or for vertical forces that point opposite "
+                   "ways",
+    "properties": {
+        "a": _MEAN_N, "b": _MEAN_N, "diff": {"type": "number", "description": "b's mean less a's, in N"},
+        "pct": {"type": ["number", "null"], "description": "diff in % of a's mean; null when a's is 0"},
+        "noise": {"type": ["number", "null"],
+                  "description": "what diff is judged against, in N: each side's noise (the larger of its mean's "
+                                 "uncertainty and its drift in N) added in quadrature; null with under 25 values"},
+        "real": {"type": ["boolean", "null"],
+                 "description": "diff is larger than its noise; false: inside the noise; null: too few values to say"},
+        "swing": {"type": "number", "description": "the larger of the two standard deviations, in N"},
+        "meshOk": {"type": ["boolean", "null"],
+                   "description": "a mesh study only: it moves no more between the two meshes than it swings"},
+        "small": {"type": "boolean", "description": "under 1 % of the total drag: too small to judge by its %"}}}
+COMPARE_SIDE = {
+    "type": "object",
+    "required": ["case", "transient", "cells", "start", "end", "window", "verdict", "vertical", "symmetry", "made",
+                 "warnings"],
+    "properties": {
+        "case": {"type": "string"}, "transient": {"type": "boolean"},
+        "cells": {"type": ["integer", "null"]}, "start": {"type": "number"}, "end": {"type": "number"},
+        "window": {"type": "object", "required": ["from", "to", "how", "n"], "description": "its own results' window",
+                   "properties": {"from": {"type": ["number", "null"]}, "to": {"type": ["number", "null"]},
+                                  "how": {"enum": ["given", "settled", "judge"]}, "n": {"type": "integer"}}},
+        "verdict": {"type": ["string", "null"]}, "vertical": {"enum": ["downforce", "lift"]},
+        "symmetry": {"type": "array", "items": {"type": "string"}},
+        "made": {"type": ["object", "null"], "required": ["template", "size"],
+                 "properties": {"template": {"type": "string"}, "size": {"type": "string"}},
+                 "description": "the template and mesh size it was made from, back through the cases it is a copy "
+                                "or a transient run of; null for a case you made"},
+        "warnings": {"type": "array", "items": {"type": "string"}, "description": "its own results' warnings"}}}
+COMPARE = {
+    "type": "object", "required": ["a", "b", "kind", "window", "vertical", "cells", "groups", "warnings"],
+    "properties": {
+        "a": COMPARE_SIDE, "b": COMPARE_SIDE,
+        "kind": {"enum": ["design", "mesh", "abtest"],
+                 "description": "mesh: a mesh study, one design at two mesh sizes (two cases made from one template "
+                                "at two sizes, or any two with mesh=true); abtest: an A/B test's original mesh (a) and "
+                                "repaired one (b); design: any other two"},
+        "window": {"type": ["object", "null"], "required": ["from", "to", "how"],
+                   "description": "the window both are averaged over (the forces after from, up to and with to); null "
+                                  "when one is steady and the other transient, each then over its own judge's",
+                   "properties": {"from": {"type": ["number", "null"]}, "to": {"type": "number"},
+                                  "how": {"enum": ["given", "judges"],
+                                          "description": "judges: from the later of their judges' starts"}}},
+        "vertical": {"type": ["string", "null"], "enum": ["downforce", "lift", None],
+                     "description": "what both vertical forces are; null when they point opposite ways"},
+        "cells": {"type": ["number", "null"], "description": "b's cells less a's, as a fraction of a's"},
+        "groups": {"type": "array", "description": "each force group in both, by name, a's total group first "
+                                                   "(with b's total when their names differ)",
+                   "items": {"type": "object", "required": ["name", "nameB", "total", "patches", "drag", "vertical"],
+                             "properties": {
+                                 "name": {"type": "string"},
+                                 "nameB": {"type": "string", "description": "its name in b (the totals' may differ)"},
+                                 "total": {"type": "boolean",
+                                           "description": "a's total group: the one its results take for the "
+                                                          "whole model"},
+                                 "patches": {"type": ["array", "null"], "items": {"type": "string"}},
+                                 "drag": COMPARED, "vertical": COMPARED}}},
+        "warnings": {"type": "array", "items": {"type": "string"}}}}
+
+
+@route("GET", "/compare", "Two runs' results compared over the same window, up to the shorter run's end, from the "
+       "later of their judges' starts unless from is given: each force group's drag and vertical force in both, b's "
+       "difference from a in N and %, and whether it is real or inside the noise (both means' uncertainty and drift); "
+       "a mesh study (one template at two sizes, or mesh=true) also says whether each moves less between the meshes "
+       "than it swings; "
+       "and plain warnings (API 1.25)",
+       query={"a": {"schema": NAME, "description": "a case in the cases folder with a force history (GET /results)"},
+              "b": {"schema": NAME, "description": "the case to compare with a: each difference is b's less a's"},
+              "abtest": {"schema": NAME, "description": "instead of a and b: an A/B test (GET /abtests), its original "
+                                                        "mesh's run as a and its repaired mesh's as b"},
+              "from": {"schema": {"type": "number", "minimum": 0},
+                       "description": "average both after this iteration or second of flow (default: the later of "
+                                      "their judges' starts)"},
+              "to": {"schema": {"type": "number", "minimum": 0},
+                     "description": "up to and with this iteration or second (default: the shorter run's end)"},
+              "mesh": {"schema": {"type": "boolean"},
+                       "description": "true: a and b are a mesh study, one design at two mesh sizes (two cases made "
+                                      "from one template at two sizes are one without it): each force also says "
+                                      "whether it moves less between the meshes than it swings"}},
+       ok=COMPARE)
+def compare_runs(p, q, b):
+    import compare                         # only reads the two runs' force files and logs
+    return _answer(compare.of(q.get("a"), q.get("b"), q.get("abtest"), q.get("from"), q.get("to"), q.get("mesh")))
 
 
 @route("GET", "/live", "The live (transient) case: forces, averaging window, time step, processes, memory",

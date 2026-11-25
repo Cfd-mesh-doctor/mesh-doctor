@@ -69,6 +69,11 @@ export const DESIGN: DocSection[] = [
               "a solved case's results: `of_case()` returns a `results` document: each force group's drag and vertical force over an averaging window (the judge's by default: a steady run's last two judge windows, a transient run's from when its forces settled), with the mean, sd, drift between the window's two halves and the uncertainty of the mean (batch means), in N; CdA and ClA over q = ½ρU² from the case's rhoInf and freestream, L/D, and Cd and Cl only for a group that a forceCoeffs function object covers with its own Aref; each residual's first and final level and the orders it fell, the judge's verdict, and plain warnings (a drift over 1 %, a single symmetry plane: maybe half a model). `listing()` gives the results of every case with a force history, newest first, and `history()` each group's forces over the whole run, thinned for charts. `meshdoctor results` prints a case's; it only reads the case (API 1.23)"
             ],
             [
+              "`compare.py`",
+              "core + CLI",
+              "two runs' results over the same window (up to the shorter run's end, from the later of their judges' starts): each force group's difference in N and %, real or inside the noise (both means' uncertainty and drift, added in quadrature); a mesh study (one template at two sizes, found back through copies and transient runs, or any two with `--mesh`) also says whether each force moves less between the meshes than it swings; plain warnings (meshes over 2 % apart in cells, a half model against a whole one, a run still drifting). `meshdoctor compare` prints it; it only reads the two runs (API 1.25)"
+            ],
+            [
               "`repair.py`, `abtest.py`",
               "core + CLI",
               "the library functions (`full`, `fix`, `judge`, `run_one`, ...) are core; their `main()` is CLI"
@@ -170,6 +175,11 @@ export const DESIGN: DocSection[] = [
               "results",
               "`results` (CLI), the API (`GET /results`)",
               "people comparing solved cases; the web app's Results screen"
+            ],
+            [
+              "comparisons",
+              "`compare` (CLI), the API (`GET /compare`)",
+              "people comparing two designs, two mesh sizes or an A/B test's two runs"
             ],
             [
               "`meshDoctor/map.json`",
@@ -446,6 +456,11 @@ export const DESIGN: DocSection[] = [
               "`GET /results/{case}/forces`",
               "(new)",
               "a case's force history for charts: each force group's drag and vertical force over the whole run, in N and in the directions its results use, thinned to about 1000 runs of values, each kept by its lowest and highest so a swing or a spike still shows (`n` says how many there were); the total group first (API 1.24)"
+            ],
+            [
+              "`GET /compare?a=&b=&from=&to=&mesh=`",
+              "(new)",
+              "two runs' results over the same window (`?abtest=`: an A/B test's original and repaired runs): each force group's drag and vertical force in both, b's difference in N and %, its noise and whether it is real; a mesh study's mesh check; each side's cells, window, verdict and what it was made from; a mesh study with `mesh=true`; plain warnings; `400` for a bad pair or window, `404` for a missing case, `409 not-ready` without forces to average (API 1.25)"
             ]
           ]
         }
