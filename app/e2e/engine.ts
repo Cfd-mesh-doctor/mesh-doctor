@@ -235,6 +235,33 @@ export function forceHistoryOf(doc: ReturnType<typeof resultsDoc>) {
   };
 }
 
+/** Two of its cases' results compared as GET /compare answers it (API 1.25), as a mesh study if `mesh`: each force
+ *  group paired with b's of its name, over the window asked for (else their judges', from 1,600), the difference real
+ *  when over the two means' uncertainties added in quadrature. */
+export function compareOf(a: ReturnType<typeof resultsDoc>, b: ReturnType<typeof resultsDoc>, mesh: boolean,
+                          from: number | null = null, to: number | null = null) {
+  const given = from != null || to != null;
+  const window = { from: from ?? 1600, to: to ?? 2000, how: given ? "given" : "judges" };
+  const side = (d: typeof a) => ({
+    case: d.case, transient: d.transient, cells: d.cells, start: d.start, end: d.end,
+    window: given ? { ...window, how: "given", n: window.to - window.from } : d.window,
+    verdict: d.verdict, vertical: d.axes.vertical, symmetry: d.symmetry, made: null, warnings: d.warnings,
+  });
+  type Force = (typeof a)["groups"][number]["drag"];
+  const compared = (x: Force, y: Force) => {
+    const diff = y.mean - x.mean, noise = Math.hypot(x.u, y.u), swing = Math.max(x.sd, y.sd);
+    return { a: x.mean, b: y.mean, diff, pct: 100 * diff / x.mean, noise, real: Math.abs(diff) > noise, swing,
+             meshOk: mesh ? Math.abs(diff) <= swing : null, small: false };
+  };
+  const groups = a.groups.flatMap((g) => {
+    const h = b.groups.find((x) => x.name === g.name);
+    return h ? [{ name: g.name, nameB: h.name, total: g.total, patches: g.patches,
+                  drag: compared(g.drag, h.drag), vertical: compared(g.vertical, h.vertical) }] : [];
+  });
+  return { a: side(a), b: side(b), kind: mesh ? "mesh" : "design", window, vertical: a.axes.vertical,
+           cells: Math.abs(b.cells - a.cells) / Math.min(a.cells, b.cells), groups, warnings: [] };
+}
+
 /** Each picture it serves: a PNG of one pixel. */
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
   "base64");
@@ -277,6 +304,8 @@ export async function mockEngine(
     /** Its cases' results (GET /results, API 1.23), each as resultsDoc() makes it; none, as from an older engine,
      * unless given. A window asked for is averaged as given, with 20 N of drag. */
     caseResults?: ReturnType<typeof resultsDoc>[];
+    /** It compares two of those (GET /compare, API 1.25), as compareOf() does; not, as an older engine, unless set. */
+    compare?: boolean;
   } = {},
 ): Promise<MockEngine> {
   const state: MockEngine = {
@@ -480,6 +509,18 @@ export async function mockEngine(
       const [group] = doc.groups;
       return json(200, { ...doc, window: { from, to, how: "given", n: to - from },
         groups: [{ ...group, drag: { ...group!.drag, mean: 20 } }] });
+    }
+    // Its comparisons (API 1.25): two of its cases' results, as compareOf() makes them.
+    if (results && opts.compare && path === "/compare") {
+      const q = new URL(req.url()).searchParams;
+      const names = [q.get("a"), q.get("b")];
+      const [a, b] = names.map((n) => results.find((d) => d.case === n));
+      if (!a || !b) {
+        const missing = names.find((n) => !results.some((d) => d.case === n));
+        return json(404, { error: { code: "not-found", message: `no case ${missing} in the cases folder` } });
+      }
+      const at = (k: string) => (q.has(k) ? Number(q.get(k)) : null);
+      return json(200, compareOf(a, b, q.get("mesh") === "true", at("from"), at("to")));
     }
     const cancel = /^\/jobs\/([^/]+)\/cancel$/.exec(path);
     if (cancel && req.method() === "POST") {

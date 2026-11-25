@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { demoTransport } from "@/demo/transport";
@@ -67,6 +67,21 @@ describe("the sidebar's Coming next list", () => {
     expect(sidebar().getByText("A/B tests")).toBeVisible();
     await user.click(fold());
     expect(fold()).toHaveAttribute("aria-expanded", "false");
+  });
+});
+
+describe("the sidebar's lit item", () => {
+  it("is the screen open, or one under it; and Results on the Compare screen, which it leads to", () => {
+    const { unmount } = show();
+    expect(sidebar().getByRole("link", { name: /^Jobs/ })).toHaveAttribute("aria-current", "page");
+    expect(sidebar().getByRole("link", { name: "Overview" })).not.toHaveAttribute("aria-current");
+    unmount();
+    renderScreen(<AppLayout />, { path: "/demo/*", at: "/demo/results/ahmed-25-coarse", transport: demoTransport(undefined, 0) });
+    expect(sidebar().getByRole("link", { name: "Results" })).toHaveAttribute("aria-current", "page");
+    cleanup();
+    renderScreen(<AppLayout />, { path: "/demo/*", at: "/demo/compare?a=ahmed-25-coarse", transport: demoTransport(undefined, 0) });
+    expect(sidebar().getByRole("link", { name: "Results" })).toHaveAttribute("aria-current", "true");
+    expect(sidebar().getAllByRole("link").filter((a) => a.hasAttribute("aria-current"))).toHaveLength(1);
   });
 });
 

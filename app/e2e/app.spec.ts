@@ -561,7 +561,7 @@ test("the app without a pairing goes to Connect", async ({ page }) => {
 });
 
 test("every page runs under the site's Content-Security-Policy", async ({ page }) => {
-  // 26 pages, each waited on until it goes quiet: about 15 s alone, and up to 30 s, the default limit, beside the
+  // 29 pages, each waited on until it goes quiet: about 15 s alone, and up to 30 s, the default limit, beside the
   // other tests on a busy PC. The Pictures pages show the demo's pictures through blob: URLs.
   test.slow();
   const res = await page.goto("/");
@@ -576,6 +576,7 @@ test("every page runs under the site's Content-Security-Policy", async ({ page }
     "/", "/connect", "/install", "/report", "/estimate", "/how-it-works", "/accuracy", "/gallery", "/docs", "/troubleshooting",
     "/limits", "/safety", "/your-own-case", "/claude-code", "/dashboard-tour", "/architecture", "/demo", "/demo/cases", "/demo/solve", "/demo/repairs", "/demo/jobs", "/demo/settings", "/demo/estimate", "/demo/repairs/ahmed35-medium-fix/report",
     "/demo/pictures", "/demo/pictures/ahmed-25-medium/2000", "/demo/results", "/demo/results/ahmed-25-coarse",
+    "/demo/compare?a=ahmed-25-coarse&b=ahmed-25-medium&mesh=true",
   ]) {
     await page.goto(path);
     await page.waitForLoadState("networkidle");

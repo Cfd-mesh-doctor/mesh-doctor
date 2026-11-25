@@ -119,6 +119,7 @@ describe("one A/B test", () => {
     expect(await screen.findByText("Is the repaired-mesh run converged?")).toBeInTheDocument();
     expect(screen.getAllByText("still converging")).toHaveLength(2);
     expect(screen.getByRole("link", { name: "A/B tests" })).toHaveAttribute("href", "/demo/abtests");
+    expect(screen.getByRole("link", { name: "Compare forces" })).toHaveAttribute("href", "/demo/compare?abtest=ahmed25-coarse-fix");
     expect(document.title).toBe("A/B test of ahmed25-coarse-fix · Mesh Doctor");
   });
 
@@ -132,6 +133,7 @@ describe("one A/B test", () => {
     expect(await screen.findByText("Is the original-mesh run converged?")).toBeInTheDocument();
     expect(screen.queryByText(/Is the repaired-mesh run converged/)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Job details" })).toHaveAttribute("href", expect.stringMatching(/^\/demo\/jobs\?job=.*abtest-ahmed25-medium-fix/));
+    expect(screen.queryByRole("link", { name: "Compare forces" })).not.toBeInTheDocument(); // one run to compare yet
   });
 
   it("words a test of solver settings as the case's settings against the variant's, on the original mesh", async () => {

@@ -5,7 +5,8 @@ import { api } from "./client";
 import { useEngine } from "./context";
 import { asEngineError } from "./errors";
 import {
-  isActive, type AbtestDetail, type CaseResults, type DiskJobKind, type ForceHistory, type Job, type JobList,
+  isActive, type AbtestDetail, type CaseResults, type CompareAsk, type Comparison, type DiskJobKind, type ForceHistory,
+  type Job, type JobList,
   type JobRequest, type PictureSet, type PictureSetList, type ResultsList, type ResultsWindow, type RunDetail,
 } from "./types";
 
@@ -334,6 +335,24 @@ export function useForceHistory(name: string) {
     queryKey: [transport?.scope, "results", name, "forces"],
     queryFn: transport ? ({ signal }) => api.forceHistory(transport, name, signal) : skipToken,
     retry: false,
+    refetchInterval: (q) => (q.state.status === "error" ? false : IDLE_POLL_MS),
+  });
+}
+
+/** Two runs' results compared over the same window (GET /compare, API 1.25), every 15 s while it answers, as their
+ * results are; nothing is asked until two cases, or an A/B test, are named. While another window of the same two is
+ * asked for, the last answer shows (isPlaceholderData), never another pair's. A refusal (no such case, two it won't
+ * compare, nothing to average yet, an engine before API 1.25) isn't asked again until what is asked changes. */
+export function useComparison(ask: CompareAsk) {
+  const { transport } = useEngine();
+  const named = ask.abtest != null || (ask.a != null && ask.b != null);
+  const pair = [ask.a, ask.b, ask.abtest, ask.mesh];
+  return useQuery<Comparison>({
+    queryKey: [transport?.scope, "compare", ...pair, ask.from, ask.to],
+    queryFn: transport && named ? ({ signal }) => api.compare(transport, ask, signal) : skipToken,
+    retry: false,
+    placeholderData: (last, lastQuery) =>
+      (lastQuery && pair.every((x, i) => lastQuery.queryKey[i + 2] === x) ? last : undefined),
     refetchInterval: (q) => (q.state.status === "error" ? false : IDLE_POLL_MS),
   });
 }

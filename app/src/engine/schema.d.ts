@@ -1807,7 +1807,7 @@ export interface operations {
             query?: {
                 /** @description a case in the cases folder with a force history (GET /results) */
                 a?: string;
-                /** @description instead of a and b: an A/B test (GET /abtests), its original mesh's run as a and its repaired mesh's as b */
+                /** @description instead of a and b: an A/B test (GET /abtests), its original mesh's run as a and its repaired mesh's as b (of a test of solver settings on one mesh, its settings' and the variant's) */
                 abtest?: string;
                 /** @description the case to compare with a: each difference is b's less a's */
                 b?: string;
@@ -1937,7 +1937,7 @@ export interface operations {
                             } | null;
                         }[];
                         /**
-                         * @description mesh: a mesh study, one design at two mesh sizes (two cases made from one template at two sizes, or any two with mesh=true); abtest: an A/B test's original mesh (a) and repaired one (b); design: any other two
+                         * @description mesh: a mesh study, one design at two mesh sizes (two cases made from one template at two sizes, or any two with mesh=true); abtest: an A/B test's two runs, its original mesh's (a) and its repaired mesh's (b), or of a test of solver settings on one mesh, its settings' (a) and the variant's (b); design: any other two
                          * @enum {unknown}
                          */
                         kind: "design" | "mesh" | "abtest";

@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Navigation. Screens that later milestones add are listed already, marked "Soon", so the shape of the
 // whole app is visible from day one: under Coming next, folded away until it's opened, so the screens that work
-// come first. At its foot: Settings, the docs, the tour and a first run, step by step.
+// come first. At its foot: Settings, the docs, the tour and a first run, step by step. The screen open is lit, as is
+// the item of a screen it leads to (Results, on the Compare screen): the item says aria-current, "page" or "true".
 import {
   BookOpen, Calculator, ChartLine, ChevronDown, Compass, FlaskConical, FolderOpen, Footprints, Image, LayoutDashboard,
   ListChecks, Play, Settings, Toolbox, Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useId, useState } from "react";
-import { Link, NavLink } from "react-router";
+import { Link, matchPath, useLocation } from "react-router";
 import { Logo } from "@/components/brand/Logo";
 import { Dot } from "@/components/ui/badge";
 import { useAppPath, useEngine } from "@/engine/context";
@@ -24,6 +25,8 @@ interface Item {
   icon: LucideIcon;
   path?: string;
   soon?: string;
+  /** Screens outside its path that it leads to, which light it too. */
+  also?: string[];
 }
 
 // Solve sets cases up and runs them, so it comes after Cases, before what's done to a case (a repair, then an A/B
@@ -35,7 +38,7 @@ const MAIN: Item[] = [
   { label: "Repairs", icon: Wrench, path: "/repairs" },
   { label: "A/B tests", icon: FlaskConical, path: "/abtests" },
   { label: "Pictures", icon: Image, path: "/pictures" },
-  { label: "Results", icon: ChartLine, path: "/results" },
+  { label: "Results", icon: ChartLine, path: "/results", also: ["/compare"] },
   { label: "Jobs", icon: ListChecks, path: "/jobs" },
   { label: "Size estimator", icon: Calculator, path: "/estimate" },
 ];
@@ -68,6 +71,7 @@ function useComingNext(): [boolean, (open: boolean) => void] {
 
 function NavItem({ item, onNavigate, active }: { item: Item; onNavigate?: () => void; active?: number }) {
   const to = useAppPath();
+  const { pathname } = useLocation();
   const Icon = item.icon;
   const base = "group flex h-9 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors";
   if (item.path === undefined) {
@@ -79,32 +83,31 @@ function NavItem({ item, onNavigate, active }: { item: Item; onNavigate?: () => 
       </div>
     );
   }
+  // Its own screen, or one under it (Overview: only its own); else a screen it leads to.
+  const at = (path: string, end: boolean) => matchPath({ path: to(path), end }, pathname) != null;
+  const here = at(item.path, item.path === "");
+  const near = !here && (item.also ?? []).some((p) => at(p, false));
+  const on = here || near;
   return (
-    <NavLink
+    <Link
       to={to(item.path)}
-      end={item.path === ""}
       onClick={onNavigate}
-      className={({ isActive: on }) =>
-        cn(base, on ? "bg-surface text-foreground shadow-card ring-1 ring-border" : "text-muted-foreground hover:bg-surface-2 hover:text-foreground")
-      }
+      aria-current={here ? "page" : near ? "true" : undefined}
+      className={cn(base, on ? "bg-surface text-foreground shadow-card ring-1 ring-border" : "text-muted-foreground hover:bg-surface-2 hover:text-foreground")}
     >
-      {({ isActive: on }) => (
+      <Icon className={cn("size-4 shrink-0", on && "text-primary")} />
+      <span className="flex-1 truncate">{item.label}</span>
+      {active ? (
         <>
-          <Icon className={cn("size-4 shrink-0", on && "text-primary")} />
-          <span className="flex-1 truncate">{item.label}</span>
-          {active ? (
-            <>
-              <span aria-hidden className="rounded-full bg-primary-soft px-1.5 text-[11px] font-semibold text-primary tabular-nums">
-                {active}
-              </span>
-              {/* Said as "Jobs (1 active)", not as a bare "Jobs 1": running or waiting their turn, as the Jobs
-                  screen's Active filter counts them. */}
-              <span className="sr-only"> ({active} active)</span>
-            </>
-          ) : null}
+          <span aria-hidden className="rounded-full bg-primary-soft px-1.5 text-[11px] font-semibold text-primary tabular-nums">
+            {active}
+          </span>
+          {/* Said as "Jobs (1 active)", not as a bare "Jobs 1": running or waiting their turn, as the Jobs
+              screen's Active filter counts them. */}
+          <span className="sr-only"> ({active} active)</span>
         </>
-      )}
-    </NavLink>
+      ) : null}
+    </Link>
   );
 }
 

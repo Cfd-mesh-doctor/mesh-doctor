@@ -7,7 +7,7 @@
 
 <a> and <b> are cases in the cases folder with a force history (runs Mesh Doctor solved, or cases you solved
 yourself), or their folders; --abtest compares an A/B test's two runs: its original mesh's as a, its repaired mesh's
-as b.  They are only read.
+as b (of a test of solver settings on one mesh: its settings' run as a, the variant's as b).  They are only read.
 
 The window is the same for both: up to the shorter run's end (or --to), from the later of their judges' starts (or
 --from), each as results.py averages it.  Two runs that aren't both steady or both transient can't share one (its
@@ -35,7 +35,7 @@ import tplan
 CELLS_SAME = 0.02    # a design comparison's meshes: cells within 2 % of each other (the cfd-results skill's 1 to 2 %)
 CHAIN = 8            # how many copies and transient runs origin() follows back
 KINDS = {"design": "two designs", "mesh": "a mesh study: one design at two mesh sizes",
-         "abtest": "an A/B test: its original mesh against its repaired one"}
+         "abtest": "an A/B test's two runs"}
 
 
 def origin(case):
@@ -168,8 +168,9 @@ def compare(case_a, case_b, t_from=None, t_to=None, names=(None, None), abtest=F
                         "comparing them with the other's.")
     drifting = [d["case"] for d in (A, B) if any(w.startswith("Still drifting") for w in d["warnings"])]
     if drifting:
-        warnings.append(f"{' and '.join(drifting)} {'is' if len(drifting) == 1 else 'are'} still drifting over the "
-                        "window (over 1 % between its halves): run longer before trusting a small difference.")
+        one = len(drifting) == 1
+        warnings.append(f"{' and '.join(drifting)} {'is' if one else 'are'} still drifting over the window (over 1 % "
+                        f"between {'its' if one else 'their'} halves): run longer before trusting a small difference.")
     if any(x and x["real"] is None for r in groups for x in (r["drag"], r["vertical"])):
         warnings.append("Too few values in the window (under 25) to say how sure each mean is, so no difference is "
                         "judged: pick a longer window, or let them solve longer.")
@@ -179,6 +180,16 @@ def compare(case_a, case_b, t_from=None, t_to=None, names=(None, None), abtest=F
     return {"a": _side(A, oa), "b": _side(B, ob), "kind": kind, "window": shared,
             "vertical": A["axes"]["vertical"] if same_up else None, "cells": cells, "groups": groups,
             "warnings": warnings}
+
+
+def ab_names(abtest, result):
+    """What an A/B test's two runs are called, from its ab_result.json (abtest.py's, or None while it has none): its
+    original and repaired mesh's, the repaired one with its settings variant if it has one; or, for a test of solver
+    settings on one mesh (no fixedName), its settings' and the variant's."""
+    variant = result.get("variant") if isinstance(result, dict) else None
+    if variant and isinstance(result, dict) and result.get("fixedName") is None:
+        return f"{abtest} (its settings)", f"{abtest} ({variant})"
+    return f"{abtest} (original mesh)", f"{abtest} (repaired mesh{f', {variant}' if variant else ''})"
 
 
 def of(a=None, b=None, abtest=None, t_from=None, t_to=None, mesh=None):
@@ -196,7 +207,7 @@ def of(a=None, b=None, abtest=None, t_from=None, t_to=None, mesh=None):
         cases = [os.path.join(top, t) for t in ("base", "fixed")]
         if not all(os.path.isfile(os.path.join(c, "system", "controlDict")) for c in cases):
             return None, ("not-found", f"no A/B test {abtest} with both its runs")
-        names = (f"{abtest} (original mesh)", f"{abtest} (repaired mesh)")
+        names = ab_names(abtest, md_api._read_json(os.path.join(top, "ab_result.json")))
     else:
         if a is None or b is None:
             return None, ("bad-request", "give a and b (two cases to compare), or abtest (an A/B test's two runs)")
@@ -269,7 +280,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog=prog.name() + " compare", description=__doc__.split("\n\n")[0])
     ap.add_argument("cases", nargs="*", metavar="case", help="two cases with a force history: their names in the "
                                                              "cases folder, or their folders (only read)")
-    ap.add_argument("--abtest", help="an A/B test's name: its original mesh's run against its repaired mesh's")
+    ap.add_argument("--abtest", help="an A/B test's name: its two runs, its original mesh's against its repaired "
+                                     "mesh's (or its settings' against the variant's)")
     ap.add_argument("--from", dest="t_from", type=float, help="average both after this iteration or time (default: "
                                                               "the later of their judges' starts)")
     ap.add_argument("--to", dest="t_to", type=float, help="up to this iteration or time (default: the shorter run's "

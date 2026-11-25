@@ -163,6 +163,8 @@ describe("Results", () => {
     expect(wing.getByText("not converged (plateau/oscillation)")).toBeInTheDocument();
     expect(wing.getByText("3.1 %").closest("[title]")).toHaveAttribute("title", expect.stringMatching(/run it longer before comparing/));
     expect(screen.queryByText("Not averaged yet")).not.toBeInTheDocument();
+    // two cases with results, so two to compare
+    expect(screen.getByRole("link", { name: "Compare two cases" })).toHaveAttribute("href", "/app/compare");
   });
 
   it("lists the cases it can't average yet, and why", async () => {
@@ -203,6 +205,7 @@ describe("a case's results", () => {
     expect(screen.getByRole("heading", { name: "car" })).toBeInTheDocument();
     expect(screen.getByText(/Results · Steady, iterations 0 to 2,000 · 479 k cells · forces written 1 hour ago/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Results" })).toHaveAttribute("href", "/app/results");
+    expect(screen.getByRole("link", { name: "Compare…" })).toHaveAttribute("href", "/app/compare?a=car");
     expect(screen.getByText("± 0.0097 N · drift 0.2 %")).toBeInTheDocument();
     expect(screen.getByText("Lift")).toBeInTheDocument();
     expect(screen.getByText("16.07 N")).toBeInTheDocument();

@@ -4,12 +4,13 @@
 // address asks for another (?from=&to=), with the judge's verdict; every force group's forces and coefficients, and
 // how far its residuals fell. Plain warnings come first. Its force charts (ForceCharts.tsx, API 1.24) show a group's
 // forces over the whole run with the window shaded: dragging its edges, or moving them with the arrow keys, asks for
-// another, as From and To do. While another window is being averaged, the last one's numbers stay, dimmed.
-import { ArrowLeft, ChartLine, Hourglass, RotateCcw, TriangleAlert } from "lucide-react";
+// another, as From and To do. While another window is being averaged, the last one's numbers stay, dimmed. Compare…
+// opens the Compare screen with this case as a, to pick the case to compare it with.
+import { ArrowLeft, ArrowLeftRight, ChartLine, Hourglass, RotateCcw, TriangleAlert } from "lucide-react";
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
-import { EmptyState, PageHeader, StatTile } from "@/components/shared/page";
+import { CamelCaseName, EmptyState, PageHeader, StatTile } from "@/components/shared/page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,6 +23,7 @@ import type { CaseResults, ResultForce, ResultsWindow } from "@/engine/types";
 import { formatCells, formatNumber, formatRelative } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
+import { comparePagePath } from "./compareView";
 import { ForceCharts } from "./ForceCharts";
 import { DriftBadge, VerdictBadge } from "./Results";
 import {
@@ -163,7 +165,7 @@ const patchesText = (p: string[] | null) => (p ? p.join(", ") : "its patches are
 function GroupName({ g }: { g: CaseResults["groups"][number] }) {
   return (
     <TD>
-      <span className="font-medium wrap-anywhere">{g.name}</span>
+      <span className="font-medium wrap-anywhere"><CamelCaseName name={g.name} /></span>
       {g.total && <Badge tone="primary" className="ml-2">Total</Badge>}
       <div className="text-xs text-muted-foreground wrap-anywhere">{patchesText(g.patches)}</div>
     </TD>
@@ -341,9 +343,14 @@ export function CaseResultsPage() {
       title={name}
       description={sub.join(" · ")}
       actions={(
-        <Button variant="secondary" asChild>
-          <Link to={to("/results")}><ArrowLeft />Results</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" asChild>
+            <Link to={to("/results")}><ArrowLeft />Results</Link>
+          </Button>
+          <Button variant="secondary" asChild>
+            <Link to={to(comparePagePath({ a: name }))}><ArrowLeftRight />Compare…</Link>
+          </Button>
+        </div>
       )}
     />
   );

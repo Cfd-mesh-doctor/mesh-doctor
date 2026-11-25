@@ -179,7 +179,7 @@ export const DESIGN: DocSection[] = [
             [
               "comparisons",
               "`compare` (CLI), the API (`GET /compare`)",
-              "people comparing two designs, two mesh sizes or an A/B test's two runs"
+              "people comparing two designs, two mesh sizes or an A/B test's two runs; the web app's Compare screen"
             ],
             [
               "`meshDoctor/map.json`",

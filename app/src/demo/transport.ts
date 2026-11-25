@@ -14,7 +14,7 @@ import { DEMO_JUDGE_NOTE, DEMO_LIVE_NOTE, RECORDED_ABTESTS, briefOf, demoAbtest,
 import { DEMO_CLUSTERS_NOTE, recordedCluster } from "./clusters";
 import recorded from "./fixtures.json";
 import { briefOfSet, demoPictureSet, demoPictureSrc } from "./pictures";
-import { demoResultsAnswer } from "./results";
+import { demoCompare, demoResultsAnswer } from "./results";
 import templates from "./templates.json";
 
 type Answers = Record<string, unknown>;
@@ -309,6 +309,10 @@ export function demoTransport(answers: Answers = DEMO_ANSWERS, delayMs = DELAY_M
       if (route === "/results" || route.startsWith("/results/")) {
         const cases = (data["/cases"] as CaseList | undefined)?.items ?? [];
         return (await demoResultsAnswer(route, new URLSearchParams(path.split("?")[1] ?? ""), cases)) as T;
+      }
+      if (route === "/compare") {
+        const cases = (data["/cases"] as CaseList | undefined)?.items ?? [];
+        return (await demoCompare(new URLSearchParams(path.split("?")[1] ?? ""), cases, [...(await abtests()).keys()])) as T;
       }
       if (route === "/pictures") {
         const of = new URLSearchParams(path.split("?")[1] ?? "").get("case");

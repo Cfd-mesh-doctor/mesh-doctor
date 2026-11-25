@@ -60,7 +60,7 @@ Every file Mesh Doctor writes for another program to read carries `"schemaVersio
 | transient plan | `transient-plan` (CLI), a `tplan` job | people deciding on a transient run; the web app's run page |
 | pictures | `pictures` (CLI), a `pictures` job | people looking at a solved case's flow; the web app's Pictures screen and a run's page |
 | results | `results` (CLI), the API (`GET /results`) | people comparing solved cases; the web app's Results screen |
-| comparisons | `compare` (CLI), the API (`GET /compare`) | people comparing two designs, two mesh sizes or an A/B test's two runs |
+| comparisons | `compare` (CLI), the API (`GET /compare`) | people comparing two designs, two mesh sizes or an A/B test's two runs; the web app's Compare screen |
 | `meshDoctor/map.json` | map | repair map page, reports |
 | `.jobs/<id>.json` | job runner (`jobs.py`, `jobrun.py`) | API, `meshdoctor jobs`, dashboard |
 | `<name>.mdreport.json` | `meshdoctor report` (`report.py`) | the report viewer, anywhere |

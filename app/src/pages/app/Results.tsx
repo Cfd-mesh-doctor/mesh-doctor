@@ -4,7 +4,7 @@
 // A case opens on its own page (CaseResults.tsx), with every force group, its coefficients and residuals, and another
 // window to average over. The cases whose forces can't be averaged yet are listed with why. Asked for every 15 s: a
 // run that solves writes its forces as it goes.
-import { ChartLine, Hourglass, Play, TriangleAlert } from "lucide-react";
+import { ArrowLeftRight, ChartLine, Hourglass, Play, TriangleAlert } from "lucide-react";
 import { Link } from "react-router";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { EmptyState, PageHeader, TableSkeleton } from "@/components/shared/page";
@@ -16,6 +16,7 @@ import { useAppPath } from "@/engine/context";
 import { asEngineError } from "@/engine/errors";
 import { useResultsList } from "@/engine/hooks";
 import type { CaseResults, ResultsList } from "@/engine/types";
+import { comparePagePath } from "./compareView";
 import { formatCells, formatDateTime, formatNumber, formatRelative } from "@/lib/format";
 import { useTitle } from "@/lib/useTitle";
 import { judgeTone } from "@/report/summary";
@@ -126,9 +127,16 @@ export function Results() {
           </>
         }
         actions={q.data && (
-          <span className="text-[13px] text-muted-foreground">
-            Updated {formatRelative(new Date(q.dataUpdatedAt).toISOString())}
-          </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-[13px] text-muted-foreground">
+              Updated {formatRelative(new Date(q.dataUpdatedAt).toISOString())}
+            </span>
+            {items.length > 1 && (
+              <Button variant="secondary" asChild>
+                <Link to={to(comparePagePath())}><ArrowLeftRight />Compare two cases</Link>
+              </Button>
+            )}
+          </div>
         )}
       />
       {q.isError && !old && (

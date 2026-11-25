@@ -6,7 +6,7 @@
 // solves, the engine's live monitor adds its iteration, pace and a judge so far. A run is judged (GET
 // /abtests/{name}/judge) once it has ended. Run longer continues the second run of a test that has ended
 // (StartAbTest.tsx); a test just started shows as waiting until its job makes its folder.
-import { ArrowLeft, FastForward, FileText, ListChecks } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, FastForward, FileText, ListChecks } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import { AbStateBadge } from "@/components/shared/badges";
@@ -32,6 +32,7 @@ import {
   abJobOf, abState, abWords, lastIteration, liveHistory, outcome, settingsOf, stepSide, stepText, type AbState,
 } from "@/report/abtest";
 import { abSummary, judgeOf } from "@/report/summary";
+import { comparePagePath } from "./compareView";
 import { ExtendAbTestDialog, type ExtendTarget } from "./StartAbTest";
 import { secondRunAt } from "./abStart";
 
@@ -262,6 +263,11 @@ export function AbTest() {
       {report && (
         <Button variant="secondary" asChild>
           <Link to={to(`/repairs/${encodeURIComponent(name)}/report`)}><FileText />Repair report</Link>
+        </Button>
+      )}
+      {detail?.result?.finished && (
+        <Button variant="secondary" asChild>
+          <Link to={to(comparePagePath({ abtest: name }))}><ArrowLeftRight />Compare forces</Link>
         </Button>
       )}
       {job && (

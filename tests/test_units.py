@@ -785,6 +785,14 @@ class ResultsTest(unittest.TestCase):
         self.assertEqual((doc["kind"], doc["a"]["case"], doc["b"]["case"], doc["a"]["made"]),
                          ("abtest", "wing-fix (original mesh)", "wing-fix (repaired mesh)", None))
         self.assertAlmostEqual(doc["groups"][0]["drag"]["diff"], 0.1)
+        # named for what it tests: the repaired mesh with a settings variant, or one mesh's settings against another's
+        for result, names in [({"fixedName": "wing-fix", "variant": "simplec"},
+                               ("wing-fix (original mesh)", "wing-fix (repaired mesh, simplec)")),
+                              ({"fixedName": None, "variant": "relax"}, ("wing-fix (its settings)", "wing-fix (relax)"))]:
+            with open(os.path.join(top, "ab_result.json"), "w") as f:
+                json.dump(result, f)
+            doc, _ = compare.of(abtest="wing-fix")
+            self.assertEqual((doc["a"]["case"], doc["b"]["case"]), names)
         # steady against transient: each over its own judge's window, and no window can be asked for both
         with open(os.path.join(self.d, "cases", "fineT", "system", "fvSchemes"), "w") as f:
             f.write("ddtSchemes\n{\n    default Euler;\n}\n")

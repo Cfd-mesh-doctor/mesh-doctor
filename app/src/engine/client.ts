@@ -7,7 +7,7 @@ import type {
   AbtestDetail, AbtestList, AbtestLive, CaseJudge, CaseList, ClusterShape, DiskInfo, DiskJob, DiskJobKind, EngineInfo, Job,
   JobList, JobRequest, JudgeAnswer, MachineInfo, PictureSet, PictureSetList, PicturesDeleted, Readiness, RepairList,
   ResultsList, ResultsWindow, RunDetail, RunList, RunLive, RunValidation, TemplateList, TransientPlan, VariantList,
-  CaseResults, ForceHistory,
+  CaseResults, CompareAsk, Comparison, ForceHistory,
 } from "./types";
 import { API_MAJOR } from "./types";
 import type { Report } from "@/report/read";
@@ -126,6 +126,21 @@ export function resultsPath(name: string, w: ResultsWindow): string {
   return `/results/${encodeURIComponent(name)}${s ? `?${s}` : ""}`;
 }
 
+/** GET /compare: two cases (with mesh=true for a mesh study), or an A/B test's two runs, with the window's from and to
+ *  where they are asked for. */
+export function comparePath(ask: CompareAsk): string {
+  const q = new URLSearchParams();
+  if (ask.abtest != null) q.set("abtest", ask.abtest);
+  else {
+    if (ask.a != null) q.set("a", ask.a);
+    if (ask.b != null) q.set("b", ask.b);
+    if (ask.mesh) q.set("mesh", "true");
+  }
+  if (ask.from != null) q.set("from", String(ask.from));
+  if (ask.to != null) q.set("to", String(ask.to));
+  return `/compare?${q.toString()}`;
+}
+
 /** The API calls the screens use; each one is a route in the engine's OpenAPI document. */
 export const api = {
   async info(t: Transport, signal?: AbortSignal): Promise<EngineInfo> {
@@ -230,4 +245,7 @@ export const api = {
   /** One case's force history for charts (API 1.24); an older engine answers not-found. */
   forceHistory: (t: Transport, name: string, signal?: AbortSignal) =>
     t.request<ForceHistory>("GET", `/results/${encodeURIComponent(name)}/forces`, undefined, signal),
+  /** Two runs' results compared over the same window (API 1.25); an older engine answers not-found. */
+  compare: (t: Transport, ask: CompareAsk, signal?: AbortSignal) =>
+    t.request<Comparison>("GET", comparePath(ask), undefined, signal),
 };

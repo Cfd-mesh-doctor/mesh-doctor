@@ -93,6 +93,22 @@ export function Field({ label, children, mono }: { label: string; children: Reac
   );
 }
 
+/** A name with a break offered where each word of its camelCase starts (forceCoeffs: force, Coeffs), so a narrow
+ *  column breaks it there before anywhere else; a <wbr> adds no text, so it reads and copies as it is. */
+export function CamelCaseName({ name }: { name: string }) {
+  const parts = name.replace(/([a-z0-9])([A-Z])/g, "$1\u0000$2").split("\u0000");
+  return (
+    <>
+      {parts.map((part, i) => (
+        <Fragment key={i}>
+          {i > 0 && <wbr />}
+          {part}
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
 /** A path with a break offered after each slash, as browsers don't break there on their own. A <wbr> adds no text,
  *  so the path copies as it is. */
 function breakAfterSlashes(text: string): ReactNode {

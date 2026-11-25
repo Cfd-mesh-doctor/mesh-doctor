@@ -53,6 +53,7 @@ function screens(home: string): RouteObject[] {
       handle: h("Results of a case"),
       lazy: async () => ({ Component: (await import("@/pages/app/CaseResults")).CaseResultsPage }),
     },
+    { path: "compare", handle: h("Compare"), lazy: async () => ({ Component: (await import("@/pages/app/Compare")).ComparePage }) },
     {
       path: "first-run",
       handle: h("First run"),

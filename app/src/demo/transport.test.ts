@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { describe, expect, it, vi } from "vitest";
 import { api } from "@/engine/client";
-import type { Job } from "@/engine/types";
+import type { CompareAsk, Job } from "@/engine/types";
 import { DEMO_CLUSTERS_NOTE, RECORDED_CLUSTERS, recordedCluster } from "./clusters";
 import clusters from "./clusters.json";
 import recorded from "./fixtures.json";
+import compared from "./compare.json";
 import forces from "./forces.json";
-import { DEMO_RESULTS_NOTE, RECORDED_RESULTS } from "./results";
+import forcesMedium from "./forces-medium.json";
+import { DEMO_COMPARE_NOTE, DEMO_RESULTS_NOTE, RECORDED, RECORDED_COMPARE_AB, RECORDED_RESULTS } from "./results";
 import results from "./results.json";
+import resultsMedium from "./results-medium.json";
 import { demoTransport, shiftTimes, withCaseSizes } from "./transport";
 
 const job = (id: string, state: Job["state"], at: string): Job => ({
@@ -146,10 +149,10 @@ describe("demo transport", () => {
     expect(doc.checks.find((c) => c.id === "memory")?.found).toBe(`${(free / 1024).toFixed(1)} GB available`);
   });
 
-  it("has the results of its recorded case, its forces written 4 h ago, and says what it didn't record", async () => {
-    const t = demoTransport({ ...answers(), "/cases": { items: [RECORDED_RESULTS, "ahmed-25-fine"] } }, 0);
+  it("has the results of its recorded cases, their forces written 4 and 5 h ago, and says what it didn't record", async () => {
+    const t = demoTransport({ ...answers(), "/cases": { items: [...RECORDED, "ahmed-25-fine"] } }, 0);
     const list = await api.resultsList(t);
-    expect(list).toMatchObject({ items: [{ case: RECORDED_RESULTS }], waiting: [] });
+    expect(list).toMatchObject({ items: [{ case: RECORDED_RESULTS }, { case: "ahmed-25-medium" }], waiting: [] });
     const doc = await api.caseResults(t, RECORDED_RESULTS, { from: null, to: null });
     expect(doc).toMatchObject({ schemaVersion: "1.1", transient: false, window: { from: 1600, to: 2000, how: "judge", n: 400 } });
     const hours = (Date.now() - Date.parse(doc.updated!)) / 3_600_000;
@@ -164,7 +167,7 @@ describe("demo transport", () => {
     await expect(api.caseResults(t, RECORDED_RESULTS, { from: 1000, to: null }))
       .rejects.toMatchObject({ code: "unavailable", message: DEMO_RESULTS_NOTE });
     await expect(api.caseResults(t, "ahmed-25-fine", { from: null, to: null }))
-      .rejects.toMatchObject({ code: "unavailable", message: expect.stringContaining(`${RECORDED_RESULTS} only`) });
+      .rejects.toMatchObject({ code: "unavailable", message: expect.stringContaining(`${RECORDED.join(" and ")} only`) });
     await expect(api.caseResults(t, "nope", { from: null, to: null })).rejects.toMatchObject({ code: "not-found" });
 
     // its force history: each group's every 4th iteration, the total group first, whose window's mean is its results'
@@ -181,12 +184,64 @@ describe("demo transport", () => {
     await expect(api.forceHistory(t, "ahmed-25-fine")).rejects.toMatchObject({ code: "unavailable" });
     await expect(api.forceHistory(t, "nope")).rejects.toMatchObject({ code: "not-found" });
     await expect(t.request("GET", "/results/nope/more")).rejects.toMatchObject({ code: "not-found" });
+
+    // the medium mesh's, for the comparison: its forces written 5 h ago, its forcesTotal group the total one
+    const medium = await api.caseResults(t, "ahmed-25-medium", { from: null, to: null });
+    expect(medium).toMatchObject({ case: "ahmed-25-medium", cells: 835_565, window: { from: 1600, to: 2000, n: 400 } });
+    expect((Date.now() - Date.parse(medium.updated!)) / 3_600_000).toBeCloseTo(5, 1);
+    expect(medium.groups.map((x) => [x.name, x.total])).toEqual([["forcesTotal", true], ["forceCoeffs", false]]);
+    const mh = await api.forceHistory(t, "ahmed-25-medium");
+    expect(mh.groups.map((x) => [x.name, x.total, x.t.length, x.t.at(-1)])).toEqual([
+      ["forcesTotal", true, 501, 2000], ["forceCoeffs", false, 501, 2000],
+    ]);
+  });
+
+  it("compares the coarse and medium meshes, as a mesh study or two designs, and its finished A/B test's two runs", async () => {
+    const t = demoTransport({ ...answers(), "/cases": { items: [...RECORDED, "ahmed-25-fine"] } }, 0);
+    const ask = (q: Partial<CompareAsk>) =>
+      api.compare(t, { a: null, b: null, abtest: null, mesh: false, from: null, to: null, ...q });
+    const [coarse, medium] = RECORDED;
+    const mesh = await ask({ a: coarse, b: medium, mesh: true });
+    expect(mesh).toMatchObject({ kind: "mesh", a: { case: coarse, cells: 478_901 }, b: { case: medium, cells: 835_565 },
+                                 window: { from: 1600, to: 2000, how: "judges" }, vertical: "lift", warnings: [] });
+    // each force group paired with the other's by name, the total ones first
+    expect(mesh.groups.map((g) => [g.name, g.nameB, g.total])).toEqual([
+      ["forceCoeffs", "forceCoeffs", true], ["forcesTotal", "forcesTotal", false],
+    ]);
+    const drag = mesh.groups[0]!.drag!;
+    expect(drag.diff).toBeCloseTo(drag.b - drag.a, 9);
+    expect([drag.real, drag.meshOk]).toEqual([true, false]);
+    const design = await ask({ a: coarse, b: medium });
+    expect(design.kind).toBe("design");
+    expect(design.warnings[0]).toMatch(/^Their meshes differ by 74\.5 % in cells \(478,901 and 835,565\)/);
+    const ab = await ask({ abtest: RECORDED_COMPARE_AB });
+    expect(ab).toMatchObject({ kind: "abtest", a: { case: `${RECORDED_COMPARE_AB} (original mesh)`, made: null },
+                               b: { case: `${RECORDED_COMPARE_AB} (repaired mesh)` } });
+    expect(ab.groups.every((g) => g.drag?.diff === 0 && g.drag.real === false)).toBe(true);
+
+    // the rest isn't in the demo, and what the engine refuses it refuses the same way
+    const refused = (q: Partial<CompareAsk>, code: string, message?: string) =>
+      expect(ask(q)).rejects.toMatchObject(message == null ? { code } : { code, message });
+    await refused({ a: medium, b: coarse }, "unavailable", DEMO_COMPARE_NOTE);
+    await refused({ a: coarse, b: "ahmed-25-fine" }, "unavailable", DEMO_COMPARE_NOTE);
+    await refused({ a: coarse, b: medium, from: 1000 }, "unavailable", DEMO_COMPARE_NOTE);
+    await refused({ abtest: RECORDED_COMPARE_AB, to: 100 }, "unavailable", DEMO_COMPARE_NOTE);
+    await refused({ abtest: "ahmed25-medium-fix" }, "unavailable", DEMO_COMPARE_NOTE);
+    await refused({ abtest: "nope" }, "not-found", "no A/B test nope with both its runs");
+    await refused({ a: coarse, b: "nope" }, "not-found", "no case nope in the cases folder");
+    await refused({ a: coarse, b: coarse }, "bad-request", "pick two different cases to compare");
+    await refused({ a: coarse }, "bad-request");
+    await expect(t.request("GET", `/compare?abtest=${RECORDED_COMPARE_AB}&a=${coarse}`))
+      .rejects.toMatchObject({ code: "bad-request" });
   });
 
   it("ships no paths from the recording machine", () => {
     expect(JSON.stringify(clusters)).not.toMatch(/\/home\/|\/mnt\/|\/tmp\/|[A-Z]:\\\\|Users[\\/]/);
     expect(JSON.stringify(results)).not.toMatch(/\/home\/|\/mnt\/|\/tmp\/|[A-Z]:\\\\|Users[\\/]/);
     expect(JSON.stringify(forces)).not.toMatch(/\/home\/|\/mnt\/|\/tmp\/|[A-Z]:\\\\|Users[\\/]/);
+    for (const doc of [resultsMedium, forcesMedium, compared]) {
+      expect(JSON.stringify(doc)).not.toMatch(/\/home\/|\/mnt\/|\/tmp\/|[A-Z]:\\\\|Users[\\/]/);
+    }
     const text = JSON.stringify(recorded);
     expect(text).not.toMatch(/\/home\/|\/mnt\/|\/tmp\/|[A-Z]:\\\\|Users[\\/]/);
   });

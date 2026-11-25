@@ -1,45 +1,97 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The demo's results (GET /results, GET /results/{case} and its force history, GET /results/{case}/forces): those of
-// the coarse 25° Ahmed body, recorded from a real engine over the judge's window (results.json, loaded when first
-// asked for: the public Ahmed-body example solved to 2,000 iterations, with no folder paths), with its forces every
-// 4th iteration (forces.json, to 4 figures). Its forces were written a few hours before the demo is asked, as the
-// demo moves its other times to look recent. Another window, or another case's results, need your own engine.
+// the coarse and medium 25° Ahmed bodies, recorded from a real engine over the judge's window (results.json and
+// results-medium.json, loaded when first asked for: the public Ahmed-body example solved to 2,000 iterations on two
+// meshes, with no folder paths), with their forces every 4th iteration (forces.json and forces-medium.json, to 4
+// figures); and their comparison (GET /compare, compare.json: as a mesh study and as two designs, over their judges'
+// window), with that of the finished A/B test's two runs. Their forces were written a few hours before the demo is
+// asked, as the demo moves its other times to look recent. Another window, or another case's results or comparison,
+// need your own engine.
 import { EngineError } from "@/engine/errors";
-import type { CaseResults, ForceHistory, ResultsList } from "@/engine/types";
+import type { CaseResults, Comparison, ForceHistory, ResultsList } from "@/engine/types";
 
-/** The recorded case. */
-export const RECORDED_RESULTS = "ahmed-25-coarse";
+/** The recorded cases, newest first: the coarse mesh's results, and the medium one's for the comparison. */
+export const RECORDED = ["ahmed-25-coarse", "ahmed-25-medium"] as const;
+export const RECORDED_RESULTS = RECORDED[0];
+
+const RECORDINGS: Record<(typeof RECORDED)[number], {
+  results: () => Promise<{ default: unknown }>; forces: () => Promise<{ default: unknown }>; hours: number;
+}> = {
+  "ahmed-25-coarse": { results: () => import("./results.json"), forces: () => import("./forces.json"), hours: 4 },
+  "ahmed-25-medium": { results: () => import("./results-medium.json"), forces: () => import("./forces-medium.json"), hours: 5 },
+};
+const recorded = (name: string): name is (typeof RECORDED)[number] => (RECORDED as readonly string[]).includes(name);
 
 export const DEMO_RESULTS_NOTE =
   "The demo recorded its results over the judge's window only: connect your own engine to average them over another.";
 
-const notRecorded = (name: string) =>
-  `The demo recorded the results of ${RECORDED_RESULTS} only: connect your own engine to see ${name}'s.`;
+/** The demo's A/B test whose two runs' comparison it recorded: its finished one. */
+export const RECORDED_COMPARE_AB = "ahmed25-coarse-fix";
 
-/** The recorded results, with its forces written 4 h before `now`. */
-export async function demoResults(now = Date.now()): Promise<CaseResults> {
-  const doc = structuredClone((await import("./results.json")).default) as unknown as CaseResults;
-  doc.updated = new Date(now - 4 * 3600_000).toISOString().replace(/\.\d{3}Z$/, "Z");
+export const DEMO_COMPARE_NOTE = `The demo recorded only ${RECORDED[0]} against ${RECORDED[1]}, and the A/B test `
+  + `${RECORDED_COMPARE_AB}'s two runs, over their judges' window: connect your own engine to compare others, or over `
+  + "another window.";
+
+const notRecorded = (name: string) =>
+  `The demo recorded the results of ${RECORDED.join(" and ")} only: connect your own engine to see ${name}'s.`;
+
+/** A recorded case's results, with its forces written a few hours before `now`. */
+export async function demoResults(name: string = RECORDED_RESULTS, now = Date.now()): Promise<CaseResults> {
+  const rec = RECORDINGS[recorded(name) ? name : RECORDED_RESULTS];
+  const doc = structuredClone((await rec.results()).default) as CaseResults;
+  doc.updated = new Date(now - rec.hours * 3600_000).toISOString().replace(/\.\d{3}Z$/, "Z");
   return doc;
 }
 
-/** The recorded case's force history for its charts: every 4th iteration's forces, so none thinned. */
-export async function demoForces(): Promise<ForceHistory> {
-  return structuredClone((await import("./forces.json")).default) as unknown as ForceHistory;
+/** A recorded case's force history for its charts: every 4th iteration's forces, so none thinned. */
+export async function demoForces(name: string = RECORDED_RESULTS): Promise<ForceHistory> {
+  return structuredClone((await RECORDINGS[recorded(name) ? name : RECORDED_RESULTS].forces()).default) as ForceHistory;
+}
+
+type Recorded = { mesh: Comparison; design: Comparison; abtest: Comparison };
+const recording = async () => (await import("./compare.json")).default as unknown as Recorded;
+
+/** The demo's answer to GET /compare: the recorded comparison of the coarse and medium meshes (as a mesh study with
+ *  mesh=true), or of its finished A/B test's two runs; refusals as the engine words them, and the rest isn't in the
+ *  demo. `cases` are the demo's cases, `abtests` its A/B tests. */
+export async function demoCompare(query: URLSearchParams, cases: readonly string[],
+                                  abtests: readonly string[] = [RECORDED_COMPARE_AB]): Promise<Comparison> {
+  const [a, b, abtest] = (["a", "b", "abtest"] as const).map((k) => query.get(k));
+  const bad = (message: string) => new EngineError("bad-request", message, 400);
+  if (abtest != null) {
+    if (a != null || b != null) throw bad("give a and b (two cases) or abtest (an A/B test's two runs), not both");
+    if (!abtests.includes(abtest)) throw new EngineError("not-found", `no A/B test ${abtest} with both its runs`, 404);
+    if (abtest !== RECORDED_COMPARE_AB || query.has("from") || query.has("to")) {
+      throw new EngineError("unavailable", DEMO_COMPARE_NOTE, 503);
+    }
+    return structuredClone((await recording()).abtest);
+  }
+  if (a == null || b == null) throw bad("give a and b (two cases to compare), or abtest (an A/B test's two runs)");
+  if (a === b) throw bad("pick two different cases to compare");
+  for (const name of [a, b]) {
+    if (!cases.includes(name)) throw new EngineError("not-found", `no case ${name} in the cases folder`, 404);
+  }
+  if (a !== RECORDED[0] || b !== RECORDED[1] || query.has("from") || query.has("to")) {
+    throw new EngineError("unavailable", DEMO_COMPARE_NOTE, 503);
+  }
+  const rec = await recording();
+  return structuredClone(query.get("mesh") === "true" ? rec.mesh : rec.design);
 }
 
 /** The demo's answer to GET /results, /results/{case} or /results/{case}/forces (`route` without its query); any
  *  other route under /results isn't in it. `cases` are the demo's cases: one it has but didn't record results of is
  *  unavailable, any other not found. */
 export async function demoResultsAnswer(route: string, query: URLSearchParams, cases: readonly string[]): Promise<unknown> {
-  if (route === "/results") return { items: [await demoResults()], waiting: [] } satisfies ResultsList;
+  if (route === "/results") {
+    return { items: await Promise.all(RECORDED.map((n) => demoResults(n))), waiting: [] } satisfies ResultsList;
+  }
   const m = /^\/results\/([^/]+)(\/forces)?$/.exec(route);
   if (!m) throw new EngineError("not-found", "Not in the demo data", 404);
   const name = decodeURIComponent(m[1] ?? "");
-  if (name === RECORDED_RESULTS) {
-    if (m[2]) return demoForces();
+  if (recorded(name)) {
+    if (m[2]) return demoForces(name);
     if (query.has("from") || query.has("to")) throw new EngineError("unavailable", DEMO_RESULTS_NOTE, 503);
-    return demoResults();
+    return demoResults(name);
   }
   if (cases.includes(name)) throw new EngineError("unavailable", notRecorded(name), 503);
   throw new EngineError("not-found", `no case ${name} in the cases folder`, 404);

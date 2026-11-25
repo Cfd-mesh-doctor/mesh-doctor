@@ -113,6 +113,24 @@ export interface ResultsWindow {
  *  over the whole run, in N, thinned by each stretch's lowest and highest; `n` its values before thinning. */
 export type ForceHistory = Json<operations["results_forces"]["responses"][200]>;
 export type ForceHistoryGroup = ForceHistory["groups"][number];
+/** Two runs' results compared over the same window (GET /compare, API 1.25): each force group's drag and vertical
+ *  force in both, b's difference from a, its noise and whether it is real (in a mesh study, also whether it moves less
+ *  between the meshes than it swings); each side's cells, window, verdict and what it was made from; plain warnings. */
+export type Comparison = Json<operations["compare_runs"]["responses"][200]>;
+export type ComparedSide = Comparison["a"];
+export type ComparedGroup = Comparison["groups"][number];
+export type Compared = NonNullable<ComparedGroup["drag"]>;
+/** What to compare: two cases, a and b (a mesh study if `mesh`), or an A/B test's two runs; over a window in
+ *  iterations or a transient run's seconds (null from: from the later of their judges' starts; null to: up to the
+ *  shorter run's end). */
+export interface CompareAsk {
+  a: string | null;
+  b: string | null;
+  abtest: string | null;
+  mesh: boolean;
+  from: number | null;
+  to: number | null;
+}
 
 /** The API major version this app speaks; the engine reports major.minor and any 1.x works. */
 export const API_MAJOR = 1;
