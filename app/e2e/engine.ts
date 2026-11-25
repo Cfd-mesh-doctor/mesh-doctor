@@ -202,7 +202,7 @@ const TEMPLATES = {
 /** A set of pictures as GET /pictures/{case}/{set} answers it (API 1.17). */
 export interface PictureSetDoc {
   case: string; set: string; time: string; mean: boolean; kinds: string[]; made: string | null; notes: string[];
-  pictures: { file: string; kind: string; title: string }[];
+  pictures: { file: string; kind: string; title: string; time?: string }[];
 }
 
 /** Each picture it serves: a PNG of one pixel. */

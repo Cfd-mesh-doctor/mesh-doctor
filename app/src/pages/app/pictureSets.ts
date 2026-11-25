@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The Pictures screen's words and checks: the kinds a set has, a set's name, address and title, the set a picture job
-// makes, the written times of a run that can be pictured (the split ones too, on an engine that joins one first), and
-// whether a picture job fits in the memory of the engine's computer.
-import { isActive, type Job, type MachineInfo, type PictureKind, type PictureSetBrief, type Run } from "@/engine/types";
+// makes, the written times of a run that can be pictured (the split ones too, on an engine that joins one first) and
+// those a cut over time reads, a mean flow's swings beside the same time's instant, and whether a picture job fits in
+// the memory of the engine's computer.
+import {
+  isActive, type Job, type MachineInfo, type PictureKind, type PictureSet, type PictureSetBrief, type Run,
+} from "@/engine/types";
 import { machineFields } from "@/estimate/machine";
 import type { MemoryCheck } from "./repairStart";
 import { timeInput } from "./solveStart";
@@ -113,12 +116,23 @@ export function setShown(s: Pick<PictureSetBrief, "made" | "job">): SetShown {
  * times (2000, 0.0006). */
 export const timeName = (t: number) => timeInput(t);
 
+/** Whether the engine's API is 1.`minor` or newer, as GET / says it (one that doesn't say is older). */
+function apiFrom(apiVersion: string | null | undefined, minor: number): boolean {
+  const m = /^(\d+)\.(\d+)/.exec(apiVersion ?? "");
+  return m != null && (Number(m[1]) > 1 || (Number(m[1]) === 1 && Number(m[2]) >= minor));
+}
+
 /** Does the engine picture a written time still split onto a run's processes (API 1.19), joining it first into the
  * run's own folder? An older one pictures a joined time only. */
-export function joinsTimes(apiVersion: string | null | undefined): boolean {
-  const m = /^(\d+)\.(\d+)/.exec(apiVersion ?? "");
-  return m != null && (Number(m[1]) > 1 || (Number(m[1]) === 1 && Number(m[2]) >= 19));
-}
+export const joinsTimes = (apiVersion: string | null | undefined) => apiFrom(apiVersion, 19);
+
+/** Does the engine make a cut over time (API 1.20): the first cut's speed at each written time up to the one
+ * pictured? */
+export const makesOverTime = (apiVersion: string | null | undefined) => apiFrom(apiVersion, 20);
+
+/** The most written times a cut over time pictures, evenly picked from the first to the latest (the engine's
+ * MAX_TIMES). */
+export const MAX_TIMES = 50;
 
 /**
  * The written times of a run that a picture job can picture, newest first, as their folders name them: each one it
@@ -144,18 +158,53 @@ export function splitTimes(run: Pick<Run, "times" | "joined">): Set<string> {
 /** Whether a run has its mean flow to picture: a transient run that has written a time with it. */
 export const hasMeanFlow = (run: Pick<Run, "averaging"> | undefined) => run?.averaging?.written != null;
 
+/**
+ * The written times a cut over time of a run reads, up to `at` (the latest when it is ""), oldest first, as their
+ * folders name them: each one it keeps with the flow (with `mean`, with its mean flow), of which it pictures at most
+ * MAX_TIMES; and whether any of them is still split onto its processes, which ParaView then reads as it is, split (no
+ * time is joined for it), taking more memory.
+ */
+export function overTimes(run: Pick<Run, "times" | "joined" | "averaging">, at: string, mean: boolean):
+  { times: string[]; split: boolean } {
+  const upto = pictureTimes(run, mean, true).filter((t) => !at || Number(t) <= Number(at)).reverse();
+  const split = splitTimes(run);
+  return { times: upto, split: upto.some((t) => split.has(t)) };
+}
+
+/**
+ * A mean flow's cuts that show how much the speed swings about it (API 1.20), each with the pictures to put beside
+ * it, as indexes in their sets' lists: the cut's mean speed, its swing and, from the set of the same written time's
+ * flow (the latest instant it averages), its speed then; null where that set has no such picture.
+ */
+export function swings(set: Pick<PictureSet, "pictures">, instant?: Pick<PictureSet, "pictures">):
+  { cut: string; mean: number | null; swing: number; instant: number | null }[] {
+  const at = (s: Pick<PictureSet, "pictures"> | undefined, file: string) => {
+    const i = s?.pictures.findIndex((p) => p.file === file) ?? -1;
+    return i < 0 ? null : i;
+  };
+  return set.pictures.flatMap((p, i) => {
+    const m = /^cuts\/(.+)_Urms\.png$/.exec(p.file);
+    if (p.kind !== "cuts" || !m) return [];
+    const speed = `cuts/${m[1]}_U.png`;
+    return [{ cut: m[1]!, mean: at(set, speed), swing: i, instant: at(instant, speed) }];
+  });
+}
+
 /** The memory a picture job takes, as the engine's RAM guard counts it: ParaView reading the case with its cell data
- * made point data, 0.6 KB a cell (18 GB at 31 million cells, 7 GB at 12 million), and 0.5 GB to spare. */
-const KB_PER_CELL = 0.6;
+ * made point data, 0.6 KB a cell (18 GB at 31 million cells, 7 GB at 12 million), and 0.5 GB to spare. A cut over
+ * time steps it through the written times, holding a time's fields twice as it moves on to the next: 1.4 KB a cell
+ * read joined, 1.9 read split (1.17 and 1.39 GB at 0.48 million cells). */
+const KB_PER_CELL = { once: 0.6, joined: 1.4, split: 1.9 } as const;
 const HEADROOM_GB = 0.5;
 
 /** Whether a picture job of a case of `cells` cells fits in the memory of the engine's computer, as the repair
- * dialog's check: under 90 % of it. Null when either isn't known (the engine still checks its free memory when the
- * job starts). */
-export function picturesMemory(cells: number | null | undefined, machine: MachineInfo | undefined): MemoryCheck | null {
+ * dialog's check: under 90 % of it; `overTime`: with a cut over time, of times read joined or split. Null when either
+ * isn't known (the engine still checks its free memory when the job starts). */
+export function picturesMemory(cells: number | null | undefined, machine: MachineInfo | undefined,
+  overTime: "joined" | "split" | null = null): MemoryCheck | null {
   if (cells == null || !(cells > 0) || !machine) return null;
   const { ram, limited } = machineFields(machine);
   if (ram === undefined) return null;
-  const need = Math.round(((cells * KB_PER_CELL) / 1024 / 1024 + HEADROOM_GB) * 10) / 10;
+  const need = Math.round(((cells * KB_PER_CELL[overTime ?? "once"]) / 1024 / 1024 + HEADROOM_GB) * 10) / 10;
   return { need, have: ram, limited: limited === true, fits: need < 0.9 * ram };
 }

@@ -3,7 +3,7 @@
 // notes and its pictures by kind, each fetched with the key as it comes near the screen and shown through a blob: URL,
 // a picture open large with Download, Delete… after a confirmation, and a set being made, made again or not made; and
 // a run's own sets on its page.
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Transport } from "@/engine/client";
@@ -239,9 +239,39 @@ describe("the Pictures screen", () => {
       + "folder and the set of pictures need about 47 MB of disk space; the disk the engine's workspace is on has"));
     expect(dialog).not.toHaveTextContent(/The set of pictures needs/);
     expect(asked).toContain("/disk/pictures?name=wing&time=200&kinds=cuts%2Cvortices%2Cspots&mean=false");
+    expect(within(dialog).queryByRole("checkbox", { name: /^A cut over time/ })).toBeNull();     // API 1.20
     await user.click(within(dialog).getByRole("button", { name: "Make pictures" }));
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0]?.body).toEqual({ kind: "pictures", params: { name: "wing", time: "200", kinds: "cuts,vortices,spots", mean: false } });
+  });
+
+  it("offers a cut over time of a run with two or more written times, on an engine at 1.20, with its count and memory", async () => {
+    const user = userEvent.setup();
+    const t = run("t", { times: [0.0002, 0.0004, 0.0006, 0.0008], joined: [0.0008] });
+    const { posted, asked } = listPage({ runs: [t], apiVersion: "1.20" });
+    await user.click((await screen.findAllByRole("button", { name: "Make pictures…" }))[0]!);
+    const dialog = await screen.findByRole("dialog", { name: "Make pictures" });
+    const over = await within(dialog).findByRole("checkbox", { name: /^A cut over time/ });
+    expect(over).not.toBeChecked();                                     // made only when asked
+    expect(dialog).toHaveTextContent("The first cut's speed at each of its 4 written times from 0.0002 to 0.0008, "
+      + "oldest first: the flow as it changes. Those split onto its processes are read as they are: none is joined for it.");
+    await waitFor(() => expect(dialog).toHaveTextContent(/Needs about 0\.8\sGB of memory;/));
+    await user.click(over);
+    expect(dialog).toHaveTextContent(/Needs about 1\.4\sGB of memory \(the cut over time holds two of its written times at once\);/);
+    const time = within(dialog).getByRole("combobox", { name: "Written time" });
+    await user.selectOptions(time, "0.0004");
+    expect(dialog).toHaveTextContent("at each of its 2 written times from 0.0002 to 0.0004, oldest first");
+    await waitFor(() => expect(asked).toContain("/disk/pictures?name=t&time=0.0004&kinds=cuts%2Cvortices%2Cspots%2Ctimes&mean=false"));
+    await user.selectOptions(time, "0.0002");                         // one written time up to it: none
+    expect(within(dialog).queryByRole("checkbox", { name: /^A cut over time/ })).toBeNull();
+    expect(dialog).toHaveTextContent(/Needs about 0\.8\sGB of memory;/);
+    await user.selectOptions(time, "0.0004");
+    expect(within(dialog).getByRole("checkbox", { name: /^A cut over time/ })).toBeChecked();
+    await user.click(within(dialog).getByRole("button", { name: "Make pictures" }));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]?.body).toEqual({
+      kind: "pictures", params: { name: "t", time: "0.0004", kinds: "cuts,vortices,spots,times", mean: false },
+    });
   });
 
   it("counts a join apart on the disk of the run's folder, when that isn't the workspace's", async () => {
@@ -416,15 +446,73 @@ describe("a set of pictures", () => {
     expect(screen.getByRole("button", { name: "Delete…" })).toBeInTheDocument();
   });
 
-  it("heads a cut over time's pictures, each at its time, oldest first", async () => {
-    const times = ["0.0002", "0.0004"].map((t) => ({
+  it("shows a cut over time one written time at a time: a slider, the times before and after, and Play", async () => {
+    const user = userEvent.setup();
+    const times = ["0.0002", "0.0004", "0.0006"].map((t) => ({
       file: `times/c1_side_U_at_${t}.png`, kind: "times" as const, time: t,
       title: `Side cut on the centreline: speed, written time ${t}`,
     }));
-    setPage("ahmed", "2000", { sets: [{ ...SET, kinds: ["cuts", "times"], pictures: [SET.pictures[0]!, ...times] }] });
+    const { fetched } = setPage("ahmed", "2000", {
+      sets: [{ ...SET, kinds: ["cuts", "times"], pictures: [SET.pictures[0]!, ...times] }],
+    });
     const card = within((await screen.findByRole("heading", { name: "Over time" })).closest("section")!);
     expect(card.getByText(/The first cut's speed at each written time/)).toBeInTheDocument();
-    expect(card.getAllByRole("button").map((b) => b.textContent)).toEqual(times.map((p) => p.title));
+    expect(card.getByText("Written time 0.0002 · 1 of 3")).toBeInTheDocument();
+    expect(card.getByRole("button", { name: times[0]!.title })).toBeInTheDocument();
+    expect(card.getByRole("button", { name: "Earlier time" })).toBeDisabled();
+    await waitFor(() => expect(fetched).toEqual(expect.arrayContaining(                     // the next one, ready
+      ["/pictures/ahmed/2000/times/c1_side_U_at_0.0002.png", "/pictures/ahmed/2000/times/c1_side_U_at_0.0004.png"])));
+    expect(fetched).not.toContain("/pictures/ahmed/2000/times/c1_side_U_at_0.0006.png");
+    await user.click(card.getByRole("button", { name: "Later time" }));
+    expect(card.getByText("Written time 0.0004 · 2 of 3")).toBeInTheDocument();
+    const slider = card.getByRole("slider", { name: "Written time" });
+    expect(slider).toHaveAttribute("aria-valuetext", "written time 0.0004, 2 of 3");
+    fireEvent.change(slider, { target: { value: "0" } });
+    expect(card.getByText("Written time 0.0002 · 1 of 3")).toBeInTheDocument();
+    await user.click(card.getByRole("button", { name: "Play" }));
+    expect(card.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+    await waitFor(() => expect(card.getByText("Written time 0.0006 · 3 of 3")).toBeInTheDocument(), { timeout: 4000 });
+    await waitFor(() => expect(card.getByRole("button", { name: "Play" })).toBeInTheDocument(), { timeout: 2000 });
+    expect(card.getByRole("button", { name: "Later time" })).toBeDisabled();
+    // it opens large; the large view moves it on, and the focus comes back to the time it shows
+    await user.click(card.getByRole("button", { name: times[2]!.title }));
+    expect(await screen.findByRole("dialog", { name: times[2]!.title })).toHaveTextContent("Over time · picture 4 of 4");
+    await user.keyboard("{ArrowLeft}");
+    await screen.findByRole("dialog", { name: times[1]!.title });
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(card.getByRole("button", { name: times[1]!.title })).toHaveFocus();
+    expect(card.getByText("Written time 0.0004 · 2 of 3")).toBeInTheDocument();
+  });
+
+  it("puts a mean flow's swing beside its mean speed and the speed at the same written time, from that time's set", async () => {
+    const user = userEvent.setup();
+    const cut = (name: string, title: string) => ({ file: `cuts/c1_side_${name}.png`, kind: "cuts" as const, title });
+    const TITLE = ["Side cut: speed of the mean flow", "Side cut: how much the speed swings about its mean", "Side cut: speed"];
+    const mean: PictureSet = {
+      ...SET, set: "0.0006_mean", time: "0.0006", mean: true, kinds: ["cuts"], notes: [],
+      pictures: [cut("U", TITLE[0]!), cut("Cp", "Side cut: pressure of the mean flow"), cut("Urms", TITLE[1]!)],
+    };
+    const instant: PictureSet = { ...SET, set: "0.0006", time: "0.0006", kinds: ["cuts"], notes: [], pictures: [cut("U", TITLE[2]!)] };
+    const view = setPage("ahmed", "0.0006_mean", { sets: [mean, instant] });
+    const card = within((await screen.findByRole("heading", { name: "Mean, swing and instant" })).closest("section")!);
+    expect(card.getByText(/and the speed at written time 0\.0006, the latest instant it averages/)).toBeInTheDocument();
+    await waitFor(() => expect(card.getAllByRole("button").map((b) => b.textContent)).toEqual(TITLE));
+    await user.click(card.getByRole("button", { name: TITLE[2] }));
+    expect(await screen.findByRole("dialog", { name: TITLE[2] })).toHaveTextContent("Cuts · picture 1 of 1 · ahmed, written time 0.0006");
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(card.getByRole("button", { name: TITLE[2] })).toHaveFocus();
+    await user.click(card.getByRole("button", { name: TITLE[1] }));
+    expect(await screen.findByRole("dialog", { name: TITLE[1] })).toHaveTextContent("Cuts · picture 3 of 3 · ahmed, the mean flow to 0.0006 s");
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(card.getByRole("button", { name: TITLE[1] })).toHaveFocus();          // not the same picture in the cuts
+    view.unmount();
+    setPage("ahmed", "0.0006_mean", { sets: [mean] });
+    const none = within((await screen.findByRole("heading", { name: "Mean, swing and instant" })).closest("section")!);
+    expect(await none.findByText("Written time 0.0006 has no pictures of its own flow yet: Make pictures… at that time, "
+      + "without its mean flow, to see the instant here.")).toBeInTheDocument();
   });
 
   it("says when the engine has no such set", async () => {

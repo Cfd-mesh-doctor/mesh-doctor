@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The Pictures screen's words and checks: a set's name, address and title, the set a picture job makes, the written
-// times a run can be pictured at (the split ones too, on an engine that joins one first), and the memory a picture job
-// takes.
+// times a run can be pictured at (the split ones too, on an engine that joins one first) and those a cut over time
+// reads, a mean flow's swings beside the same time's instant, and the memory a picture job takes.
 import { describe, expect, it } from "vitest";
 import type { Job, MachineInfo, Run } from "@/engine/types";
 import {
-  hasMeanFlow, jobOfSet, joinsTimes, kindInfo, kindsText, makingPictures, parseSet, pictureFileName, pictureTimes,
-  picturesMemory,
-  setHeading, setName, setOfJob, setPath, setShown, setTitle, splitTimes, timeName,
+  MAX_TIMES, hasMeanFlow, jobOfSet, joinsTimes, kindInfo, kindsText, makesOverTime, makingPictures, overTimes, parseSet,
+  pictureFileName, pictureTimes, picturesMemory, setHeading, setName, setOfJob, setPath, setShown, setTitle, splitTimes,
+  swings, timeName,
 } from "./pictureSets";
 
 const job = (id: string, state: Job["state"], params: Record<string, unknown>, kind: Job["kind"] = "pictures") =>
@@ -47,6 +47,18 @@ describe("a set of pictures", () => {
 
   it("is saved under its case, its name and its file", () => {
     expect(pictureFileName("ahmed", "2000", "cuts/c1_side_centre_U.png")).toBe("ahmed_2000_cuts_c1_side_centre_U.png");
+  });
+
+  it("of a mean flow puts each cut's swing beside its mean speed and the speed at the same time, from that time's set", () => {
+    const pic = (file: string) => ({ file, kind: "cuts" as const, title: file });
+    const mean = { pictures: [pic("cuts/a1_U.png"), pic("cuts/a1_Urms.png"), pic("cuts/a2_Cpt.png"), pic("cuts/a2_Urms.png")] };
+    const instant = { pictures: [pic("cuts/a1_Cp.png"), pic("cuts/a1_U.png")] };
+    expect(swings(mean, instant)).toEqual([
+      { cut: "a1", mean: 0, swing: 1, instant: 1 },
+      { cut: "a2", mean: null, swing: 3, instant: null },
+    ]);
+    expect(swings(mean).map((r) => r.instant)).toEqual([null, null]);     // no set of that time
+    expect(swings(instant)).toEqual([]);                                   // no swing: not a mean flow's
   });
 });
 
@@ -106,6 +118,19 @@ describe("the times a run can be pictured at", () => {
     expect(pictureTimes(run([300]), false, true)).toEqual(["300"]);
     expect(splitTimes({ joined: [300] }).size).toBe(0);
   });
+
+  it("of a cut over time are those up to the one pictured, oldest first, on an engine that makes one (API 1.20)", () => {
+    expect(["1.20", "1.21", "2.0"].map(makesOverTime)).toEqual([true, true, true]);
+    expect(["1.19", "1.2", "", null].map(makesOverTime)).toEqual([false, false, false, false]);
+    const r = { times: [100, 200, 300, 400], joined: [200, 400], averaging: null } as Pick<Run, "times" | "joined" | "averaging">;
+    expect(overTimes(r, "300", false)).toEqual({ times: ["100", "200", "300"], split: true });
+    expect(overTimes(r, "", false).times).toEqual(["100", "200", "300", "400"]);      // up to the latest
+    expect(overTimes({ ...r, times: [200, 400] }, "", false)).toEqual({ times: ["200", "400"], split: false });
+    // with its mean flow: those written with it
+    const t = { times: [0.0002, 0.0004, 0.0006], joined: [0.0006], averaging: { from: 0.0003, settled: null, written: 0.0006 } };
+    expect(overTimes(t as Pick<Run, "times" | "joined" | "averaging">, "", true)).toEqual({ times: ["0.0004", "0.0006"], split: true });
+    expect(MAX_TIMES).toBe(50);
+  });
 });
 
 describe("a picture job's memory", () => {
@@ -117,6 +142,13 @@ describe("a picture job's memory", () => {
     expect(picturesMemory(31_100_000, machine(65_536))).toEqual({ need: 18.3, have: 64, limited: false, fits: true });
     expect(picturesMemory(31_100_000, machine(16_384))).toMatchObject({ need: 18.3, have: 16, fits: false });
     expect(picturesMemory(478_901, machine(65_536, 25_600))).toEqual({ need: 0.8, have: 25, limited: true, fits: true });
+  });
+
+  it("with a cut over time is 1.4 KB a cell read joined and 1.9 read split, as the engine's RAM guard counts it", () => {
+    expect(picturesMemory(478_901, machine(16_384), "joined")).toMatchObject({ need: 1.1, fits: true });
+    expect(picturesMemory(478_901, machine(16_384), "split")).toMatchObject({ need: 1.4, fits: true });
+    expect(picturesMemory(12_300_000, machine(32_768), "split")).toMatchObject({ need: 22.8, have: 32, fits: true });
+    expect(picturesMemory(31_100_000, machine(32_768), "joined")).toMatchObject({ need: 42, fits: false });
   });
 
   it("isn't checked here when the case's size or the computer's memory isn't known", () => {

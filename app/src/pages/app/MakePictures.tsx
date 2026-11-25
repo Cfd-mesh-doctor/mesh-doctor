@@ -3,7 +3,9 @@
 // has averaged its flow, its mean flow; whether it fits in the memory of the engine's computer and on the disk of its
 // workspace; then POST /jobs (a `pictures` job) and the new job on the Jobs screen, which links its set. A time still
 // split onto a run's processes is joined first, into the run's own folder (API 1.19), and the disk this takes is said
-// first. The demo can't start jobs: it says so and gives the command that does the same in a terminal.
+// first. A run with two or more written times up to the one pictured can have a cut over time too (API 1.20): the
+// first cut at each of them. The demo can't start jobs: it says so and gives the command that does the same in a
+// terminal.
 import { ImagePlus } from "lucide-react";
 import { useId, useState } from "react";
 import { useNavigate } from "react-router";
@@ -19,7 +21,9 @@ import {
 import { JOB_KIND_LABEL, isActive, type DiskPictures, type PictureKind, type Run } from "@/engine/types";
 import { formatInt } from "@/lib/format";
 import { DiskNote, FIELD, GB, JobDialog, Note } from "./dialogParts";
-import { KINDS, hasMeanFlow, joinsTimes, pictureTimes, picturesMemory, splitTimes } from "./pictureSets";
+import {
+  KINDS, MAX_TIMES, hasMeanFlow, joinsTimes, makesOverTime, overTimes, pictureTimes, picturesMemory, splitTimes,
+} from "./pictureSets";
 import { formatTime } from "./solveStart";
 
 /**
@@ -36,6 +40,21 @@ export function MakePicturesDialog({ open, onOpenChange, name = null }: {
       <MakePicturesForm name={name} onDone={() => onOpenChange(false)} />
     </JobDialog>
   );
+}
+
+/** Every kind a picture job makes, in the engine's order: those of KINDS, and a cut over time (API 1.20). */
+const ALL_KINDS: readonly PictureKind[] = [...KINDS.map((k) => k.value), "times"];
+
+/** What a cut over time of a run pictures: the first cut at each written time up to the one pictured, at most
+ * MAX_TIMES, and how those split onto its processes are read. */
+function overTimeAbout(o: { times: string[]; split: boolean }, mean: boolean): string {
+  const n = o.times.length;
+  const span = `${o.times[0]} to ${o.times.at(-1)}`;
+  const which = n > MAX_TIMES ? `${MAX_TIMES} of its ${n} written times from ${span}, evenly picked`
+    : `each of its ${n} written times from ${span}`;
+  return `The first cut's ${mean ? "mean speed" : "speed"} at ${which}, oldest first: `
+    + `${mean ? "the average as it settles" : "the flow as it changes"}.`
+    + (o.split ? " Those split onto its processes are read as they are: none is joined for it." : "");
 }
 
 /** A run with a result to picture: one that isn't solving, with a written time (a joined one, on an engine that
@@ -101,29 +120,34 @@ function MakePicturesForm({ name, onDone }: { name: string | null; onDone: () =>
   // the time the job pictures is split onto the run's processes: it is joined first
   const joinsFirst = split.has(at || times[0] || "");
   const [kinds, setKinds] = useState<readonly PictureKind[]>(KINDS.map((k) => k.value));
-  const toggle = (k: PictureKind, on: boolean) =>
-    setKinds((now) => KINDS.map((x) => x.value).filter((v) => (v === k ? on : now.includes(v))));
+  const toggle = (k: PictureKind, on: boolean) => setKinds((now) => ALL_KINDS.filter((v) => (v === k ? on : now.includes(v))));
+  // a cut over time (API 1.20): the first cut at each written time up to the one pictured, of a run with two or more
+  const overTime = run && makesOverTime(info.data?.apiVersion) ? overTimes(run, at || times[0] || "", withMean) : null;
+  const canOverTime = overTime != null && overTime.times.length > 1;
+  // what the job is asked for: the kinds ticked, a cut over time while the run has the times for it
+  const asked = kinds.filter((k) => k !== "times" || canOverTime);
+  const readOverTime = asked.includes("times") && overTime ? (overTime.split ? "split" : "joined") : null;
 
   const plain = chosen !== null && isPlainName(chosen);
   const solving = run?.state === "running";
   const nothing = run != null && !solving && times.length === 0;
   const cells = chosen ? cases.data?.cells?.[chosen] ?? null : null;
-  const memory = picturesMemory(cells, machine.data);
+  const memory = picturesMemory(cells, machine.data, readOverTime);
   const busy = jobs.data?.items.find((j) => isActive(j.state));
   const paraview = readiness.data?.checks.find((c) => c.id === "pvbatch");
-  const query = !demo && plain && chosen && kinds.length > 0
-    ? { name: chosen, time: at, kinds: kinds.join(","), mean: String(withMean) } : null;
+  const query = !demo && plain && chosen && asked.length > 0
+    ? { name: chosen, time: at, kinds: asked.join(","), mean: String(withMean) } : null;
   // the set's pictures, as the engine's disk guard counts them (API 1.18), and a time it joins first (API 1.19)
   const disk = useDiskJob("pictures", query);
   const pictureDisk: DiskPictures | undefined = disk.data;
   const computer = demo ? "the demo engine's computer" : "your engine's computer";
-  const ready = !demo && plain && !solving && !nothing && kinds.length > 0 && !busy && !start.isPending;
-  const command = chosen ? picturesCommand(chosen, { time: at || undefined, kinds, mean: withMean }) : null;
+  const ready = !demo && plain && !solving && !nothing && asked.length > 0 && !busy && !start.isPending;
+  const command = chosen ? picturesCommand(chosen, { time: at || undefined, kinds: asked, mean: withMean }) : null;
   const options = solved.length + yours.length;
 
   const submit = () => {
     if (!ready || !chosen) return;
-    start.mutate({ kind: "pictures", params: { name: chosen, time: at, kinds: kinds.join(","), mean: withMean } }, {
+    start.mutate({ kind: "pictures", params: { name: chosen, time: at, kinds: asked.join(","), mean: withMean } }, {
       onSuccess: (job) => {
         onDone();
         void navigate(to(`/jobs?job=${encodeURIComponent(job.id)}`));
@@ -249,7 +273,17 @@ function MakePicturesForm({ name, onDone }: { name: string | null; onDone: () =>
                   </span>
                 </label>
               ))}
-              {kinds.length === 0 && <p className="text-xs text-danger">Pick at least one.</p>}
+              {canOverTime && (
+                <label className="flex items-start gap-2 text-[13px]">
+                  <input type="checkbox" checked={kinds.includes("times")} onChange={(e) => toggle("times", e.target.checked)}
+                    className="mt-0.5 size-4 shrink-0 accent-primary" />
+                  <span>
+                    <span className="font-medium">A cut over time</span>
+                    <span className="block text-xs text-muted-foreground">{overTimeAbout(overTime, withMean)}</span>
+                  </span>
+                </label>
+              )}
+              {asked.length === 0 && <p className="text-xs text-danger">Pick at least one.</p>}
             </fieldset>
           )}
 
@@ -258,12 +292,15 @@ function MakePicturesForm({ name, onDone }: { name: string | null; onDone: () =>
               {memory ? (
                 memory.fits ? (
                   <Note tone="ok">
-                    Needs about <GB value={memory.need} /> of memory; {computer} has <GB value={memory.have} />
-                    {memory.limited ? " (its RAM limit)" : ""}.
+                    Needs about <GB value={memory.need} /> of memory
+                    {readOverTime ? " (the cut over time holds two of its written times at once)" : ""}; {computer} has{" "}
+                    <GB value={memory.have} />{memory.limited ? " (its RAM limit)" : ""}.
                   </Note>
                 ) : (
                   <Note tone="warn">
-                    Needs about <GB value={memory.need} /> of memory, more than {computer} can give it: a job may use
+                    Needs about <GB value={memory.need} /> of memory
+                    {readOverTime ? " (the cut over time holds two of its written times at once)" : ""}, more than{" "}
+                    {computer} can give it: a job may use
                     90&nbsp;% of its <GB value={memory.have} />{memory.limited ? " (its RAM limit)" : ""}. The engine
                     refuses a picture job that won&apos;t fit in its free memory.
                   </Note>
@@ -290,7 +327,7 @@ function MakePicturesForm({ name, onDone }: { name: string | null; onDone: () =>
             </div>
           )}
 
-          {demo && plain && command && kinds.length > 0 && (
+          {demo && plain && command && asked.length > 0 && (
             <div className="space-y-2 rounded-lg border border-border bg-surface-2/50 p-3">
               <p className="text-[13px]">
                 The demo can&apos;t start jobs. With your own engine paired, Make pictures runs this on your computer; in a

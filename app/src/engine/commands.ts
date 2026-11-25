@@ -68,8 +68,10 @@ export function picturesCommand(name: string, { time, kinds, mean }: {
   time?: string; kinds?: readonly string[]; mean?: boolean;
 } = {}): string | null {
   if (!PLAIN.test(name) || (time && !/^[0-9][0-9.eE+-]*$/.test(time))) return null;
-  return [`meshdoctor pictures ${name}`, time && `--time ${time}`, kinds && kinds.length < 3 && `--kinds ${kinds.join(",")}`,
-    mean && "--mean"].filter(Boolean).join(" ");
+  // --kinds unless they are the default: cuts, vortices and spots (a cut over time, times, only when asked)
+  const asked = kinds?.join(",");
+  return [`meshdoctor pictures ${name}`, time && `--time ${time}`,
+    asked && asked !== "cuts,vortices,spots" && `--kinds ${asked}`, mean && "--mean"].filter(Boolean).join(" ");
 }
 
 export function abExtendCommand(name: string, to: number): string | null {

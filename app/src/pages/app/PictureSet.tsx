@@ -2,11 +2,13 @@
 // One set of pictures (GET /pictures/{case}/{set}, API 1.17): its notes on what was left out, and its pictures by
 // kind, each fetched with the engine's key once it comes near the screen (GET /pictures/{case}/{set}/{kind}/{file})
 // and shown through a blob: URL. A picture opens large, with its title, the ones before and after it, and Download.
+// A cut over time (API 1.20) shows one written time at a time, with a slider over them and Play; a mean flow's set puts
+// each cut's swing beside its mean speed and the speed at the same written time, from that time's own set.
 // Delete… deletes the set (POST /pictures/{case}/{set}/delete) after a confirmation. A set being made shows its job;
 // one being made again keeps the pictures made before until its job has finished. While a job makes it the screen
 // asks again every 3 s.
-import { ArrowLeft, ChevronLeft, ChevronRight, Download, Image, ListChecks, Trash2 } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Download, Image, ListChecks, Pause, Play, Trash2 } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ErrorPanel } from "@/components/shared/ErrorPanel";
 import { JobStateBadge } from "@/components/shared/badges";
@@ -25,21 +27,24 @@ import { useTitle } from "@/lib/useTitle";
 import { cn } from "@/lib/utils";
 import { Section } from "@/pages/report/Section";
 import { saveFile } from "@/report/save";
-import { jobOfSet, kindInfo, parseSet, pictureFileName, setTitle } from "./pictureSets";
+import { jobOfSet, kindInfo, parseSet, pictureFileName, setTitle, swings } from "./pictureSets";
 
 const LINK = "font-medium text-primary underline-offset-4 hover:underline";
 
 const jobPath = (job: Job) => `/jobs?job=${encodeURIComponent(job.id)}`;
 
 /** One picture in a set's grid: a grey frame until it comes near the screen and loads, then the picture, which opens
- * large. Its title says what it shows. */
-function Thumb({ s, picture, id, onOpen }: { s: PictureSet; picture: Picture; id: string; onOpen: () => void }) {
+ * large. Its title says what it shows; `label`, above it, which one of a row it is. */
+function Thumb({ s, picture, id, onOpen, label }: {
+  s: PictureSet; picture: Picture; id: string; onOpen: () => void; label?: string;
+}) {
   const [near, seen] = useSeen<HTMLLIElement>();
   const q = usePicture(s.case, s.set, s.made, picture.file, seen);
   const img = useBlobSrc(q.data);
   const [state, setState] = useState<"loading" | "shown" | "broken">("loading");
   return (
     <li ref={near} className="min-w-0">
+      {label && <p className="mb-1.5 text-xs font-medium">{label}</p>}
       {q.isError ? (
         <div className="grid aspect-video place-items-center rounded-lg bg-surface-2 p-3 text-center ring-1 ring-border">
           <div>
@@ -71,6 +76,98 @@ function Thumb({ s, picture, id, onOpen }: { s: PictureSet; picture: Picture; id
         </button>
       )}
     </li>
+  );
+}
+
+/** How long Play shows each written time of a cut over time, once its picture has loaded. */
+const PLAY_MS = 800;
+
+/**
+ * A cut over time: its pictures one at a time, oldest first, with a slider over their written times, the ones before
+ * and after, and Play, which shows each in turn (each for 0.8 s once it has loaded) to the latest and stops there. Each
+ * is fetched once its place comes near the screen, the next one with it, and the one shown stays until the next has
+ * loaded. It opens large as the others do; `at` is the one shown, which the large view moves on as it goes.
+ */
+function OverTime({ s, frames, at, onAt, idOf, onOpen }: {
+  s: PictureSet;
+  frames: readonly { p: Picture; i: number }[];
+  at: number;
+  onAt: (at: number) => void;
+  idOf: (i: number) => string;
+  onOpen: (i: number) => void;
+}) {
+  const [near, seen] = useSeen<HTMLDivElement>();
+  const [playing, setPlaying] = useState(false);
+  const last = frames.length - 1;
+  const shown = Math.min(Math.max(at, 0), last);
+  const { p, i } = frames[shown]!;
+  const next = frames[shown + 1];
+  const q = usePicture(s.case, s.set, s.made, p.file, seen, true);
+  usePicture(s.case, s.set, s.made, next?.p.file ?? "", seen && next != null);      // the next one, ready to show
+  const img = useBlobSrc(q.data);
+  const loaded = q.data != null && !q.isPlaceholderData;
+  useEffect(() => {
+    if (!playing || !loaded) return undefined;
+    const t = setTimeout(() => {
+      if (shown < last) onAt(shown + 1);
+      else setPlaying(false);
+    }, PLAY_MS);
+    return () => clearTimeout(t);
+  }, [playing, loaded, shown, last, onAt]);
+  const go = (to: number) => {
+    setPlaying(false);
+    onAt(Math.min(Math.max(to, 0), last));
+  };
+  const play = () => {
+    if (shown >= last) onAt(0);
+    setPlaying(true);
+  };
+  const time = p.time ?? "?";
+  return (
+    <div ref={near}>
+      {q.isError ? (
+        <div className="grid aspect-video place-items-center rounded-lg bg-surface-2 p-3 text-center ring-1 ring-border">
+          <div>
+            <p className="text-xs text-danger">The picture didn&apos;t load: {asEngineError(q.error).message}</p>
+            <Button className="mt-2" size="sm" variant="secondary" onClick={() => void q.refetch()}
+              disabled={q.isFetching}>
+              Try again
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <button id={idOf(i)} type="button" onClick={() => onOpen(i)}
+          className="group block w-full rounded-lg text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
+          <span className="relative block aspect-video overflow-hidden rounded-lg bg-surface-2 ring-1 ring-border">
+            {!q.data && <Skeleton className="absolute inset-0 size-full rounded-none" />}
+            {/* Named by the title under it, which is the button's name. */}
+            <img ref={img} alt="" className={cn("size-full object-contain", q.data ? "opacity-100" : "opacity-0")} />
+          </span>
+          <span className="mt-1.5 block text-xs text-pretty text-muted-foreground group-hover:text-foreground">
+            {p.title}
+          </span>
+        </button>
+      )}
+      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2">
+        <Button size="sm" variant="secondary" onClick={playing ? () => setPlaying(false) : play}>
+          {playing ? <><Pause aria-hidden /> Pause</> : <><Play aria-hidden /> Play</>}
+        </Button>
+        <Button size="icon-sm" variant="ghost" aria-label="Earlier time" onClick={() => go(shown - 1)}
+          disabled={shown === 0}>
+          <ChevronLeft aria-hidden />
+        </Button>
+        <input type="range" min={0} max={last} step={1} value={shown} aria-label="Written time"
+          aria-valuetext={`written time ${time}, ${shown + 1} of ${frames.length}`}
+          onChange={(e) => go(Number(e.target.value))} className="h-6 min-w-24 flex-1 accent-primary" />
+        <Button size="icon-sm" variant="ghost" aria-label="Later time" onClick={() => go(shown + 1)}
+          disabled={shown === last}>
+          <ChevronRight aria-hidden />
+        </Button>
+        <span className="text-[13px] text-muted-foreground tabular-nums">
+          Written time {time} · {shown + 1} of {frames.length}
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -207,9 +304,16 @@ export function PictureSetPage() {
   const s = q.data;
   const code = q.isError ? asEngineError(q.error).code : null;
   const [viewing, setViewing] = useState<number | null>(null);
+  // the picture a large view was opened from, when it isn't the set's own in its grid: the focus goes back to it
+  const [opener, setOpener] = useState<{ i: number; id: string } | null>(null);
+  const [frame, setFrame] = useState(0);              // the written time a cut over time shows
   const [deleting, setDeleting] = useState(false);
   const base = useId();
   const idOf = (i: number) => `${base}-picture-${i}`;
+  // a mean flow's set: the set of the same written time's flow, to put its speed beside the swing
+  const named = parseSet(set);
+  const instant = usePictureSet(name, named.time, () => false, named.mean);
+  const [instantView, setInstantView] = useState<{ index: number | null; from: number }>({ index: null, from: 0 });
 
   const at = s ?? parseSet(set);
   const sub = [
@@ -309,6 +413,23 @@ export function PictureSetPage() {
   const again = job && (job.state === "failed" || job.state === "cancelled") && s.made != null
     && toMillis(job.finished) > toMillis(s.made) ? job : null;
   const kinds = [...s.kinds, ...new Set(s.pictures.map((p) => p.kind).filter((k) => !s.kinds.includes(k)))];
+  // A picture open large; a cut over time shows the written time looked at there, so the focus can go back to it.
+  const view = (i: number | null) => {
+    setViewing(i);
+    if (i != null && s.pictures[i]?.kind === "times") {
+      setFrame(s.pictures.slice(0, i).filter((p) => p.kind === "times").length);
+    }
+  };
+  const open = (i: number, from: string | null = null) => {
+    setOpener(from == null ? null : { i, id: from });
+    view(i);
+  };
+  const instantSet = s.mean ? instant.data : undefined;
+  const rows = s.mean ? swings(s, instantSet) : [];
+  const noInstant = instant.isPending ? `Asking the engine for the pictures of written time ${s.time}…`
+    : !instantSet ? `Written time ${s.time} has no pictures of its own flow yet: Make pictures… at that time, without `
+      + "its mean flow, to see the instant here."
+    : `The pictures of written time ${s.time} have no such cut.`;
 
   return (
     <>
@@ -370,11 +491,13 @@ export function PictureSetPage() {
                     <p className="text-sm text-muted-foreground">
                       None of this kind{s.notes.length > 0 ? ": the notes above say why." : "."}
                     </p>
+                  ) : k === "times" ? (
+                    <OverTime key={s.made} s={s} frames={of} at={frame} onAt={setFrame} idOf={idOf} onOpen={open} />
                   ) : (
                     <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                       {of.map(({ p, i }) => (
                         // A set made again starts each picture grey, until its new one has loaded.
-                        <Thumb key={`${s.made}:${p.file}`} s={s} picture={p} id={idOf(i)} onOpen={() => setViewing(i)} />
+                        <Thumb key={`${s.made}:${p.file}`} s={s} picture={p} id={idOf(i)} onOpen={() => open(i)} />
                       ))}
                     </ul>
                   )}
@@ -383,8 +506,51 @@ export function PictureSetPage() {
             </Section>
           );
         })}
+        {rows.length > 0 && (
+          <Section title="Mean, swing and instant">
+            <Card>
+              <CardHeader className="block">
+                <CardTitle>Mean, swing and instant</CardTitle>
+                <CardDescription>
+                  Each cut&apos;s mean speed, how much the speed swings about it (its rms over the free-stream speed)
+                  and the speed at written time {s.time}, the latest instant it averages: where it swings most, the flow
+                  at any moment is furthest from its mean.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {rows.map((r) => (
+                  <ul key={r.cut} className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    {r.mean != null && (
+                      <Thumb key={`${s.made}:mean`} s={s} picture={s.pictures[r.mean]!} id={`${base}-mean-${r.mean}`}
+                        onOpen={() => open(r.mean!, `${base}-mean-${r.mean}`)} label="Its mean speed" />
+                    )}
+                    <Thumb key={`${s.made}:swing`} s={s} picture={s.pictures[r.swing]!} id={`${base}-swing-${r.swing}`}
+                      onOpen={() => open(r.swing, `${base}-swing-${r.swing}`)} label="How much the speed swings" />
+                    {instantSet && r.instant != null ? (
+                      <Thumb key={`${instantSet.made}:instant`} s={instantSet} picture={instantSet.pictures[r.instant]!}
+                        id={`${base}-instant-${r.instant}`} label={`The speed at written time ${s.time}`}
+                        onOpen={() => setInstantView({ index: r.instant, from: r.instant ?? 0 })} />
+                    ) : (
+                      <li className="min-w-0">
+                        <p className="mb-1.5 text-xs font-medium">The speed at written time {s.time}</p>
+                        <p className="grid aspect-video place-items-center rounded-lg bg-surface-2 p-3 text-center text-xs text-pretty text-muted-foreground ring-1 ring-border">
+                          {noInstant}
+                        </p>
+                      </li>
+                    )}
+                  </ul>
+                ))}
+              </CardContent>
+            </Card>
+          </Section>
+        )}
       </div>
-      <Viewer s={s} index={viewing} onIndex={setViewing} onClose={() => setViewing(null)} idOf={idOf} />
+      <Viewer s={s} index={viewing} onIndex={view} onClose={() => view(null)}
+        idOf={(i) => (opener?.i === i ? opener.id : idOf(i))} />
+      {instantSet && (
+        <Viewer s={instantSet} index={instantView.index} onIndex={(i) => setInstantView((v) => ({ ...v, index: i }))}
+          onClose={() => setInstantView((v) => ({ ...v, index: null }))} idOf={() => `${base}-instant-${instantView.from}`} />
+      )}
       <DeleteDialog s={s} open={deleting} onOpenChange={setDeleting} />
     </>
   );

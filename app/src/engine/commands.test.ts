@@ -1,6 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { describe, expect, it } from "vitest";
-import { abCommand, repairCommand } from "./commands";
+import { abCommand, picturesCommand, repairCommand } from "./commands";
+
+describe("a picture job's command", () => {
+  it("names the kinds asked for, unless they are the default (cuts, vortices and spots)", () => {
+    expect(picturesCommand("ahmed")).toBe("meshdoctor pictures ahmed");
+    expect(picturesCommand("ahmed", { kinds: ["cuts", "vortices", "spots"] })).toBe("meshdoctor pictures ahmed");
+    expect(picturesCommand("ahmed", { kinds: ["cuts"] })).toBe("meshdoctor pictures ahmed --kinds cuts");
+    expect(picturesCommand("t", { time: "0.0006", kinds: ["cuts", "vortices", "spots", "times"], mean: true }))
+      .toBe("meshdoctor pictures t --time 0.0006 --kinds cuts,vortices,spots,times --mean");
+    expect(picturesCommand("my case")).toBeNull();
+  });
+});
 
 describe("a case's repair command", () => {
   it("names the copy after the case, with a name no run has yet", () => {

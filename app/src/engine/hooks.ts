@@ -314,12 +314,13 @@ export function usePictureSets(making: boolean, of: string | null = null) {
 
 /** One set of pictures: asked for again every 3 s while a job makes it (`making`, given the set as it is now, or while
  * the engine answers that it is being made the first time, not-ready), else every 15 s, and not again once the engine
- * has none (not-found). Its key is under the sets', so it is asked for again with them. */
-export function usePictureSet(name: string, set: string, making: (now: PictureSet | undefined) => boolean) {
+ * has none (not-found); not asked for at all unless `enabled`. Its key is under the sets', so it is asked for again
+ * with them. */
+export function usePictureSet(name: string, set: string, making: (now: PictureSet | undefined) => boolean, enabled = true) {
   const { transport } = useEngine();
   return useQuery<PictureSet>({
     queryKey: [transport?.scope, "pictures", "set", name, set],
-    queryFn: transport ? ({ signal }) => api.pictureSet(transport, name, set, signal) : skipToken,
+    queryFn: transport && enabled ? ({ signal }) => api.pictureSet(transport, name, set, signal) : skipToken,
     retry: false,
     refetchInterval: (q) => making(q.state.data) || refused(q.state.status, q.state.error, ["not-ready"]) ? ACTIVE_POLL_MS
       : refused(q.state.status, q.state.error, ["not-found"]) ? false : IDLE_POLL_MS,
@@ -328,12 +329,14 @@ export function usePictureSet(name: string, set: string, making: (now: PictureSe
 
 /** One picture of a set, the PNG itself, once `enabled` (once it scrolls into view). A set made again holds new
  * pictures under the same names, so `made` (when the set was made) is part of its key. It stays cached for ten
- * minutes once no picture shows it. */
-export function usePicture(name: string, set: string, made: string | null, file: string, enabled: boolean) {
+ * minutes once no picture shows it. `keep`: the picture asked for before stays while this one loads (a cut over time
+ * moving on to its next written time). */
+export function usePicture(name: string, set: string, made: string | null, file: string, enabled: boolean, keep = false) {
   const { transport } = useEngine();
   return useQuery<Blob>({
     queryKey: [transport?.scope, "picture", name, set, made, file],
     queryFn: transport && enabled ? ({ signal }) => api.picture(transport, name, set, file, signal) : skipToken,
+    placeholderData: keep ? keepPreviousData : undefined,
     staleTime: Infinity,
     gcTime: 10 * 60_000,
     retry: false,
